@@ -100,7 +100,7 @@ macro_rules! impl_field {
         use std::iter::{Product, Sum};
 
         use num_traits::{Num, One, Zero};
-        use $crate::utils::Field;
+        use $crate::fields::Field;
 
         impl Num for $field_name {
             type FromStrRadixErr = Box<dyn std::error::Error>;
