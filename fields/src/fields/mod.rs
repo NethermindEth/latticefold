@@ -6,7 +6,8 @@ use std::{
 
 use num_traits::{NumAssign, One};
 
-mod mersenne31;
+pub mod mersenne31;
+pub use mersenne31::*;
 
 // pub trait FieldOps<F: Field>: ColumnOps<F> {
 //     // TODO(Ohad): change to use a mutable slice.
