@@ -5,10 +5,10 @@ use std::{
 
 use qfall_math::{
     integer::Z,
-    integer_mod_q::{ModulusPolynomialRingZq, PolynomialRingZq, Zq},
+    integer_mod_q::{Modulus, ModulusPolynomialRingZq, PolynomialRingZq, Zq},
 };
 
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub struct AjtaiVecRingElems {
     pub polys: Vec<PolynomialRingZq>,
 }
@@ -17,10 +17,10 @@ impl AjtaiVecRingElems {
     pub fn new(
         num_polys: usize,
         field_modulus: usize,
-        modulus_poly_degree: usize,
+        modulus_poly: ModulusPolynomialRingZq,
     ) -> AjtaiVecRingElems {
         AjtaiVecRingElems {
-            polys: sample_rand_vec_polys(num_polys, field_modulus, modulus_poly_degree),
+            polys: sample_rand_vec_polys(num_polys, field_modulus, modulus_poly),
         }
     }
 
@@ -37,14 +37,14 @@ impl AjtaiVecRingElems {
 /// This contains the root of unity and the twiddle factors
 pub struct NTTDomain {}
 impl NTTDomain {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         todo!()
     }
 }
 /// This contains the inverse of the NTTDomain
 pub struct INTTDomain {}
 impl INTTDomain {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         todo!()
     }
 }
@@ -70,10 +70,10 @@ impl AjtaiMatrixRingElems {
         rows: usize,
         columns: usize,
         field_modulus: usize,
-        modulus_poly_degree: usize,
+        modulus_poly: ModulusPolynomialRingZq,
     ) -> Self {
         AjtaiMatrixRingElems {
-            mat: sample_rand_mat_polys(rows, columns, field_modulus, modulus_poly_degree),
+            mat: sample_rand_mat_polys(rows, columns, field_modulus, modulus_poly),
         }
     }
     pub fn naive_commit(self, to_commit: AjtaiVecRingElems) -> AjtaiVecRingElems {
@@ -105,18 +105,8 @@ impl Mul<AjtaiVecRingElems> for AjtaiMatrixRingElems {
 fn sample_rand_vec_polys(
     num_polys: usize,
     field_modulus: usize,
-    modulus_poly_degree: usize,
+    modulus_poly: ModulusPolynomialRingZq,
 ) -> Vec<PolynomialRingZq> {
-    let mut desc_mod_poly = format!("{}  1", modulus_poly_degree + 1);
-    for _ in 0..modulus_poly_degree - 1 {
-        desc_mod_poly.push_str(" 0");
-    }
-    desc_mod_poly.push_str(" 1");
-    desc_mod_poly.push_str(&format!(" mod {}", field_modulus));
-
-    print!("desc: {}", desc_mod_poly);
-    let modulus_poly = ModulusPolynomialRingZq::from_str(&desc_mod_poly).unwrap();
-
     let mut polys_vec = Vec::new();
     for _ in 0..num_polys {
         let rand_poly = PolynomialRingZq::sample_uniform(modulus_poly.clone());
@@ -129,14 +119,14 @@ fn sample_rand_mat_polys(
     rows: usize,
     columns: usize,
     field_modulus: usize,
-    modulus_poly_degree: usize,
+    modulus_poly: ModulusPolynomialRingZq,
 ) -> Vec<Vec<PolynomialRingZq>> {
     let mut matrix = Vec::new();
     for _ in 0..rows {
         matrix.push(sample_rand_vec_polys(
             columns,
             field_modulus,
-            modulus_poly_degree,
+            modulus_poly.clone(),
         ));
     }
     matrix
@@ -180,7 +170,7 @@ pub struct AjtaiEvalsVec {
 }
 
 impl AjtaiEvalsVec {
-    fn make_coeffs(
+    pub fn make_coeffs(
         self,
         domain: &INTTDomain,
         modulus: ModulusPolynomialRingZq,
@@ -199,7 +189,27 @@ pub struct AjtaiEvalsMatrix {
 }
 
 impl AjtaiEvalsMatrix {
-    fn sample_rand_mat_evals() {}
+    pub fn sample_rand_mat_evals(
+        rows: usize,
+        columns: usize,
+        field_modulus: usize,
+        num_evals: usize,
+    ) -> AjtaiEvalsMatrix {
+        let modulus = Modulus::from_str(format!("{}", field_modulus).as_str()).unwrap();
+        let mut mat = Vec::new();
+        for _ in 0..rows {
+            let mut row = Vec::new();
+            for _ in 0..columns {
+                let evals = (0..num_evals)
+                    .map(|_| Zq::sample_uniform(modulus.clone()).unwrap())
+                    .collect::<Vec<_>>();
+                let poly_eval = PolyEvaluation { evals };
+                row.push(poly_eval);
+            }
+            mat.push(row);
+        }
+        AjtaiEvalsMatrix { mat }
+    }
 }
 
 impl Mul<AjtaiEvalsVec> for AjtaiEvalsMatrix {
