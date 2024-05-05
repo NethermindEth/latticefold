@@ -1,13 +1,16 @@
-use core::num;
-use std::{ops::Mul, process::Output, str::FromStr};
-
-use qfall_math::{
-    integer_mod_q::{ModulusPolynomialRingZq, PolyOverZq, PolynomialRingZq, Zq},
-    traits::GetCoefficient,
+use std::{
+    ops::{Add, Mul},
+    str::FromStr,
 };
 
-struct AjtaiVecRingElems {
-    polys: Vec<PolynomialRingZq>,
+use qfall_math::{
+    integer::Z,
+    integer_mod_q::{ModulusPolynomialRingZq, PolynomialRingZq, Zq},
+};
+
+#[derive(Debug,Clone)]
+pub struct AjtaiVecRingElems {
+    pub polys: Vec<PolynomialRingZq>,
 }
 
 impl AjtaiVecRingElems {
@@ -85,13 +88,14 @@ fn sample_rand_vec_polys(
     field_modulus: usize,
     modulus_poly_degree: usize,
 ) -> Vec<PolynomialRingZq> {
-    let mut desc_mod_poly = format!("{} 1", modulus_poly_degree + 1);
+    let mut desc_mod_poly = format!("{}  1", modulus_poly_degree + 1);
     for _ in 0..modulus_poly_degree - 1 {
         desc_mod_poly.push_str(" 0");
     }
     desc_mod_poly.push_str(" 1");
-    desc_mod_poly.push_str(&format!("mod {}", field_modulus));
+    desc_mod_poly.push_str(&format!(" mod {}", field_modulus));
 
+    print!("desc: {}", desc_mod_poly);
     let modulus_poly = ModulusPolynomialRingZq::from_str(&desc_mod_poly).unwrap();
 
     let mut polys_vec = Vec::new();
