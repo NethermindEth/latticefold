@@ -24,25 +24,44 @@ impl AjtaiVecRingElems {
         }
     }
 
-    pub fn evaluate(self, root_of_unity: Zq, num_evals: usize) -> Vec<PolyEvaluation> {
+    pub fn evaluate(self, domain: &NTTDomain) -> AjtaiEvalsVec {
         let mut evals = Vec::new();
         let polys = self.polys;
         for poly in polys {
-            evals.push(ntt(poly));
+            evals.push(ntt(domain, poly));
         }
-        evals
+        AjtaiEvalsVec { vec: evals }
     }
 }
 
-fn ntt(rou: Zq, domain_size: usize, poly: PolynomialRingZq) -> PolyEvaluation {
+/// This contains the root of unity and the twiddle factors
+pub struct NTTDomain {}
+impl NTTDomain {
+    pub fn new() -> Self{
+        todo!()
+    }
+}
+/// This contains the inverse of the NTTDomain
+pub struct INTTDomain {}
+impl INTTDomain {
+    pub fn new() -> Self{
+        todo!()
+    }
+}
+
+fn ntt(domain: &NTTDomain, poly: PolynomialRingZq) -> PolyEvaluation {
     todo!()
 }
 
-fn intt(irou: Zq, evals: PolyEvaluation, modulus: ModulusPolynomialRingZq) -> PolynomialRingZq {
+fn intt(
+    domain: &INTTDomain,
+    evals: PolyEvaluation,
+    modulus: ModulusPolynomialRingZq,
+) -> PolynomialRingZq {
     todo!()
 }
 
-struct AjtaiMatrixRingElems {
+pub struct AjtaiMatrixRingElems {
     mat: Vec<Vec<PolynomialRingZq>>,
 }
 
@@ -123,8 +142,23 @@ fn sample_rand_mat_polys(
     matrix
 }
 
-struct PolyEvaluation {
+#[derive(Clone)]
+pub struct PolyEvaluation {
     evals: Vec<Zq>,
+}
+
+impl Add for PolyEvaluation {
+    type Output = PolyEvaluation;
+    fn add(self, rhs: Self) -> Self::Output {
+        assert_eq!(self.evals.len(), rhs.evals.len());
+        let result = self
+            .evals
+            .iter()
+            .zip(rhs.evals.iter())
+            .map(|(l, r)| l + r)
+            .collect::<Vec<_>>();
+        PolyEvaluation { evals: result }
+    }
 }
 
 impl Mul for PolyEvaluation {
@@ -141,10 +175,53 @@ impl Mul for PolyEvaluation {
     }
 }
 
-struct EvalsVec {
+pub struct AjtaiEvalsVec {
     vec: Vec<PolyEvaluation>,
 }
 
-struct EvalsMatrix {
+impl AjtaiEvalsVec {
+    fn make_coeffs(
+        self,
+        domain: &INTTDomain,
+        modulus: ModulusPolynomialRingZq,
+    ) -> AjtaiVecRingElems {
+        let result = self
+            .vec
+            .iter()
+            .map(|poly_evals| intt(domain, poly_evals.clone(), modulus.clone()))
+            .collect::<Vec<_>>();
+        AjtaiVecRingElems { polys: result }
+    }
+}
+
+pub struct AjtaiEvalsMatrix {
     mat: Vec<Vec<PolyEvaluation>>,
+}
+
+impl AjtaiEvalsMatrix {
+    fn sample_rand_mat_evals() {}
+}
+
+impl Mul<AjtaiEvalsVec> for AjtaiEvalsMatrix {
+    type Output = AjtaiEvalsVec;
+
+    fn mul(self, rhs: AjtaiEvalsVec) -> Self::Output {
+        let lhs_mat = self.mat;
+        let rhs_vec = rhs.vec;
+        let modulus = rhs_vec.first().unwrap().evals.first().unwrap().get_mod();
+        let zero = Zq::from_z_modulus(&Z::from(0), modulus);
+        let zero_evals = PolyEvaluation {
+            evals: vec![zero; rhs_vec.first().unwrap().evals.len()],
+        };
+        let mut result = vec![zero_evals; lhs_mat.len()];
+
+        for (i, row) in lhs_mat.iter().enumerate() {
+            for (j, val) in row.into_iter().enumerate() {
+                result[i] = result[i].clone() + val.clone() * rhs_vec[j].clone();
+                // remove clones
+            }
+        }
+
+        AjtaiEvalsVec { vec: result }
+    }
 }
