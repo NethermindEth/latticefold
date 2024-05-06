@@ -1,11 +1,13 @@
 use std::{
+    fmt::format,
     ops::{Add, Mul},
     str::FromStr,
 };
 
 use qfall_math::{
     integer::Z,
-    integer_mod_q::{Modulus, ModulusPolynomialRingZq, PolynomialRingZq, Zq},
+    integer_mod_q::{Modulus, ModulusPolynomialRingZq, PolyOverZq, PolynomialRingZq, Zq},
+    traits::{GetCoefficient, Pow},
 };
 
 #[derive(Debug, Clone)]
@@ -20,7 +22,7 @@ impl AjtaiVecRingElems {
         modulus_poly: ModulusPolynomialRingZq,
     ) -> AjtaiVecRingElems {
         AjtaiVecRingElems {
-            polys: sample_rand_vec_polys(num_polys, field_modulus, modulus_poly),
+            polys: sample_rand_vec_polys(num_polys, modulus_poly),
         }
     }
 
@@ -28,29 +30,138 @@ impl AjtaiVecRingElems {
         let mut evals = Vec::new();
         let polys = self.polys;
         for poly in polys {
-            evals.push(ntt(domain, poly));
+            evals.push(domain.ntt(poly));
         }
         AjtaiEvalsVec { vec: evals }
     }
 }
 
 /// This contains the root of unity and the twiddle factors
-pub struct NTTDomain {}
+pub struct NTTDomain {
+    omega_powers: Vec<Zq>,
+}
 impl NTTDomain {
-    pub fn new() -> Self {
-        todo!()
+    pub fn new(rou: Zq, domain_len: usize) -> Self {
+        let q = rou.get_mod().to_string().parse::<u32>().unwrap();
+        let resize_power = q / domain_len as u32;
+        let new_rou = rou.pow(resize_power).unwrap();
+        let mut omega_power = Zq::from_str(format!("1 mod {}", q).as_str()).unwrap();
+        let mut omega_powers = Vec::new();
+        for _ in 0..domain_len {
+            omega_powers.push(omega_power.clone());
+            omega_power = omega_power * new_rou.clone();
+        }
+        NTTDomain { omega_powers }
+    }
+
+    fn ntt(&self, poly: PolynomialRingZq) -> PolyEvaluation {
+        let mut coefficients = Vec::new();
+        let poly_string = format!("{}", poly.get_poly());
+        let poly_str = poly_string.as_str();
+        let parts: Vec<&str> = poly_str.split("  ").collect();
+        println!("poly_str:\n{} with len = {}", poly_str, parts.len());
+        if parts.len() == 2 {
+            let num_coeffs: usize = parts[0].parse().unwrap();
+            let coeff_parts: Vec<&str> = parts[1].split_whitespace().collect();
+
+            if num_coeffs == coeff_parts.len() {
+                for coeff_str in coeff_parts {
+                    let coeff: i64 = coeff_str.parse().unwrap();
+                    coefficients.push(coeff);
+                }
+            } else {
+                panic!("Invalid number of coefficients");
+            }
+        } else {
+            panic!("Invalid polynomial string format");
+        }
+        let modulus = poly.get_mod().get_q();
+        let coeffs = coefficients
+            .iter()
+            .map(|coeff| Zq::from_z_modulus(&Z::from(coeff), modulus.clone()))
+            .collect::<Vec<_>>(); //remove clones
+        if coeffs.len().is_power_of_two() {
+            let mut coeff_slice = coeffs.clone();
+            radix2ntt(self.omega_powers.as_slice(), &mut coeff_slice); //remove clone
+            return PolyEvaluation { evals: coeff_slice };
+        } else {
+            unimplemented!("NTT for n != power of two not implemented");
+        }
     }
 }
 /// This contains the inverse of the NTTDomain
-pub struct INTTDomain {}
+pub struct INTTDomain {
+    inv_omega_powers: Vec<Zq>,
+}
 impl INTTDomain {
-    pub fn new() -> Self {
-        todo!()
+    pub fn new(domain: &NTTDomain) -> Self {
+        let omega_inv_powers = domain
+            .omega_powers
+            .iter()
+            .map(|w_power| w_power.inverse().unwrap())
+            .collect::<Vec<_>>();
+        INTTDomain {
+            inv_omega_powers: omega_inv_powers,
+        }
+    }
+
+    pub fn intt(
+        &self,
+        evals: PolyEvaluation,
+        modulus: ModulusPolynomialRingZq,
+    ) -> PolynomialRingZq {
+        let mut evals = evals.evals;
+
+        radix2ntt(self.inv_omega_powers.as_slice(), &mut evals);
+        let q = evals[0].get_mod();
+        let n = Zq::from_z_modulus(&Z::from(evals.len() as u32), q);
+        let inv_n = n.inverse().unwrap(); // resolve this unwrap, tho it should exist
+
+        for i in 0..evals.len() {
+            evals[i] = evals[i].clone() * inv_n.clone();
+        }
+
+        let coeffs = evals.clone();
+        let coeffs_string = coeffs
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let poly_format = format!("{}  {}", evals.len(), coeffs_string);
+        let poly = PolyOverZq::from_str(&poly_format.as_str()).unwrap();
+        PolynomialRingZq::from((&poly, &modulus))
     }
 }
 
-fn ntt(domain: &NTTDomain, poly: PolynomialRingZq) -> PolyEvaluation {
-    todo!()
+fn radix2ntt(omega_powers: &[Zq], coeffs: &mut [Zq]) {
+    let n = coeffs.len();
+    let q = omega_powers.first().unwrap().get_mod();
+    if n == 1 {
+        return;
+    }
+
+    let zero = Zq::from_z_modulus(&Z::from(0), q);
+    let mut coeffs_even = vec![zero.clone(); n / 2];
+    let mut coeffs_odd = vec![zero.clone(); n / 2];
+
+    for i in 0..n / 2 {
+        coeffs_even[i] = coeffs[2 * i].clone();
+        coeffs_odd[i] = coeffs[2 * i + 1].clone(); // Remove clones
+    }
+
+    let half_omegas = omega_powers
+        .iter()
+        .step_by(2)
+        .map(|z| z.clone())
+        .collect::<Vec<_>>();
+    radix2ntt(half_omegas.as_slice(), &mut coeffs_even);
+    radix2ntt(half_omegas.as_slice(), &mut coeffs_odd);
+
+    for i in 0..n / 2 {
+        let t = coeffs_odd[i].clone() * omega_powers[i].clone();
+        coeffs[i] = coeffs_even[i].clone() + t.clone();
+        coeffs[i + n / 2] = coeffs_even[i].clone() - t;
+    }
 }
 
 fn intt(
@@ -104,7 +215,6 @@ impl Mul<AjtaiVecRingElems> for AjtaiMatrixRingElems {
 
 fn sample_rand_vec_polys(
     num_polys: usize,
-    field_modulus: usize,
     modulus_poly: ModulusPolynomialRingZq,
 ) -> Vec<PolynomialRingZq> {
     let mut polys_vec = Vec::new();
@@ -123,11 +233,7 @@ fn sample_rand_mat_polys(
 ) -> Vec<Vec<PolynomialRingZq>> {
     let mut matrix = Vec::new();
     for _ in 0..rows {
-        matrix.push(sample_rand_vec_polys(
-            columns,
-            field_modulus,
-            modulus_poly.clone(),
-        ));
+        matrix.push(sample_rand_vec_polys(columns, modulus_poly.clone()));
     }
     matrix
 }
@@ -178,7 +284,7 @@ impl AjtaiEvalsVec {
         let result = self
             .vec
             .iter()
-            .map(|poly_evals| intt(domain, poly_evals.clone(), modulus.clone()))
+            .map(|poly_evals| domain.intt(poly_evals.clone(), modulus.clone()))
             .collect::<Vec<_>>();
         AjtaiVecRingElems { polys: result }
     }
