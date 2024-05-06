@@ -76,10 +76,15 @@ impl NTTDomain {
             panic!("Invalid polynomial string format");
         }
         let modulus = poly.get_mod().get_q();
-        let coeffs = coefficients
+        let mut coeffs = coefficients
             .iter()
             .map(|coeff| Zq::from_z_modulus(&Z::from(coeff), modulus.clone()))
             .collect::<Vec<_>>(); //remove clones
+        coeffs.resize(
+            (coeffs.len() + 1).next_power_of_two(),
+            Zq::from_z_modulus(&Z::from(0), modulus.clone()),
+        );
+        println!("Coeffs len inside ntt: {}", coeffs.len());
         if coeffs.len().is_power_of_two() {
             let mut coeff_slice = coeffs.clone();
             radix2ntt(self.omega_powers.as_slice(), &mut coeff_slice); //remove clone
@@ -114,7 +119,7 @@ impl INTTDomain {
 
         radix2ntt(self.inv_omega_powers.as_slice(), &mut evals);
         let q = evals[0].get_mod();
-        let n = Zq::from_z_modulus(&Z::from(evals.len() as u32), q);
+        let n = Zq::from_z_modulus(&Z::from(evals.len() as u32), q.clone());
         let inv_n = n.inverse().unwrap(); // resolve this unwrap, tho it should exist
 
         for i in 0..evals.len() {
@@ -124,10 +129,12 @@ impl INTTDomain {
         let coeffs = evals.clone();
         let coeffs_string = coeffs
             .iter()
-            .map(|c| c.to_string())
+            .map(|c| c.get_value().to_string())
             .collect::<Vec<_>>()
             .join(" ");
-        let poly_format = format!("{}  {}", evals.len(), coeffs_string);
+        println!("Coeffs string: {}", coeffs_string);
+        let poly_format = format!("{}  {} mod {}", evals.len(), coeffs_string, q.to_string());
+        println!("poly format string: {}", poly_format);
         let poly = PolyOverZq::from_str(&poly_format.as_str()).unwrap();
         PolynomialRingZq::from((&poly, &modulus))
     }

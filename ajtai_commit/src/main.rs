@@ -39,12 +39,15 @@ fn main() {
 
     print!("Ajtai commitment using FFT");
     let rou = Zq::from_str(format!("{} mod {}", 27, field_modulus).as_str()).unwrap();
-    let ntt_domain = NTTDomain::new(rou, 2 * (modulus_poly_degree + 1));
+    let ntt_domain = NTTDomain::new(
+        rou,
+        (modulus_poly_degree as u32).next_power_of_two() as usize,
+    );
     let ajtai_matrix = AjtaiEvalsMatrix::sample_rand_mat_evals(
         num_input_polys,
         num_input_polys,
         field_modulus,
-        2 * (modulus_poly_degree + 1), //check that num of evals is the same as in domain
+        (modulus_poly_degree + 1 as u32).next_power_of_two() as usize, //check that num of evals is the same as in domain
     );
     let ajtai_evals_input = ajtai_input.evaluate(&ntt_domain);
     let commitment = ajtai_matrix * ajtai_evals_input;
