@@ -1,8 +1,31 @@
 use std::str::FromStr;
 
 use ajtai_commit::*;
-use qfall_math::integer_mod_q::{ModulusPolynomialRingZq, Zq};
+use qfall_math::{
+    integer::Z,
+    integer_mod_q::{ModulusPolynomialRingZq, Zq},
+};
 fn main() {
+    // Test STARK prime
+    let stark_prime_string =
+        "3618502788666131213697322783095070105623107215331596699973092056135872020481";
+    let two_in_stark_string = format!("2 mod {}", stark_prime_string);
+    let two_in_stark = Zq::from_str(&two_in_stark_string).unwrap();
+    let a_in_stark_string = format!(
+        "1809251394333065606848661391547535052811553607665798349986546028067936010238 mod {}",
+        stark_prime_string
+    );
+    let a_in_stark = Zq::from_str(&a_in_stark_string).unwrap();
+    println!("Two: {}", &two_in_stark);
+    println!("A: {}", &a_in_stark);
+    let two_times_a = &two_in_stark * &a_in_stark;
+    println!("Two time A:\n{}", two_times_a);
+    let zero_string = format!("0 mod {}", stark_prime_string);
+    let zero = Zq::from_str(&zero_string).unwrap();
+    let five = &zero - &two_times_a;
+    println!("Should be five: {}", five);
+    //test Ajtai
+
     let po2_np = 2;
     let num_input_polys = 1 << po2_np as usize;
     let field_modulus = (15 * (1 << 27) + 1) as usize; // using M31 as a placeholder
