@@ -54,26 +54,10 @@ impl NTTDomain {
         NTTDomain { omega_powers }
     }
 
-    fn ntt(&self, poly: PolynomialRingZq) -> PolyEvaluation {
+    fn ntt(&self, poly: PolynomialRingZq) -> RqNTT {
         let mut coefficients = Vec::new();
-        let poly_string = format!("{}", poly.get_poly());
-        let poly_str = poly_string.as_str();
-        let parts: Vec<&str> = poly_str.split("  ").collect();
-        println!("poly_str:\n{} with len = {}", poly_str, parts.len());
-        if parts.len() == 2 {
-            let num_coeffs: usize = parts[0].parse().unwrap();
-            let coeff_parts: Vec<&str> = parts[1].split_whitespace().collect();
-
-            if num_coeffs == coeff_parts.len() {
-                for coeff_str in coeff_parts {
-                    let coeff: i64 = coeff_str.parse().unwrap();
-                    coefficients.push(coeff);
-                }
-            } else {
-                panic!("Invalid number of coefficients");
-            }
-        } else {
-            panic!("Invalid polynomial string format");
+        for i in 0..(poly.get_degree() + 1) {
+            coefficients.push(poly.get_coeff(i).unwrap());
         }
         let modulus = poly.get_mod().get_q();
         let mut coeffs = coefficients
@@ -81,17 +65,12 @@ impl NTTDomain {
             .map(|coeff| Zq::from_z_modulus(&Z::from(coeff), modulus.clone()))
             .collect::<Vec<_>>(); //remove clones
         coeffs.resize(
-            (coeffs.len() + 1).next_power_of_two(),
+            (coeffs.len() + 1).next_power_of_two(), // Currently Restricted to domain size of a power of two
             Zq::from_z_modulus(&Z::from(0), modulus.clone()),
         );
-        println!("Coeffs len inside ntt: {}", coeffs.len());
-        if coeffs.len().is_power_of_two() {
-            let mut coeff_slice = coeffs.clone();
-            radix2ntt(self.omega_powers.as_slice(), &mut coeff_slice); //remove clone
-            return PolyEvaluation { evals: coeff_slice };
-        } else {
-            unimplemented!("NTT for n != power of two not implemented");
-        }
+        let mut coeff_slice = coeffs.clone();
+        radix2ntt(self.omega_powers.as_slice(), &mut coeff_slice); //remove clone
+        return RqNTT { evals: coeff_slice };
     }
 }
 /// This contains the inverse of the NTTDomain
@@ -110,11 +89,7 @@ impl INTTDomain {
         }
     }
 
-    pub fn intt(
-        &self,
-        evals: PolyEvaluation,
-        modulus: ModulusPolynomialRingZq,
-    ) -> PolynomialRingZq {
+    pub fn intt(&self, evals: RqNTT, modulus: ModulusPolynomialRingZq) -> PolynomialRingZq {
         let mut evals = evals.evals;
 
         radix2ntt(self.inv_omega_powers.as_slice(), &mut evals);
@@ -132,11 +107,10 @@ impl INTTDomain {
             .map(|c| c.get_value().to_string())
             .collect::<Vec<_>>()
             .join(" ");
-        println!("Coeffs string: {}", coeffs_string);
         let poly_format = format!("{}  {} mod {}", evals.len(), coeffs_string, q.to_string());
-        println!("poly format string: {}", poly_format);
         let poly = PolyOverZq::from_str(&poly_format.as_str()).unwrap();
-        PolynomialRingZq::from((&poly, &modulus))
+
+        PolynomialRingZq::from((&poly, &modulus)) // from() reduces the polynomial automatically
     }
 }
 
@@ -171,11 +145,7 @@ fn radix2ntt(omega_powers: &[Zq], coeffs: &mut [Zq]) {
     }
 }
 
-fn intt(
-    domain: &INTTDomain,
-    evals: PolyEvaluation,
-    modulus: ModulusPolynomialRingZq,
-) -> PolynomialRingZq {
+fn intt(domain: &INTTDomain, evals: RqNTT, modulus: ModulusPolynomialRingZq) -> PolynomialRingZq {
     todo!()
 }
 
@@ -245,13 +215,15 @@ fn sample_rand_mat_polys(
     matrix
 }
 
+/// Representation of an element of a ring where the coefficients are elements of a prime field
+/// and \zeta_m powers maps to powers of the root of unity following usual NTT
 #[derive(Clone)]
-pub struct PolyEvaluation {
+pub struct RqNTT {
     evals: Vec<Zq>,
 }
 
-impl Add for PolyEvaluation {
-    type Output = PolyEvaluation;
+impl Add for RqNTT {
+    type Output = RqNTT;
     fn add(self, rhs: Self) -> Self::Output {
         assert_eq!(self.evals.len(), rhs.evals.len());
         let result = self
@@ -260,12 +232,12 @@ impl Add for PolyEvaluation {
             .zip(rhs.evals.iter())
             .map(|(l, r)| l + r)
             .collect::<Vec<_>>();
-        PolyEvaluation { evals: result }
+        RqNTT { evals: result }
     }
 }
 
-impl Mul for PolyEvaluation {
-    type Output = PolyEvaluation;
+impl Mul for RqNTT {
+    type Output = RqNTT;
     fn mul(self, rhs: Self) -> Self::Output {
         assert_eq!(self.evals.len(), rhs.evals.len());
         let result = self
@@ -274,12 +246,12 @@ impl Mul for PolyEvaluation {
             .zip(rhs.evals.iter())
             .map(|(l, r)| l * r)
             .collect::<Vec<_>>();
-        PolyEvaluation { evals: result }
+        RqNTT { evals: result }
     }
 }
 
 pub struct AjtaiEvalsVec {
-    vec: Vec<PolyEvaluation>,
+    vec: Vec<RqNTT>,
 }
 
 impl AjtaiEvalsVec {
@@ -298,7 +270,7 @@ impl AjtaiEvalsVec {
 }
 
 pub struct AjtaiEvalsMatrix {
-    mat: Vec<Vec<PolyEvaluation>>,
+    mat: Vec<Vec<RqNTT>>,
 }
 
 impl AjtaiEvalsMatrix {
@@ -316,7 +288,7 @@ impl AjtaiEvalsMatrix {
                 let evals = (0..num_evals)
                     .map(|_| Zq::sample_uniform(modulus.clone()).unwrap())
                     .collect::<Vec<_>>();
-                let poly_eval = PolyEvaluation { evals };
+                let poly_eval = RqNTT { evals };
                 row.push(poly_eval);
             }
             mat.push(row);
@@ -333,7 +305,7 @@ impl Mul<AjtaiEvalsVec> for AjtaiEvalsMatrix {
         let rhs_vec = rhs.vec;
         let modulus = rhs_vec.first().unwrap().evals.first().unwrap().get_mod();
         let zero = Zq::from_z_modulus(&Z::from(0), modulus);
-        let zero_evals = PolyEvaluation {
+        let zero_evals = RqNTT {
             evals: vec![zero; rhs_vec.first().unwrap().evals.len()],
         };
         let mut result = vec![zero_evals; lhs_mat.len()];

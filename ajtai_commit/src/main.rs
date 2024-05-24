@@ -37,7 +37,7 @@ fn main() {
         println!("poly #{}: {}", i, polyring)
     }
 
-    print!("Ajtai commitment using FFT");
+    println!("Ajtai commitment using FFT");
     let rou = Zq::from_str(format!("{} mod {}", 27, field_modulus).as_str()).unwrap();
     let ntt_domain = NTTDomain::new(
         rou,
