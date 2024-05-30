@@ -1,3 +1,4 @@
+use super::crt_basis::RqCRT;
 use super::Field;
 
 /// Ring m-th cyclotomic element where m is a power of a prime
@@ -27,13 +28,39 @@ where
         }
     }
 
-    pub fn to_crt_basis(&self, rou: F) {
+    pub fn to_crt_basis(&self, rou: F) -> RqCRT<F> {
         let prime = self.prime;
         let prime_power = self.prime_power;
         // Ensure rou is the m-th root of unity
         assert_eq!(rou.pow(prime.pow(prime_power as u32) as u128), F::one());
         let mut coeffs = self.coeffs.clone();
-        todo!()
+        if prime == 2 {
+            // Note that in the prime = 2 case the twiddle factors for CRT are just a scalar
+            // multiplication of each entry and because all operations are element wise it can be
+            // rescale at a later time or not rescale and perform ICRT without affecting
+            // Basically CRT = NTT for po2
+            // Same thing happens with reordering/permutations
+            RqDense::<F>::ntt(prime, prime_power, rou, coeffs.as_mut_slice());
+        } else {
+            RqDense::crt(prime, prime_power, rou, coeffs.as_mut_slice())
+        }
+        RqCRT { crt_coeffs: coeffs }
+    }
+
+    fn ntt(prime: usize, prime_power: usize, omega: F, coeffs: &mut [F]) {
+        let varphi_m = coeffs.len();
+        let m_prime = varphi_m / (prime - 1);
+
+        // Set up omegas powers
+        let mut current_omega_power = F::one();
+        let mut omega_powers: Vec<F> = Vec::new();
+        for _ in 0..m_prime * prime - 1 {
+            omega_powers.push(current_omega_power.clone());
+            current_omega_power = current_omega_power * omega;
+        }
+        omega_powers.push(current_omega_power);
+        // TODO: optimize radix2-ntt
+        RqDense::radixp_ntt(prime, prime_power, omega_powers.as_slice(), coeffs);
     }
 
     // Assure omega is the m-th root of unity
@@ -63,25 +90,19 @@ where
             return;
         }
 
-        if prime != 2 {
-            // Handle powers diferent than two
-            RqDense::stride_permutation(prime - 1, coeffs);
+        // Handle powers diferent than two
+        RqDense::stride_permutation(prime - 1, coeffs);
 
-            // In the prime = 2 case the crt matrix is [[1]]
-            for coeffs_chunk in coeffs.chunks_exact_mut(prime - 1) {
-                RqDense::crt_prime(prime_omegas.as_slice(), coeffs_chunk);
-            }
+        // In the prime = 2 case the crt matrix is [[1]]
+        for coeffs_chunk in coeffs.chunks_exact_mut(prime - 1) {
+            RqDense::crt_prime(prime_omegas.as_slice(), coeffs_chunk);
+        }
 
-            RqDense::inverse_stride_permutation(prime - 1, coeffs);
+        RqDense::inverse_stride_permutation(prime - 1, coeffs);
 
-            // Note that in the prime = 2 case the twiddle factors for CRT are just a scalar
-            // multiplication of each entry and because all operations are element wise it can be
-            // rescale at a later time or not rescale and perform ICRT without affecting
-            // Basically CRT = NTT for po2
-            let t_hat = RqDense::twiddle_hat_factors(prime, omega_powers.as_slice());
-            for (&twiddle_factor, coeff) in t_hat.iter().zip(coeffs.iter_mut()) {
-                *coeff = *coeff * twiddle_factor;
-            }
+        let t_hat = RqDense::twiddle_hat_factors(prime, omega_powers.as_slice());
+        for (&twiddle_factor, coeff) in t_hat.iter().zip(coeffs.iter_mut()) {
+            *coeff = *coeff * twiddle_factor;
         }
 
         let m_prime_omega_powers = omega_powers
@@ -94,9 +115,7 @@ where
             RqDense::radixp_ntt(prime, prime_power - 1, &m_prime_omega_powers, coeffs_chunk);
         }
 
-        if prime != 2 {
-            RqDense::stride_permutation(prime - 1, coeffs);
-        }
+        RqDense::stride_permutation(prime - 1, coeffs);
     }
 
     fn crt_prime(prime_omegas: &[F], coeffs: &mut [F]) {
@@ -106,7 +125,7 @@ where
         for i in 0..p {
             let mut sum = F::zero();
             for j in 0..p {
-                sum = sum + prime_omegas[((i+1)*j) % p]*coeffs[j];
+                sum = sum + prime_omegas[((i + 1) * j) % p] * coeffs[j];
             }
             changed_coeffs.push(sum);
         }
