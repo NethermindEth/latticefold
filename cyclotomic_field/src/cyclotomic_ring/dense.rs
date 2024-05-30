@@ -55,9 +55,48 @@ where
         let prime_omegas = omega_powers
             .iter()
             .step_by(m_prime)
-            .map(|w| w)
+            .map(|w| w.clone()) // Remove clone
             .collect::<Vec<_>>();
+
+        if prime_power == 1 {
+            RqDense::<F>::crt_prime(prime_omegas.as_slice(), coeffs);
+            return;
+        }
+
+        if prime != 2 {
+            // Handle powers of two
+        }
     }
 
-    fn crt_prime(prime_omegas: &[F]) {}
+    fn crt_prime(prime_omegas: &[F], coeffs: &mut [F]) {
+        todo!()
+    }
+    fn stride_permutation(varphi_p: usize, input: &mut [F]) {
+        let varphi_m = input.len();
+        assert_eq!(varphi_m % varphi_p, 0); // Assure permutation is well define
+
+        let mut temp = vec![F::zero(); varphi_m];
+
+        for i in 0..varphi_m - 1 {
+            let new_index = (i * varphi_p) % (varphi_m - 1);
+            temp[new_index] = input[i].clone(); // Remove clone, try using swap to do it in-place
+        }
+        temp[varphi_m - 1] = input[varphi_m - 1].clone();
+        input.clone_from_slice(&temp);
+    }
+
+    fn inverse_stride_permutation(varphi_p: usize, input: &mut [F]) {
+        let varphi_m = input.len();
+        assert_eq!(varphi_m % varphi_p, 0); // Assure permutation is well define
+
+        let mut temp = vec![F::zero(); varphi_m];
+
+        let d = varphi_m / varphi_p;
+        for i in 0..varphi_m - 1 {
+            let new_index = (i * d) % (varphi_m - 1);
+            temp[new_index] = input[i].clone(); // Remove clone, try using swap to do it in-place
+        }
+        temp[varphi_m - 1] = input[varphi_m - 1].clone();
+        input.clone_from_slice(&temp);
+    }
 }
