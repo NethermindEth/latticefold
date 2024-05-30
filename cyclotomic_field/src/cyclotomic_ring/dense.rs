@@ -64,13 +64,30 @@ where
         }
 
         if prime != 2 {
-            // Handle powers of two
+            // Handle powers diferent than two
+            RqDense::stride_permutation(prime - 1, coeffs);
+
+            // In the prime = 2 case the crt matrix is [[1]]
+            for coeffs_chunk in coeffs.chunks_exact_mut(prime - 1) {
+                RqDense::crt_prime(prime_omegas.as_slice(), coeffs_chunk);
+            }
+
+            RqDense::inverse_stride_permutation(prime - 1, coeffs);
+
+            // Note that in the prime = 2 case the twiddle factors for CRT are just a scalar
+            // multiplication of each entry and because all operations are element wise it can be
+            // rescale at a later time or not rescale and perform ICRT without affecting
+            let t_hat = RqDense::twiddle_hat_factors(prime, omega_powers.as_slice());
+            for (&twiddle_factor, coeff) in t_hat.iter().zip(coeffs.iter_mut()) {
+                *coeff = *coeff * twiddle_factor;
+            }
         }
     }
 
     fn crt_prime(prime_omegas: &[F], coeffs: &mut [F]) {
         todo!()
     }
+
     fn stride_permutation(varphi_p: usize, input: &mut [F]) {
         let varphi_m = input.len();
         assert_eq!(varphi_m % varphi_p, 0); // Assure permutation is well define
@@ -98,5 +115,16 @@ where
         }
         temp[varphi_m - 1] = input[varphi_m - 1].clone();
         input.clone_from_slice(&temp);
+    }
+
+    fn twiddle_hat_factors(prime: usize, omega_powers: &[F]) -> Vec<F> {
+        let m_prime = omega_powers.len() / prime;
+        let mut t_hat = Vec::new();
+        for r in 1..prime {
+            for j in 0..m_prime {
+                t_hat.push(omega_powers[r * j].clone());
+            }
+        }
+        t_hat
     }
 }
