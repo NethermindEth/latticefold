@@ -40,7 +40,7 @@ where
             // rescale at a later time or not rescale and perform ICRT without affecting
             // Basically CRT = NTT for po2
             // Same thing happens with reordering/permutations
-            RqDense::<F>::ntt(prime, prime_power, rou, coeffs.as_mut_slice());
+            RqDense::<F>::ntt(prime, prime_power - 1, rou, coeffs.as_mut_slice());
         } else {
             RqDense::crt(prime, prime_power, rou, coeffs.as_mut_slice())
         }
@@ -133,7 +133,42 @@ where
     }
 
     fn radixp_ntt(prime: usize, prime_power: usize, omega_powers: &[F], coeffs: &mut [F]) {
-        todo!()
+        let n = coeffs.len();
+        if n == 1 {
+            return;
+        }
+        let mut decomposed_coeffs = vec![vec![F::zero(); n / prime]; prime];
+        for i in 0..n / prime {
+            for j in 0..decomposed_coeffs.len() {
+                decomposed_coeffs[j][i] = coeffs[prime * i + j].clone();
+            }
+        }
+
+        let primed_omegas = omega_powers
+            .iter()
+            .step_by(prime)
+            .map(|w| w.clone())
+            .collect::<Vec<_>>();
+
+        for i in 0..prime {
+            RqDense::radixp_ntt(
+                prime,
+                prime_power - 1,
+                primed_omegas.as_slice(),
+                decomposed_coeffs[i].as_mut_slice(),
+            );
+        }
+
+        for q in 0..n / prime {
+            for s in 0..prime {
+                let mut sum = F::zero();
+                for l in 0..prime {
+                    sum = sum
+                        + omega_powers[(l * (q + s * (n / prime))) % n] * decomposed_coeffs[l][q];
+                }
+                coeffs[q + s * (n / prime)] = sum;
+            }
+        }
     }
 
     fn stride_permutation(varphi_p: usize, input: &mut [F]) {
