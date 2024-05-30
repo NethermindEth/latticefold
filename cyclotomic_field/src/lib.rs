@@ -1,1 +1,1 @@
-mod cyclotomic_prime;
+mod cyclotomic_ring;
