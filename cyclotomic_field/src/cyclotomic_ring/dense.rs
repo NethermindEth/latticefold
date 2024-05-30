@@ -77,14 +77,33 @@ where
             // Note that in the prime = 2 case the twiddle factors for CRT are just a scalar
             // multiplication of each entry and because all operations are element wise it can be
             // rescale at a later time or not rescale and perform ICRT without affecting
+            // Basically CRT = DFT for po2
             let t_hat = RqDense::twiddle_hat_factors(prime, omega_powers.as_slice());
             for (&twiddle_factor, coeff) in t_hat.iter().zip(coeffs.iter_mut()) {
                 *coeff = *coeff * twiddle_factor;
             }
         }
+
+        let m_prime_omega_powers = omega_powers
+            .iter()
+            .step_by(prime)
+            .map(|w| w.clone())
+            .collect::<Vec<_>>();
+
+        for coeffs_chunk in coeffs.chunks_exact_mut(m_prime) {
+            RqDense::radixp_ntt(prime, prime_power - 1, &m_prime_omega_powers, coeffs_chunk);
+        }
+
+        if prime != 2 {
+            RqDense::stride_permutation(prime - 1, coeffs);
+        }
     }
 
     fn crt_prime(prime_omegas: &[F], coeffs: &mut [F]) {
+        todo!()
+    }
+
+    fn radixp_ntt(prime: usize, prime_power: usize, omega_powers: &[F], coeffs: &mut [F]) {
         todo!()
     }
 
