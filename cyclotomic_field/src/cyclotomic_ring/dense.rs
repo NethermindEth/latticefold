@@ -44,10 +44,14 @@ where
         } else {
             RqDense::crt(prime, prime_power, rou, coeffs.as_mut_slice())
         }
-        RqCRT { crt_coeffs: coeffs }
+        RqCRT {
+            crt_coeffs: coeffs,
+            prime,
+            prime_power,
+        }
     }
 
-    fn ntt(prime: usize, prime_power: usize, omega: F, coeffs: &mut [F]) {
+    pub fn ntt(prime: usize, prime_power: usize, omega: F, coeffs: &mut [F]) {
         let varphi_m = coeffs.len();
         let m_prime = varphi_m / (prime - 1);
 
