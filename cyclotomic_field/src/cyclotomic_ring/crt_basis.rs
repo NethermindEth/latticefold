@@ -113,7 +113,18 @@ where
     }
 
     fn icrt_prime(prime_omegas: &[F], crt_coeffs: &mut [F]) {
-        // TODO: Easy to define the inverse of the matrix?
+        let prime = prime_omegas.len();
+        // Assert if prime?
+        match prime {
+            2 => return,
+            3 => {
+                RqCRT::icrt_three(prime_omegas, crt_coeffs);
+            }
+            _ => {
+                unimplemented!("No support for powers-of-{}", prime);
+            }
+        }
+        // TODO: Easy way to define the inverse of the matrix?
         todo!()
     }
 
@@ -168,6 +179,15 @@ where
             }
         }
         t_hat
+    }
+
+    fn icrt_three(prime_omegas: &[F], crt_coeffs: &mut [F]) {
+        let b_0 = crt_coeffs[0] * prime_omegas[2] - crt_coeffs[1] * prime_omegas[1];
+        let b_1 = crt_coeffs[1] - crt_coeffs[0];
+        let det = prime_omegas[2] - prime_omegas[1];
+        let inv_det = det.inverse();
+        crt_coeffs[0] = b_0 * inv_det;
+        crt_coeffs[1] = b_1 * inv_det;
     }
 }
 
