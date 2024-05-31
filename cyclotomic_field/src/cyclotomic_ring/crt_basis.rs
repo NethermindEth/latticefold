@@ -31,7 +31,21 @@ where
     }
 
     pub fn to_power_basis(&self, rou: F) -> RqDense<F> {
-        todo!()
+        let prime = self.prime;
+        let prime_power = self.prime_power;
+        assert_eq!(rou.pow(prime.pow(prime_power as u32) as u128), F::one());
+        let mut crt_coeffs = self.crt_coeffs.clone();
+        if prime == 2 {
+            RqCRT::intt(prime, prime_power - 1, rou, crt_coeffs.as_mut_slice());
+        } else {
+            RqCRT::icrt(prime, prime_power, rou, crt_coeffs.as_mut_slice());
+        }
+
+        RqDense {
+            coeffs: crt_coeffs,
+            prime,
+            prime_power,
+        }
     }
 
     pub fn intt(prime: usize, prime_power: usize, omega: F, crt_coeffs: &mut [F]) {
@@ -46,19 +60,74 @@ where
             current_omega_power = current_omega_power * omega;
         }
         omega_powers.push(current_omega_power);
-        todo!()
+        RqCRT::radixp_intt(prime, prime_power, omega_powers.as_slice(), crt_coeffs);
     }
 
     fn icrt(prime: usize, prime_power: usize, omega: F, crt_coeffs: &mut [F]) {
-        todo!()
+        let varphi_m = crt_coeffs.len();
+        let m_prime = varphi_m / (prime - 1);
+
+        // Set up omegas powers
+        let mut current_omega_power = F::one();
+        let mut omega_powers: Vec<F> = Vec::new();
+        for _ in 0..m_prime * prime - 1 {
+            omega_powers.push(current_omega_power.clone());
+            current_omega_power = current_omega_power * omega;
+        }
+        omega_powers.push(current_omega_power);
+        let prime_omegas = omega_powers
+            .iter()
+            .step_by(m_prime)
+            .map(|w| w.clone()) // Remove clone
+            .collect::<Vec<_>>();
+
+        if prime_power == 1 {
+            RqCRT::<F>::icrt_prime(prime_omegas.as_slice(), crt_coeffs);
+            return;
+        }
+
+        RqCRT::inverse_stride_permutation(prime - 1, crt_coeffs);
+
+        let m_prime_omega_powers = omega_powers
+            .iter()
+            .step_by(prime)
+            .map(|w| w.clone())
+            .collect::<Vec<_>>();
+
+        for coeffs_chunk in crt_coeffs.chunks_exact_mut(m_prime) {
+            RqCRT::radixp_intt(prime, prime_power - 1, &m_prime_omega_powers, coeffs_chunk);
+        }
+
+        let t_hat = RqCRT::twiddle_hat_factors(prime, omega_powers.as_slice());
+        for (twiddle_factor, coeff) in t_hat.iter().zip(crt_coeffs.iter_mut()) {
+            *coeff = *coeff * twiddle_factor.inverse();
+        }
+
+        RqCRT::stride_permutation(prime - 1, crt_coeffs);
+
+        for crt_coeffs_chunks in crt_coeffs.chunks_exact_mut(prime - 1) {
+            RqCRT::icrt_prime(prime_omegas.as_slice(), crt_coeffs_chunks);
+        }
+
+        RqCRT::inverse_stride_permutation(prime - 1, crt_coeffs);
     }
 
     fn icrt_prime(prime_omegas: &[F], crt_coeffs: &mut [F]) {
+        // TODO: Easy to define the inverse of the matrix?
         todo!()
     }
 
     fn radixp_intt(prime: usize, prime_power: usize, omega_powers: &[F], crt_coeffs: &mut [F]) {
-        todo!()
+        RqDense::radixp_ntt(prime, prime_power, omega_powers, crt_coeffs);
+        let mut inv_n = F::zero();
+        let one = F::one();
+        for _ in 0..crt_coeffs.len() {
+            inv_n = inv_n + one;
+        }
+        inv_n = inv_n.inverse();
+        for coeff in crt_coeffs {
+            *coeff = *coeff * inv_n;
+        }
     }
 
     fn stride_permutation(varphi_p: usize, input: &mut [F]) {

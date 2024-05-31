@@ -6,8 +6,8 @@ use super::Field;
 /// then the minimal polynomial for a prime is define as Phi_m(X) = Phi_p(x^{m/p})
 pub struct RqDense<F: Field> {
     pub coeffs: Vec<F>,
-    prime: usize,
-    prime_power: usize,
+    pub prime: usize,
+    pub prime_power: usize,
 }
 
 impl<F> RqDense<F>
@@ -136,7 +136,7 @@ where
         coeffs.copy_from_slice(&changed_coeffs);
     }
 
-    fn radixp_ntt(prime: usize, prime_power: usize, omega_powers: &[F], coeffs: &mut [F]) {
+    pub fn radixp_ntt(prime: usize, prime_power: usize, omega_powers: &[F], coeffs: &mut [F]) {
         let n = coeffs.len();
         if n == 1 {
             return;
