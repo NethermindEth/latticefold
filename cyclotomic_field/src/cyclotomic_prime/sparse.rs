@@ -95,7 +95,6 @@ mod cyclotomic_prime_tests {
             let random_u64: u64 = random();
             let m31_rand = fields::M31::reduce(random_u64);
             coeffs.insert(i, m31_rand);
-            
         }
         let random_cyclotomic_element = Number::new(5, &coeffs);
         println!("{:?}", random_cyclotomic_element);
