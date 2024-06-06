@@ -1,6 +1,5 @@
 use lattirust_arithmetic::ring::Ring;
 use crate::utils::{ self, mat_by_vec };
-use crate::utils::hadamard_vec;
 use crate::NotSatisfiedError;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
