@@ -15,6 +15,8 @@ pub fn mat_by_vec<R: Ring>(lhs: &Vec<Vec<R>>, rhs: &Vec<R>) -> Vec<R> {
     }
     result
 }
+
+//  Computes the hadamard product of two ring
 pub fn hadamard_vec<R: Ring>(lhs: &Vec<R>, rhs: &Vec<R>) -> Vec<R> {
     lhs.iter()
         .zip(rhs.iter())
@@ -22,12 +24,14 @@ pub fn hadamard_vec<R: Ring>(lhs: &Vec<R>, rhs: &Vec<R>) -> Vec<R> {
         .collect()
 }
 
+// Multiplies Vector of rings by another ring
 pub fn vec_value_mul<R: Ring>(lhs: &Vec<R>, rhs: &R) -> Vec<R> {
     lhs.iter()
         .map(|lhs_i| *lhs_i * rhs)
         .collect()
 }
 
+// Adds two ring vectors
 pub fn vec_add<R: Ring>(lhs: &Vec<R>, rhs: &Vec<R>) -> Vec<R> {
     lhs.iter()
         .zip(rhs.iter())

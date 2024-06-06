@@ -1,4 +1,5 @@
 use lattirust_arithmetic::ring::Ring;
+use utils::hadamard_vec;
 use crate::error::NotSatisfiedError;
 pub mod r1cs;
 pub mod error;
@@ -40,7 +41,7 @@ impl<R: Ring> CCS<R> {
     /// check that a CCS structure is satisfied by a z vector. Only for testing.
     pub fn check_relation(&self, z: &[R]) -> Result<(), NotSatisfiedError> {
         let mut result = vec![R::zero(); self.m];
-
+        //  Calculates \sum_{i=1}^{n_r} c_i \cdot \bigg( \bigcirc_{j \in S_i} (M_j \cdot \vec{z}) \bigg)
         for i in 0..self.q {
             // Extract the needed M_j matrices out of S_i
             let vec_M_j: Vec<&Vec<Vec<R>>> = self.S[i]
@@ -49,19 +50,18 @@ impl<R: Ring> CCS<R> {
                 .collect();
 
             // complete the hadamard chain
-
             let mut hadamard_result = vec![R::one(); self.m];
             for M_j in vec_M_j.into_iter() {
                 let M_j_z: Vec<R> = utils::mat_by_vec(M_j, &z.to_vec());
 
-                for k in 0..self.m {
-                    hadamard_result = utils::hadamard_vec(&hadamard_result, &M_j_z);
-                }
+                hadamard_result = hadamard_vec(&hadamard_result, &M_j_z);
             }
-            result
-                .iter()
-                .zip(hadamard_result.iter())
-                .map(|(x, y)| *x + y);
+
+            // multiply by the coefficient of this step
+            let c_M_j_z = utils::vec_value_mul(&hadamard_result, &self.c[i]);
+
+            // Add it to the final vector
+            result = utils::vec_add(&result, &c_M_j_z);
         }
 
         if result.iter().all(|x| x == &R::zero()) {
@@ -72,6 +72,7 @@ impl<R: Ring> CCS<R> {
     }
 }
 
+// CCS is a generalisation of R1CS, so we can convert from R1CS to CSS
 impl<R: Ring> CCS<R> {
     pub fn from_r1cs(r1cs: R1CS<R>) -> Self {
         let m = r1cs.A.len();
