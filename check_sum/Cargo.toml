@@ -1,0 +1,7 @@
+[package]
+name = "check_sum"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lattirust-arithmetic = { version = "0.0.1-alpha", path = "../../lattirust/lattirust-arithmetic/" }
