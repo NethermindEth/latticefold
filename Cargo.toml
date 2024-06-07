@@ -1,1 +1,1 @@
-workspace = { members = [ "ajtai_commit", "cyclotomic_field","fields"] }
+workspace = { members = [ "ajtai_commit", "cyclotomic_field","fields", "ccs",] }
