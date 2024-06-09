@@ -1,4 +1,5 @@
 use lattirust_arithmetic::ring::Ring;
+use std::fmt;
 
 // Represents a univariate Polynomial
 // Represented by a list of coefficients of ascending powers
@@ -31,6 +32,29 @@ impl<R: Ring> UnivPoly<R> {
         }
 
         result
+    }
+
+    pub fn format_univ_poly(&self, varname: &str) -> String {
+        if self.coeffs.is_empty() || !self.coeffs.iter().any(|coeff| *coeff != R::zero()) {
+            String::from("0")
+        } else {
+            self.coeffs
+                .iter()
+                .enumerate()
+                .rev()
+                .filter(|(_, coeff)| **coeff != R::zero())
+                .map(|(exp, coeff)| {
+                    match (exp, coeff) {
+                        (0, _) => format!("{}", coeff),
+                        (1, coeff) if *coeff == R::one() => format!("{}", varname),
+                        (1, _) => format!("{}*{}", coeff, varname),
+                        (_, coeff) if *coeff == R::one() => format!("{}^{}", varname, exp),
+                        (_, _) => format!("{}*{}^{}", coeff, varname, exp),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" + ")
+        }
     }
 }
 
