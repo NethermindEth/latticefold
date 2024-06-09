@@ -7,4 +7,4 @@ edition = "2021"
 ark-relations = "0.4.0"
 ark-std = "0.4.0"
 
-lattirust-arithmetic = { git="https://github.com/cknabs/lattirust", branch = "main"}
+lattirust-arithmetic = { git="ssh://git@github.com/cknabs/lattirust.git", branch = "main"}
