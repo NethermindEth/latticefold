@@ -1,3 +1,3 @@
 pub mod prover;
-pub mod utils;
+pub mod poly_utils;
 pub mod verifier;

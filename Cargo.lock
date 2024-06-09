@@ -209,6 +209,7 @@ name = "check_sum"
 version = "0.1.0"
 dependencies = [
  "lattirust-arithmetic",
+ "num-traits",
 ]
 
 [[package]]
@@ -682,6 +683,7 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
+source = "git+ssh://git@github.com/cknabs/lattirust.git?branch=main#9ed7edad40d24be49d15a4fa7967906d16b1c710"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -842,9 +844,9 @@ dependencies = [
 
 [[package]]
 name = "num-traits"
-version = "0.2.18"
+version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da0df0e5185db44f69b44f26786fe401b6c293d1907744beaa7fa62b2e5a517a"
+checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
  "libm",
