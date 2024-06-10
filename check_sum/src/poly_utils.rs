@@ -1,5 +1,6 @@
+// ! Utilities for reasoning with multi and univariate polynomials
+
 use lattirust_arithmetic::ring::Ring;
-use std::fmt;
 
 // Represents a univariate Polynomial
 // Represented by a list of coefficients of ascending powers
@@ -11,7 +12,8 @@ pub struct UnivPoly<R: Ring> {
 // Represents a multivariate polynomial
 // Represented by a vector of terms
 // Each term has a coefficient and a vector corresponding
-// To the
+// To the degree of each variable in that term
+//  See tests for examples
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MultiPoly<R: Ring> {
     pub terms: Vec<(R, Vec<(usize, usize)>)>,
@@ -24,7 +26,7 @@ impl<R: Ring> UnivPoly<R> {
     }
 
     // Takes a value and evaluates the polynomial
-    pub fn eval_poly_univ(&self, r: &R) -> R {
+    pub fn eval(&self, r: &R) -> R {
         let mut result = R::zero();
 
         for (i, coeff) in self.coeffs.iter().enumerate() {
@@ -33,7 +35,7 @@ impl<R: Ring> UnivPoly<R> {
 
         result
     }
-
+    //  Pretty prints a univariate polynomial
     pub fn format_univ_poly(&self, varname: &str) -> String {
         if self.coeffs.is_empty() || !self.coeffs.iter().any(|coeff| *coeff != R::zero()) {
             String::from("0")
@@ -75,14 +77,22 @@ fn power_sums<R: Ring>(max_exponent: usize, summands: &[R]) -> Vec<R> {
 
 impl<R: Ring> MultiPoly<R> {
     // Takes a list of values and evaluates the multivariate polynomial
-    pub fn eval_poly(&self, values: Vec<R>) -> R {
+    pub fn eval_poly(&self, values: &Vec<R>) -> R {
         self.terms
             .iter()
             .map(|(coeff, term)| {
                 let term_product = term
                     .iter()
                     .map(|(value_index, power)| {
-                        values[*value_index].clone().pow(&[*power as u64])
+                        if *value_index < values.len() {
+                            values[*value_index].clone().pow(&[*power as u64])
+                        } else {
+                            panic!(
+                                "value_index {} is out of bounds for values vector of length {}",
+                                value_index,
+                                values.len()
+                            );
+                        }
                     })
                     .fold(R::one(), |acc, x| acc * x);
                 *coeff * term_product
@@ -101,30 +111,54 @@ impl<R: Ring> MultiPoly<R> {
         })
     }
 
+    // The degree of a multivariate polynomial
+    pub fn multi_degree(&self) -> Vec<usize> {
+        // Find the maximum index of the variables used in the polynomial
+        let num_variables =
+            self.terms
+                .iter()
+                .flat_map(|(_, term)| term.iter().map(|(var, _)| *var))
+                .max()
+                .unwrap_or(0) + 1;
+
+        // Initialize a vector to hold the maximum degree for each variable
+        let mut degrees = vec![0; num_variables];
+
+        // Iterate over each term in the polynomial
+        for (_, term) in &self.terms {
+            // Update the degree for each variable in the term
+            for (var, exp) in term {
+                if *exp > degrees[*var] {
+                    degrees[*var] = *exp;
+                }
+            }
+        }
+
+        degrees
+    }
+
     // Simplify the polynomial by summing terms with the same monomials
     pub fn simplify(&self) -> MultiPoly<R> {
         let mut simplified_terms = Vec::new();
 
-        // Iterate over the polynomial's terms
         for &(coeff, ref term) in &self.terms {
             // Search for a term with the same monomials in the simplified_terms vector
             if
-                let Some((existing_coeff, existing_term)) = simplified_terms
+                let Some((existing_coeff, _)) = simplified_terms
                     .iter_mut()
                     .find(|(_, t)| *t == *term)
             {
-                // If found, add the coefficient to the existing term
                 *existing_coeff += coeff;
             } else {
-                // If not found, add the term to the simplified_terms vector
+                // Otherwise add the term to the polynomial
                 simplified_terms.push((coeff, term.clone()));
             }
         }
 
-        // Create a new polynomial with the simplified terms
         MultiPoly { terms: simplified_terms }
     }
-    // Returns the number of variables in the polynomial
+
+    // Calculates the number of variables in the polynomial
     pub fn num_vars(&self) -> usize {
         self.terms
             .iter()
@@ -210,7 +244,6 @@ impl<R: Ring> MultiPoly<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lattirust_arithmetic::ring::Ring;
     use lattirust_arithmetic::ring::Z2_64;
 
     #[test]
@@ -222,11 +255,11 @@ mod tests {
 
         // Evaluate the polynomial at x = 1
         let x = Z2_64::from(1 as u8);
-        assert_eq!(poly.eval_poly_univ(&x), Z2_64::from(6 as u8));
+        assert_eq!(poly.eval(&x), Z2_64::from(6 as u8));
 
         // Evaluate the polynomial at x = 2
         let x = Z2_64::from(2 as u8);
-        assert_eq!(poly.eval_poly_univ(&x), Z2_64::from(11 as u8));
+        assert_eq!(poly.eval(&x), Z2_64::from(11 as u8));
     }
     #[test]
     fn test_multi_poly_eval() {
@@ -242,13 +275,12 @@ mod tests {
 
         // Evaluate the polynomial at x1 = 1, x2 = 1
         let values = vec![Z2_64::from(1 as u8), Z2_64::from(1 as u8)];
-        println!("{:?}", poly.eval_poly(values.clone()).clone());
-        assert_eq!(poly.eval_poly(values), Z2_64::from(11 as u8));
+
+        assert_eq!(poly.eval_poly(&values), Z2_64::from(11 as u8));
 
         // Evaluate the polynomial at x1 = 2, x2 = 3
         let values = vec![Z2_64::from(2 as u8), Z2_64::from(3 as u8)];
-        println!("{:?}", poly.eval_poly(values.clone()).clone());
-        assert_eq!(poly.eval_poly(values), Z2_64::from(32 as u8));
+        assert_eq!(poly.eval_poly(&values), Z2_64::from(32 as u8));
     }
     #[test]
     fn test_partial_summation() {

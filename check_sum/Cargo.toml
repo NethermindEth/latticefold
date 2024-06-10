@@ -6,4 +6,6 @@ edition = "2021"
 [dependencies]
 lattirust-arithmetic = { git="ssh://git@github.com/cknabs/lattirust.git", branch = "main"}
 num-traits = "0.2.19"
+rand = "0.8.5"
+rang = "0.1.1"
 

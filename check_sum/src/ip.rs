@@ -1,65 +1,37 @@
-// Copied from pazk
-// TODO add a propoer attribution here
+// ! Provides generic structure for an interactive proof
+// Adapted from https://github.com/bgillesp/pazk/blob/main/src/ip.rs
+// Copyright (c) 2022 Bryan Gillespie
 
 use std::thread;
 use std::fmt::{ self, Display };
 
 use std::sync::mpsc;
-use std::sync::{ Arc, Mutex };
 
 use lattirust_arithmetic::ring::Ring;
 use crate::poly_utils::UnivPoly;
+#[derive(Debug)]
+pub enum IPResult {
+    ACCEPT,
+    REJECT,
+}
 
 // 2-party interactive protocol
 pub trait IP<T: Clone> {
-    fn execute(&self, ch: Channel<T>, log: Log);
+    fn execute(&self, ch: Channel<T>) -> Result<IPResult, IPResult>;
 }
 
 pub fn execute<T: Clone + Send + 'static + Display>(
     prover: impl IP<T> + Send + 'static,
     verifier: impl IP<T> + Send + 'static
-) {
+) -> Result<IPResult, IPResult> {
     let (ch1, ch2) = Channel::<T>::gen();
-    let log = Log::new();
-    let (lg1, lg2) = (log.clone(), log.clone());
 
-    let prover_handle = thread::spawn(move || {
-        prover.execute(ch1, lg1);
-    });
+    let prover_handle = thread::spawn(move || { prover.execute(ch1) });
     let verifier_handle = thread::spawn(move || {
-        verifier.execute(ch2, lg2);
+        verifier.execute(ch2);
     });
-
-    prover_handle.join().unwrap();
     verifier_handle.join().unwrap();
-
-    let log = &*log.get_log().lock().unwrap();
-    for message in log {
-        println!("{}", message);
-    }
-}
-
-#[derive(Clone)]
-pub struct Log {
-    log: Arc<Mutex<Vec<String>>>,
-}
-
-impl Log {
-    pub fn new() -> Log {
-        let vec: Vec<String> = Vec::new();
-        Log {
-            log: Arc::new(Mutex::new(vec)),
-        }
-    }
-
-    pub fn write(&self, message: String) {
-        let mut log = self.log.lock().unwrap();
-        log.push(message);
-    }
-
-    pub fn get_log(&self) -> &Arc<Mutex<Vec<String>>> {
-        &self.log
-    }
+    prover_handle.join().unwrap()
 }
 
 // bidirectional channel
@@ -123,5 +95,44 @@ impl<R: Ring> fmt::Display for Data<R> {
                 if *b { write!(f, "Accept") } else { write!(f, "Reject") }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::poly_utils::MultiPoly;
+    use crate::prover::SumCheckProver;
+    use crate::verifier::SumCheckVerifier;
+
+    use lattirust_arithmetic::ring::Z2_64;
+    use crate::ip;
+    #[test]
+    fn test_sum_check() {
+        // Define a polynomial 3 + 2x1^2 + x1*x2 + 5x2 in Z2_64
+        let poly = MultiPoly {
+            terms: vec![
+                (Z2_64::from(3 as u8), vec![]),
+                (Z2_64::from(2 as u8), vec![(0, 2)]),
+                (Z2_64::from(1 as u8), vec![(0, 1), (1, 1)]),
+                (Z2_64::from(5 as u8), vec![(1, 1)])
+            ],
+        };
+        let claimed_sum = Z2_64::from(27u8);
+        let degrees = poly.multi_degree();
+
+        let prover = SumCheckProver::<Z2_64> {
+            polynomial: poly.clone().into(),
+        };
+
+        let verifier = SumCheckVerifier::<Z2_64> {
+            cyclotomic_ring_modulus: 2,
+            polynomial: poly.clone().into(),
+            degrees,
+            claimed_sum,
+        };
+
+        let result = ip::execute(prover, verifier);
+
+        assert!(result.is_ok())
     }
 }
