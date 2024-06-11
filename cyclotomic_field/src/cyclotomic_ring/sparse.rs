@@ -2,23 +2,25 @@ use std::{collections::HashMap, fmt::Debug};
 
 use super::Field;
 
-use super::PrimeCyclotomicFieldElement;
+use super::crt_basis::RqCRT;
 
 #[derive(Clone)]
-pub struct Number<F: Field> {
-    order: usize,
+pub struct RqSparse<F: Field> {
     pub coeffs: HashMap<usize, F>,
+    pub prime: usize,
+    pub prime_power: usize,
 }
 
-pub fn print_cyclotomic_element<F: Field>(z: &Number<F>) -> String {
+fn print_cyclotomic_element<F: Field>(z: &RqSparse<F>) -> String {
     let mut str_list: Vec<String> = vec![];
     let mut exp = 0;
-    while &exp != &z.order {
+    let order = z.prime.pow(z.prime_power as u32);
+    while &exp != &order {
         let zero = F::zero();
         let coeff = z.coeffs.get(&exp).unwrap_or(&zero);
         if !coeff.is_zero() {
             str_list.push(String::from(
-                format!("{}*E({})^{}", coeff, z.order, exp).as_str(),
+                format!("{}*E({})^{}", coeff, order, exp).as_str(),
             ));
         }
         exp += 1;
@@ -26,77 +28,73 @@ pub fn print_cyclotomic_element<F: Field>(z: &Number<F>) -> String {
     "(".to_string() + &str_list.join(" + ") + ")"
 }
 
-impl<F: Field> Debug for Number<F> {
+impl<F: Field> Debug for RqSparse<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CyclotomicNumber ({})", print_cyclotomic_element(self))
+        write!(f, "SparseCyclotomic ({})", print_cyclotomic_element(self))
     }
 }
 
-impl<F> Number<F>
+impl<F> RqSparse<F>
 where
     F: Field,
 {
-    pub fn new(order: usize, coeffs: &HashMap<usize, F>) -> Number<F> {
-        // There should be a restriction on the coeffs keys depending on the order
-        Number {
-            order,
+    pub fn new(prime: usize, prime_power: usize, coeffs: &HashMap<usize, F>) -> RqSparse<F> {
+        assert!(prime.pow(prime_power as u32 - 1) * (prime - 1) >= coeffs.len());
+        RqSparse {
             coeffs: coeffs.clone(),
+            prime,
+            prime_power,
         }
     }
 
-    pub fn increase_order_to(z: &mut Self, new_order: usize) {
-        let mut new_coeffs = HashMap::default();
-        for (exp, coeff) in &z.coeffs {
-            new_coeffs.insert(new_order * exp / z.order, *coeff);
+    pub fn to_crt_basis(&self, rou: F) -> RqCRT<F> {
+        let prime = self.prime;
+        let prime_power = self.prime_power;
+        let varphi_m = self.coeffs.len();
+        let m_prime = varphi_m / (prime - 1);
+        // Ensure rou is the m-th root of unity
+        assert_eq!(rou.pow(prime.pow(prime_power as u32) as u128), F::one());
+        let omega = rou;
+        let order = prime.pow(prime_power as u32 - 1) * (prime - 1);
+        let mut crt_coeffs = vec![F::zero(); order];
+
+        let mut current_omega_power = F::one();
+        let mut omega_powers: Vec<F> = Vec::new();
+        for _ in 0..m_prime * prime - 1 {
+            omega_powers.push(current_omega_power.clone());
+            current_omega_power = current_omega_power * omega;
         }
-        z.order = new_order;
-        z.coeffs = new_coeffs;
+        omega_powers.push(current_omega_power);
+        if prime == 2 {
+            // Note that in the dense case we use NTT instead of CRT for po2
+            for i in 0..varphi_m {
+                let mut sum = F::zero();
+                for (j, &coeff) in &self.coeffs {
+                    sum = sum + omega_powers[(i * j) % varphi_m] * coeff;
+                }
+                crt_coeffs[i] = sum;
+            }
+        } else {
+            let relatives_set = euler_totient(prime, prime_power);
+            for i in relatives_set {
+                let mut sum = F::zero();
+                for (j, &coeff) in &self.coeffs {
+                    sum = sum + omega_powers[(i * j) % varphi_m] * coeff;
+                }
+                crt_coeffs[i] = sum;
+            }
+        }
+        RqCRT {
+            crt_coeffs,
+            prime,
+            prime_power,
+        }
     }
 }
 
-impl<F> PrimeCyclotomicFieldElement<F> for Number<F>
-where
-    F: Field,
-{
-    fn e(n: usize, k: usize) -> Self {
-        let mut coeffs = HashMap::<usize, F>::default();
-        coeffs.insert(k, F::one());
-        Number::new(n, &coeffs)
-    }
-
-    fn scalar_mul(&mut self, scalar: &F) -> &mut Self {
-        // TODO resolve clones
-        let mut result = self.clone();
-        for (_, coeff) in result.coeffs.iter_mut() {
-            *coeff = coeff.clone() * scalar.clone();
-        }
-        *self = result;
-        self
-    }
-
-    fn zero_order(n: usize) -> Self {
-        todo!()
-    }
-
-    fn one_order(n: usize) -> Self {
-        todo!()
-    }
-}
-
-#[cfg(test)]
-mod cyclotomic_prime_tests {
-    use rand::random;
-
-    use super::*;
-    #[test]
-    fn print_test() {
-        let mut coeffs = HashMap::<usize, fields::M31>::default();
-        for i in 0..5 {
-            let random_u64: u64 = random();
-            let m31_rand = fields::M31::reduce(random_u64);
-            coeffs.insert(i, m31_rand);
-        }
-        let random_cyclotomic_element = Number::new(5, &coeffs);
-        println!("{:?}", random_cyclotomic_element);
-    }
+fn euler_totient(prime: usize, prime_power: usize) -> impl Iterator<Item = usize> {
+    let m_prime = prime.pow(prime_power as u32);
+    let relative_set =
+        (1..prime).chain((1..(m_prime)).flat_map(move |i| i * prime + 1..prime * (i + 1)));
+    relative_set
 }

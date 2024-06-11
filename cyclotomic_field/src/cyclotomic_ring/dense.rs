@@ -1,3 +1,6 @@
+use std::fmt::Debug;
+use std::ops::Mul;
+
 use super::crt_basis::RqCRT;
 use super::Field;
 
@@ -10,10 +13,29 @@ pub struct RqDense<F: Field> {
     pub prime_power: usize,
 }
 
+fn print_cyclotomic_element<F: Field>(z: &RqDense<F>) -> String {
+    let mut str_list: Vec<String> = vec![];
+    let order = z.prime.pow(z.prime_power as u32);
+    for (i, coeff) in z.coeffs.iter().enumerate() {
+        str_list.push(String::from(format!("{}*E({})^{}", coeff, order, i)));
+    }
+    "(".to_string() + &str_list.join(" + ") + ")"
+}
+
+impl<F: Field> Debug for RqDense<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DenseCyclotomic ({})", print_cyclotomic_element(self))
+    }
+}
+
 impl<F> RqDense<F>
 where
     F: Field,
 {
+    pub fn reduce(&self) -> Self {
+        todo!()
+    }
+
     pub fn new(prime: usize, prime_power: usize, coeffs: Vec<F>) -> Self {
         // Assure is a prime power cyclotomic
         assert_eq!(
@@ -21,11 +43,36 @@ where
             coeffs.len()
         );
 
-        RqDense {
+        let rq = RqDense {
             coeffs,
             prime,
             prime_power,
+        };
+        rq.reduce() // might not be needed
+    }
+
+    pub fn naive_mul(self, rhs: Self) -> Self {
+        let lhs_coeffs = self.coeffs;
+        let m = lhs_coeffs.len();
+
+        let rhs_coeffs = rhs.coeffs;
+        let n = rhs_coeffs.len();
+
+        assert_eq!(self.prime, rhs.prime);
+        assert_eq!(self.prime_power, rhs.prime_power);
+        let result_size = m + n - 1;
+        let mut result = vec![F::zero(); result_size];
+        for i in 0..m {
+            for j in 0..n {
+                result[i+j] += lhs_coeffs[i]*rhs_coeffs[j];
+            }
         }
+        let rq = RqDense {
+            coeffs: result,
+            prime: self.prime,
+            prime_power: self.prime_power,
+        };
+        rq.reduce()
     }
 
     pub fn to_crt_basis(&self, rou: F) -> RqCRT<F> {
