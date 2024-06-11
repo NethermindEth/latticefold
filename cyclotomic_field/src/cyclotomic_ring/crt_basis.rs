@@ -59,6 +59,7 @@ where
             omega_powers.push(current_omega_power.clone());
             current_omega_power = current_omega_power * omega;
         }
+
         omega_powers.push(current_omega_power);
         RqCRT::radixp_intt(prime, prime_power, omega_powers.as_slice(), crt_coeffs);
     }
@@ -129,7 +130,12 @@ where
     }
 
     fn radixp_intt(prime: usize, prime_power: usize, omega_powers: &[F], crt_coeffs: &mut [F]) {
-        RqDense::radixp_ntt(prime, prime_power, omega_powers, crt_coeffs);
+        // Get the inverse powers
+        let mut omega_powers = omega_powers.to_vec();
+        omega_powers.reverse();
+        omega_powers.rotate_right(1);
+
+        RqDense::radixp_ntt(prime, prime_power, &omega_powers, crt_coeffs);
         let mut inv_n = F::zero();
         let one = F::one();
         for _ in 0..crt_coeffs.len() {
