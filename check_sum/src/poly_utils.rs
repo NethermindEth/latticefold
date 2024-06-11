@@ -377,4 +377,56 @@ mod tests {
 
         assert_eq!(univariate_poly, expected_univariate_poly);
     }
+
+    #[test]
+    fn test_partial_eval() {
+        // Define a polynomial 3 + 2x1^2 + x1*x2 + 5x2 in Z2_64
+        let poly = MultiPoly {
+            terms: vec![
+                (Z2_64::from(3 as u8), vec![]),
+                (Z2_64::from(2 as u8), vec![(0, 2)]),
+                (Z2_64::from(1 as u8), vec![(0, 1), (1, 1)]),
+                (Z2_64::from(5 as u8), vec![(1, 1)])
+            ],
+        };
+
+        // Perform partial evaluation by setting x1 = 2
+        let result = poly.partial_eval(Z2_64::from(2 as u8), 0).simplify();
+        // Expected result after setting x1 = 2:
+        // 3 + 2*2^2 + 2*x2 + 5*x2
+        // = 3 + 8 + 2*x2 + 5*x2
+        // = 11 + 7*x2
+        let expected_result = MultiPoly {
+            terms: vec![(Z2_64::from(11 as u8), vec![]), (Z2_64::from(7 as u8), vec![(1, 1)])],
+        };
+
+        assert_eq!(result, expected_result);
+        let poly = MultiPoly {
+            terms: vec![
+                (Z2_64::from(1 as u8), vec![]),
+                (Z2_64::from(3 as u8), vec![(0, 1)]),
+                (Z2_64::from(4 as u8), vec![(1, 2)]),
+                (Z2_64::from(6 as u8), vec![(0, 1), (1, 1)]),
+                (Z2_64::from(2 as u8), vec![(0, 2), (1, 1)])
+            ],
+        };
+
+        // Perform partial evaluation by setting x2 = 3
+        let result = poly.partial_eval(Z2_64::from(3 as u8), 1).simplify();
+
+        // Expected result after setting x2 = 3:
+        // 1 + 3x1 + 4*3^2 + 6x1*3 + 2x1^2*3
+        // = 1 + 3x1 + 4*9 + 18x1 + 6x1^2
+        // = 1 + 3x1 + 36 + 18x1 + 6x1^2
+        // = 37 + 21x1 + 6x1^2
+        let expected_result = MultiPoly {
+            terms: vec![
+                (Z2_64::from(37 as u8), vec![]),
+                (Z2_64::from(21 as u8), vec![(0, 1)]),
+                (Z2_64::from(6 as u8), vec![(0, 2)])
+            ],
+        };
+
+        assert_eq!(result, expected_result);
+    }
 }
