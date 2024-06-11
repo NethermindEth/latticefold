@@ -23,7 +23,7 @@ impl<R: Ring> SumCheckVerifier<R> {
         for (i, round) in self.transcript.rounds.iter().enumerate() {
             let j = rounds_len - 1 - i;
 
-            let sum = round.unipoly.eval(&one) + round.unipoly.eval(&zero);
+            let sum = round.unipoly.at_one() + round.unipoly.at_zero();
             if sum != check_sum {
                 return false;
             } else {

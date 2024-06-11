@@ -58,6 +58,13 @@ impl<R: Ring> UnivPoly<R> {
                 .join(" + ")
         }
     }
+    pub fn at_zero(&self) -> R {
+        self.coeffs[0]
+    }
+    // Sum the coefficients of the polynomial
+    pub fn at_one(&self) -> R {
+        self.coeffs.iter().fold(R::zero(), |acc, coeff| acc + *coeff)
+    }
 }
 
 /// Compute the sums of k-powers of the list of summands for k up to `max_exponent`.
