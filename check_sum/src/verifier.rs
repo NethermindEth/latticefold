@@ -72,7 +72,6 @@ mod test {
         };
 
         let transcript = prover.prove();
-        println!("{:?}", transcript);
         let verifier = SumCheckVerifier::new(transcript);
         assert_eq!(verifier.verify(), true);
     }
