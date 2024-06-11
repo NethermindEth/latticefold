@@ -1,8 +1,7 @@
 use std::fmt::Debug;
-use std::ops::Mul;
 
 use super::crt_basis::RqCRT;
-use super::Field;
+use super::{CRTDomain, Field};
 
 /// Ring m-th cyclotomic element where m is a power of a prime
 /// The minimal polynomial for a prime is define as Phi_p(X) = Sum_{i=0}^{p-1} X^i
@@ -64,7 +63,7 @@ where
         let mut result = vec![F::zero(); result_size];
         for i in 0..m {
             for j in 0..n {
-                result[i+j] += lhs_coeffs[i]*rhs_coeffs[j];
+                result[i + j] += lhs_coeffs[i] * rhs_coeffs[j];
             }
         }
         let rq = RqDense {
@@ -75,11 +74,12 @@ where
         rq.reduce()
     }
 
-    pub fn to_crt_basis(&self, rou: F) -> RqCRT<F> {
+    pub fn to_crt_basis(&self, domain: &CRTDomain<F>) -> RqCRT<F> {
         let prime = self.prime;
         let prime_power = self.prime_power;
         // Ensure rou is the m-th root of unity
-        assert_eq!(rou.pow(prime.pow(prime_power as u32) as u128), F::one());
+        let omega = domain.omega_powers[1];
+        assert_eq!(omega.pow(prime.pow(prime_power as u32) as u128), F::one());
         let mut coeffs = self.coeffs.clone();
         if prime == 2 {
             // Note that in the prime = 2 case the twiddle factors for CRT are just a scalar
@@ -87,9 +87,19 @@ where
             // rescale at a later time or not rescale and perform ICRT without affecting
             // Basically CRT = NTT for po2
             // Same thing happens with reordering/permutations
-            RqDense::<F>::ntt(prime, prime_power - 1, rou, coeffs.as_mut_slice());
+            RqDense::<F>::ntt(
+                prime,
+                prime_power - 1,
+                &domain.omega_powers,
+                coeffs.as_mut_slice(),
+            );
         } else {
-            RqDense::crt(prime, prime_power, rou, coeffs.as_mut_slice())
+            RqDense::crt(
+                prime,
+                prime_power,
+                &domain.omega_powers,
+                coeffs.as_mut_slice(),
+            )
         }
         RqCRT {
             crt_coeffs: coeffs,
@@ -98,37 +108,15 @@ where
         }
     }
 
-    pub fn ntt(prime: usize, prime_power: usize, omega: F, coeffs: &mut [F]) {
-        let varphi_m = coeffs.len();
-        let m_prime = varphi_m / (prime - 1);
-
-        // Set up omegas powers
-        let mut current_omega_power = F::one();
-        let mut omega_powers: Vec<F> = Vec::new();
-        for _ in 0..m_prime * prime - 1 {
-            omega_powers.push(current_omega_power.clone());
-            current_omega_power = current_omega_power * omega;
-        }
-        omega_powers.push(current_omega_power);
+    pub fn ntt(prime: usize, prime_power: usize, omega_powers: &[F], coeffs: &mut [F]) {
         // TODO: optimize radix2-ntt
-        RqDense::radixp_ntt(prime, prime_power, omega_powers.as_slice(), coeffs);
+        RqDense::radixp_ntt(prime, prime_power, omega_powers, coeffs);
     }
 
     // Assure omega is the m-th root of unity
-    fn crt(prime: usize, prime_power: usize, omega: F, coeffs: &mut [F]) {
+    fn crt(prime: usize, prime_power: usize, omega_powers: &[F], coeffs: &mut [F]) {
         let varphi_m = coeffs.len();
         let m_prime = varphi_m / (prime - 1);
-
-        // Set up omegas powers
-        let mut current_omega_power = F::one();
-        let mut omega_powers: Vec<F> = Vec::new();
-        // Do we need all the powers of omega or just some? review
-        // twiddle factors for CRT
-        for _ in 0..m_prime * prime - 1 {
-            omega_powers.push(current_omega_power.clone());
-            current_omega_power = current_omega_power * omega;
-        }
-        omega_powers.push(current_omega_power);
 
         let prime_omegas = omega_powers
             .iter()
@@ -151,7 +139,7 @@ where
 
         RqDense::inverse_stride_permutation(prime - 1, coeffs);
 
-        let t_hat = RqDense::twiddle_hat_factors(prime, omega_powers.as_slice());
+        let t_hat = RqDense::twiddle_hat_factors(prime, omega_powers);
         for (&twiddle_factor, coeff) in t_hat.iter().zip(coeffs.iter_mut()) {
             *coeff = *coeff * twiddle_factor;
         }
