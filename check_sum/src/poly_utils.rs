@@ -6,7 +6,7 @@ use lattirust_arithmetic::ring::Ring;
 // Represented by a list of coefficients of ascending powers
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UnivPoly<R: Ring> {
-    coeffs: Vec<R>,
+    pub coeffs: Vec<R>,
 }
 
 // Represents a multivariate polynomial
