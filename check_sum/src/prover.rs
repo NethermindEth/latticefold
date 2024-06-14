@@ -34,10 +34,7 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
 
             let uni = partial.to_univariate(j);
             let challenge = sum_check.hasher.get_big_challenge();
-            for coeff in &uni.coeffs {
-                // Iterate over references
-                sum_check.hasher.absorb_ring(coeff);
-            }
+
             sum_check.add_round(challenge.into(), j, uni);
             poly = poly.partial_eval(challenge.into(), j).simplify().clone();
         }

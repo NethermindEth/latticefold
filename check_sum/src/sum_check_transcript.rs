@@ -53,12 +53,14 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
     }
 
     pub fn add_round(&mut self, challenge: R, var_index: usize, unipoly: UnivPoly<R>) {
+        self.hasher.absorb_ring_vec(&unipoly.coeffs);
         let round = SumCheckRound {
             challenge,
             var_index,
             unipoly,
             _marker: std::marker::PhantomData,
         };
+
         self.rounds.push(round);
     }
 }
