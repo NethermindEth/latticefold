@@ -1,13 +1,23 @@
-use lattirust_arithmetic::ring::Ring;
+use ark_crypto_primitives::sponge::Absorb;
+use ark_ff::PrimeField;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
+    LatticefoldChallengeSet,
+    OverField,
+};
 
-use crate::transcript::{ self, SumCheckTranscript };
-pub struct SumCheckVerifier<R: Ring> {
-    transcript: SumCheckTranscript<R>,
+use crate::sum_check_transcript::SumCheckTranscript;
+pub struct SumCheckVerifier<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
+    where F: Absorb {
+    _marker: std::marker::PhantomData<(F, CS)>,
+    transcript: SumCheckTranscript<F, R, CS>,
 }
 
-impl<R: Ring> SumCheckVerifier<R> {
-    pub fn new(transcript: SumCheckTranscript<R>) -> SumCheckVerifier<R> {
+impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckVerifier<F, R, CS>
+    where F: Absorb
+{
+    pub fn new(transcript: SumCheckTranscript<F, R, CS>) -> SumCheckVerifier<F, R, CS> {
         SumCheckVerifier {
+            _marker: std::marker::PhantomData,
             transcript,
         }
     }
@@ -15,10 +25,8 @@ impl<R: Ring> SumCheckVerifier<R> {
     // Returns true if the transcript represents a true claim
     // False otherwise
     pub fn verify(&self) -> bool {
-        let zero = R::zero();
-        let one = R::one();
         let mut check_sum = self.transcript.claimed_sum;
-        let mut poly = &self.transcript.polynomial;
+        let poly = &self.transcript.polynomial;
         let rounds_len = self.transcript.rounds.len();
         for (i, round) in self.transcript.rounds.iter().enumerate() {
             let j = rounds_len - 1 - i;
@@ -42,37 +50,60 @@ impl<R: Ring> SumCheckVerifier<R> {
         return oracle_evaluation == check_sum;
     }
 }
-
 #[cfg(test)]
 mod test {
-    use crate::poly_utils::MultiPoly;
-    use crate::prover::SumCheckProver;
+    use crate::{ poly_utils::MultiPoly, prover::SumCheckProver, verifier::SumCheckVerifier };
 
-    use lattirust_arithmetic::ring::Z2_64;
-    use crate::transcript;
+    use lattirust_arithmetic::{
+        challenge_set::latticefold_challenge_set::BinarySmallSet,
+        ring::{ Pow2CyclotomicPolyRingNTT, Zq },
+    };
 
-    use super::SumCheckVerifier;
     #[test]
-    fn test_prover() {
-        // Define a polynomial 3 + 2x1^2 + x1*x2 + 5x2 in Z2_64
+    fn test_sumcheck_protocol() {
+        // Define the modulus Q and the dimension N
+        const Q: u64 = 17; // Replace with an appropriate modulus
+        const N: usize = 8; // Replace with an appropriate dimension
+
+        // Example function to generate coefficients
+        fn generate_coefficient(index: usize) -> Zq<Q> {
+            Zq::<Q>::from(index as u64) // Simple example: use the index as the coefficient value
+        }
+
+        // Create an instance of Pow2CyclotomicPolyRingNTT using from_fn
+        let poly_ntt = Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient);
+
+        // Create a MultiPoly instance
         let poly = MultiPoly {
-            terms: vec![
-                (Z2_64::from(3 as u8), vec![]),
-                (Z2_64::from(2 as u8), vec![(0, 2)]),
-                (Z2_64::from(1 as u8), vec![(0, 1), (1, 1)]),
-                (Z2_64::from(5 as u8), vec![(1, 1)])
-            ],
-        };
-        let claimed_sum = Z2_64::from(27u8);
-
-        let prover = SumCheckProver::<Z2_64> {
-            polynomial: poly.clone().into(),
-            cyclotomic_ring_modulus: 2,
-            claimed_sum,
+            terms: vec![(poly_ntt, vec![(0, 1)])],
         };
 
+        // Define the claimed sum for testing
+        let claimed_sum = poly_ntt; // Example sum
+
+        // Create an instance of the prover
+        let prover = SumCheckProver::<
+            Zq<Q>,
+            Pow2CyclotomicPolyRingNTT<Q, N>,
+            BinarySmallSet<Q, N>
+        > {
+            _marker: std::marker::PhantomData,
+            polynomial: poly.clone(),
+            claimed_sum: Into::into(claimed_sum),
+        };
+
+        // Prove the statement
         let transcript = prover.prove();
-        let verifier = SumCheckVerifier::new(transcript);
-        assert_eq!(verifier.verify(), true);
+
+        // Create an instance of the verifier
+        let verifier = SumCheckVerifier::<
+            Zq<Q>,
+            Pow2CyclotomicPolyRingNTT<Q, N>,
+            BinarySmallSet<Q, N>
+        >::new(transcript);
+
+        // Verify the transcript
+        let result = verifier.verify();
+        assert_eq!(result, true)
     }
 }

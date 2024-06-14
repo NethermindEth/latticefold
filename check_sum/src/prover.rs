@@ -1,19 +1,28 @@
-use crate::{ poly_utils::MultiPoly, transcript::{ SumCheckRound, SumCheckTranscript } };
-use lattirust_arithmetic::ring::Ring;
-use std::sync::Arc;
-use rand::Rng;
+use crate::{
+    poly_utils::MultiPoly,
+    sum_check_transcript::SumCheckTranscript,
+    transcript::Transcript,
+};
+use ark_crypto_primitives::sponge::Absorb;
+use ark_ff::PrimeField;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
+    LatticefoldChallengeSet,
+    OverField,
+};
 
-pub struct SumCheckProver<R: Ring> {
+pub struct SumCheckProver<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
+    where F: Absorb {
+    pub _marker: std::marker::PhantomData<(F, CS)>,
     pub polynomial: MultiPoly<R>,
-    pub cyclotomic_ring_modulus: u128,
     pub claimed_sum: R,
 }
-impl<R: Ring> SumCheckProver<R> {
-    pub fn prove(&self) -> SumCheckTranscript<R> {
-        let mut rng = rand::thread_rng();
+impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckProver<F, R, CS>
+    where F: Absorb
+{
+    pub fn prove(&self) -> SumCheckTranscript<F, R, CS> {
         let num_vars = self.polynomial.num_vars();
         let mut poly = self.polynomial.clone();
-        let mut transcript = SumCheckTranscript::<R>::new(
+        let mut transcript = SumCheckTranscript::<F, R, CS>::new(
             self.claimed_sum,
             self.polynomial.clone().simplify(),
             self.polynomial.num_vars()
@@ -28,15 +37,9 @@ impl<R: Ring> SumCheckProver<R> {
             let partial = poly.partial_summation(&vals).simplify();
 
             let uni = partial.to_univariate(j);
-
-            // send univariate restriction to verifier
-
-            let challenge = R::from(rng.gen_range(0..self.cyclotomic_ring_modulus));
-            // restrict according to random challenge
-            let round: SumCheckRound<R> = SumCheckRound::new(poly.clone(), uni, j, challenge);
-
-            transcript.add_round(round);
-            poly = poly.partial_eval(challenge, j).simplify().clone();
+            let challenge = transcript.hasher.get_big_challenge();
+            transcript.add_round(challenge.into(), j, uni);
+            poly = poly.partial_eval(challenge.into(), j).simplify().clone();
         }
         transcript
     }
