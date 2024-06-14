@@ -5,17 +5,17 @@ use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
     OverField,
 };
 
-use crate::sum_check_transcript::SumCheckTranscript;
+use crate::sum_check_transcript::SumCheckIP;
 pub struct SumCheckVerifier<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
     where F: Absorb {
     _marker: std::marker::PhantomData<(F, CS)>,
-    transcript: SumCheckTranscript<F, R, CS>,
+    transcript: SumCheckIP<F, R, CS>,
 }
 
 impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckVerifier<F, R, CS>
     where F: Absorb
 {
-    pub fn new(transcript: SumCheckTranscript<F, R, CS>) -> SumCheckVerifier<F, R, CS> {
+    pub fn new(transcript: SumCheckIP<F, R, CS>) -> SumCheckVerifier<F, R, CS> {
         SumCheckVerifier {
             _marker: std::marker::PhantomData,
             transcript,

@@ -10,7 +10,7 @@ use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
     OverField,
 };
 
-pub struct SumCheckTranscript<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
+pub struct SumCheckIP<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
     where F: Absorb {
     pub claimed_sum: R,
     pub polynomial: MultiPoly<R>,
@@ -26,14 +26,14 @@ pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
     pub unipoly: UnivPoly<R>,
 }
 
-impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckTranscript<F, R, CS>
+impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckIP<F, R, CS>
     where F: Absorb
 {
     pub fn new(
         claimed_sum: R,
         polynomial: MultiPoly<R>,
         num_rounds: usize
-    ) -> SumCheckTranscript<F, R, CS> {
+    ) -> SumCheckIP<F, R, CS> {
         let config = PoseidonConfig {
             full_rounds: 8, // Example values, adjust according to your needs
             partial_rounds: 57,
@@ -44,7 +44,7 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
             capacity: 1,
         };
 
-        SumCheckTranscript {
+        SumCheckIP {
             claimed_sum,
             polynomial,
             rounds: Vec::with_capacity(num_rounds),

@@ -1,8 +1,4 @@
-use crate::{
-    poly_utils::MultiPoly,
-    sum_check_transcript::SumCheckTranscript,
-    transcript::Transcript,
-};
+use crate::{ poly_utils::MultiPoly, sum_check_transcript::SumCheckIP, transcript::Transcript };
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
@@ -19,10 +15,10 @@ pub struct SumCheckProver<F: PrimeField, R: OverField<F>, CS: LatticefoldChallen
 impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckProver<F, R, CS>
     where F: Absorb
 {
-    pub fn prove(&self) -> SumCheckTranscript<F, R, CS> {
+    pub fn prove(&self) -> SumCheckIP<F, R, CS> {
         let num_vars = self.polynomial.num_vars();
         let mut poly = self.polynomial.clone();
-        let mut transcript = SumCheckTranscript::<F, R, CS>::new(
+        let mut transcript = SumCheckIP::<F, R, CS>::new(
             self.claimed_sum,
             self.polynomial.clone().simplify(),
             self.polynomial.num_vars()
