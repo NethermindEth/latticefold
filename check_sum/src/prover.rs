@@ -18,7 +18,7 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
     pub fn prove(&self) -> SumCheckIP<F, R, CS> {
         let num_vars = self.polynomial.num_vars();
         let mut poly = self.polynomial.clone();
-        let mut transcript = SumCheckIP::<F, R, CS>::new(
+        let mut sum_check = SumCheckIP::<F, R, CS>::new(
             self.claimed_sum,
             self.polynomial.clone().simplify(),
             self.polynomial.num_vars()
@@ -33,10 +33,10 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
             let partial = poly.partial_summation(&vals).simplify();
 
             let uni = partial.to_univariate(j);
-            let challenge = transcript.hasher.get_big_challenge();
-            transcript.add_round(challenge.into(), j, uni);
+            let challenge = sum_check.hasher.get_big_challenge();
+            sum_check.add_round(challenge.into(), j, uni);
             poly = poly.partial_eval(challenge.into(), j).simplify().clone();
         }
-        transcript
+        sum_check
     }
 }
