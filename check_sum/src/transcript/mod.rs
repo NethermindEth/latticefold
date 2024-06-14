@@ -13,9 +13,10 @@ pub trait Transcript<F: Field, R: OverField<F>> {
     fn absorb(&mut self, v: &F);
     fn absorb_vec(&mut self, v: &[F]);
     fn absorb_ring(&mut self, v: &R);
+    fn absorb_ring_vec(&mut self, v: &[R]);
     fn get_big_challenge(&mut self) -> R::BaseRing;
     fn get_small_challenge(&mut self) -> R;
-    
+
     // /// get_challenge_nbits returns a field element of size nbits
     // fn get_challenge_nbits(&mut self, nbits: usize) -> Vec<bool>;
     // fn get_challenges(&mut self, n: usize) -> Vec<C::ScalarField>;
