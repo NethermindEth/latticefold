@@ -368,6 +368,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyclotomic-rings"
+version = "0.1.0"
+
+[[package]]
 name = "cyclotomic_field"
 version = "0.1.0"
 dependencies = [
