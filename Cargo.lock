@@ -195,7 +195,7 @@ version = "0.1.0"
 dependencies = [
  "ark-relations",
  "ark-std",
- "lattirust-arithmetic",
+ "lattirust-arithmetic 0.0.1-alpha",
 ]
 
 [[package]]
@@ -370,6 +370,10 @@ dependencies = [
 [[package]]
 name = "cyclotomic-rings"
 version = "0.1.0"
+dependencies = [
+ "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/cknabs/lattirust.git?branch=main)",
+ "num-bigint",
+]
 
 [[package]]
 name = "cyclotomic_field"
@@ -679,6 +683,31 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "bincode",
+ "bitter",
+ "delegate",
+ "delegate-attr",
+ "derive_more",
+ "nalgebra",
+ "nalgebra-sparse",
+ "nimue",
+ "num-bigint",
+ "num-traits",
+ "rayon",
+ "rounded-div",
+ "serde",
+ "serde_with",
+ "zeroize",
+]
+
+[[package]]
+name = "lattirust-arithmetic"
+version = "0.0.1-alpha"
+source = "git+ssh://git@github.com/cknabs/lattirust.git?branch=main#b714d1bc3bf91475447a0517b81b6675a87369f5"
 dependencies = [
  "ark-ff",
  "ark-serialize",
