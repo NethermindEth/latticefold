@@ -373,6 +373,7 @@ version = "0.1.0"
 dependencies = [
  "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/cknabs/lattirust.git?branch=main)",
  "num-bigint",
+ "rand",
 ]
 
 [[package]]

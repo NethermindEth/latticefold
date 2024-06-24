@@ -1,5 +1,4 @@
 use lattirust_arithmetic::ring::Zq;
-use num_bigint::BigInt;
 
 mod pbb;
 mod pstark;
@@ -7,6 +6,9 @@ mod pgold;
 mod pm31;
 
 pub trait CyclotomicRing<const Q: u64> {
-    fn get_challenge_set(&self) -> BigInt;
+    // Challenge is on the form of polynomial with 0 and 1 coefficients
+    // TODO This is currently implemented as random zeroes and ones
+    // Change this is so it uses a real hash function
+    fn get_challenge_set(&self) -> Vec<u8>;
     fn to_ntt(&self) -> Vec<Zq<Q>>;
 }
