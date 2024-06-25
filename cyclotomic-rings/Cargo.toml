@@ -5,5 +5,5 @@ edition = "2021"
 
 [dependencies]
 num-bigint = "0.4.5"
-lattirust-arithmetic = { git="ssh://git@github.com/cknabs/lattirust.git", branch = "main"}
+lattirust-arithmetic = { git="ssh://git@github.com/cknabs/lattirust.git", branch = "add_z_big_q"}
 rand = "0.8.5"

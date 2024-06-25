@@ -12,7 +12,7 @@ type ZqQ = Zq<Q>;
 
 pub struct PBBCyclotomicRing<const N: usize>(Pow2CyclotomicPolyRing<ZqQ, N>);
 
-impl<const N: usize> CyclotomicRing<Q> for PBBCyclotomicRing<N> {
+impl<const N: usize> CyclotomicRing<ZqQ> for PBBCyclotomicRing<N> {
     // Challenge can be any polynomial with degree up to 120
     fn get_challenge_set(&self) -> Vec<u8> {
         let mut rng = rand::thread_rng();
