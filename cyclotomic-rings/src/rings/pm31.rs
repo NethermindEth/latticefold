@@ -3,6 +3,7 @@ use super::PrimeCyclotomicRing;
 use lattirust_arithmetic::ring::{ Zq, CyclotomicPolyRingSplittedNTT };
 use rand::Rng;
 use lattirust_arithmetic::partial_ntt::PartialNTT;
+use std::ops::{ Add, Mul };
 const Q: u64 = (1 << 31) - 1;
 const D: usize = 84;
 const Z: usize = 225;
@@ -30,5 +31,19 @@ impl<const N: usize> PrimeCyclotomicRing<Q, N> for PM31CyclotomicRing<N> {
 
     fn ntt(&self, a: &mut [Zq<Q>; N], rou: Zq<Q>) {
         CyclotomicPolyRingSplittedNTT::<Q, N, D, Z, PHI_Z>::ntt(a, rou);
+    }
+}
+
+impl<const N: usize> Add for PM31CyclotomicRing<N> {
+    type Output = Self;
+    fn add(self, rhs: Self) -> Self::Output {
+        PM31CyclotomicRing(rhs.0 + self.0)
+    }
+}
+
+impl<const N: usize> Mul for PM31CyclotomicRing<N> {
+    type Output = Self;
+    fn mul(self, rhs: Self) -> Self::Output {
+        PM31CyclotomicRing(rhs.0 * self.0)
     }
 }
