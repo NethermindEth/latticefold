@@ -1,40 +1,34 @@
-// pM31 = 2^31 − 1
-
-use lattirust_arithmetic::{
-    ntt::NTT,
-    ring::{ Zq, Pow2CyclotomicPolyRingNTT, Pow2CyclotomicPolyRing },
-};
-use super::CyclotomicRing;
+// pBB = 15 · 2^27 + 1
+use super::PrimeCyclotomicRing;
+use lattirust_arithmetic::ring::{ Zq, CyclotomicPolyRingSplittedNTT };
 use rand::Rng;
-
+use lattirust_arithmetic::partial_ntt::PartialNTT;
 const Q: u64 = (1 << 31) - 1;
+const D: usize = 84;
+const Z: usize = 225;
+const PHI_Z: usize = 120;
 
 type ZqQ = Zq<Q>;
+pub struct PM31CyclotomicRing<const N: usize>(CyclotomicPolyRingSplittedNTT<Q, N, D, Z, PHI_Z>);
 
-pub struct PM31CyclotomicRing<const N: usize>(Pow2CyclotomicPolyRing<ZqQ, N>);
-
-impl<const N: usize> CyclotomicRing<ZqQ> for PM31CyclotomicRing<N> {
-    // Challenge can be any polynomial with degree up to 84
-    fn get_challenge_set(&self) -> Vec<u8> {
+impl<const N: usize> PrimeCyclotomicRing<Q, N> for PM31CyclotomicRing<N> {
+    // Challenge can be any polynomial with degree up to 120
+    fn get_challenge_set(&self) -> Vec<ZqQ> {
         let mut rng = rand::thread_rng();
-        let mut random_bytes = [0u8; 11];
+        let mut random_bytes = [0u8; 7];
         rng.fill(&mut random_bytes);
 
         // Convert the bytes to bits
         let mut bits = Vec::new();
         for byte in random_bytes.iter() {
             for i in 0..8 {
-                bits.push((byte >> (7 - i)) & 1);
+                bits.push(ZqQ::from((byte >> (7 - i)) & 1));
             }
         }
-
-        // Trim the bits to 84
-        bits.truncate(84);
         return bits;
     }
 
-    fn to_ntt(&self) -> Vec<ZqQ> {
-        let ntt_ring = Pow2CyclotomicPolyRingNTT::from(self.0);
-        ntt_ring.ntt_coeffs()
+    fn ntt(&self, a: &mut [Zq<Q>; N], rou: Zq<Q>) {
+        CyclotomicPolyRingSplittedNTT::<Q, N, D, Z, PHI_Z>::ntt(a, rou);
     }
 }
