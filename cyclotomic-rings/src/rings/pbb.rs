@@ -33,8 +33,15 @@ impl<const N: usize> PrimeCyclotomicRing<Q, N> for PBBCyclotomicRing<N> {
         CyclotomicPolyRingSplittedNTT::<Q, N, D, Z, PHI_Z>::ntt(a, rou);
     }
 
-    fn get_challenge_from_random_bytes(&self, bytes: &[u8]) -> Vec<Zq<Q>> {
-        todo!()
+    fn try_challenge_from_random_bytes(&self, bytes: &[u8]) -> Vec<Zq<Q>> {
+        assert!(bytes.len() >= 15);
+        let mut bits = Vec::new();
+        for byte in bytes.iter().take(15) {
+            for i in 0..8 {
+                bits.push(ZqQ::from((byte >> (7 - i)) & 1));
+            }
+        }
+        return bits;
     }
 }
 
