@@ -14,7 +14,7 @@ pub struct PM31CyclotomicRing<const N: usize>(CyclotomicPolyRingSplittedNTT<Q, N
 
 impl<const N: usize> PrimeCyclotomicRing<Q, N> for PM31CyclotomicRing<N> {
     // Challenge can be any polynomial with degree up to 120
-    fn get_challenge_set(&self) -> Vec<ZqQ> {
+    fn get_challenge(&self) -> Vec<ZqQ> {
         let mut rng = rand::thread_rng();
         let mut random_bytes = [0u8; 7];
         rng.fill(&mut random_bytes);
@@ -31,6 +31,10 @@ impl<const N: usize> PrimeCyclotomicRing<Q, N> for PM31CyclotomicRing<N> {
 
     fn ntt(&self, a: &mut [Zq<Q>; N], rou: Zq<Q>) {
         CyclotomicPolyRingSplittedNTT::<Q, N, D, Z, PHI_Z>::ntt(a, rou);
+    }
+
+    fn get_challenge_from_random_bytes(&self, bytes: &[u8]) -> Vec<Zq<Q>> {
+        todo!()
     }
 }
 
