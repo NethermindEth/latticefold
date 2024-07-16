@@ -28,8 +28,6 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
             &num_vars
         );
         for j in (0..num_vars).rev() {
-            // let partial = poly.partial_summation(&vals).simplify();
-            // let uni = partial.to_univariate(j);
             let mut flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> =
                 poly.flattened_ml_extensions
                     .iter()

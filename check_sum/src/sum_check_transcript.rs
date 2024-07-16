@@ -1,7 +1,4 @@
-use crate::{
-    poly_utils::{ MultiPoly, UnivPoly },
-    transcript::{ poseidon::PoseidonTranscript, Transcript },
-};
+use crate::transcript::{ poseidon::PoseidonTranscript, Transcript };
 use lattirust_arithmetic::polynomials::VirtualPolynomial;
 use ark_crypto_primitives::sponge::{ poseidon::PoseidonConfig, Absorb };
 use ark_ff::PrimeField;

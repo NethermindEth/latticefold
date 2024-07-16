@@ -63,7 +63,7 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
 mod test {
     use std::sync::Arc;
 
-    use crate::{ poly_utils::MultiPoly, prover::SumCheckProver, verifier::SumCheckVerifier };
+    use crate::{ prover::SumCheckProver, verifier::SumCheckVerifier };
 
     use ark_ff::{ One, Zero };
     use lattirust_arithmetic::{
@@ -95,8 +95,6 @@ mod test {
             &Arc::from(mle),
             Pow2CyclotomicPolyRingNTT::<Q, N>::one()
         );
-
-        println!("{:?}", polynomial);
         // Define the claimed sum for testing
         let claimed_sum = poly_ntt; // Example sum
 
