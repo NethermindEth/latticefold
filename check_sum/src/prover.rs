@@ -53,10 +53,16 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
 
             poly.products.iter().for_each(|(coeff, indices)| {
                 let mut new_poly = VirtualPolynomial::new(1);
-                new_poly.add_mle_list(
+                let res = new_poly.add_mle_list(
                     indices.iter().map(|i| Arc::from(flattened_ml_extensions[*i].clone())),
                     *coeff
                 );
+                match res {
+                    Ok(_) => {}
+                    Err(_) => {
+                        panic!("Creating univariate polynomial did not work.");
+                    }
+                }
                 uni = &uni + &new_poly;
             });
 
