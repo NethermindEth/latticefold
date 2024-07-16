@@ -27,7 +27,7 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
             self.polynomial.clone(),
             &num_vars
         );
-        for j in (0..num_vars).rev() {
+        for j in 0..num_vars {
             let mut flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> =
                 poly.flattened_ml_extensions
                     .iter()
@@ -39,11 +39,12 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
             flattened_ml_extensions.iter_mut().for_each(|mle| {
                 let eval0 = (0..1 << (num_vars - j - 1)).fold(
                     R::zero(),
-                    |acc, index| acc + mle.evaluations[index]
+
+                    |acc, index| { acc + mle.evaluations[index] }
                 );
                 let eval1 = (1 << (num_vars - j - 1)..1 << (num_vars - j)).fold(
                     R::zero(),
-                    |acc, index| acc + mle.evaluations[index]
+                    |acc, index| { acc + mle.evaluations[index] }
                 );
                 *mle = DenseMultilinearExtension::<R>::from_evaluations_slice(1, &[eval0, eval1]);
             });

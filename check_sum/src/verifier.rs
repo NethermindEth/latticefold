@@ -88,15 +88,24 @@ mod test {
         let poly_ntt = Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient);
 
         let mle = DenseMultilinearExtension::from_evaluations_slice(
-            1,
-            &[Pow2CyclotomicPolyRingNTT::<Q, N>::zero(), poly_ntt]
+            3,
+            &[
+                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
+                poly_ntt,
+                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
+                poly_ntt,
+                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
+                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
+                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
+                poly_ntt,
+            ]
         );
         let polynomial = VirtualPolynomial::new_from_mle(
             &Arc::from(mle),
             Pow2CyclotomicPolyRingNTT::<Q, N>::one()
         );
         // Define the claimed sum for testing
-        let claimed_sum = poly_ntt; // Example sum
+        let claimed_sum = poly_ntt + poly_ntt + poly_ntt; // Example sum
 
         // Create an instance of the prover
         let prover = SumCheckProver::<
