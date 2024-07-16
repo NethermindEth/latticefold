@@ -43,11 +43,11 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
             if sum != check_sum {
                 return false;
             } else {
-                // if round.unipoly.degree() > poly.multi_degree()[j] {
-                //     return false;
-                // } else {
-                check_sum = round.unipoly.evaluate(&[round.challenge]).unwrap();
-                // }
+                if round.unipoly.aux_info.max_degree > poly.aux_info.max_degree {
+                    return false;
+                } else {
+                    check_sum = round.unipoly.evaluate(&[round.challenge]).unwrap();
+                }
             }
         }
         let challenge_vector: Vec<R> = self.transcript.rounds
