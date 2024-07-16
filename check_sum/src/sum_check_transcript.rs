@@ -2,7 +2,7 @@ use crate::{
     poly_utils::{ MultiPoly, UnivPoly },
     transcript::{ poseidon::PoseidonTranscript, Transcript },
 };
-
+use lattirust_arithmetic::polynomials::VirtualPolynomial;
 use ark_crypto_primitives::sponge::{ poseidon::PoseidonConfig, Absorb };
 use ark_ff::PrimeField;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
@@ -13,17 +13,17 @@ use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
 pub struct SumCheckIP<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
     where F: Absorb {
     pub claimed_sum: R,
-    pub polynomial: MultiPoly<R>,
+    pub polynomial: VirtualPolynomial<R>,
     pub rounds: Vec<SumCheckRound<F, R>>,
     pub hasher: PoseidonTranscript<F, R, CS>,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
     _marker: std::marker::PhantomData<F>,
     pub challenge: R,
     var_index: usize,
-    pub unipoly: UnivPoly<R>,
+    pub unipoly: VirtualPolynomial<R>,
 }
 
 impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckIP<F, R, CS>
@@ -31,8 +31,8 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
 {
     pub fn new(
         claimed_sum: R,
-        polynomial: MultiPoly<R>,
-        num_rounds: usize
+        polynomial: VirtualPolynomial<R>,
+        num_rounds: &usize
     ) -> SumCheckIP<F, R, CS> {
         let config = PoseidonConfig {
             full_rounds: 8, // Example values, adjust according to your needs
@@ -47,13 +47,17 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
         SumCheckIP {
             claimed_sum,
             polynomial,
-            rounds: Vec::with_capacity(num_rounds),
+            rounds: Vec::with_capacity(*num_rounds),
             hasher: PoseidonTranscript::new(&config),
         }
     }
 
-    pub fn add_round(&mut self, challenge: R, var_index: usize, unipoly: UnivPoly<R>) {
-        self.hasher.absorb_ring_vec(&unipoly.coeffs);
+    pub fn add_round(&mut self, challenge: R, var_index: usize, unipoly: VirtualPolynomial<R>) {
+        let absorbtion_vec: Vec<R> = unipoly.flattened_ml_extensions
+            .iter()
+            .map(|mle| mle.evaluations[0])
+            .collect();
+        self.hasher.absorb_ring_vec(&absorbtion_vec);
         let round = SumCheckRound {
             challenge,
             var_index,
@@ -66,7 +70,11 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
 }
 
 impl<F: PrimeField, R: OverField<F>> SumCheckRound<F, R> {
-    pub fn new(unipoly: UnivPoly<R>, var_index: usize, challenge: R) -> SumCheckRound<F, R> {
+    pub fn new(
+        unipoly: VirtualPolynomial<R>,
+        var_index: usize,
+        challenge: R
+    ) -> SumCheckRound<F, R> {
         SumCheckRound {
             challenge,
             var_index,
