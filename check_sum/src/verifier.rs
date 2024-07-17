@@ -80,32 +80,39 @@ mod test {
         const N: usize = 8; // Replace with an appropriate dimension
 
         // Example function to generate coefficients
-        fn generate_coefficient(index: usize) -> Zq<Q> {
+        fn generate_coefficient_i(index: usize) -> Zq<Q> {
             Zq::<Q>::from(index as u64) // Simple example: use the index as the coefficient value
         }
 
         // Create an instance of Pow2CyclotomicPolyRingNTT using from_fn
-        let poly_ntt = Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient);
+        let poly_ntt = Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient_i);
 
-        let mle = DenseMultilinearExtension::from_evaluations_slice(
+        let one = Pow2CyclotomicPolyRingNTT::<Q, N>::one();
+        let zero = Pow2CyclotomicPolyRingNTT::<Q, N>::zero();
+        let mle1 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[
-                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
-                poly_ntt,
-                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
-                poly_ntt,
-                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
-                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
-                Pow2CyclotomicPolyRingNTT::<Q, N>::zero(),
-                poly_ntt,
-            ]
+            &[poly_ntt, poly_ntt, zero, zero, zero, zero, zero, zero]
         );
-        let polynomial = VirtualPolynomial::new_from_mle(
-            &Arc::from(mle),
-            Pow2CyclotomicPolyRingNTT::<Q, N>::one()
+        let mle2 = DenseMultilinearExtension::from_evaluations_slice(
+            3,
+            &[zero, zero, poly_ntt, poly_ntt, zero, zero, zero, zero]
         );
+        let mle3 = DenseMultilinearExtension::from_evaluations_slice(
+            3,
+            &[zero, zero, zero, zero, poly_ntt, poly_ntt, zero, zero]
+        );
+        let mle4 = DenseMultilinearExtension::from_evaluations_slice(
+            3,
+            &[zero, zero, zero, zero, zero, zero, poly_ntt, poly_ntt]
+        );
+        let mut polynomial = VirtualPolynomial::new(3);
+        polynomial.add_mle_list(
+            vec![Arc::from(mle1.clone()), Arc::from(mle2), Arc::from(mle3), Arc::from(mle4)],
+            one
+        );
+        polynomial.add_mle_list(vec![Arc::from(mle1)], one);
         // Define the claimed sum for testing
-        let claimed_sum = poly_ntt + poly_ntt + poly_ntt; // Example sum
+        let claimed_sum = poly_ntt + poly_ntt; // Example sum
 
         // Create an instance of the prover
         let prover = SumCheckProver::<
