@@ -592,6 +592,7 @@ version = "0.1.0"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
+ "ark-std",
  "lattirust-arithmetic",
  "num-traits",
  "rand",

@@ -10,7 +10,7 @@ pub fn mat_by_vec<R: Ring>(lhs: &Vec<Vec<R>>, rhs: &Vec<R>) -> Vec<R> {
     // Perform matrix-vector multiplication
     for i in 0..lhs.len() {
         for j in 0..cols {
-            result[i] = result[i].clone() + lhs[i][j].clone() * rhs[j].clone();
+            result[i] += lhs[i][j] * rhs[j];
         }
     }
     result

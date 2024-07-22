@@ -19,6 +19,26 @@ where
     sponge: PoseidonSponge<F>,
 }
 
+impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> Default
+    for PoseidonTranscript<F, R, CS>
+where
+    F: Absorb,
+{
+    fn default() -> Self {
+        let config = PoseidonConfig {
+            full_rounds: 8, // Example values, adjust according to your needs
+            partial_rounds: 57,
+            alpha: 5,
+            ark: vec![vec![F::zero(); 3]; 8 + 57], // Adjust to actual ark parameters
+            mds: vec![vec![F::zero(); 3]; 3],      // Adjust to actual MDS matrix parameters
+            rate: 2,
+            capacity: 1,
+        };
+
+        Self::new(&config)
+    }
+}
+
 impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> Transcript<F, R>
     for PoseidonTranscript<F, R, CS>
 where

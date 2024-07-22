@@ -2,81 +2,85 @@ pub mod prover;
 pub mod verifier;
 
 use std::fmt::Display;
+use std::marker::PhantomData;
 
-use crate::transcript::{poseidon::PoseidonTranscript, Transcript};
-use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
+use crate::transcript::Transcript;
+use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
-    LatticefoldChallengeSet, OverField,
-};
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
+use lattirust_arithmetic::polynomials::VPAuxInfo;
 use lattirust_arithmetic::polynomials::{ArithErrors, VirtualPolynomial};
+use lattirust_arithmetic::ring::Ring;
 use thiserror_no_std::Error;
 
-pub struct SumCheckIP<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
+pub struct SumCheckIP<F: PrimeField, R: OverField<F>>
 where
     F: Absorb,
 {
+    pub _f: PhantomData<F>,
     pub claimed_sum: R,
-    pub polynomial: VirtualPolynomial<R>,
+    pub poly_info: VPAuxInfo<R>,
+}
+
+impl<F: PrimeField, R: OverField<F>> SumCheckIP<F, R>
+where
+    F: Absorb,
+{
+    pub fn new(claimed_sum: R, poly_info: VPAuxInfo<R>) -> Self {
+        SumCheckIP {
+            _f: Default::default(),
+            claimed_sum,
+            poly_info,
+        }
+    }
+}
+
+pub struct SumCheckProof<F: PrimeField, R: OverField<F>>
+where
+    F: Absorb,
+{
     pub rounds: Vec<SumCheckRound<F, R>>,
-    pub hasher: PoseidonTranscript<F, R, CS>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
     _marker: std::marker::PhantomData<F>,
-    pub challenge: R,
-    var_index: usize,
     pub unipoly: VirtualPolynomial<R>,
 }
 
 #[derive(Error, Debug)]
-pub enum SumcheckError<R: Ring + Display> {
+pub enum SumCheckError<R: Ring + Display> {
     #[error("univariate polynomial evaluation error")]
     EvaluationError(#[from] ArithErrors),
     #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")]
     SumCheckFailed(R, R),
     #[error("max degree exceeded")]
-    MaxDegreeExcided
+    MaxDegreeExceeded,
 }
 
-impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckIP<F, R, CS>
+impl<F: PrimeField, R: OverField<F>> SumCheckProof<F, R>
 where
     F: Absorb,
 {
-    pub fn new(
-        claimed_sum: R,
-        polynomial: VirtualPolynomial<R>,
-        num_rounds: &usize,
-    ) -> SumCheckIP<F, R, CS> {
-        let config = PoseidonConfig {
-            full_rounds: 8, // Example values, adjust according to your needs
-            partial_rounds: 57,
-            alpha: 5,
-            ark: vec![vec![F::zero(); 3]; 8 + 57], // Adjust to actual ark parameters
-            mds: vec![vec![F::zero(); 3]; 3],      // Adjust to actual MDS matrix parameters
-            rate: 2,
-            capacity: 1,
-        };
-
-        SumCheckIP {
-            claimed_sum,
-            polynomial,
-            rounds: Vec::with_capacity(*num_rounds),
-            hasher: PoseidonTranscript::new(&config),
+    pub fn new(num_rounds: usize) -> SumCheckProof<F, R> {
+        SumCheckProof {
+            rounds: Vec::with_capacity(num_rounds),
         }
     }
 
-    pub fn add_round(&mut self, challenge: R, var_index: usize, unipoly: VirtualPolynomial<R>) {
-        let absorbtion_vec: Vec<R> = unipoly
-            .flattened_ml_extensions
-            .iter()
-            .map(|mle| mle.evaluations[0])
+    pub fn add_round(
+        &mut self,
+        transcript: &mut impl Transcript<F, R>,
+        unipoly: VirtualPolynomial<R>,
+    ) {
+        let coeffs: Vec<R> = unipoly
+            .products
+            .clone()
+            .into_iter()
+            .map(|(x, _)| x)
             .collect();
-        self.hasher.absorb_ring_vec(&absorbtion_vec);
+        transcript.absorb_ring_vec(&coeffs);
         let round = SumCheckRound {
-            challenge,
-            var_index,
             unipoly,
             _marker: std::marker::PhantomData,
         };
@@ -86,14 +90,8 @@ where
 }
 
 impl<F: PrimeField, R: OverField<F>> SumCheckRound<F, R> {
-    pub fn new(
-        unipoly: VirtualPolynomial<R>,
-        var_index: usize,
-        challenge: R,
-    ) -> SumCheckRound<F, R> {
+    pub fn new(unipoly: VirtualPolynomial<R>) -> SumCheckRound<F, R> {
         SumCheckRound {
-            challenge,
-            var_index,
             unipoly,
             _marker: std::marker::PhantomData,
         }
