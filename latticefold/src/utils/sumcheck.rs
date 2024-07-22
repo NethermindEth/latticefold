@@ -1,14 +1,21 @@
-use crate::transcript::{ poseidon::PoseidonTranscript, Transcript };
-use lattirust_arithmetic::polynomials::VirtualPolynomial;
-use ark_crypto_primitives::sponge::{ poseidon::PoseidonConfig, Absorb };
+pub mod prover;
+pub mod verifier;
+
+use std::fmt::Display;
+
+use crate::transcript::{poseidon::PoseidonTranscript, Transcript};
+use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::PrimeField;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
-    LatticefoldChallengeSet,
-    OverField,
+    LatticefoldChallengeSet, OverField,
 };
+use lattirust_arithmetic::polynomials::{ArithErrors, VirtualPolynomial};
+use thiserror_no_std::Error;
 
 pub struct SumCheckIP<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
-    where F: Absorb {
+where
+    F: Absorb,
+{
     pub claimed_sum: R,
     pub polynomial: VirtualPolynomial<R>,
     pub rounds: Vec<SumCheckRound<F, R>>,
@@ -23,20 +30,31 @@ pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
     pub unipoly: VirtualPolynomial<R>,
 }
 
+#[derive(Error, Debug)]
+pub enum SumcheckError<R: Ring + Display> {
+    #[error("univariate polynomial evaluation error")]
+    EvaluationError(#[from] ArithErrors),
+    #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")]
+    SumCheckFailed(R, R),
+    #[error("max degree exceeded")]
+    MaxDegreeExcided
+}
+
 impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckIP<F, R, CS>
-    where F: Absorb
+where
+    F: Absorb,
 {
     pub fn new(
         claimed_sum: R,
         polynomial: VirtualPolynomial<R>,
-        num_rounds: &usize
+        num_rounds: &usize,
     ) -> SumCheckIP<F, R, CS> {
         let config = PoseidonConfig {
             full_rounds: 8, // Example values, adjust according to your needs
             partial_rounds: 57,
             alpha: 5,
             ark: vec![vec![F::zero(); 3]; 8 + 57], // Adjust to actual ark parameters
-            mds: vec![vec![F::zero(); 3]; 3], // Adjust to actual MDS matrix parameters
+            mds: vec![vec![F::zero(); 3]; 3],      // Adjust to actual MDS matrix parameters
             rate: 2,
             capacity: 1,
         };
@@ -50,7 +68,8 @@ impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheck
     }
 
     pub fn add_round(&mut self, challenge: R, var_index: usize, unipoly: VirtualPolynomial<R>) {
-        let absorbtion_vec: Vec<R> = unipoly.flattened_ml_extensions
+        let absorbtion_vec: Vec<R> = unipoly
+            .flattened_ml_extensions
             .iter()
             .map(|mle| mle.evaluations[0])
             .collect();
@@ -70,7 +89,7 @@ impl<F: PrimeField, R: OverField<F>> SumCheckRound<F, R> {
     pub fn new(
         unipoly: VirtualPolynomial<R>,
         var_index: usize,
-        challenge: R
+        challenge: R,
     ) -> SumCheckRound<F, R> {
         SumCheckRound {
             challenge,

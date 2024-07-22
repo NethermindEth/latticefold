@@ -1,13 +1,13 @@
 [package]
-name = "check_sum"
+name = "latticefold"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ark-crypto-primitives = { version = "0.4.0", features = ["sponge"] }
+ark-crypto-primitives = { version = "0.4.0", default-features = false, features = ["sponge"] }
 ark-ff = "0.4.2"
 lattirust-arithmetic = { git="ssh://git@github.com/cknabs/lattirust.git", branch = "main"}
 num-traits = "0.2.19"
 rand = "0.8.5"
-rang = "0.1.1"
+thiserror-no-std = { version = "2.0.2", default-features = false }
 
