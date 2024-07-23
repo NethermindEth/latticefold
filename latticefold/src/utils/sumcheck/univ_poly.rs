@@ -1,20 +1,17 @@
-use std::marker::PhantomData;
 use std::ops::AddAssign;
 
-use ark_ff::PrimeField;
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::polynomials::VirtualPolynomial;
 use lattirust_arithmetic::mle::DenseMultilinearExtension;
-pub struct UnivPoly<F: PrimeField, R: OverField<F>> {
-    coeffs: Vec<R>,
-    _marker: PhantomData<F>,
+use lattirust_arithmetic::ring::Ring;
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnivPoly<R: Ring> {
+    pub coeffs: Vec<R>,
 }
 
-impl<F: PrimeField, R: OverField<F>> UnivPoly<F, R> {
+impl<R: Ring> UnivPoly<R> {
     pub fn new() -> Self {
         Self {
             coeffs: Vec::new(),
-            _marker: PhantomData::default(),
         }
     }
 
@@ -51,7 +48,6 @@ impl<F: PrimeField, R: OverField<F>> UnivPoly<F, R> {
         let coeffs = vec![mle.evaluations[0], mle.evaluations[1] - mle.evaluations[0]];
         Self {
             coeffs,
-            _marker: PhantomData::default(),
         }
     }
 
@@ -64,7 +60,6 @@ impl<F: PrimeField, R: OverField<F>> UnivPoly<F, R> {
         }
         Self {
             coeffs: new_coeffs,
-            _marker: PhantomData::default(),
         }
     }
 
@@ -75,13 +70,12 @@ impl<F: PrimeField, R: OverField<F>> UnivPoly<F, R> {
             .collect();
         Self {
             coeffs: new_coeffs,
-            _marker: PhantomData::default(),
         }
     }
 }
 
-impl<F: PrimeField, R: OverField<F>> AddAssign<&UnivPoly<F, R>> for UnivPoly<F, R> {
-    fn add_assign(&mut self, other: &UnivPoly<F, R>) {
+impl<R: Ring> AddAssign<&UnivPoly<R>> for UnivPoly<R> {
+    fn add_assign(&mut self, other: &UnivPoly<R>) {
         // Ensure that both polynomials have the same degree by resizing the coefficients vectors
         let max_len = std::cmp::max(self.coeffs.len(), other.coeffs.len());
         self.coeffs.resize(max_len, R::zero());
