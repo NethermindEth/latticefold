@@ -1,4 +1,4 @@
-use std::fmt::{ self, Display };
+use std::fmt::{self, Display};
 
 #[derive(Clone, Debug)]
 pub struct NotSatisfiedError;

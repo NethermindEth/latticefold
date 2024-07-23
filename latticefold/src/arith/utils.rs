@@ -10,7 +10,7 @@ pub fn mat_by_vec<R: Ring>(lhs: &Vec<Vec<R>>, rhs: &Vec<R>) -> Vec<R> {
     // Perform matrix-vector multiplication
     for i in 0..lhs.len() {
         for j in 0..cols {
-            result[i] = result[i].clone() + lhs[i][j].clone() * rhs[j].clone();
+            result[i] += lhs[i][j] * rhs[j];
         }
     }
     result
@@ -26,15 +26,10 @@ pub fn hadamard_vec<R: Ring>(lhs: &Vec<R>, rhs: &Vec<R>) -> Vec<R> {
 
 // Multiplies Vector of rings by another ring
 pub fn vec_value_mul<R: Ring>(lhs: &Vec<R>, rhs: &R) -> Vec<R> {
-    lhs.iter()
-        .map(|lhs_i| *lhs_i * rhs)
-        .collect()
+    lhs.iter().map(|lhs_i| *lhs_i * rhs).collect()
 }
 
 // Adds two ring vectors
 pub fn vec_add<R: Ring>(lhs: &Vec<R>, rhs: &Vec<R>) -> Vec<R> {
-    lhs.iter()
-        .zip(rhs.iter())
-        .map(|(a, b)| *a + b)
-        .collect()
+    lhs.iter().zip(rhs.iter()).map(|(a, b)| *a + b).collect()
 }

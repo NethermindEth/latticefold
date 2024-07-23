@@ -1,7 +1,7 @@
 //use crate::Error;
-use std::fmt::Debug;
 use ark_ff::Field;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::*;
+use std::fmt::Debug;
 
 pub mod poseidon;
 
