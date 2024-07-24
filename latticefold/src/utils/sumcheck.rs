@@ -15,19 +15,13 @@ use lattirust_arithmetic::ring::Ring;
 use thiserror_no_std::Error;
 use univ_poly::UnivPoly;
 
-pub struct SumCheckIP<F: PrimeField, R: OverField<F>>
-where
-    F: Absorb,
-{
+pub struct SumCheckIP<F: PrimeField, R: OverField<F>> where F: Absorb {
     pub _f: PhantomData<F>,
     pub claimed_sum: R,
     pub poly_info: VPAuxInfo<R>,
 }
 
-impl<F: PrimeField, R: OverField<F>> SumCheckIP<F, R>
-where
-    F: Absorb,
-{
+impl<F: PrimeField, R: OverField<F>> SumCheckIP<F, R> where F: Absorb {
     pub fn new(claimed_sum: R, poly_info: VPAuxInfo<R>) -> Self {
         SumCheckIP {
             _f: Default::default(),
@@ -36,10 +30,7 @@ where
         }
     }
 }
-pub struct SumCheckProof<F: PrimeField, R: OverField<F>>
-where
-    F: Absorb,
-{
+pub struct SumCheckProof<F: PrimeField, R: OverField<F>> where F: Absorb {
     pub rounds: Vec<SumCheckRound<F, R>>,
 }
 
@@ -51,18 +42,13 @@ pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
 
 #[derive(Error, Debug)]
 pub enum SumCheckError<R: Ring + Display> {
-    #[error("univariate polynomial evaluation error")]
-    EvaluationError(#[from] ArithErrors),
-    #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")]
-    SumCheckFailed(R, R),
+    #[error("univariate polynomial evaluation error")] EvaluationError(#[from] ArithErrors),
+    #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")] SumCheckFailed(R, R),
     #[error("max degree exceeded")]
     MaxDegreeExceeded,
 }
 
-impl<F: PrimeField, R: OverField<F>> SumCheckProof<F, R>
-where
-    F: Absorb,
-{
+impl<F: PrimeField, R: OverField<F>> SumCheckProof<F, R> where F: Absorb {
     pub fn new(num_rounds: usize) -> SumCheckProof<F, R> {
         SumCheckProof {
             rounds: Vec::with_capacity(num_rounds),
@@ -70,8 +56,7 @@ where
     }
 
     pub fn add_round(&mut self, transcript: &mut impl Transcript<F, R>, unipoly: UnivPoly<R>) {
-        let coeffs: Vec<R> = unipoly.coeffs.clone().into_iter().collect();
-        transcript.absorb_ring_vec(&coeffs);
+        transcript.absorb_ring_vec(&unipoly.coeffs);
         let round = SumCheckRound {
             unipoly,
             _marker: std::marker::PhantomData,

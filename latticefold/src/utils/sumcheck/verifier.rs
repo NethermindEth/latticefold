@@ -1,7 +1,8 @@
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
-    LatticefoldChallengeSet, OverField,
+    LatticefoldChallengeSet,
+    OverField,
 };
 
 use crate::transcript::Transcript;
@@ -23,16 +24,13 @@ pub struct SumCheckSubClaim<F: PrimeField, R: OverField<F>> {
     _marker: std::marker::PhantomData<F>,
 }
 pub struct SumCheckVerifier<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
-where
-    F: Absorb,
-{
+    where F: Absorb {
     _marker: std::marker::PhantomData<(F, CS)>,
     protocol: SumCheckIP<F, R>,
 }
 
 impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckVerifier<F, R, CS>
-where
-    F: Absorb,
+    where F: Absorb
 {
     pub fn new(protocol: SumCheckIP<F, R>) -> SumCheckVerifier<F, R, CS> {
         SumCheckVerifier {
@@ -46,18 +44,14 @@ where
     pub fn verify(
         &self,
         proof: &SumCheckProof<F, R>,
-        transcript: &mut impl Transcript<F, R, ChallengeSet = CS>,
+        transcript: &mut impl Transcript<F, R, ChallengeSet = CS>
     ) -> Result<SumCheckSubClaim<F, R>, SumCheckError<R>> {
         let mut check_sum = self.protocol.claimed_sum;
 
         let mut challenge_vector: Vec<R> = Vec::with_capacity(proof.rounds.len());
 
         for round in proof.rounds.iter() {
-            let eval1 = round
-                .unipoly
-                .coeffs
-                .iter()
-                .fold(R::zero(), |sum, x| sum + x);
+            let eval1 = round.unipoly.coeffs.iter().fold(R::zero(), |sum, x| sum + x);
             let eval0 = round.unipoly.coeffs[0];
             let sum = eval1 + eval0;
 
@@ -67,8 +61,7 @@ where
                 return Err(SumCheckError::MaxDegreeExceeded);
             }
 
-            let coeffs: Vec<R> = round.unipoly.coeffs.clone().into_iter().collect();
-            transcript.absorb_ring_vec(&coeffs);
+            transcript.absorb_ring_vec(&round.unipoly.coeffs);
 
             let challenge = transcript.get_big_challenge().into();
 
@@ -89,15 +82,16 @@ mod test {
 
     use super::SumCheckVerifier;
     use crate::{
-        transcript::poseidon::PoseidonTranscript, utils::sumcheck::prover::SumCheckProver,
+        transcript::poseidon::PoseidonTranscript,
+        utils::sumcheck::prover::SumCheckProver,
     };
 
-    use ark_ff::{One, Zero};
+    use ark_ff::{ One, Zero };
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
         mle::DenseMultilinearExtension,
         polynomials::VirtualPolynomial,
-        ring::{Pow2CyclotomicPolyRingNTT, Zq},
+        ring::{ Pow2CyclotomicPolyRingNTT, Zq },
     };
 
     #[test]
@@ -118,36 +112,35 @@ mod test {
         let zero = Pow2CyclotomicPolyRingNTT::<Q, N>::zero();
         let mle1 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[poly_ntt, poly_ntt, zero, zero, zero, zero, zero, zero],
+            &[poly_ntt, poly_ntt, zero, zero, zero, zero, zero, zero]
         );
         let mle2 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[zero, zero, poly_ntt, poly_ntt, zero, zero, zero, zero],
+            &[zero, zero, poly_ntt, poly_ntt, zero, zero, zero, zero]
         );
         let mle3 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[zero, zero, zero, zero, poly_ntt, poly_ntt, zero, zero],
+            &[zero, zero, zero, zero, poly_ntt, poly_ntt, zero, zero]
         );
         let mle4 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[zero, zero, zero, zero, zero, zero, poly_ntt, poly_ntt],
+            &[zero, zero, zero, zero, zero, zero, poly_ntt, poly_ntt]
         );
         let mut polynomial = VirtualPolynomial::new(3);
         let _ = polynomial.add_mle_list(
-            vec![
-                Arc::from(mle1.clone()),
-                Arc::from(mle2),
-                Arc::from(mle3),
-                Arc::from(mle4),
-            ],
-            one,
+            vec![Arc::from(mle1.clone()), Arc::from(mle2), Arc::from(mle3), Arc::from(mle4)],
+            one
         );
         let _ = polynomial.add_mle_list(vec![Arc::from(mle1)], one);
         // Define the claimed sum for testing
         let claimed_sum = poly_ntt + poly_ntt; // Example sum
 
         // Create an instance of the prover
-        let prover = SumCheckProver::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>> {
+        let prover = SumCheckProver::<
+            Zq<Q>,
+            Pow2CyclotomicPolyRingNTT<Q, N>,
+            BinarySmallSet<Q, N>
+        > {
             _marker: std::marker::PhantomData,
             polynomial: polynomial.clone(),
             claimed_sum: Into::into(claimed_sum),
@@ -160,10 +153,11 @@ mod test {
 
         let mut transcript = PoseidonTranscript::default();
         // Create an instance of the verifier
-        let verifier =
-            SumCheckVerifier::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::new(
-                protocol,
-            );
+        let verifier = SumCheckVerifier::<
+            Zq<Q>,
+            Pow2CyclotomicPolyRingNTT<Q, N>,
+            BinarySmallSet<Q, N>
+        >::new(protocol);
 
         // Verify the transcript
         let subclaim = verifier.verify(&proof, &mut transcript).unwrap();
@@ -190,29 +184,24 @@ mod test {
         let zero = Pow2CyclotomicPolyRingNTT::<Q, N>::zero();
         let mle1 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[poly_ntt, poly_ntt, zero, zero, zero, zero, zero, zero],
+            &[poly_ntt, poly_ntt, zero, zero, zero, zero, zero, zero]
         );
         let mle2 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[zero, zero, poly_ntt, poly_ntt, zero, zero, zero, zero],
+            &[zero, zero, poly_ntt, poly_ntt, zero, zero, zero, zero]
         );
         let mle3 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[zero, zero, zero, zero, poly_ntt, poly_ntt, zero, zero],
+            &[zero, zero, zero, zero, poly_ntt, poly_ntt, zero, zero]
         );
         let mle4 = DenseMultilinearExtension::from_evaluations_slice(
             3,
-            &[zero, zero, zero, zero, zero, zero, poly_ntt, poly_ntt],
+            &[zero, zero, zero, zero, zero, zero, poly_ntt, poly_ntt]
         );
         let mut polynomial = VirtualPolynomial::new(3);
         let _ = polynomial.add_mle_list(
-            vec![
-                Arc::from(mle1.clone()),
-                Arc::from(mle2),
-                Arc::from(mle3),
-                Arc::from(mle4),
-            ],
-            one,
+            vec![Arc::from(mle1.clone()), Arc::from(mle2), Arc::from(mle3), Arc::from(mle4)],
+            one
         );
         let _ = polynomial.add_mle_list(vec![Arc::from(mle1)], one);
         // Define the claimed sum for testing
@@ -220,7 +209,11 @@ mod test {
 
         let mut transcript = PoseidonTranscript::default();
         // Create an instance of the prover
-        let prover = SumCheckProver::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>> {
+        let prover = SumCheckProver::<
+            Zq<Q>,
+            Pow2CyclotomicPolyRingNTT<Q, N>,
+            BinarySmallSet<Q, N>
+        > {
             _marker: std::marker::PhantomData,
             polynomial: polynomial.clone(),
             claimed_sum: Into::into(claimed_sum),
@@ -230,17 +223,15 @@ mod test {
         let (protocol, proof) = prover.prove(&mut transcript).unwrap();
 
         // Create an instance of the verifier
-        let verifier =
-            SumCheckVerifier::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::new(
-                protocol,
-            );
+        let verifier = SumCheckVerifier::<
+            Zq<Q>,
+            Pow2CyclotomicPolyRingNTT<Q, N>,
+            BinarySmallSet<Q, N>
+        >::new(protocol);
 
         let mut transcript = PoseidonTranscript::default();
         // Verify the transcript
         let subclaim = verifier.verify(&proof, &mut transcript);
-        assert!(
-            subclaim.is_err(),
-            "Wrong sumcheck claim should return error"
-        );
+        assert!(subclaim.is_err(), "Wrong sumcheck claim should return error");
     }
 }
