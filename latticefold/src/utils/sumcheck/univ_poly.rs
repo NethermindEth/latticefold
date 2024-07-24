@@ -1,4 +1,4 @@
-use std::ops::{ AddAssign, Mul };
+use std::ops::{AddAssign, Mul};
 
 use lattirust_arithmetic::mle::DenseMultilinearExtension;
 use lattirust_arithmetic::polynomials::VirtualPolynomial;
@@ -17,38 +17,39 @@ impl<R: Ring> UnivPoly<R> {
     }
 
     pub fn evaluate(&self, x: R) -> R {
-        let mut result = R::zero();
-
-        // Horner's method to evaluate the polynomial
-        for &coeff in self.coeffs.iter().rev() {
-            result = result * x + coeff;
-        }
-
-        result
+        self.coeffs
+            .iter()
+            .rev()
+            .fold(R::zero(), |result, coeff| result * x + coeff)
     }
+
     pub fn degree(&self) -> usize {
         self.coeffs
             .iter()
             .enumerate()
+            .rev()
             .filter_map(|(i, coeff)| (!coeff.is_zero()).then(|| i))
-            .last()
+            .next()
             .unwrap_or(0)
     }
 }
 impl<R: Ring> From<&DenseMultilinearExtension<R>> for UnivPoly<R> {
     fn from(mle: &DenseMultilinearExtension<R>) -> Self {
-        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
+        assert!(
+            mle.num_vars == 1,
+            "Multilinear extension must be univariate!"
+        );
         let coeffs = vec![mle.evaluations[0], mle.evaluations[1] - mle.evaluations[0]];
         Self { coeffs }
     }
 }
 impl<R: Ring> From<VirtualPolynomial<R>> for UnivPoly<R> {
     fn from(poly: VirtualPolynomial<R>) -> Self {
-        let flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> =
-            poly.flattened_ml_extensions
-                .iter()
-                .map(|x| x.as_ref().clone())
-                .collect();
+        let flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> = poly
+            .flattened_ml_extensions
+            .iter()
+            .map(|x| x.as_ref().clone())
+            .collect();
         // Start with an empty polynomial
         let mut result_poly = UnivPoly::new();
 
@@ -76,7 +77,10 @@ impl<R: Ring> Mul<&DenseMultilinearExtension<R>> for UnivPoly<R> {
     type Output = Self;
 
     fn mul(self, mle: &DenseMultilinearExtension<R>) -> Self {
-        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
+        assert!(
+            mle.num_vars == 1,
+            "Multilinear extension must be univariate!"
+        );
         let mut new_coeffs = vec![R::zero(); self.coeffs.len() + 1];
         for i in 0..self.coeffs.len() {
             new_coeffs[i] += self.coeffs[i] * mle.evaluations[0];
@@ -90,10 +94,7 @@ impl<R: Ring> Mul<&R> for UnivPoly<R> {
     type Output = Self;
 
     fn mul(self, scalar: &R) -> Self {
-        let new_coeffs: Vec<R> = self.coeffs
-            .iter()
-            .map(|&coeff| coeff * scalar)
-            .collect();
+        let new_coeffs: Vec<R> = self.coeffs.iter().map(|&coeff| coeff * scalar).collect();
         Self { coeffs: new_coeffs }
     }
 }
@@ -152,7 +153,11 @@ mod tests {
         let result = poly * &mle;
         assert_eq!(
             result.coeffs,
-            vec![Z2_128::from(2u128), Z2_128::from(3u128), Z2_128::from(1u128)]
+            vec![
+                Z2_128::from(2u128),
+                Z2_128::from(3u128),
+                Z2_128::from(1u128)
+            ]
         );
     }
 
@@ -163,7 +168,10 @@ mod tests {
         };
         let scalar = Z2_128::from(3u128);
         let result = poly * &scalar;
-        assert_eq!(result.coeffs, vec![Z2_128::from(3u128), Z2_128::from(6u128)]);
+        assert_eq!(
+            result.coeffs,
+            vec![Z2_128::from(3u128), Z2_128::from(6u128)]
+        );
     }
 
     #[test]
@@ -184,7 +192,11 @@ mod tests {
         let result = UnivPoly::from(virtual_poly);
         assert_eq!(
             result.coeffs,
-            vec![Z2_128::from(4u128), Z2_128::from(4u128), Z2_128::from(1u128)]
+            vec![
+                Z2_128::from(4u128),
+                Z2_128::from(4u128),
+                Z2_128::from(1u128)
+            ]
         );
     }
 
