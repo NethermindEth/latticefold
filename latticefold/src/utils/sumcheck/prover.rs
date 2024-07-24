@@ -65,7 +65,7 @@ where
                 uni = &uni + &new_poly;
             }
 
-            sum_check_proof.add_round(transcript, UnivPoly::from(uni));
+            sum_check_proof.add_round(transcript, UnivPoly::try_from(uni)?);
             poly.flattened_ml_extensions.iter_mut().for_each(|mle| {
                 *mle = Arc::from(fix_variables(mle, &[challenge.into()]));
             });
