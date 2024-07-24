@@ -40,7 +40,6 @@ impl<R: Ring> UnivPoly<R> {
             // Accumulate the result
             result_poly += &unipoly;
         }
-
         result_poly
     }
     pub fn from_mle(mle: &DenseMultilinearExtension<R>) -> Self {
@@ -82,6 +81,15 @@ impl<R: Ring> UnivPoly<R> {
         }
 
         result
+    }
+    pub fn degree(&self) -> usize {
+        for (i, coeff) in self.coeffs.iter().rev().enumerate() {
+            if *coeff != R::zero() {
+                return self.coeffs.len() - i - 1;
+            }
+        }
+
+        0
     }
 }
 

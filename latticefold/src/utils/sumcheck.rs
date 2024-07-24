@@ -10,9 +10,10 @@ use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::polynomials::VPAuxInfo;
-use lattirust_arithmetic::polynomials::{ ArithErrors, VirtualPolynomial };
+use lattirust_arithmetic::polynomials::ArithErrors;
 use lattirust_arithmetic::ring::Ring;
 use thiserror_no_std::Error;
+use univ_poly::UnivPoly;
 
 pub struct SumCheckIP<F: PrimeField, R: OverField<F>> where F: Absorb {
     pub _f: PhantomData<F>,
@@ -29,7 +30,7 @@ impl<F: PrimeField, R: OverField<F>> SumCheckIP<F, R> where F: Absorb {
         }
     }
 }
-
+#[derive(Debug)]
 pub struct SumCheckProof<F: PrimeField, R: OverField<F>> where F: Absorb {
     pub rounds: Vec<SumCheckRound<F, R>>,
 }
@@ -37,7 +38,7 @@ pub struct SumCheckProof<F: PrimeField, R: OverField<F>> where F: Absorb {
 #[derive(Debug, Clone, PartialEq)]
 pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
     _marker: std::marker::PhantomData<F>,
-    pub unipoly: VirtualPolynomial<R>,
+    pub unipoly: UnivPoly<R>,
 }
 
 #[derive(Error, Debug)]
@@ -55,16 +56,8 @@ impl<F: PrimeField, R: OverField<F>> SumCheckProof<F, R> where F: Absorb {
         }
     }
 
-    pub fn add_round(
-        &mut self,
-        transcript: &mut impl Transcript<F, R>,
-        unipoly: VirtualPolynomial<R>
-    ) {
-        let coeffs: Vec<R> = unipoly.products
-            .clone()
-            .into_iter()
-            .map(|(x, _)| x)
-            .collect();
+    pub fn add_round(&mut self, transcript: &mut impl Transcript<F, R>, unipoly: UnivPoly<R>) {
+        let coeffs: Vec<R> = unipoly.coeffs.clone().into_iter().collect();
         transcript.absorb_ring_vec(&coeffs);
         let round = SumCheckRound {
             unipoly,
@@ -76,7 +69,7 @@ impl<F: PrimeField, R: OverField<F>> SumCheckProof<F, R> where F: Absorb {
 }
 
 impl<F: PrimeField, R: OverField<F>> SumCheckRound<F, R> {
-    pub fn new(unipoly: VirtualPolynomial<R>) -> SumCheckRound<F, R> {
+    pub fn new(unipoly: UnivPoly<R>) -> SumCheckRound<F, R> {
         SumCheckRound {
             unipoly,
             _marker: std::marker::PhantomData,
