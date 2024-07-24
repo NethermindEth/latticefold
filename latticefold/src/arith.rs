@@ -3,7 +3,6 @@
 pub mod error;
 pub mod r1cs;
 pub mod utils;
-pub mod rings;
 
 use ark_std::log2;
 use error::NotSatisfiedError;
@@ -48,10 +47,7 @@ impl<R: Ring> CCS<R> {
         //  Calculates \sum_{i=1}^{n_r} c_i \cdot \bigg( \bigcirc_{j \in S_i} (M_j \cdot \vec{z}) \bigg)
         for i in 0..self.q {
             // Extract the needed M_j matrices out of S_i
-            let vec_M_j: Vec<&Vec<Vec<R>>> = self.S[i]
-                .iter()
-                .map(|&j| &self.M[j])
-                .collect();
+            let vec_M_j: Vec<&Vec<Vec<R>>> = self.S[i].iter().map(|&j| &self.M[j]).collect();
 
             // complete the hadamard chain
             let mut hadamard_result = vec![R::one(); self.m];
@@ -106,3 +102,10 @@ impl<R: Ring> CCS<R> {
         }
     }
 }
+
+// TODO: commited CCS type.
+// Should be something like { instance: Instance, cm_W: Vec<R> }
+// where cm_W is supposed to be an Ajtai commitment to the actual witness.
+pub type CCCS = ();
+pub type LCCCS = ();
+pub type Witness = ();

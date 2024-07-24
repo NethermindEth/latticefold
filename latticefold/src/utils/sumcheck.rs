@@ -36,6 +36,8 @@ where
         }
     }
 }
+
+#[derive(Debug, Clone)]
 pub struct SumCheckProof<F: Field, R: OverField<F>>
 where
     F: Absorb,
