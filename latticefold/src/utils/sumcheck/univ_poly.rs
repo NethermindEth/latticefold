@@ -4,6 +4,9 @@ use lattirust_arithmetic::mle::DenseMultilinearExtension;
 use lattirust_arithmetic::polynomials::VirtualPolynomial;
 use lattirust_arithmetic::ring::Ring;
 #[derive(Debug, Clone, PartialEq)]
+
+// Represents a univariate polynomial
+// Coefficients represented in ascending order
 pub struct UnivPoly<R: Ring> {
     pub coeffs: Vec<R>,
 }
@@ -75,13 +78,12 @@ impl<R: Ring> UnivPoly<R> {
         result
     }
     pub fn degree(&self) -> usize {
-        for (i, coeff) in self.coeffs.iter().rev().enumerate() {
-            if !coeff.is_zero() {
-                return self.coeffs.len() - i - 1;
-            }
-        }
-        // If all coefficients are zero then this is a degree 0 polynomial
-        0
+        self.coeffs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, coeff)| (!coeff.is_zero()).then(|| i))
+            .last()
+            .unwrap_or(0)
     }
 }
 
@@ -102,6 +104,8 @@ impl<R: Ring> AddAssign<&UnivPoly<R>> for UnivPoly<R> {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+
+    use crate::utils::sumcheck::univ_poly;
 
     use super::*;
     use lattirust_arithmetic::mle::DenseMultilinearExtension;
@@ -182,5 +186,14 @@ mod tests {
         let unipoly = UnivPoly::from_virtual_polynomial(virtual_poly);
         assert_eq!(unipoly.evaluate(Z2_128::from(2u128)), Z2_128::from(16u128));
         assert_eq!(unipoly.evaluate(Z2_128::from(5u128)), Z2_128::from(49u128));
+    }
+
+    #[test]
+    fn test_degree() {
+        let virtual_poly = sample_virtual_polynomial();
+        let unipoly = UnivPoly::from_virtual_polynomial(virtual_poly);
+        assert_eq!(unipoly.degree(), 2);
+        let unipoly = unipoly.multiply_by_mle(&sample_mle());
+        assert_eq!(unipoly.degree(), 3);
     }
 }
