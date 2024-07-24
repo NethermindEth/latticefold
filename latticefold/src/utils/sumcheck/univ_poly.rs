@@ -1,7 +1,7 @@
 use std::ops::AddAssign;
 
-use lattirust_arithmetic::polynomials::VirtualPolynomial;
 use lattirust_arithmetic::mle::DenseMultilinearExtension;
+use lattirust_arithmetic::polynomials::VirtualPolynomial;
 use lattirust_arithmetic::ring::Ring;
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnivPoly<R: Ring> {
@@ -10,17 +10,15 @@ pub struct UnivPoly<R: Ring> {
 
 impl<R: Ring> UnivPoly<R> {
     pub fn new() -> Self {
-        Self {
-            coeffs: Vec::new(),
-        }
+        Self { coeffs: Vec::new() }
     }
 
     pub fn from_virtual_polynomial(poly: VirtualPolynomial<R>) -> Self {
-        let flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> =
-            poly.flattened_ml_extensions
-                .iter()
-                .map(|x| x.as_ref().clone())
-                .collect();
+        let flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> = poly
+            .flattened_ml_extensions
+            .iter()
+            .map(|x| x.as_ref().clone())
+            .collect();
         // Start with an empty polynomial
         let mut result_poly = UnivPoly::new();
 
@@ -43,33 +41,30 @@ impl<R: Ring> UnivPoly<R> {
         result_poly
     }
     pub fn from_mle(mle: &DenseMultilinearExtension<R>) -> Self {
-        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
+        assert!(
+            mle.num_vars == 1,
+            "Multilinear extension must be univariate!"
+        );
         let coeffs = vec![mle.evaluations[0], mle.evaluations[1] - mle.evaluations[0]];
-        Self {
-            coeffs,
-        }
+        Self { coeffs }
     }
 
     pub fn multiply_by_mle(self, mle: &DenseMultilinearExtension<R>) -> Self {
-        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
+        assert!(
+            mle.num_vars == 1,
+            "Multilinear extension must be univariate!"
+        );
         let mut new_coeffs = vec![R::zero(); self.coeffs.len() + 1];
         for i in 0..self.coeffs.len() {
             new_coeffs[i] += self.coeffs[i] * mle.evaluations[0];
             new_coeffs[i + 1] += self.coeffs[i] * (mle.evaluations[1] - mle.evaluations[0]);
         }
-        Self {
-            coeffs: new_coeffs,
-        }
+        Self { coeffs: new_coeffs }
     }
 
     pub fn multiply_by_scalar(self, scalar: R) -> Self {
-        let new_coeffs: Vec<R> = self.coeffs
-            .iter()
-            .map(|&coeff| coeff * scalar)
-            .collect();
-        Self {
-            coeffs: new_coeffs,
-        }
+        let new_coeffs: Vec<R> = self.coeffs.iter().map(|&coeff| coeff * scalar).collect();
+        Self { coeffs: new_coeffs }
     }
 
     pub fn evaluate(&self, x: R) -> R {
@@ -112,9 +107,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use lattirust_arithmetic::ring::Z2_128;
-    use lattirust_arithmetic::polynomials::VirtualPolynomial;
     use lattirust_arithmetic::mle::DenseMultilinearExtension;
+    use lattirust_arithmetic::polynomials::VirtualPolynomial;
+    use lattirust_arithmetic::ring::Z2_128;
 
     // Define some sample DenseMultilinearExtension for testing
     fn sample_mle() -> DenseMultilinearExtension<Z2_128> {
@@ -148,7 +143,11 @@ mod tests {
         let result = poly.multiply_by_mle(&mle);
         assert_eq!(
             result.coeffs,
-            vec![Z2_128::from(2u128), Z2_128::from(3u128), Z2_128::from(1u128)]
+            vec![
+                Z2_128::from(2u128),
+                Z2_128::from(3u128),
+                Z2_128::from(1u128)
+            ]
         );
     }
 
@@ -159,7 +158,10 @@ mod tests {
         };
         let scalar = Z2_128::from(3u128);
         let result = poly.multiply_by_scalar(scalar);
-        assert_eq!(result.coeffs, vec![Z2_128::from(3u128), Z2_128::from(6u128)]);
+        assert_eq!(
+            result.coeffs,
+            vec![Z2_128::from(3u128), Z2_128::from(6u128)]
+        );
     }
 
     #[test]
@@ -180,7 +182,11 @@ mod tests {
         let result = UnivPoly::from_virtual_polynomial(virtual_poly);
         assert_eq!(
             result.coeffs,
-            vec![Z2_128::from(4u128), Z2_128::from(4u128), Z2_128::from(1u128)]
+            vec![
+                Z2_128::from(4u128),
+                Z2_128::from(4u128),
+                Z2_128::from(1u128)
+            ]
         );
     }
 
