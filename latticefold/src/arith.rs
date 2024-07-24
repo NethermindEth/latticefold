@@ -1,17 +1,18 @@
 #![allow(non_snake_case)]
 
-use lattirust_arithmetic::ring::Ring;
-use utils::hadamard_vec;
-use crate::error::NotSatisfiedError;
-pub mod r1cs;
 pub mod error;
+pub mod r1cs;
 pub mod utils;
-use r1cs::R1CS;
+pub mod rings;
+
 use ark_std::log2;
+use error::NotSatisfiedError;
+use lattirust_arithmetic::ring::Ring;
+use r1cs::R1CS;
+use utils::hadamard_vec;
 
 /// CCS represents the Customizable Constraint Systems structure defined in
 /// the [CCS paper](https://eprint.iacr.org/2023/552)
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CCS<R: Ring> {
     /// m: number of rows in M_i (such that M_i \in F^{m, n})
@@ -39,6 +40,7 @@ pub struct CCS<R: Ring> {
     /// vector of coefficients
     pub c: Vec<R>,
 }
+
 impl<R: Ring> CCS<R> {
     /// check that a CCS structure is satisfied by a z vector. Only for testing.
     pub fn check_relation(&self, z: &[R]) -> Result<(), NotSatisfiedError> {

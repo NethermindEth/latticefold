@@ -1,1 +1,1 @@
-workspace = { members = [ "ajtai_commit", "cyclotomic_field","fields", "ccs", "cyclotomic-rings",] }
+workspace = { members = [ "latticefold",], resolver = "2" }
