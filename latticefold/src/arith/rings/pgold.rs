@@ -3,8 +3,7 @@
 use super::PrimeCyclotomicRing;
 use lattirust_arithmetic::ring::{ Zq, CyclotomicPolyRingSplittedNTT };
 use rand::Rng;
-use lattirust_arithmetic::partial_ntt::PartialNTT;
-use std::ops::{ Add, Mul };
+use std::ops::{ Deref, DerefMut };
 const Q: u64 = 18446744069414584321;
 const D: usize = 120;
 const Z: usize = 225;
@@ -30,10 +29,6 @@ impl<const N: usize> PrimeCyclotomicRing<Q, N> for PGoldCyclotomicRing<N> {
         return bits;
     }
 
-    fn ntt(&self, a: &mut [Zq<Q>; N], rou: Zq<Q>) {
-        CyclotomicPolyRingSplittedNTT::<Q, N, D, Z, PHI_Z>::ntt(a, rou);
-    }
-
     fn try_challenge_from_random_bytes(&self, bytes: &[u8]) -> Vec<Zq<Q>> {
         assert!(bytes.len() >= 15);
         let mut bits = Vec::new();
@@ -45,17 +40,16 @@ impl<const N: usize> PrimeCyclotomicRing<Q, N> for PGoldCyclotomicRing<N> {
         return bits;
     }
 }
+impl<const N: usize> Deref for PGoldCyclotomicRing<N> {
+    type Target = CyclotomicPolyRingSplittedNTT<Q, N, D, Z, PHI_Z>;
 
-impl<const N: usize> Add for PGoldCyclotomicRing<N> {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        PGoldCyclotomicRing(rhs.0 + self.0)
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-impl<const N: usize> Mul for PGoldCyclotomicRing<N> {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        PGoldCyclotomicRing(rhs.0 * self.0)
+impl<const N: usize> DerefMut for PGoldCyclotomicRing<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
