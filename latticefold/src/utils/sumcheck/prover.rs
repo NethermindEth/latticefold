@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{SumCheckError, SumCheckIP, SumCheckProof};
+use super::{univ_poly::UnivPoly, SumCheckError, SumCheckIP, SumCheckProof};
 use crate::transcript::Transcript;
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::PrimeField;
@@ -65,12 +65,11 @@ where
                 uni = &uni + &new_poly;
             }
 
-            sum_check_proof.add_round(transcript, uni);
+            sum_check_proof.add_round(transcript, UnivPoly::try_from(uni)?);
             poly.flattened_ml_extensions.iter_mut().for_each(|mle| {
                 *mle = Arc::from(fix_variables(mle, &[challenge.into()]));
             });
         }
-
         Ok((protocol, sum_check_proof))
     }
 }

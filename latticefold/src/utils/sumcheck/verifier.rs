@@ -53,29 +53,25 @@ where
         let mut challenge_vector: Vec<R> = Vec::with_capacity(proof.rounds.len());
 
         for round in proof.rounds.iter() {
-            let eval1 = round.unipoly.evaluate(&[R::one()])?;
-            let eval0 = round.unipoly.evaluate(&[R::zero()])?;
+            let eval1 = round
+                .unipoly
+                .coeffs
+                .iter()
+                .fold(R::zero(), |sum, x| sum + x);
+            let eval0 = round.unipoly.coeffs[0];
             let sum = eval1 + eval0;
 
             if sum != check_sum {
                 return Err(SumCheckError::SumCheckFailed(sum, check_sum));
-            } else if round.unipoly.aux_info.max_degree > self.protocol.poly_info.max_degree {
+            } else if round.unipoly.degree() > self.protocol.poly_info.max_degree {
                 return Err(SumCheckError::MaxDegreeExceeded);
             }
 
-            let coeffs: Vec<R> = round
-                .unipoly
-                .products
-                .clone()
-                .into_iter()
-                .map(|(x, _)| x)
-                .collect();
-            transcript.absorb_ring_vec(&coeffs);
+            transcript.absorb_ring_vec(&round.unipoly.coeffs);
 
             let challenge = transcript.get_big_challenge().into();
 
-            // TODO: replace this with a saner type for the UV polys?
-            check_sum = round.unipoly.evaluate(&[challenge])?;
+            check_sum = round.unipoly.evaluate(challenge);
             challenge_vector.push(challenge);
         }
 
