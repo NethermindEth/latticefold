@@ -3,7 +3,7 @@ use std::sync::Arc;
 use super::{univ_poly::UnivPoly, SumCheckError, SumCheckIP, SumCheckProof};
 use crate::transcript::Transcript;
 use ark_crypto_primitives::sponge::Absorb;
-use ark_ff::PrimeField;
+use ark_ff::Field;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::{LatticefoldChallengeSet, OverField},
     mle::DenseMultilinearExtension,
@@ -11,7 +11,7 @@ use lattirust_arithmetic::{
     polynomials::VirtualPolynomial,
 };
 
-pub struct SumCheckProver<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
+pub struct SumCheckProver<F: Field, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
 where
     F: Absorb,
 {
@@ -20,7 +20,7 @@ where
     pub claimed_sum: R,
 }
 
-impl<F: PrimeField, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckProver<F, R, CS>
+impl<F: Field, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckProver<F, R, CS>
 where
     F: Absorb,
 {
