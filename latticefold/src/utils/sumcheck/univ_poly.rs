@@ -72,6 +72,17 @@ impl<R: Ring> UnivPoly<R> {
             coeffs: new_coeffs,
         }
     }
+
+    pub fn evaluate(&self, x: R) -> R {
+        let mut result = R::zero();
+
+        // Horner's method to evaluate the polynomial
+        for &coeff in self.coeffs.iter().rev() {
+            result = result * x + coeff;
+        }
+
+        result
+    }
 }
 
 impl<R: Ring> AddAssign<&UnivPoly<R>> for UnivPoly<R> {
@@ -163,5 +174,13 @@ mod tests {
             result.coeffs,
             vec![Z2_128::from(4u128), Z2_128::from(4u128), Z2_128::from(1u128)]
         );
+    }
+
+    #[test]
+    fn test_univ_poly_evaluation() {
+        let virtual_poly = sample_virtual_polynomial();
+        let unipoly = UnivPoly::from_virtual_polynomial(virtual_poly);
+        assert_eq!(unipoly.evaluate(Z2_128::from(2u128)), Z2_128::from(16u128));
+        assert_eq!(unipoly.evaluate(Z2_128::from(5u128)), Z2_128::from(49u128));
     }
 }
