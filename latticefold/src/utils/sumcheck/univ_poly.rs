@@ -87,3 +87,81 @@ impl<R: Ring> AddAssign<&UnivPoly<R>> for UnivPoly<R> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+    use lattirust_arithmetic::ring::Z2_128;
+    use lattirust_arithmetic::polynomials::VirtualPolynomial;
+    use lattirust_arithmetic::mle::DenseMultilinearExtension;
+
+    // Define some sample DenseMultilinearExtension for testing
+    fn sample_mle() -> DenseMultilinearExtension<Z2_128> {
+        DenseMultilinearExtension {
+            num_vars: 1,
+            evaluations: vec![Z2_128::from(2u128), Z2_128::from(3u128)],
+        }
+    }
+
+    // Define a sample VirtualPolynomial for testing
+    fn sample_virtual_polynomial() -> VirtualPolynomial<Z2_128> {
+        let mut polynomial = VirtualPolynomial::new(1);
+        polynomial.flattened_ml_extensions = vec![Arc::new(sample_mle().clone()); 2];
+        polynomial.products = vec![(Z2_128::from(1u128), vec![0, 1])];
+        return polynomial;
+    }
+
+    #[test]
+    fn test_univ_poly_from_mle() {
+        let mle = sample_mle();
+        let poly = UnivPoly::from_mle(&mle);
+        assert_eq!(poly.coeffs, vec![Z2_128::from(2u128), Z2_128::from(1u128)]);
+    }
+
+    #[test]
+    fn test_univ_poly_multiply_by_mle() {
+        let mle = sample_mle();
+        let poly = UnivPoly {
+            coeffs: vec![Z2_128::from(1u128), Z2_128::from(1u128)],
+        };
+        let result = poly.multiply_by_mle(&mle);
+        assert_eq!(
+            result.coeffs,
+            vec![Z2_128::from(2u128), Z2_128::from(3u128), Z2_128::from(1u128)]
+        );
+    }
+
+    #[test]
+    fn test_univ_poly_multiply_by_scalar() {
+        let poly = UnivPoly {
+            coeffs: vec![Z2_128::from(1u128), Z2_128::from(2u128)],
+        };
+        let scalar = Z2_128::from(3u128);
+        let result = poly.multiply_by_scalar(scalar);
+        assert_eq!(result.coeffs, vec![Z2_128::from(3u128), Z2_128::from(6u128)]);
+    }
+
+    #[test]
+    fn test_univ_poly_add_assign() {
+        let mut poly1 = UnivPoly {
+            coeffs: vec![Z2_128::from(1u128), Z2_128::from(2u128)],
+        };
+        let poly2 = UnivPoly {
+            coeffs: vec![Z2_128::from(3u128), Z2_128::from(4u128)],
+        };
+        poly1 += &poly2;
+        assert_eq!(poly1.coeffs, vec![Z2_128::from(4u128), Z2_128::from(6u128)]);
+    }
+
+    #[test]
+    fn test_univ_poly_from_virtual_polynomial() {
+        let virtual_poly = sample_virtual_polynomial();
+        let result = UnivPoly::from_virtual_polynomial(virtual_poly);
+        assert_eq!(
+            result.coeffs,
+            vec![Z2_128::from(4u128), Z2_128::from(4u128), Z2_128::from(1u128)]
+        );
+    }
+}
