@@ -84,12 +84,17 @@ impl<R: Ring> Mul<&DenseMultilinearExtension<R>> for UnivPoly<R> {
             mle.num_vars == 1,
             "Multilinear extension must be univariate!"
         );
-        let mut new_coeffs = vec![R::zero(); self.coeffs.len() + 1];
-        for i in 0..self.coeffs.len() {
-            new_coeffs[i] += self.coeffs[i] * mle.evaluations[0];
-            new_coeffs[i + 1] += self.coeffs[i] * (mle.evaluations[1] - mle.evaluations[0]);
+
+        Self {
+            coeffs: self.coeffs.iter().enumerate().fold(
+                vec![R::zero(); self.coeffs.len() + 1],
+                |mut new_coeffs, (i, coeff)| {
+                    new_coeffs[i] += *coeff * mle.evaluations[0];
+                    new_coeffs[i + 1] += *coeff * (mle.evaluations[1] - mle.evaluations[0]);
+                    new_coeffs
+                },
+            ),
         }
-        Self { coeffs: new_coeffs }
     }
 }
 
