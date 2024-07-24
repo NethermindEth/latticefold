@@ -1,4 +1,4 @@
-use std::ops::AddAssign;
+use std::ops::{ AddAssign, Mul };
 
 use lattirust_arithmetic::mle::DenseMultilinearExtension;
 use lattirust_arithmetic::polynomials::VirtualPolynomial;
@@ -32,11 +32,11 @@ impl<R: Ring> UnivPoly<R> {
 
             // Multiply by subsequent MLEs
             for &index in &list[1..] {
-                unipoly = unipoly.multiply_by_mle(&flattened_ml_extensions[list[index]]);
+                unipoly = unipoly * &flattened_ml_extensions[list[index]];
             }
 
             // Scale the polynomial by the coefficient
-            unipoly = unipoly.multiply_by_scalar(*coeff);
+            unipoly = unipoly * coeff;
 
             // Accumulate the result
             result_poly += &unipoly;
@@ -47,24 +47,6 @@ impl<R: Ring> UnivPoly<R> {
         assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
         let coeffs = vec![mle.evaluations[0], mle.evaluations[1] - mle.evaluations[0]];
         Self { coeffs }
-    }
-
-    pub fn multiply_by_mle(self, mle: &DenseMultilinearExtension<R>) -> Self {
-        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
-        let mut new_coeffs = vec![R::zero(); self.coeffs.len() + 1];
-        for i in 0..self.coeffs.len() {
-            new_coeffs[i] += self.coeffs[i] * mle.evaluations[0];
-            new_coeffs[i + 1] += self.coeffs[i] * (mle.evaluations[1] - mle.evaluations[0]);
-        }
-        Self { coeffs: new_coeffs }
-    }
-
-    pub fn multiply_by_scalar(self, scalar: R) -> Self {
-        let new_coeffs: Vec<R> = self.coeffs
-            .iter()
-            .map(|&coeff| coeff * scalar)
-            .collect();
-        Self { coeffs: new_coeffs }
     }
 
     pub fn evaluate(&self, x: R) -> R {
@@ -86,7 +68,31 @@ impl<R: Ring> UnivPoly<R> {
             .unwrap_or(0)
     }
 }
+impl<R: Ring> Mul<&DenseMultilinearExtension<R>> for UnivPoly<R> {
+    type Output = Self;
 
+    fn mul(self, mle: &DenseMultilinearExtension<R>) -> Self {
+        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
+        let mut new_coeffs = vec![R::zero(); self.coeffs.len() + 1];
+        for i in 0..self.coeffs.len() {
+            new_coeffs[i] += self.coeffs[i] * mle.evaluations[0];
+            new_coeffs[i + 1] += self.coeffs[i] * (mle.evaluations[1] - mle.evaluations[0]);
+        }
+        Self { coeffs: new_coeffs }
+    }
+}
+
+impl<R: Ring> Mul<&R> for UnivPoly<R> {
+    type Output = Self;
+
+    fn mul(self, scalar: &R) -> Self {
+        let new_coeffs: Vec<R> = self.coeffs
+            .iter()
+            .map(|&coeff| coeff * scalar)
+            .collect();
+        Self { coeffs: new_coeffs }
+    }
+}
 impl<R: Ring> AddAssign<&UnivPoly<R>> for UnivPoly<R> {
     fn add_assign(&mut self, other: &UnivPoly<R>) {
         // Ensure that both polynomials have the same degree by resizing the coefficients vectors
@@ -141,7 +147,7 @@ mod tests {
         let poly = UnivPoly {
             coeffs: vec![Z2_128::from(1u128), Z2_128::from(1u128)],
         };
-        let result = poly.multiply_by_mle(&mle);
+        let result = poly * &mle;
         assert_eq!(
             result.coeffs,
             vec![Z2_128::from(2u128), Z2_128::from(3u128), Z2_128::from(1u128)]
@@ -154,7 +160,7 @@ mod tests {
             coeffs: vec![Z2_128::from(1u128), Z2_128::from(2u128)],
         };
         let scalar = Z2_128::from(3u128);
-        let result = poly.multiply_by_scalar(scalar);
+        let result = poly * &scalar;
         assert_eq!(result.coeffs, vec![Z2_128::from(3u128), Z2_128::from(6u128)]);
     }
 
@@ -193,7 +199,7 @@ mod tests {
         let virtual_poly = sample_virtual_polynomial();
         let unipoly = UnivPoly::from_virtual_polynomial(virtual_poly);
         assert_eq!(unipoly.degree(), 2);
-        let unipoly = unipoly.multiply_by_mle(&sample_mle());
+        let unipoly = unipoly * &sample_mle();
         assert_eq!(unipoly.degree(), 3);
     }
 }
