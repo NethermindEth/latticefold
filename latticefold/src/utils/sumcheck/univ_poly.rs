@@ -16,39 +16,6 @@ impl<R: Ring> UnivPoly<R> {
         Self { coeffs: Vec::new() }
     }
 
-    pub fn from_virtual_polynomial(poly: VirtualPolynomial<R>) -> Self {
-        let flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> =
-            poly.flattened_ml_extensions
-                .iter()
-                .map(|x| x.as_ref().clone())
-                .collect();
-        // Start with an empty polynomial
-        let mut result_poly = UnivPoly::new();
-
-        // Iterate over the products in the virtual polynomial
-        for (coeff, list) in poly.products.iter() {
-            // Start with the polynomial from the first MLE in the list
-            let mut unipoly = UnivPoly::from_mle(&flattened_ml_extensions[list[0]]);
-
-            // Multiply by subsequent MLEs
-            for &index in &list[1..] {
-                unipoly = unipoly * &flattened_ml_extensions[list[index]];
-            }
-
-            // Scale the polynomial by the coefficient
-            unipoly = unipoly * coeff;
-
-            // Accumulate the result
-            result_poly += &unipoly;
-        }
-        result_poly
-    }
-    pub fn from_mle(mle: &DenseMultilinearExtension<R>) -> Self {
-        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
-        let coeffs = vec![mle.evaluations[0], mle.evaluations[1] - mle.evaluations[0]];
-        Self { coeffs }
-    }
-
     pub fn evaluate(&self, x: R) -> R {
         let mut result = R::zero();
 
@@ -68,6 +35,43 @@ impl<R: Ring> UnivPoly<R> {
             .unwrap_or(0)
     }
 }
+impl<R: Ring> From<&DenseMultilinearExtension<R>> for UnivPoly<R> {
+    fn from(mle: &DenseMultilinearExtension<R>) -> Self {
+        assert!(mle.num_vars == 1, "Multilinear extension must be univariate!");
+        let coeffs = vec![mle.evaluations[0], mle.evaluations[1] - mle.evaluations[0]];
+        Self { coeffs }
+    }
+}
+impl<R: Ring> From<VirtualPolynomial<R>> for UnivPoly<R> {
+    fn from(poly: VirtualPolynomial<R>) -> Self {
+        let flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> =
+            poly.flattened_ml_extensions
+                .iter()
+                .map(|x| x.as_ref().clone())
+                .collect();
+        // Start with an empty polynomial
+        let mut result_poly = UnivPoly::new();
+
+        // Iterate over the products in the virtual polynomial
+        for (coeff, list) in poly.products.iter() {
+            // Start with the polynomial from the first MLE in the list
+            let mut unipoly = UnivPoly::from(&flattened_ml_extensions[list[0]]);
+
+            // Multiply by subsequent MLEs
+            for &index in &list[1..] {
+                unipoly = unipoly * &flattened_ml_extensions[list[index]];
+            }
+
+            // Scale the polynomial by the coefficient
+            unipoly = unipoly * coeff;
+
+            // Accumulate the result
+            result_poly += &unipoly;
+        }
+        result_poly
+    }
+}
+
 impl<R: Ring> Mul<&DenseMultilinearExtension<R>> for UnivPoly<R> {
     type Output = Self;
 
@@ -111,8 +115,6 @@ impl<R: Ring> AddAssign<&UnivPoly<R>> for UnivPoly<R> {
 mod tests {
     use std::sync::Arc;
 
-    use crate::utils::sumcheck::univ_poly;
-
     use super::*;
     use lattirust_arithmetic::mle::DenseMultilinearExtension;
     use lattirust_arithmetic::polynomials::VirtualPolynomial;
@@ -137,7 +139,7 @@ mod tests {
     #[test]
     fn test_univ_poly_from_mle() {
         let mle = sample_mle();
-        let poly = UnivPoly::from_mle(&mle);
+        let poly = UnivPoly::from(&mle);
         assert_eq!(poly.coeffs, vec![Z2_128::from(2u128), Z2_128::from(1u128)]);
     }
 
@@ -179,7 +181,7 @@ mod tests {
     #[test]
     fn test_univ_poly_from_virtual_polynomial() {
         let virtual_poly = sample_virtual_polynomial();
-        let result = UnivPoly::from_virtual_polynomial(virtual_poly);
+        let result = UnivPoly::from(virtual_poly);
         assert_eq!(
             result.coeffs,
             vec![Z2_128::from(4u128), Z2_128::from(4u128), Z2_128::from(1u128)]
@@ -189,7 +191,7 @@ mod tests {
     #[test]
     fn test_univ_poly_evaluation() {
         let virtual_poly = sample_virtual_polynomial();
-        let unipoly = UnivPoly::from_virtual_polynomial(virtual_poly);
+        let unipoly = UnivPoly::from(virtual_poly);
         assert_eq!(unipoly.evaluate(Z2_128::from(2u128)), Z2_128::from(16u128));
         assert_eq!(unipoly.evaluate(Z2_128::from(5u128)), Z2_128::from(49u128));
     }
@@ -197,7 +199,7 @@ mod tests {
     #[test]
     fn test_degree() {
         let virtual_poly = sample_virtual_polynomial();
-        let unipoly = UnivPoly::from_virtual_polynomial(virtual_poly);
+        let unipoly = UnivPoly::from(virtual_poly);
         assert_eq!(unipoly.degree(), 2);
         let unipoly = unipoly * &sample_mle();
         assert_eq!(unipoly.degree(), 3);
