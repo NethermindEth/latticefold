@@ -55,9 +55,9 @@ where
     type Proof = LinearizationProof<F, R>;
 
     fn prove(
-        cm_i: &CCCS<R>,
-        wit: &Witness<R>,
-        transcript: &mut impl Transcript<F, R>,
+        _cm_i: &CCCS<R>,
+        _wit: &Witness<R>,
+        _transcript: &mut impl Transcript<F, R>,
     ) -> Result<(LCCCS<R>, Self::Proof), LinearizationError<R>> {
         todo!()
     }
@@ -71,9 +71,9 @@ where
     type Prover = NIFSProver<F, R, T>;
 
     fn verify(
-        cm_i: &CCCS<R>,
-        proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
-        transcript: &mut impl Transcript<F, R>,
+        _cm_i: &CCCS<R>,
+        _proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
+        _transcript: &mut impl Transcript<F, R>,
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
         todo!()
     }
