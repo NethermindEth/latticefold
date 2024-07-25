@@ -6,7 +6,7 @@ use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, 
 use thiserror_no_std::Error;
 
 use crate::{
-    arith::{Witness, CCCS, LCCCS},
+    arith::{Witness, LCCCS},
     transcript::Transcript,
     utils::sumcheck::SumCheckProof,
 };
@@ -21,20 +21,20 @@ pub enum FoldingError<R: Ring> {
 pub trait FoldingProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Proof: Clone;
     fn prove(
-        cm_i_s: &[LCCCS],
-        w_s: &[Witness],
+        cm_i_s: &[LCCCS<R>],
+        w_s: &[Witness<R>],
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS, Witness, Self::Proof), FoldingError<R>>;
+    ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), FoldingError<R>>;
 }
 
 pub trait FoldingVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Prover: FoldingProver<F, R, T>;
 
     fn verify(
-        cm_i_s: &[LCCCS],
+        cm_i_s: &[LCCCS<R>],
         proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<LCCCS, FoldingError<R>>;
+    ) -> Result<LCCCS<R>, FoldingError<R>>;
 }
 
 #[derive(Clone)]
@@ -56,10 +56,10 @@ where
     type Proof = FoldingProof<F, R>;
 
     fn prove(
-        cm_i_s: &[LCCCS],
-        w_s: &[Witness],
+        cm_i_s: &[LCCCS<R>],
+        w_s: &[Witness<R>],
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS, Witness, Self::Proof), FoldingError<R>> {
+    ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), FoldingError<R>> {
         todo!()
     }
 }
@@ -72,10 +72,10 @@ where
     type Prover = NIFSProver<F, R, T>;
 
     fn verify(
-        cm_i_s: &[LCCCS],
+        cm_i_s: &[LCCCS<R>],
         proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<LCCCS, FoldingError<R>> {
+    ) -> Result<LCCCS<R>, FoldingError<R>> {
         todo!()
     }
 }

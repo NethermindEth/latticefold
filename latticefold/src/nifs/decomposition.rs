@@ -6,7 +6,7 @@ use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, 
 use thiserror_no_std::Error;
 
 use crate::{
-    arith::{Witness, CCCS, LCCCS},
+    arith::{Witness, LCCCS},
     transcript::Transcript,
 };
 
@@ -21,20 +21,20 @@ pub enum DecompositionError<R: Ring> {
 pub trait DecompositionProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Proof: Clone;
     fn prove(
-        cm_i: &LCCCS,
-        wit: &Witness,
+        cm_i: &LCCCS<R>,
+        wit: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(Vec<(LCCCS, Witness)>, Self::Proof), DecompositionError<R>>;
+    ) -> Result<(Vec<(LCCCS<R>, Witness<R>)>, Self::Proof), DecompositionError<R>>;
 }
 
 pub trait DecompositionVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Prover: DecompositionProver<F, R, T>;
 
     fn verify(
-        cm_i: &LCCCS,
+        cm_i: &LCCCS<R>,
         proof: &<Self::Prover as DecompositionProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<Vec<LCCCS>, DecompositionError<R>>;
+    ) -> Result<Vec<LCCCS<R>>, DecompositionError<R>>;
 }
 
 #[derive(Clone)]
@@ -57,10 +57,10 @@ where
     type Proof = DecompositionProof<F, R>;
 
     fn prove(
-        cm_i: &LCCCS,
-        wit: &Witness,
+        cm_i: &LCCCS<R>,
+        wit: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(Vec<(LCCCS, Witness)>, Self::Proof), DecompositionError<R>> {
+    ) -> Result<(Vec<(LCCCS<R>, Witness<R>)>, Self::Proof), DecompositionError<R>> {
         todo!()
     }
 }
@@ -73,10 +73,10 @@ where
     type Prover = NIFSProver<F, R, T>;
 
     fn verify(
-        cm_i: &LCCCS,
+        cm_i: &LCCCS<R>,
         proof: &<Self::Prover as DecompositionProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<Vec<LCCCS>, DecompositionError<R>> {
+    ) -> Result<Vec<LCCCS<R>>, DecompositionError<R>> {
         todo!()
     }
 }

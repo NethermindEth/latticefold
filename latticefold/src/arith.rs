@@ -4,6 +4,8 @@ pub mod error;
 pub mod r1cs;
 pub mod utils;
 
+use std::marker::PhantomData;
+
 use ark_std::log2;
 use error::NotSatisfiedError;
 use lattirust_arithmetic::ring::Ring;
@@ -106,6 +108,12 @@ impl<R: Ring> CCS<R> {
 // TODO: commited CCS type.
 // Should be something like { instance: Instance, cm_W: Vec<R> }
 // where cm_W is supposed to be an Ajtai commitment to the actual witness.
-pub type CCCS = ();
-pub type LCCCS = ();
-pub type Witness = ();
+pub struct CCCS<R: Ring> {
+    _marker: PhantomData<R>,
+}
+pub struct LCCCS<R: Ring> {
+    _marker: PhantomData<R>,
+}
+pub struct Witness<R: Ring> {
+    _marker: PhantomData<R>,
+}

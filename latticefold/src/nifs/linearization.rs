@@ -19,20 +19,20 @@ pub enum LinearizationError<R: Ring> {
 pub trait LinearizationProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Proof: Clone;
     fn prove(
-        cm_i: &CCCS,
-        wit: &Witness,
+        cm_i: &CCCS<R>,
+        wit: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS, Self::Proof), LinearizationError<R>>;
+    ) -> Result<(LCCCS<R>, Self::Proof), LinearizationError<R>>;
 }
 
 pub trait LinearizationVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Prover: LinearizationProver<F, R, T>;
 
     fn verify(
-        cm_i: &CCCS,
+        cm_i: &CCCS<R>,
         proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<LCCCS, LinearizationError<R>>;
+    ) -> Result<LCCCS<R>, LinearizationError<R>>;
 }
 
 #[derive(Clone)]
@@ -55,10 +55,10 @@ where
     type Proof = LinearizationProof<F, R>;
 
     fn prove(
-        cm_i: &CCCS,
-        wit: &Witness,
+        cm_i: &CCCS<R>,
+        wit: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS, Self::Proof), LinearizationError<R>> {
+    ) -> Result<(LCCCS<R>, Self::Proof), LinearizationError<R>> {
         todo!()
     }
 }
@@ -71,10 +71,10 @@ where
     type Prover = NIFSProver<F, R, T>;
 
     fn verify(
-        cm_i: &CCCS,
+        cm_i: &CCCS<R>,
         proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<LCCCS, LinearizationError<R>> {
+    ) -> Result<LCCCS<R>, LinearizationError<R>> {
         todo!()
     }
 }
