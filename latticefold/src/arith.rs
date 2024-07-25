@@ -112,14 +112,17 @@ pub struct CCCS<R: Ring> {
     cm: Vec<R>,
     x_ccs: Vec<R>,
 }
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct LCCCS<R: Ring> {
     r_arr: Vec<R>,
-    v: Vec<R>,
+    v: R,
     y: Vec<R>,
     u: Vec<R>,
     x_w: Vec<R>,
+    h: R,
 }
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Witness<R: Ring> {
     f_arr: Vec<R>,
