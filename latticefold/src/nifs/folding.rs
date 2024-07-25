@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
 use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::Ring};

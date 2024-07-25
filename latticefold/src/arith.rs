@@ -4,8 +4,6 @@ pub mod error;
 pub mod r1cs;
 pub mod utils;
 
-use std::marker::PhantomData;
-
 use ark_std::log2;
 use error::NotSatisfiedError;
 use lattirust_arithmetic::ring::Ring;
@@ -49,15 +47,12 @@ impl<R: Ring> CCS<R> {
         //  Calculates \sum_{i=1}^{n_r} c_i \cdot \bigg( \bigcirc_{j \in S_i} (M_j \cdot \vec{z}) \bigg)
         for i in 0..self.q {
             // Extract the needed M_j matrices out of S_i
-            let vec_M_j: Vec<&Vec<Vec<R>>> = self.S[i]
-                .iter()
-                .map(|&j| &self.M[j])
-                .collect();
+            let vec_M_j: Vec<&Vec<Vec<R>>> = self.S[i].iter().map(|&j| &self.M[j]).collect();
 
             // complete the hadamard chain
             let mut hadamard_result = vec![R::one(); self.m];
             for M_j in vec_M_j.into_iter() {
-                let M_j_z: Vec<R> = utils::mat_by_vec(M_j, &z.to_vec());
+                let M_j_z: Vec<R> = utils::mat_by_vec(M_j, z);
 
                 hadamard_result = hadamard_vec(&hadamard_result, &M_j_z);
             }

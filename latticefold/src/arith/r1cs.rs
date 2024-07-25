@@ -17,10 +17,10 @@ impl<R: Ring> R1CS<R> {
     }
     // check that a R1CS structure is satisfied by a z vector. Only for testing.
     pub fn check_relation(&self, z: &[R]) -> Result<(), NotSatisfiedError> {
-        let Az = utils::mat_by_vec(&self.A, &z.to_vec());
-        let Bz = utils::mat_by_vec(&self.B, &z.to_vec());
+        let Az = utils::mat_by_vec(&self.A, z);
+        let Bz = utils::mat_by_vec(&self.B, z);
 
-        let Cz = utils::mat_by_vec(&self.C, &z.to_vec());
+        let Cz = utils::mat_by_vec(&self.C, z);
         let AzBz = utils::hadamard_vec(&Az, &Bz);
 
         if AzBz != Cz {
@@ -55,9 +55,9 @@ pub struct RelaxedR1CS<R: Ring> {
 impl<R: Ring> RelaxedR1CS<R> {
     /// check that a RelaxedR1CS structure is satisfied by a z vector.
     pub fn check_relation(&self, z: &[R]) -> Result<(), NotSatisfiedError> {
-        let Az = mat_by_vec(&self.A, &z.to_vec());
-        let Bz = mat_by_vec(&self.B, &z.to_vec());
-        let Cz = mat_by_vec(&self.B, &z.to_vec());
+        let Az = mat_by_vec(&self.A, z);
+        let Bz = mat_by_vec(&self.B, z);
+        let Cz = mat_by_vec(&self.B, z);
 
         let uCz = utils::vec_value_mul(&Cz, &self.u);
         let uCzE = utils::vec_add(&uCz, &self.E);

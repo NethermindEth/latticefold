@@ -12,6 +12,12 @@ pub struct UnivPoly<R: Ring> {
     pub coeffs: Vec<R>,
 }
 
+impl<R: Ring> Default for UnivPoly<R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<R: Ring> UnivPoly<R> {
     pub fn new() -> Self {
         Self { coeffs: Vec::new() }
@@ -29,7 +35,7 @@ impl<R: Ring> UnivPoly<R> {
             .iter()
             .enumerate()
             .rev()
-            .filter_map(|(i, coeff)| (!coeff.is_zero()).then(|| i))
+            .filter_map(|(i, coeff)| (!coeff.is_zero()).then_some(i))
             .next()
             .unwrap_or(0)
     }
@@ -140,9 +146,9 @@ mod tests {
     // Define a sample VirtualPolynomial for testing
     fn sample_virtual_polynomial() -> VirtualPolynomial<Z2_128> {
         let mut polynomial = VirtualPolynomial::new(1);
-        polynomial.flattened_ml_extensions = vec![Arc::new(sample_mle().clone()); 2];
+        polynomial.flattened_ml_extensions = (0..2).map(|_| Arc::new(sample_mle())).collect();
         polynomial.products = vec![(Z2_128::from(1u128), vec![0, 1])];
-        return polynomial;
+        polynomial
     }
 
     #[test]
