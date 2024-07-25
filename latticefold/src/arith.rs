@@ -49,7 +49,10 @@ impl<R: Ring> CCS<R> {
         //  Calculates \sum_{i=1}^{n_r} c_i \cdot \bigg( \bigcirc_{j \in S_i} (M_j \cdot \vec{z}) \bigg)
         for i in 0..self.q {
             // Extract the needed M_j matrices out of S_i
-            let vec_M_j: Vec<&Vec<Vec<R>>> = self.S[i].iter().map(|&j| &self.M[j]).collect();
+            let vec_M_j: Vec<&Vec<Vec<R>>> = self.S[i]
+                .iter()
+                .map(|&j| &self.M[j])
+                .collect();
 
             // complete the hadamard chain
             let mut hadamard_result = vec![R::one(); self.m];
@@ -104,16 +107,21 @@ impl<R: Ring> CCS<R> {
         }
     }
 }
-
-// TODO: commited CCS type.
-// Should be something like { instance: Instance, cm_W: Vec<R> }
-// where cm_W is supposed to be an Ajtai commitment to the actual witness.
+#[derive(Debug, Clone, PartialEq)]
 pub struct CCCS<R: Ring> {
-    _marker: PhantomData<R>,
+    cm: Vec<R>,
+    x_ccs: Vec<R>,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct LCCCS<R: Ring> {
-    _marker: PhantomData<R>,
+    r_arr: Vec<R>,
+    v: Vec<R>,
+    y: Vec<R>,
+    u: Vec<R>,
+    x_w: Vec<R>,
 }
+#[derive(Debug, Clone, PartialEq)]
 pub struct Witness<R: Ring> {
-    _marker: PhantomData<R>,
+    f_arr: Vec<R>,
+    w_ccs: Vec<R>,
 }
