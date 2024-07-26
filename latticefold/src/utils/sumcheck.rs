@@ -7,15 +7,15 @@ use std::marker::PhantomData;
 
 use crate::transcript::Transcript;
 use ark_crypto_primitives::sponge::Absorb;
-use ark_ff::PrimeField;
+use ark_ff::Field;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::polynomials::ArithErrors;
 use lattirust_arithmetic::polynomials::VPAuxInfo;
 use lattirust_arithmetic::ring::Ring;
-use thiserror_no_std::Error;
+use thiserror::Error;
 use univ_poly::UnivPoly;
 
-pub struct SumCheckIP<F: PrimeField, R: OverField<F>>
+pub struct SumCheckIP<F: Field, R: OverField<F>>
 where
     F: Absorb,
 {
@@ -24,7 +24,7 @@ where
     pub poly_info: VPAuxInfo<R>,
 }
 
-impl<F: PrimeField, R: OverField<F>> SumCheckIP<F, R>
+impl<F: Field, R: OverField<F>> SumCheckIP<F, R>
 where
     F: Absorb,
 {
@@ -36,7 +36,9 @@ where
         }
     }
 }
-pub struct SumCheckProof<F: PrimeField, R: OverField<F>>
+
+#[derive(Debug, Clone)]
+pub struct SumCheckProof<F: Field, R: OverField<F>>
 where
     F: Absorb,
 {
@@ -44,7 +46,7 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
+pub struct SumCheckRound<F: Field, R: OverField<F>> {
     _marker: std::marker::PhantomData<F>,
     pub unipoly: UnivPoly<R>,
 }
@@ -52,14 +54,20 @@ pub struct SumCheckRound<F: PrimeField, R: OverField<F>> {
 #[derive(Error, Debug)]
 pub enum SumCheckError<R: Ring + Display> {
     #[error("univariate polynomial evaluation error")]
-    EvaluationError(#[from] ArithErrors),
+    EvaluationError(ArithErrors),
     #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")]
     SumCheckFailed(R, R),
     #[error("max degree exceeded")]
     MaxDegreeExceeded,
 }
 
-impl<F: PrimeField, R: OverField<F>> SumCheckProof<F, R>
+impl<R: Ring> From<ArithErrors> for SumCheckError<R> {
+    fn from(arith_error: ArithErrors) -> Self {
+        Self::EvaluationError(arith_error)
+    }
+}
+
+impl<F: Field, R: OverField<F>> SumCheckProof<F, R>
 where
     F: Absorb,
 {
@@ -80,7 +88,7 @@ where
     }
 }
 
-impl<F: PrimeField, R: OverField<F>> SumCheckRound<F, R> {
+impl<F: Field, R: OverField<F>> SumCheckRound<F, R> {
     pub fn new(unipoly: UnivPoly<R>) -> SumCheckRound<F, R> {
         SumCheckRound {
             unipoly,
