@@ -1,7 +1,7 @@
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
 use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::Ring};
-use thiserror_no_std::Error;
+use thiserror::Error;
 
 use crate::{
     arith::{Witness, CCCS, LCCCS},
@@ -13,26 +13,30 @@ use super::{NIFSProver, NIFSVerifier};
 
 #[derive(Debug, Error)]
 pub enum LinearizationError<R: Ring> {
+    #[error("sum check failed at linearization step: {0}")]
     SumCheckError(#[from] SumCheckError<R>),
 }
 
 pub trait LinearizationProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Proof: Clone;
+    type Error: std::error::Error;
+
     fn prove(
         cm_i: &CCCS<R>,
         wit: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS<R>, Self::Proof), LinearizationError<R>>;
+    ) -> Result<(LCCCS<R>, Self::Proof), Self::Error>;
 }
 
 pub trait LinearizationVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Prover: LinearizationProver<F, R, T>;
+    type Error = <Self::Prover as LinearizationProver<F, R, T>>::Error;
 
     fn verify(
         cm_i: &CCCS<R>,
         proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<LCCCS<R>, LinearizationError<R>>;
+    ) -> Result<LCCCS<R>, Self::Error>;
 }
 
 #[derive(Clone)]
@@ -53,12 +57,13 @@ where
     F: Absorb,
 {
     type Proof = LinearizationProof<F, R>;
+    type Error = LinearizationError<R>;
 
     fn prove(
         _cm_i: &CCCS<R>,
         _wit: &Witness<R>,
         _transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS<R>, Self::Proof), LinearizationError<R>> {
+    ) -> Result<(LCCCS<R>, LinearizationProof<F, R>), LinearizationError<R>> {
         todo!()
     }
 }

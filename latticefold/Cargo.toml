@@ -12,4 +12,4 @@ ark-std = { version = "0.4.0", default-features = false }
 lattirust-arithmetic = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "main" }
 num-traits = "0.2.19"
 rand = "0.8.5"
-thiserror-no-std = { version = "2.0.2", default-features = false }
+thiserror = "1.0.63"

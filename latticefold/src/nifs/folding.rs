@@ -1,7 +1,7 @@
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
 use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::Ring};
-use thiserror_no_std::Error;
+use thiserror::Error;
 
 use crate::{
     arith::{Witness, LCCCS},
@@ -13,26 +13,30 @@ use super::{NIFSProver, NIFSVerifier};
 
 #[derive(Debug, Error)]
 pub enum FoldingError<R: Ring> {
+    #[error("phantom folding error")]
     PhantomRRemoveThisLater(R),
 }
 
 pub trait FoldingProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Proof: Clone;
+    type Error: std::error::Error;
+
     fn prove(
         cm_i_s: &[LCCCS<R>],
         w_s: &[Witness<R>],
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), FoldingError<R>>;
+    ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), Self::Error>;
 }
 
 pub trait FoldingVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     type Prover: FoldingProver<F, R, T>;
+    type Error = <Self::Prover as FoldingProver<F, R, T>>::Error;
 
     fn verify(
         cm_i_s: &[LCCCS<R>],
         proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
-    ) -> Result<LCCCS<R>, FoldingError<R>>;
+    ) -> Result<LCCCS<R>, Self::Error>;
 }
 
 #[derive(Clone)]
@@ -52,12 +56,13 @@ where
     F: Absorb,
 {
     type Proof = FoldingProof<F, R>;
+    type Error = FoldingError<R>;
 
     fn prove(
         _cm_i_s: &[LCCCS<R>],
         _w_s: &[Witness<R>],
         _transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), FoldingError<R>> {
+    ) -> Result<(LCCCS<R>, Witness<R>, FoldingProof<F, R>), FoldingError<R>> {
         todo!()
     }
 }

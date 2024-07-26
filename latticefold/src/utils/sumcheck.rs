@@ -12,7 +12,7 @@ use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::polynomials::ArithErrors;
 use lattirust_arithmetic::polynomials::VPAuxInfo;
 use lattirust_arithmetic::ring::Ring;
-use thiserror_no_std::Error;
+use thiserror::Error;
 use univ_poly::UnivPoly;
 
 pub struct SumCheckIP<F: Field, R: OverField<F>>
@@ -54,11 +54,17 @@ pub struct SumCheckRound<F: Field, R: OverField<F>> {
 #[derive(Error, Debug)]
 pub enum SumCheckError<R: Ring + Display> {
     #[error("univariate polynomial evaluation error")]
-    EvaluationError(#[from] ArithErrors),
+    EvaluationError(ArithErrors),
     #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")]
     SumCheckFailed(R, R),
     #[error("max degree exceeded")]
     MaxDegreeExceeded,
+}
+
+impl<R: Ring> From<ArithErrors> for SumCheckError<R> {
+    fn from(arith_error: ArithErrors) -> Self {
+        Self::EvaluationError(arith_error)
+    }
 }
 
 impl<F: Field, R: OverField<F>> SumCheckProof<F, R>
