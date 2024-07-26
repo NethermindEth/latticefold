@@ -2,22 +2,25 @@ use std::marker::PhantomData;
 
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
-use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::Ring};
-use thiserror::Error;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 
 use crate::{
     arith::{Witness, LCCCS},
     transcript::Transcript,
 };
 
-use super::{NIFSProver, NIFSVerifier};
+use super::{error::DecompositionError, NIFSProver, NIFSVerifier};
 
-#[derive(Debug, Error)]
-pub enum DecompositionError<R: Ring> {
-    #[error("phantom decomposition error constructor")]
-    PhantomRRemoveThisLater(R),
-    #[error("input vectors have incorrect length")]
-    IncorrectLength,
+#[derive(Clone)]
+pub struct DecompositionProof<F: Field, R: OverField<F>>
+where
+    F: Absorb,
+{
+    _f: PhantomData<F>,
+    pub u_s: Vec<Vec<R>>,
+    pub v_s: Vec<R>,
+    pub x_s: Vec<Vec<R>>,
+    pub y_s: Vec<Vec<R>>,
 }
 
 pub trait DecompositionProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
@@ -40,18 +43,6 @@ pub trait DecompositionVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> 
         proof: &<Self::Prover as DecompositionProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
     ) -> Result<Vec<LCCCS<R>>, Self::Error>;
-}
-
-#[derive(Clone)]
-pub struct DecompositionProof<F: Field, R: OverField<F>>
-where
-    F: Absorb,
-{
-    _f: PhantomData<F>,
-    pub u_s: Vec<Vec<R>>,
-    pub v_s: Vec<R>,
-    pub x_s: Vec<Vec<R>>,
-    pub y_s: Vec<Vec<R>>,
 }
 
 impl<F: Field, R: OverField<F>, T: Transcript<F, R>> DecompositionProver<F, R, T>

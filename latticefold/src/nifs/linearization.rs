@@ -1,20 +1,25 @@
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
-use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::Ring};
-use thiserror::Error;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 
 use crate::{
     arith::{Witness, CCCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{SumCheckError, SumCheckProof},
+    utils::sumcheck::SumCheckProof,
 };
 
-use super::{NIFSProver, NIFSVerifier};
+use super::{error::LinearizationError, NIFSProver, NIFSVerifier};
 
-#[derive(Debug, Error)]
-pub enum LinearizationError<R: Ring> {
-    #[error("sum check failed at linearization step: {0}")]
-    SumCheckError(#[from] SumCheckError<R>),
+#[derive(Clone)]
+pub struct LinearizationProof<F: Field, R: OverField<F>>
+where
+    F: Absorb,
+{
+    // Sent in the step 2. of the linearization subprotocol
+    pub linearization_sumcheck: SumCheckProof<F, R>,
+    // Sent in the step 3.
+    pub v: R,
+    pub u: Vec<R>,
 }
 
 pub trait LinearizationProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
@@ -37,18 +42,6 @@ pub trait LinearizationVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> 
         proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
     ) -> Result<LCCCS<R>, Self::Error>;
-}
-
-#[derive(Clone)]
-pub struct LinearizationProof<F: Field, R: OverField<F>>
-where
-    F: Absorb,
-{
-    // Sent in the step 2. of the linearization subprotocol
-    pub linearization_sumcheck: SumCheckProof<F, R>,
-    // Sent in the step 3.
-    pub v: R,
-    pub u: Vec<R>,
 }
 
 impl<F: Field, R: OverField<F>, T: Transcript<F, R>> LinearizationProver<F, R, T>

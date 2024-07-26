@@ -1,7 +1,6 @@
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
-use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::Ring};
-use thiserror::Error;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 
 use crate::{
     arith::{Witness, LCCCS},
@@ -9,12 +8,18 @@ use crate::{
     utils::sumcheck::SumCheckProof,
 };
 
-use super::{NIFSProver, NIFSVerifier};
+use super::{error::FoldingError, NIFSProver, NIFSVerifier};
 
-#[derive(Debug, Error)]
-pub enum FoldingError<R: Ring> {
-    #[error("phantom folding error")]
-    PhantomRRemoveThisLater(R),
+#[derive(Clone)]
+pub struct FoldingProof<F: Field, R: OverField<F>>
+where
+    F: Absorb,
+{
+    // Step 2.
+    pub pointshift_sumcheck_proof: SumCheckProof<F, R>,
+    // Step 3
+    pub theta_s: Vec<R>,
+    pub eta_s: Vec<R>,
 }
 
 pub trait FoldingProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
@@ -37,18 +42,6 @@ pub trait FoldingVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
         proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
     ) -> Result<LCCCS<R>, Self::Error>;
-}
-
-#[derive(Clone)]
-pub struct FoldingProof<F: Field, R: OverField<F>>
-where
-    F: Absorb,
-{
-    // Step 2.
-    pub pointshift_sumcheck_proof: SumCheckProof<F, R>,
-    // Step 3
-    pub theta_s: Vec<R>,
-    pub eta_s: Vec<R>,
 }
 
 impl<F: Field, R: OverField<F>, T: Transcript<F, R>> FoldingProver<F, R, T> for NIFSProver<F, R, T>

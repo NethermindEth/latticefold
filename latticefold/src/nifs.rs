@@ -1,4 +1,5 @@
 pub mod decomposition;
+pub mod error;
 pub mod folding;
 pub mod linearization;
 
@@ -6,27 +7,14 @@ use std::marker::PhantomData;
 
 use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
-use decomposition::{DecompositionError, DecompositionProver, DecompositionVerifier};
-use folding::{FoldingError, FoldingProver, FoldingVerifier};
+use decomposition::{DecompositionProver, DecompositionVerifier};
+use error::LatticefoldError;
+use folding::{FoldingProver, FoldingVerifier};
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::ring::Ring;
-use linearization::{LinearizationError, LinearizationProver, LinearizationVerifier};
-use thiserror::Error;
+use linearization::{LinearizationProver, LinearizationVerifier};
 
 use crate::arith::{Witness, LCCCS};
 use crate::{arith::CCCS, transcript::Transcript};
-
-pub struct NIFSProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
-    _f: PhantomData<F>,
-    _r: PhantomData<R>,
-    _t: PhantomData<T>,
-}
-
-pub struct NIFSVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
-    _f: PhantomData<F>,
-    _r: PhantomData<R>,
-    _t: PhantomData<T>,
-}
 
 #[derive(Debug, Clone)]
 pub struct ComposedProof<
@@ -46,17 +34,23 @@ pub struct ComposedProof<
 type LatticefoldProof<F, R, T> =
     ComposedProof<F, R, T, NIFSProver<F, R, T>, NIFSProver<F, R, T>, NIFSProver<F, R, T>>;
 
-#[derive(Debug, Error)]
-pub enum LatticefoldError<R: Ring> {
-    #[error("linearization failed: {0}")]
-    LinearizationError(#[from] LinearizationError<R>),
-    #[error("decomposition failed: {0}")]
-    DecompositionError(#[from] DecompositionError<R>),
-    #[error("folding failed: {0}")]
-    FoldingError(#[from] FoldingError<R>),
+pub struct NIFSProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
+    _f: PhantomData<F>,
+    _r: PhantomData<R>,
+    _t: PhantomData<T>,
 }
 
 impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSProver<F, R, T> {
+    pub fn prove(
+        acc: &LCCCS<R>,
+        w_acc: &Witness<R>,
+        cm_i: &CCCS<R>,
+        w_i: &Witness<R>,
+        transcript: &mut impl Transcript<F, R>,
+    ) -> Result<(LCCCS<R>, Witness<R>, LatticefoldProof<F, R, T>), LatticefoldError<R>> {
+        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript)
+    }
+
     fn prove_aux<
         L: LinearizationProver<F, R, T>,
         D: DecompositionProver<F, R, T>,
@@ -100,19 +94,29 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSProver<F, R, T
             },
         ))
     }
+}
 
-    pub fn prove(
-        acc: &LCCCS<R>,
-        w_acc: &Witness<R>,
-        cm_i: &CCCS<R>,
-        w_i: &Witness<R>,
-        transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS<R>, Witness<R>, LatticefoldProof<F, R, T>), LatticefoldError<R>> {
-        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript)
-    }
+pub struct NIFSVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
+    _f: PhantomData<F>,
+    _r: PhantomData<R>,
+    _t: PhantomData<T>,
 }
 
 impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSVerifier<F, R, T> {
+    pub fn verify(
+        acc: &LCCCS<R>,
+        cm_i: &CCCS<R>,
+        proof: &LatticefoldProof<F, R, T>,
+        transcript: &mut impl Transcript<F, R>,
+    ) -> Result<LCCCS<R>, LatticefoldError<R>> {
+        Self::verify_aux::<
+            NIFSVerifier<F, R, T>,
+            NIFSVerifier<F, R, T>,
+            NIFSVerifier<F, R, T>,
+            LatticefoldError<R>,
+        >(acc, cm_i, proof, transcript)
+    }
+
     fn verify_aux<
         L: LinearizationVerifier<F, R, T>,
         D: DecompositionVerifier<F, R, T>,
@@ -139,19 +143,5 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSVerifier<F, R,
         };
 
         Ok(FV::verify(&lcccs_s, &proof.folding_proof, transcript)?)
-    }
-
-    pub fn verify(
-        acc: &LCCCS<R>,
-        cm_i: &CCCS<R>,
-        proof: &LatticefoldProof<F, R, T>,
-        transcript: &mut impl Transcript<F, R>,
-    ) -> Result<LCCCS<R>, LatticefoldError<R>> {
-        Self::verify_aux::<
-            NIFSVerifier<F, R, T>,
-            NIFSVerifier<F, R, T>,
-            NIFSVerifier<F, R, T>,
-            LatticefoldError<R>,
-        >(acc, cm_i, proof, transcript)
     }
 }
