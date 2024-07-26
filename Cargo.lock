@@ -602,7 +602,7 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/cknabs/lattirust.git?branch=main#e4fd2a55d573d9d76b5cb9228aea1f187dff9122"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e4fd2a55d573d9d76b5cb9228aea1f187dff9122"
 dependencies = [
  "ark-ff",
  "ark-serialize",

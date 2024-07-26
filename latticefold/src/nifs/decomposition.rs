@@ -57,9 +57,9 @@ where
     type Proof = DecompositionProof<F, R>;
 
     fn prove(
-        cm_i: &LCCCS<R>,
-        wit: &Witness<R>,
-        transcript: &mut impl Transcript<F, R>,
+        _cm_i: &LCCCS<R>,
+        _wit: &Witness<R>,
+        _transcript: &mut impl Transcript<F, R>,
     ) -> Result<(Vec<(LCCCS<R>, Witness<R>)>, Self::Proof), DecompositionError<R>> {
         todo!()
     }
@@ -73,9 +73,9 @@ where
     type Prover = NIFSProver<F, R, T>;
 
     fn verify(
-        cm_i: &LCCCS<R>,
-        proof: &<Self::Prover as DecompositionProver<F, R, T>>::Proof,
-        transcript: &mut impl Transcript<F, R>,
+        _cm_i: &LCCCS<R>,
+        _proof: &<Self::Prover as DecompositionProver<F, R, T>>::Proof,
+        _transcript: &mut impl Transcript<F, R>,
     ) -> Result<Vec<LCCCS<R>>, DecompositionError<R>> {
         todo!()
     }

@@ -54,9 +54,9 @@ where
     type Proof = FoldingProof<F, R>;
 
     fn prove(
-        cm_i_s: &[LCCCS<R>],
-        w_s: &[Witness<R>],
-        transcript: &mut impl Transcript<F, R>,
+        _cm_i_s: &[LCCCS<R>],
+        _w_s: &[Witness<R>],
+        _transcript: &mut impl Transcript<F, R>,
     ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), FoldingError<R>> {
         todo!()
     }
@@ -70,9 +70,9 @@ where
     type Prover = NIFSProver<F, R, T>;
 
     fn verify(
-        cm_i_s: &[LCCCS<R>],
-        proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
-        transcript: &mut impl Transcript<F, R>,
+        _cm_i_s: &[LCCCS<R>],
+        _proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
+        _transcript: &mut impl Transcript<F, R>,
     ) -> Result<LCCCS<R>, FoldingError<R>> {
         todo!()
     }
