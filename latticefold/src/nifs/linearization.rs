@@ -1,5 +1,5 @@
 use crate::{
-    arith::{Witness, CCCS, LCCCS},
+    arith::{ Witness, CCCS, LCCCS },
     transcript::Transcript,
     utils::sumcheck::SumCheckProof,
 };
@@ -7,18 +7,16 @@ use ark_crypto_primitives::sponge::Absorb;
 use ark_ff::Field;
 use ark_std::iterable::Iterable;
 use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::OverField, mle::DenseMultilinearExtension,
+    challenge_set::latticefold_challenge_set::OverField,
+    mle::DenseMultilinearExtension,
     ring::PolyRing,
 };
 use libm::log2;
 
-use super::{error::LinearizationError, NIFSProver, NIFSVerifier};
+use super::{ error::LinearizationError, NIFSProver, NIFSVerifier };
 
 #[derive(Clone)]
-pub struct LinearizationProof<F: Field, R: OverField<F>>
-where
-    F: Absorb,
-{
+pub struct LinearizationProof<F: Field, R: OverField<F>> where F: Absorb {
     // Sent in the step 2. of the linearization subprotocol
     pub linearization_sumcheck: SumCheckProof<F, R>,
     // Sent in the step 3.
@@ -33,7 +31,7 @@ pub trait LinearizationProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
     fn prove(
         cm_i: &CCCS<R>,
         wit: &Witness<R>,
-        transcript: &mut impl Transcript<F, R>,
+        transcript: &mut impl Transcript<F, R>
     ) -> Result<(LCCCS<R>, Self::Proof), Self::Error>;
 }
 
@@ -44,14 +42,13 @@ pub trait LinearizationVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> 
     fn verify(
         cm_i: &CCCS<R>,
         proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
-        transcript: &mut impl Transcript<F, R>,
+        transcript: &mut impl Transcript<F, R>
     ) -> Result<LCCCS<R>, Self::Error>;
 }
 
 impl<F: Field, R: OverField<F>, T: Transcript<F, R>> LinearizationProver<F, R, T>
     for NIFSProver<F, R, T>
-where
-    F: Absorb,
+    where F: Absorb
 {
     type Proof = LinearizationProof<F, R>;
     type Error = LinearizationError<R>;
@@ -59,7 +56,7 @@ where
     fn prove(
         _cm_i: &CCCS<R>,
         _wit: &Witness<R>,
-        _transcript: &mut impl Transcript<F, R>,
+        _transcript: &mut impl Transcript<F, R>
     ) -> Result<(LCCCS<R>, LinearizationProof<F, R>), LinearizationError<R>> {
         todo!()
     }
@@ -67,15 +64,14 @@ where
 
 impl<F: Field, R: OverField<F>, T: Transcript<F, R>> LinearizationVerifier<F, R, T>
     for NIFSVerifier<F, R, T>
-where
-    F: Absorb,
+    where F: Absorb
 {
     type Prover = NIFSProver<F, R, T>;
 
     fn verify(
         _cm_i: &CCCS<R>,
         _proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
-        _transcript: &mut impl Transcript<F, R>,
+        _transcript: &mut impl Transcript<F, R>
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
         todo!()
     }
@@ -84,7 +80,7 @@ where
 fn get_challenge_vector<F: Field, R: OverField<F>, T: Transcript<F, R>>(
     _cm_i: &CCCS<R>,
     _transcript: &mut T,
-    len: usize,
+    len: usize
 ) -> Vec<<R as PolyRing>::BaseRing> {
     (0..len)
         .map(|_| {
@@ -97,18 +93,13 @@ fn get_challenge_vector<F: Field, R: OverField<F>, T: Transcript<F, R>>(
 
 // Outputs 1 if vectors are the same, zero otherwise
 fn eq<F: Field, R: OverField<F>>(b_arr: &Vec<R>, x_arr: &Vec<R>) -> R {
-    assert_eq!(
-        b_arr.len(),
-        x_arr.len(),
-        "Eq function takes two vectors of the same length!"
-    );
-    b_arr.iter().zip(x_arr).fold(R::one(), |ret_value, (b, x)| {
-        if b == x {
-            ret_value * R::one()
-        } else {
-            ret_value * R::zero()
-        }
-    })
+    assert_eq!(b_arr.len(), x_arr.len(), "Eq function takes two vectors of the same length!");
+    b_arr
+        .iter()
+        .zip(x_arr)
+        .fold(R::one(), |ret_value, (b, x)| {
+            ret_value * ((R::one() - b) * (R::one() - x) + *b * x)
+        })
 }
 
 fn usize_to_binary_vector(n: usize) -> Vec<u8> {
@@ -132,7 +123,7 @@ fn mle_val_from_vector<F: Field, R: OverField<F>>(vector: &Vec<R>, values: &Vec<
 fn mle_val_from_matrix<F: Field, R: OverField<F>>(
     matrix: &Vec<Vec<R>>,
     values_x: &Vec<R>,
-    values_y: &Vec<R>,
+    values_y: &Vec<R>
 ) -> R {
     assert_eq!(values_y.len(), log2(matrix.len() as f64) as usize);
     assert_eq!(values_x.len(), log2(matrix[0].len() as f64) as usize);
@@ -145,10 +136,10 @@ fn mle_val_from_matrix<F: Field, R: OverField<F>>(
 
 #[cfg(test)]
 mod tests {
-    use ark_ff::{One, Zero};
-    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRingNTT, Zq};
+    use ark_ff::{ One, Zero };
+    use lattirust_arithmetic::ring::{ Pow2CyclotomicPolyRingNTT, Zq };
 
-    use crate::nifs::linearization::{eq, mle_val_from_matrix, mle_val_from_vector};
+    use crate::nifs::linearization::{ eq, mle_val_from_matrix, mle_val_from_vector };
 
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
@@ -172,29 +163,14 @@ mod tests {
     fn test_utils() {
         // Test evaluation of mle from a vector
         let evaluation_vector = vec![poly_ntt(), zero()];
-        assert_eq!(
-            mle_val_from_vector(&evaluation_vector, &vec![one()]),
-            zero()
-        );
-        assert_ne!(
-            mle_val_from_vector(&evaluation_vector, &vec![one()]),
-            poly_ntt()
-        );
-        assert_eq!(
-            mle_val_from_vector(&evaluation_vector, &vec![zero()]),
-            poly_ntt()
-        );
-        assert_ne!(
-            mle_val_from_vector(&evaluation_vector, &vec![zero()]),
-            zero()
-        );
+        assert_eq!(mle_val_from_vector(&evaluation_vector, &vec![one()]), zero());
+        assert_ne!(mle_val_from_vector(&evaluation_vector, &vec![one()]), poly_ntt());
+        assert_eq!(mle_val_from_vector(&evaluation_vector, &vec![zero()]), poly_ntt());
+        assert_ne!(mle_val_from_vector(&evaluation_vector, &vec![zero()]), zero());
 
         // Test evaluation of bivariate MLE from a matrix
         let evaluation_matrix = vec![vec![poly_ntt(), zero()], vec![one(), poly_ntt()]];
-        assert_eq!(
-            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]),
-            one()
-        );
+        assert_eq!(mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]), one());
         assert_ne!(
             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]),
             poly_ntt()
@@ -203,15 +179,12 @@ mod tests {
             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]),
             poly_ntt()
         );
-        assert_ne!(
-            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]),
-            zero()
-        );
+        assert_ne!(mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]), zero());
 
         // Test the eq function
-        let vector_one = vec![poly_ntt(), one(), one(), zero()];
-        let vector_two = vec![poly_ntt(), one(), one(), zero()];
-        let vector_three = vec![poly_ntt(), one(), one(), one()];
+        let vector_one = vec![zero(), one(), one(), zero()];
+        let vector_two = vec![zero(), one(), one(), zero()];
+        let vector_three = vec![zero(), one(), one(), one()];
 
         assert_eq!(eq(&vector_one, &vector_two), one());
         assert_ne!(eq(&vector_one, &vector_two), zero());
