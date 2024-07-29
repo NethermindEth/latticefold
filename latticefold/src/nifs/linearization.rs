@@ -59,7 +59,12 @@ impl<F: Field, R: OverField<F>, T: Transcript<F, R>> LinearizationProver<F, R, T
         _transcript: &mut impl Transcript<F, R>
     ) -> Result<(LCCCS<R>, LinearizationProof<F, R>), LinearizationError<R>> {
         // Step 1: Get the public coin randomness
-        // Step 2:
+        let Beta = get_challenge_vector(_cm_i, _transcript, _wit.f_arr.len());
+        // Step 2: Sum check protocol
+        let claimed_sum = R::zero();
+        // Step 3: Compute v, u_vector
+        // (Step 4 in protocol is verifier only)
+        // Step 5: Output
         todo!()
     }
 }
@@ -124,6 +129,7 @@ fn mle_val_from_vector<F: Field, R: OverField<F>>(vector: &Vec<R>, values: &Vec<
     let mle = DenseMultilinearExtension::from_evaluations_vec(values.len(), vector.clone());
     mle.evaluate(values.as_slice()).unwrap()
 }
+
 fn mle_val_from_matrix<F: Field, R: OverField<F>>(
     matrix: &Vec<Vec<R>>,
     values_x: &Vec<R>,
@@ -133,9 +139,28 @@ fn mle_val_from_matrix<F: Field, R: OverField<F>>(
     assert_eq!(values_x.len(), log2(matrix[0].len() as f64) as usize);
     let univariate_mle_evaluations = matrix
         .into_iter()
-        .map(|row| mle_val_from_vector(row, values_x))
+        .map(|col| mle_val_from_vector(col, values_x))
         .collect();
     mle_val_from_vector(&univariate_mle_evaluations, values_y)
+}
+
+// Convert a bivariate MLE to a univariate MLE by evaluating the second vector
+fn mle_matrix_to_val_eval_second<F: Field, R: OverField<F>>(
+    matrix: &Vec<Vec<R>>,
+    values_y: &Vec<R>
+) -> Vec<R> {
+    (0..matrix[0].len())
+        .into_iter()
+        .map(|i| {
+            mle_val_from_vector(
+                &matrix
+                    .iter()
+                    .map(|col| col[i])
+                    .collect(),
+                values_y
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -145,6 +170,7 @@ mod tests {
 
     use crate::nifs::linearization::{
         eq,
+        mle_matrix_to_val_eval_second,
         mle_val_from_matrix,
         mle_val_from_vector,
         usize_to_binary_vector,
@@ -207,6 +233,17 @@ mod tests {
         assert_eq!(
             usize_to_binary_vector::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>>(5),
             vec![one(), zero(), one()]
+        );
+
+        // Test the conversion of Bivariate MLE to univariate MLE by evaluating second values
+        let bivariate_mle = vec![vec![poly_ntt(), poly_ntt()], vec![zero(), poly_ntt()]];
+        assert_eq!(
+            mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]),
+            vec![zero(), poly_ntt()]
+        );
+        assert_eq!(
+            mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]),
+            vec![poly_ntt(), poly_ntt()]
         )
     }
 }
