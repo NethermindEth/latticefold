@@ -58,6 +58,8 @@ impl<F: Field, R: OverField<F>, T: Transcript<F, R>> LinearizationProver<F, R, T
         _wit: &Witness<R>,
         _transcript: &mut impl Transcript<F, R>
     ) -> Result<(LCCCS<R>, LinearizationProof<F, R>), LinearizationError<R>> {
+        // Step 1: Get the public coin randomness
+        // Step 2:
         todo!()
     }
 }
@@ -102,7 +104,7 @@ fn eq<F: Field, R: OverField<F>>(b_arr: &Vec<R>, x_arr: &Vec<R>) -> R {
         })
 }
 
-fn usize_to_binary_vector(n: usize) -> Vec<u8> {
+fn usize_to_binary_vector<F: Field, R: OverField<F>>(n: usize) -> Vec<R> {
     let mut bits = Vec::new();
     let mut current = n;
 
@@ -112,7 +114,9 @@ fn usize_to_binary_vector(n: usize) -> Vec<u8> {
     }
 
     bits.reverse();
-    bits
+    bits.iter()
+        .map(|bit| if *bit == 1 { R::one() } else { R::zero() })
+        .collect()
 }
 
 fn mle_val_from_vector<F: Field, R: OverField<F>>(vector: &Vec<R>, values: &Vec<R>) -> R {
@@ -139,7 +143,12 @@ mod tests {
     use ark_ff::{ One, Zero };
     use lattirust_arithmetic::ring::{ Pow2CyclotomicPolyRingNTT, Zq };
 
-    use crate::nifs::linearization::{ eq, mle_val_from_matrix, mle_val_from_vector };
+    use crate::nifs::linearization::{
+        eq,
+        mle_val_from_matrix,
+        mle_val_from_vector,
+        usize_to_binary_vector,
+    };
 
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
@@ -190,5 +199,14 @@ mod tests {
         assert_ne!(eq(&vector_one, &vector_two), zero());
         assert_eq!(eq(&vector_one, &vector_three), zero());
         assert_ne!(eq(&vector_one, &vector_three), one());
+
+        assert_eq!(
+            usize_to_binary_vector::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>>(4),
+            vec![one(), zero(), zero()]
+        );
+        assert_eq!(
+            usize_to_binary_vector::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>>(5),
+            vec![one(), zero(), one()]
+        )
     }
 }
