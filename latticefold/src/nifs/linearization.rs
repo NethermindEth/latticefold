@@ -143,12 +143,22 @@ fn mle_val_from_matrix<F: Field, R: OverField<F>>(
         .collect();
     mle_val_from_vector(&univariate_mle_evaluations, values_y)
 }
-
+fn mle_matrix_to_val_eval_first<F: Field, R: OverField<F>>(
+    matrix: &Vec<Vec<R>>,
+    values_x: &Vec<R>
+) -> Vec<R> {
+    assert_eq!(values_x.len(), log2(matrix[0].len() as f64) as usize);
+    matrix
+        .into_iter()
+        .map(|col| { mle_val_from_vector(col, values_x) })
+        .collect()
+}
 // Convert a bivariate MLE to a univariate MLE by evaluating the second vector
 fn mle_matrix_to_val_eval_second<F: Field, R: OverField<F>>(
     matrix: &Vec<Vec<R>>,
     values_y: &Vec<R>
 ) -> Vec<R> {
+    assert_eq!(values_y.len(), log2(matrix.len() as f64) as usize);
     (0..matrix[0].len())
         .into_iter()
         .map(|i| {
@@ -170,6 +180,7 @@ mod tests {
 
     use crate::nifs::linearization::{
         eq,
+        mle_matrix_to_val_eval_first,
         mle_matrix_to_val_eval_second,
         mle_val_from_matrix,
         mle_val_from_vector,
@@ -234,16 +245,28 @@ mod tests {
             usize_to_binary_vector::<Zq<Q>, Pow2CyclotomicPolyRingNTT<Q, N>>(5),
             vec![one(), zero(), one()]
         );
+        // Test the conversion of Bivariate MLE to univariate MLE by evaluating first values
+        let bivariate_mle = vec![
+            vec![poly_ntt(), poly_ntt(), one(), zero()],
+            vec![zero(), poly_ntt(), zero(), one()]
+        ];
+        assert_eq!(
+            mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]),
+            vec![poly_ntt(), zero()]
+        );
+        assert_eq!(
+            mle_matrix_to_val_eval_first(&bivariate_mle, &vec![one(), zero()]),
+            vec![poly_ntt(), poly_ntt()]
+        );
 
         // Test the conversion of Bivariate MLE to univariate MLE by evaluating second values
-        let bivariate_mle = vec![vec![poly_ntt(), poly_ntt()], vec![zero(), poly_ntt()]];
         assert_eq!(
             mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]),
-            vec![zero(), poly_ntt()]
+            vec![zero(), poly_ntt(), zero(), one()]
         );
         assert_eq!(
             mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]),
-            vec![poly_ntt(), poly_ntt()]
-        )
+            vec![poly_ntt(), poly_ntt(), one(), zero()]
+        );
     }
 }
