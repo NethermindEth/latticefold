@@ -5,7 +5,7 @@ use ark_ff::Field;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 
 use crate::{
-    arith::{Witness, LCCCS},
+    arith::{Witness, CCS, LCCCS},
     transcript::Transcript,
 };
 
@@ -31,6 +31,7 @@ pub trait DecompositionProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
         cm_i: &LCCCS<R>,
         wit: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<(Vec<LCCCS<R>>, Vec<Witness<R>>, Self::Proof), Self::Error>;
 }
 
@@ -42,6 +43,7 @@ pub trait DecompositionVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> 
         cm_i: &LCCCS<R>,
         proof: &<Self::Prover as DecompositionProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<Vec<LCCCS<R>>, Self::Error>;
 }
 
@@ -57,6 +59,7 @@ where
         _cm_i: &LCCCS<R>,
         _wit: &Witness<R>,
         _transcript: &mut impl Transcript<F, R>,
+        _ccs: &CCS<R>,
     ) -> Result<(Vec<LCCCS<R>>, Vec<Witness<R>>, DecompositionProof<F, R>), DecompositionError<R>>
     {
         todo!()
@@ -74,6 +77,7 @@ where
         _cm_i: &LCCCS<R>,
         _proof: &<Self::Prover as DecompositionProver<F, R, T>>::Proof,
         _transcript: &mut impl Transcript<F, R>,
+        _ccs: &CCS<R>,
     ) -> Result<Vec<LCCCS<R>>, DecompositionError<R>> {
         todo!()
     }

@@ -13,7 +13,7 @@ use folding::{FoldingProver, FoldingVerifier};
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use linearization::{LinearizationProver, LinearizationVerifier};
 
-use crate::arith::{Witness, LCCCS};
+use crate::arith::{Witness, CCS, LCCCS};
 use crate::{arith::CCCS, transcript::Transcript};
 
 #[derive(Debug, Clone)]
@@ -47,8 +47,9 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSProver<F, R, T
         cm_i: &CCCS<R>,
         w_i: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Witness<R>, LatticefoldProof<F, R, T>), LatticefoldError<R>> {
-        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript)
+        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript, ccs)
     }
 
     fn prove_aux<
@@ -62,12 +63,13 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSProver<F, R, T
         cm_i: &CCCS<R>,
         w_i: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Witness<R>, ComposedProof<F, R, T, L, D, FP>), E> {
-        let (linearized_cm_i, linearization_proof) = L::prove(cm_i, w_i, transcript)?;
+        let (linearized_cm_i, linearization_proof) = L::prove(cm_i, w_i, transcript, ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            D::prove(acc, w_acc, transcript)?;
+            D::prove(acc, w_acc, transcript, ccs)?;
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
-            D::prove(&linearized_cm_i, w_i, transcript)?;
+            D::prove(&linearized_cm_i, w_i, transcript, ccs)?;
 
         let (lcccs, wit_s) = {
             let mut lcccs = decomposed_lcccs_l;
@@ -81,7 +83,7 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSProver<F, R, T
             (lcccs, wit_s)
         };
 
-        let (folded_lcccs, wit, folding_proof) = FP::prove(&lcccs, &wit_s, transcript)?;
+        let (folded_lcccs, wit, folding_proof) = FP::prove(&lcccs, &wit_s, transcript, ccs)?;
 
         Ok((
             folded_lcccs,
@@ -108,13 +110,14 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSVerifier<F, R,
         cm_i: &CCCS<R>,
         proof: &LatticefoldProof<F, R, T>,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, LatticefoldError<R>> {
         Self::verify_aux::<
             NIFSVerifier<F, R, T>,
             NIFSVerifier<F, R, T>,
             NIFSVerifier<F, R, T>,
             LatticefoldError<R>,
-        >(acc, cm_i, proof, transcript)
+        >(acc, cm_i, proof, transcript, ccs)
     }
 
     fn verify_aux<
@@ -127,11 +130,16 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSVerifier<F, R,
         cm_i: &CCCS<R>,
         proof: &ComposedProof<F, R, T, L::Prover, D::Prover, FV::Prover>,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, E> {
-        let linearized_cm_i = L::verify(cm_i, &proof.linearization_proof, transcript)?;
-        let decomposed_acc = D::verify(acc, &proof.decomposition_proof_l, transcript)?;
-        let decomposed_cm_i =
-            D::verify(&linearized_cm_i, &proof.decomposition_proof_r, transcript)?;
+        let linearized_cm_i = L::verify(cm_i, &proof.linearization_proof, transcript, ccs)?;
+        let decomposed_acc = D::verify(acc, &proof.decomposition_proof_l, transcript, ccs)?;
+        let decomposed_cm_i = D::verify(
+            &linearized_cm_i,
+            &proof.decomposition_proof_r,
+            transcript,
+            ccs,
+        )?;
 
         let lcccs_s = {
             let mut decomposed_acc = decomposed_acc;
@@ -142,6 +150,6 @@ impl<F: Field + Absorb, R: OverField<F>, T: Transcript<F, R>> NIFSVerifier<F, R,
             decomposed_acc
         };
 
-        Ok(FV::verify(&lcccs_s, &proof.folding_proof, transcript)?)
+        Ok(FV::verify(&lcccs_s, &proof.folding_proof, transcript, ccs)?)
     }
 }

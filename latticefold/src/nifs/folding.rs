@@ -3,7 +3,7 @@ use ark_ff::Field;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 
 use crate::{
-    arith::{Witness, LCCCS},
+    arith::{Witness, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::SumCheckProof,
 };
@@ -30,6 +30,7 @@ pub trait FoldingProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
         cm_i_s: &[LCCCS<R>],
         w_s: &[Witness<R>],
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), Self::Error>;
 }
 
@@ -41,6 +42,7 @@ pub trait FoldingVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
         cm_i_s: &[LCCCS<R>],
         proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, Self::Error>;
 }
 
@@ -55,6 +57,7 @@ where
         _cm_i_s: &[LCCCS<R>],
         _w_s: &[Witness<R>],
         _transcript: &mut impl Transcript<F, R>,
+        _ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Witness<R>, FoldingProof<F, R>), FoldingError<R>> {
         todo!()
     }
@@ -71,6 +74,7 @@ where
         _cm_i_s: &[LCCCS<R>],
         _proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
         _transcript: &mut impl Transcript<F, R>,
+        _ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, FoldingError<R>> {
         todo!()
     }

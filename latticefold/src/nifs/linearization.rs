@@ -3,7 +3,7 @@ use ark_ff::Field;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 
 use crate::{
-    arith::{Witness, CCCS, LCCCS},
+    arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::SumCheckProof,
 };
@@ -30,6 +30,7 @@ pub trait LinearizationProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
         cm_i: &CCCS<R>,
         wit: &Witness<R>,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Self::Proof), Self::Error>;
 }
 
@@ -41,6 +42,7 @@ pub trait LinearizationVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> 
         cm_i: &CCCS<R>,
         proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
         transcript: &mut impl Transcript<F, R>,
+        ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, Self::Error>;
 }
 
@@ -56,6 +58,7 @@ where
         _cm_i: &CCCS<R>,
         _wit: &Witness<R>,
         _transcript: &mut impl Transcript<F, R>,
+        _ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, LinearizationProof<F, R>), LinearizationError<R>> {
         todo!()
     }
@@ -72,6 +75,7 @@ where
         _cm_i: &CCCS<R>,
         _proof: &<Self::Prover as LinearizationProver<F, R, T>>::Proof,
         _transcript: &mut impl Transcript<F, R>,
+        _ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
         todo!()
     }
