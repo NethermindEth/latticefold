@@ -2,8 +2,6 @@ use std::sync::Arc;
 
 use super::{univ_poly::UnivPoly, SumCheckError, SumCheckIP, SumCheckProof};
 use crate::transcript::Transcript;
-use ark_crypto_primitives::sponge::Absorb;
-use ark_ff::Field;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::{LatticefoldChallengeSet, OverField},
     mle::DenseMultilinearExtension,
@@ -11,26 +9,20 @@ use lattirust_arithmetic::{
     polynomials::VirtualPolynomial,
 };
 
-pub struct SumCheckProver<F: Field, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>>
-where
-    F: Absorb,
-{
-    pub _marker: std::marker::PhantomData<(F, CS)>,
+pub struct SumCheckProver<R: OverField, CS: LatticefoldChallengeSet<R>> {
+    pub _marker: std::marker::PhantomData<CS>,
     pub polynomial: VirtualPolynomial<R>,
     pub claimed_sum: R,
 }
 
-impl<F: Field, R: OverField<F>, CS: LatticefoldChallengeSet<F, R>> SumCheckProver<F, R, CS>
-where
-    F: Absorb,
-{
+impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckProver<R, CS> {
     pub fn prove(
         &self,
-        transcript: &mut impl Transcript<F, R, ChallengeSet = CS>,
-    ) -> Result<(SumCheckIP<F, R>, SumCheckProof<F, R>), SumCheckError<R>> {
+        transcript: &mut impl Transcript<R, ChallengeSet = CS>,
+    ) -> Result<(SumCheckIP<R>, SumCheckProof<R>), SumCheckError<R>> {
         let num_vars = self.polynomial.aux_info.num_variables;
         let mut poly = self.polynomial.clone();
-        let mut sum_check_proof = SumCheckProof::<F, R>::new(num_vars);
+        let mut sum_check_proof = SumCheckProof::<R>::new(num_vars);
 
         let protocol = SumCheckIP::new(self.claimed_sum, self.polynomial.aux_info.clone());
 

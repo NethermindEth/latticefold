@@ -1,17 +1,15 @@
-//use crate::Error;
-use ark_ff::Field;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::*;
 use std::fmt::Debug;
 
 pub mod poseidon;
 
-pub trait Transcript<F: Field, R: OverField<F>> {
-    type ChallengeSet: LatticefoldChallengeSet<F, R>;
+pub trait Transcript<R: OverField> {
+    type ChallengeSet: LatticefoldChallengeSet<R>;
     type TranscriptConfig: Debug;
 
     fn new(config: &Self::TranscriptConfig) -> Self;
-    fn absorb(&mut self, v: &F);
-    fn absorb_vec(&mut self, v: &[F]);
+    fn absorb(&mut self, v: &R::F);
+    fn absorb_vec(&mut self, v: &[R::F]);
     fn absorb_ring(&mut self, v: &R);
     fn absorb_ring_vec(&mut self, v: &[R]);
     fn get_big_challenge(&mut self) -> R::BaseRing;
