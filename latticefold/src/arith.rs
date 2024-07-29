@@ -104,22 +104,22 @@ impl<R: Ring> CCS<R> {
 }
 #[derive(Debug, Clone, PartialEq)]
 pub struct CCCS<R: Ring> {
-    cm: Vec<R>,
-    x_ccs: Vec<R>,
+    pub cm: Vec<R>,
+    pub x_ccs: Vec<R>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LCCCS<R: Ring> {
-    r_arr: Vec<R>,
-    v: R,
-    y: Vec<R>,
-    u: Vec<R>,
-    x_w: Vec<R>,
-    h: R,
+    pub r_arr: Vec<R>,
+    pub v: R,
+    pub y: Vec<R>,
+    pub u: Vec<R>,
+    pub x_w: Vec<R>,
+    pub h: R,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Witness<R: Ring> {
-    f_arr: Vec<R>,
-    w_ccs: Vec<R>,
+    pub f_arr: Vec<R>,
+    pub w_ccs: Vec<R>,
 }

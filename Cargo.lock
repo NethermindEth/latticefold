@@ -594,6 +594,7 @@ dependencies = [
  "ark-ff",
  "ark-std",
  "lattirust-arithmetic",
+ "libm",
  "num-traits",
  "rand",
  "thiserror",
@@ -631,6 +632,12 @@ name = "libc"
 version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
+
+[[package]]
+name = "libm"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec2a862134d2a7d32d7983ddcdd1c4923530833c9f2ea1a44fc5fa473989058"
 
 [[package]]
 name = "log"
