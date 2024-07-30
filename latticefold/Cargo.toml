@@ -9,7 +9,7 @@ ark-crypto-primitives = { version = "0.4.0", default-features = false, features 
 ] }
 ark-ff = { version = "0.4.2", default-features = false }
 ark-std = { version = "0.4.0", default-features = false }
-lattirust-arithmetic = { git = "ssh://git@github.com/cknabs/lattirust.git", branch = "Nethermind/MatthewKlein/update-latticefold-challengeset" }
+lattirust-arithmetic = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "MatthewKlein/challenge-set-field" }
 num-traits = "0.2.19"
 rand = "0.8.5"
 thiserror = "1.0.63"
