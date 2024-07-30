@@ -114,4 +114,17 @@ impl<R: OverField, T: Transcript<R>> DecompositionVerifier<R, T> for NIFSVerifie
                  // Implementation of L(f) (Ajtai Commitment)
                todo!()
     }
-        
+
+
+   fn l_w_function<Rn: Ring>(f: &Vec<Rn>, n_initial: usize) -> Vec<Rn> {
+           // Implementation of Lw(f) between 1 and n_in
+                 todo!()
+             }
+         
+    fn inner<Rn:Ring>(fi: &Vec<Rn>, r: &Vec<Rn>) -> Vec<Rn> {
+                 //call l_w_function
+                 //compute tensor(r)
+                 // compute M.tensor(r)
+                 //compute inner product of M.tensor and l_w_funciton
+                 todo!()
+            }
