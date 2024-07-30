@@ -1,9 +1,7 @@
-use ark_crypto_primitives::sponge::Absorb;
-use ark_ff::Field;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 
 use crate::{
-    arith::{Witness, LCCCS},
+    arith::{Witness, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::SumCheckProof,
 };
@@ -11,66 +9,60 @@ use crate::{
 use super::{error::FoldingError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
-pub struct FoldingProof<F: Field, R: OverField<F>>
-where
-    F: Absorb,
-{
+pub struct FoldingProof<R: OverField> {
     // Step 2.
-    pub pointshift_sumcheck_proof: SumCheckProof<F, R>,
+    pub pointshift_sumcheck_proof: SumCheckProof<R>,
     // Step 3
     pub theta_s: Vec<R>,
     pub eta_s: Vec<R>,
 }
 
-pub trait FoldingProver<F: Field, R: OverField<F>, T: Transcript<F, R>> {
+pub trait FoldingProver<R: OverField, T: Transcript<R>> {
     type Proof: Clone;
     type Error: std::error::Error;
 
     fn prove(
         cm_i_s: &[LCCCS<R>],
         w_s: &[Witness<R>],
-        transcript: &mut impl Transcript<F, R>,
+        transcript: &mut impl Transcript<R>,
+        ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), Self::Error>;
 }
 
-pub trait FoldingVerifier<F: Field, R: OverField<F>, T: Transcript<F, R>> {
-    type Prover: FoldingProver<F, R, T>;
-    type Error = <Self::Prover as FoldingProver<F, R, T>>::Error;
+pub trait FoldingVerifier<R: OverField, T: Transcript<R>> {
+    type Prover: FoldingProver<R, T>;
+    type Error = <Self::Prover as FoldingProver<R, T>>::Error;
 
     fn verify(
         cm_i_s: &[LCCCS<R>],
-        proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
-        transcript: &mut impl Transcript<F, R>,
+        proof: &<Self::Prover as FoldingProver<R, T>>::Proof,
+        transcript: &mut impl Transcript<R>,
+        ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, Self::Error>;
 }
 
-impl<F: Field, R: OverField<F>, T: Transcript<F, R>> FoldingProver<F, R, T> for NIFSProver<F, R, T>
-where
-    F: Absorb,
-{
-    type Proof = FoldingProof<F, R>;
+impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
+    type Proof = FoldingProof<R>;
     type Error = FoldingError<R>;
 
     fn prove(
         _cm_i_s: &[LCCCS<R>],
         _w_s: &[Witness<R>],
-        _transcript: &mut impl Transcript<F, R>,
-    ) -> Result<(LCCCS<R>, Witness<R>, FoldingProof<F, R>), FoldingError<R>> {
+        _transcript: &mut impl Transcript<R>,
+        _ccs: &CCS<R>,
+    ) -> Result<(LCCCS<R>, Witness<R>, FoldingProof<R>), FoldingError<R>> {
         todo!()
     }
 }
 
-impl<F: Field, R: OverField<F>, T: Transcript<F, R>> FoldingVerifier<F, R, T>
-    for NIFSVerifier<F, R, T>
-where
-    F: Absorb,
-{
-    type Prover = NIFSProver<F, R, T>;
+impl<R: OverField, T: Transcript<R>> FoldingVerifier<R, T> for NIFSVerifier<R, T> {
+    type Prover = NIFSProver<R, T>;
 
     fn verify(
         _cm_i_s: &[LCCCS<R>],
-        _proof: &<Self::Prover as FoldingProver<F, R, T>>::Proof,
-        _transcript: &mut impl Transcript<F, R>,
+        _proof: &<Self::Prover as FoldingProver<R, T>>::Proof,
+        _transcript: &mut impl Transcript<R>,
+        _ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, FoldingError<R>> {
         todo!()
     }
