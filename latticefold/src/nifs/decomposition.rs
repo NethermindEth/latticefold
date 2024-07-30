@@ -109,3 +109,9 @@ impl<R: OverField, T: Transcript<R>> DecompositionVerifier<R, T> for NIFSVerifie
          //compute f hat and call mle from lattirust
        todo!()
        }
+
+       fn l_function<Rn: Ring>(f: &Vec<Rn>) -> Rn {
+                 // Implementation of L(f) (Ajtai Commitment)
+               todo!()
+    }
+        
