@@ -82,3 +82,25 @@ impl<R: OverField, T: Transcript<R>> DecompositionVerifier<R, T> for NIFSVerifie
              f.iter().map(|x| decompose_balanced_polyring(x, b, Some(k))).collect()
    }
 
+   fn tensor<R: PolyRing>(r: &Vec<R>) -> Vec<R> {
+             
+    let log_m = r.len();
+let num_combinations = 1 << log_m; 
+
+   let mut result = Vec::with_capacity(num_combinations);
+
+  for i in 0..num_combinations {
+       let mut product = R::one(); 
+       for (j, &rj) in r.iter().enumerate() {
+           if (i & (1 << j)) != 0 {
+               product = product * rj;
+           } else {
+               product = product * (R::one() - rj);
+           }
+       }
+       result.push(product);
+    }
+
+    result
+}
+
