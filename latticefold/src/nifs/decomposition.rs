@@ -1,11 +1,22 @@
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
+use lattirust_arithmetic::{balanced_decomposition::decompose_balanced_polyring, challenge_set::latticefold_challenge_set::OverField};
+
+use ark_ff::Field;
+use ark_std::iterable::Iterable;
+use lattirust_arithmetic::{
+     mle::DenseMultilinearExtension,
+    ring::PolyRing,
+};
+
+
+use super::{error::LinearizationError, NIFSProver, NIFSVerifier};
+
 
 use crate::{
     arith::{Witness, CCS, LCCCS},
     transcript::Transcript,
 };
 
-use super::{error::DecompositionError, NIFSProver, NIFSVerifier};
+use super::{error::DecompositionError};
 
 #[derive(Clone)]
 pub struct DecompositionProof<R: OverField> {
@@ -66,3 +77,8 @@ impl<R: OverField, T: Transcript<R>> DecompositionVerifier<R, T> for NIFSVerifie
         todo!()
     }
 }
+
+ fn compute_fi<R: PolyRing>(f: Vec<R>, b: u128, k: usize) -> Vec<Vec<R>> {
+             f.iter().map(|x| decompose_balanced_polyring(x, b, Some(k))).collect()
+   }
+
