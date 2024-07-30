@@ -103,4 +103,9 @@ impl<R: OverField, T: Transcript<R>> DecompositionVerifier<R, T> for NIFSVerifie
 
     result
 }
-
+ 
+  fn mle<Rn: Ring>(f: &Vec<Rn>, r: &Vec<Rn>) -> Rn {
+             
+         //compute f hat and call mle from lattirust
+       todo!()
+       }
