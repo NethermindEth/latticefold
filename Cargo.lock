@@ -608,7 +608,7 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/challenge-set-field#999dccf1eeabae886a4252bf99562b8d5cbdd9f5"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#6f64113d5f67bf2e18dbb169dfb4a85556de6426"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
