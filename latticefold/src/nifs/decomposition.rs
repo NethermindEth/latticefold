@@ -1,4 +1,4 @@
-use lattirust_arithmetic::{balanced_decomposition::decompose_balanced_polyring, challenge_set::latticefold_challenge_set::OverField};
+use lattirust_arithmetic::{balanced_decomposition::decompose_balanced_polyring, challenge_set::latticefold_challenge_set::OverField, ring::Ring};
 
 use ark_ff::Field;
 use ark_std::iterable::Iterable;
@@ -82,20 +82,20 @@ impl<R: OverField, T: Transcript<R>> DecompositionVerifier<R, T> for NIFSVerifie
              f.iter().map(|x| decompose_balanced_polyring(x, b, Some(k))).collect()
    }
 
-   fn tensor<R: PolyRing>(r: &Vec<R>) -> Vec<R> {
+   fn tensor<Rn: Ring>(r: &Vec<Rn>) -> Vec<Rn> {
              
     let log_m = r.len();
-let num_combinations = 1 << log_m; 
+    let num_combinations = 1 << log_m; 
 
    let mut result = Vec::with_capacity(num_combinations);
 
   for i in 0..num_combinations {
-       let mut product = R::one(); 
+       let mut product = Rn::one(); 
        for (j, &rj) in r.iter().enumerate() {
            if (i & (1 << j)) != 0 {
                product = product * rj;
            } else {
-               product = product * (R::one() - rj);
+               product = product * (Rn::one() - rj);
            }
        }
        result.push(product);
