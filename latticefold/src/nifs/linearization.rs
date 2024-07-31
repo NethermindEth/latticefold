@@ -93,18 +93,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
         let r_arr = subclaim.point;
 
         let v = mle_val_from_vector(&_wit.f_hat, &r_arr);
-        let mut u: Vec<R> = Vec::with_capacity(_ccs.t);
-
-        _ccs.M.iter().for_each(|M_i| {
-            (1..M_i.len())
-                .into_iter()
-                .map(|i| usize_to_binary_vector::<R>(i, log2(M_i.len() as f64) as usize))
-                .for_each(|b| {
-                    let u_i =
-                        mle_val_from_matrix(&M_i, &r_arr, &b) * mle_val_from_vector(&z_ccs, &b);
-                    u.push(u_i);
-                })
-        });
+        let u = create_u(_ccs.t, &_ccs.M, &r_arr, &z_ccs);
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
@@ -179,6 +168,25 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
             h: R::one(),
         })
     }
+}
+
+fn create_u<R: OverField>(
+    length: usize,
+    M: &Vec<Vec<Vec<R>>>,
+    r_arr: &Vec<R>,
+    z_ccs: &Vec<R>,
+) -> Vec<R> {
+    let mut u: Vec<R> = Vec::with_capacity(length);
+    M.iter().for_each(|M_i| {
+        (1..M_i.len())
+            .into_iter()
+            .map(|i| usize_to_binary_vector::<R>(i, log2(M_i.len() as f64) as usize))
+            .for_each(|b| {
+                let u_i = mle_val_from_matrix(&M_i, &r_arr, &b) * mle_val_from_vector(&z_ccs, &b);
+                u.push(u_i);
+            })
+    });
+    u
 }
 
 fn create_sumcheck_polynomial<R: OverField>(
