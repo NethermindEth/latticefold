@@ -38,8 +38,10 @@ pub struct SumCheckRound<R: OverField> {
 
 #[derive(Error, Debug)]
 pub enum SumCheckError<R: Ring + Display> {
-    #[error("univariate polynomial evaluation error")] EvaluationError(ArithErrors),
-    #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")] SumCheckFailed(R, R),
+    #[error("univariate polynomial evaluation error")]
+    EvaluationError(ArithErrors),
+    #[error("incorrect sumcheck sum. Expected `{0}`. Received `{1}`")]
+    SumCheckFailed(R, R),
     #[error("max degree exceeded")]
     MaxDegreeExceeded,
 }

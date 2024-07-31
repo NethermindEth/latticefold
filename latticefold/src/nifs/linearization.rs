@@ -1,25 +1,22 @@
 use std::sync::Arc;
 
+use crate::utils::sumcheck::SumCheckError::SumCheckFailed;
 use crate::{
-    arith::{ Witness, CCCS, CCS, LCCCS },
+    arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::{
-        prover::SumCheckProver,
-        verifier::SumCheckVerifier,
-        SumCheckIP,
-        SumCheckProof,
+        prover::SumCheckProver, verifier::SumCheckVerifier, SumCheckIP, SumCheckProof,
     },
 };
-use crate::utils::sumcheck::SumCheckError::SumCheckFailed;
 use ark_std::iterable::Iterable;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
-    polynomials::{ build_eq_x_r, VPAuxInfo, VirtualPolynomial },
+    polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
 };
 use libm::log2;
 
-use super::{ error::LinearizationError, NIFSProver, NIFSVerifier };
+use super::{error::LinearizationError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
 pub struct LinearizationProof<R: OverField> {
@@ -38,7 +35,7 @@ pub trait LinearizationProver<R: OverField, T: Transcript<R>> {
         cm_i: &CCCS<R>,
         wit: &Witness<R>,
         transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>
+        ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Self::Proof), Self::Error>;
 }
 
@@ -50,7 +47,7 @@ pub trait LinearizationVerifier<R: OverField, T: Transcript<R>> {
         cm_i: &CCCS<R>,
         proof: &<Self::Prover as LinearizationProver<R, T>>::Proof,
         transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>
+        ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, Self::Error>;
 }
 
@@ -62,7 +59,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
         _cm_i: &CCCS<R>,
         _wit: &Witness<R>,
         _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>
+        _ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, LinearizationProof<R>), LinearizationError<R>> {
         // Define some constants
         // TODO decide which ones of these are best as explicit
@@ -94,8 +91,8 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
 
         // Step 3: Compute v, u_vector
         let r_arr = subclaim.point;
-        // TODO we need to intt this f_arr to get the f_hat
-        let v = mle_val_from_vector(&_wit.f_arr, &r_arr);
+
+        let v = mle_val_from_vector(&_wit.f_hat, &r_arr);
         let mut u: Vec<R> = Vec::with_capacity(_ccs.t);
 
         _ccs.M.iter().for_each(|M_i| {
@@ -136,7 +133,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
         _cm_i: &CCCS<R>,
         _proof: &<Self::Prover as LinearizationProver<R, T>>::Proof,
         _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>
+        _ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
         let m = _ccs.m;
         let log_m = log2(m as f64) as usize;
@@ -147,26 +144,30 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
             num_variables: log_m,
             phantom: std::marker::PhantomData,
         };
-        let protocol = SumCheckIP { claimed_sum: R::zero(), poly_info };
+        let protocol = SumCheckIP {
+            claimed_sum: R::zero(),
+            poly_info,
+        };
         let verifier = SumCheckVerifier::new(protocol);
 
         // Verify the transcript
-        let subclaim = verifier.verify(&_proof.linearization_sumcheck, _transcript).unwrap();
+        let subclaim = verifier
+            .verify(&_proof.linearization_sumcheck, _transcript)
+            .unwrap();
         let e = eq(&Beta, &subclaim.point);
         let s = subclaim.expected_evaluation.clone();
 
-        let should_equal_s =
-            e *
-            _ccs.c
-                .iter()
-                .fold(R::zero(), |sum, c| {
-                    sum + *c * _proof.u.iter().fold(R::one(), |product, u_j| product * u_j)
-                });
+        let should_equal_s = e * _ccs.c.iter().fold(R::zero(), |sum, c| {
+            sum + *c * _proof.u.iter().fold(R::one(), |product, u_j| product * u_j)
+        });
 
         match should_equal_s == s {
             true => {}
             false => {
-                return Err(LinearizationError::SumCheckError(SumCheckFailed(should_equal_s, s)));
+                return Err(LinearizationError::SumCheckError(SumCheckFailed(
+                    should_equal_s,
+                    s,
+                )));
             }
         }
         Ok(LCCCS {
@@ -185,7 +186,7 @@ fn create_sumcheck_polynomial<R: OverField>(
     c: &Vec<R>,
     M: &Vec<Vec<Vec<R>>>,
     z_ccs: &Vec<R>,
-    Beta: &Vec<R>
+    Beta: &Vec<R>,
 ) -> VirtualPolynomial<R> {
     let mut g = VirtualPolynomial::new(log_m);
     c.iter().for_each(|coefficient| {
@@ -225,7 +226,7 @@ fn create_sumcheck_polynomial<R: OverField>(
 fn get_challenge_vector<R: OverField, T: Transcript<R>>(
     _cm_i: &CCCS<R>,
     _transcript: &mut T,
-    len: usize
+    len: usize,
 ) -> Vec<R> {
     (0..len)
         .map(|_| {
@@ -237,13 +238,14 @@ fn get_challenge_vector<R: OverField, T: Transcript<R>>(
 }
 
 fn eq<R: OverField>(b_arr: &Vec<R>, x_arr: &Vec<R>) -> R {
-    assert_eq!(b_arr.len(), x_arr.len(), "Eq function takes two vectors of the same length!");
-    b_arr
-        .iter()
-        .zip(x_arr)
-        .fold(R::one(), |ret_value, (b, x)| {
-            ret_value * ((R::one() - b) * (R::one() - x) + *b * x)
-        })
+    assert_eq!(
+        b_arr.len(),
+        x_arr.len(),
+        "Eq function takes two vectors of the same length!"
+    );
+    b_arr.iter().zip(x_arr).fold(R::one(), |ret_value, (b, x)| {
+        ret_value * ((R::one() - b) * (R::one() - x) + *b * x)
+    })
 }
 
 fn usize_to_binary_vector<R: OverField>(n: usize, length: usize) -> Vec<R> {
@@ -280,7 +282,7 @@ fn mle_val_from_vector<R: OverField>(vector: &Vec<R>, values: &Vec<R>) -> R {
 fn mle_val_from_matrix<R: OverField>(
     matrix: &Vec<Vec<R>>,
     values_x: &Vec<R>,
-    values_y: &Vec<R>
+    values_y: &Vec<R>,
 ) -> R {
     assert_eq!(values_y.len(), log2(matrix.len() as f64) as usize);
     assert_eq!(values_x.len(), log2(matrix[0].len() as f64) as usize);
@@ -302,30 +304,18 @@ fn mle_matrix_to_val_eval_second<R: OverField>(matrix: &Vec<Vec<R>>, values_y: &
     assert_eq!(values_y.len(), log2(matrix.len() as f64) as usize);
     (0..matrix[0].len())
         .into_iter()
-        .map(|i|
-            mle_val_from_vector(
-                &matrix
-                    .iter()
-                    .map(|col| col[i])
-                    .collect(),
-                values_y
-            )
-        )
+        .map(|i| mle_val_from_vector(&matrix.iter().map(|col| col[i]).collect(), values_y))
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use ark_ff::{ One, Zero };
-    use lattirust_arithmetic::ring::{ Pow2CyclotomicPolyRingNTT, Zq };
+    use ark_ff::{One, Zero};
+    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRingNTT, Zq};
 
     use crate::nifs::linearization::{
-        eq,
-        mle_matrix_to_val_eval_first,
-        mle_matrix_to_val_eval_second,
-        mle_val_from_matrix,
-        mle_val_from_vector,
-        usize_to_binary_vector,
+        eq, mle_matrix_to_val_eval_first, mle_matrix_to_val_eval_second, mle_val_from_matrix,
+        mle_val_from_vector, usize_to_binary_vector,
     };
 
     // Boilerplate code to generate values needed for testing
@@ -350,13 +340,28 @@ mod tests {
     fn test_utils() {
         // Test evaluation of mle from a vector
         let evaluation_vector = vec![poly_ntt(), zero()];
-        assert_eq!(mle_val_from_vector(&evaluation_vector, &vec![one()]), zero());
-        assert_ne!(mle_val_from_vector(&evaluation_vector, &vec![one()]), poly_ntt());
-        assert_eq!(mle_val_from_vector(&evaluation_vector, &vec![zero()]), poly_ntt());
-        assert_ne!(mle_val_from_vector(&evaluation_vector, &vec![zero()]), zero());
+        assert_eq!(
+            mle_val_from_vector(&evaluation_vector, &vec![one()]),
+            zero()
+        );
+        assert_ne!(
+            mle_val_from_vector(&evaluation_vector, &vec![one()]),
+            poly_ntt()
+        );
+        assert_eq!(
+            mle_val_from_vector(&evaluation_vector, &vec![zero()]),
+            poly_ntt()
+        );
+        assert_ne!(
+            mle_val_from_vector(&evaluation_vector, &vec![zero()]),
+            zero()
+        );
 
         let evaluation_matrix = vec![vec![poly_ntt(), zero()], vec![one(), poly_ntt()]];
-        assert_eq!(mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]), one());
+        assert_eq!(
+            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]),
+            one()
+        );
         assert_ne!(
             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]),
             poly_ntt()
@@ -365,7 +370,10 @@ mod tests {
             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]),
             poly_ntt()
         );
-        assert_ne!(mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]), zero());
+        assert_ne!(
+            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]),
+            zero()
+        );
 
         // Test the eq function
         let vector_one = vec![zero(), one(), one(), zero()];
@@ -379,7 +387,16 @@ mod tests {
 
         assert_eq!(
             usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8),
-            vec![zero(), zero(), zero(), zero(), zero(), one(), zero(), zero()]
+            vec![
+                zero(),
+                zero(),
+                zero(),
+                zero(),
+                zero(),
+                one(),
+                zero(),
+                zero()
+            ]
         );
         assert_eq!(
             usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(5, 5),
@@ -388,7 +405,7 @@ mod tests {
         // Test the conversion of Bivariate MLE to univariate MLE by evaluating first values
         let bivariate_mle = vec![
             vec![poly_ntt(), poly_ntt(), one(), zero()],
-            vec![zero(), poly_ntt(), zero(), one()]
+            vec![zero(), poly_ntt(), zero(), one()],
         ];
         assert_eq!(
             mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]),
