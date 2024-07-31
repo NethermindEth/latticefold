@@ -121,5 +121,7 @@ pub struct LCCCS<R: Ring> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Witness<R: Ring> {
     pub f_arr: Vec<R>,
+    // NTT(f_hat) = f_arr
+    pub f_hat: Vec<R>,
     pub w_ccs: Vec<R>,
 }
