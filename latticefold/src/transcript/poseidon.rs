@@ -75,6 +75,18 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> Transcript<R> for PoseidonTra
         self.sponge.absorb(&c);
         Self::ChallengeSet::small_challenge(&c[0].into_bigint().to_bytes_be())
     }
+
+    fn get_challenges(&mut self, n: usize) -> Vec<R> {
+        let mut challenges: Vec<R> = Vec::with_capacity(n);
+        (0..n).for_each(|_| {
+            let c: Vec<R::F> = self.sponge.squeeze_field_elements(1);
+            self.sponge.absorb(&c);
+            challenges.push(Self::ChallengeSet::small_challenge(
+                &c[0].into_bigint().to_bytes_be(),
+            ))
+        });
+        challenges
+    }
 }
 
 fn ring_to_field<R: OverField>(x: &R) -> Vec<R::F> {
