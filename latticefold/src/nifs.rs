@@ -1,6 +1,7 @@
 pub mod decomposition;
 pub mod error;
 pub mod folding;
+#[allow(non_snake_case)]
 pub mod linearization;
 
 use std::marker::PhantomData;
