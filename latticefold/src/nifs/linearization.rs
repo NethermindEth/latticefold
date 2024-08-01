@@ -1,5 +1,9 @@
 use std::sync::Arc;
 
+use super::{
+    error::LinearizationError::{self, ParametersError},
+    NIFSProver, NIFSVerifier,
+};
 use crate::utils::sumcheck::SumCheckError::SumCheckFailed;
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
@@ -8,6 +12,7 @@ use crate::{
         prover::SumCheckProver, verifier::SumCheckVerifier, SumCheckIP, SumCheckProof,
     },
 };
+use ark_ff::PrimeField;
 use ark_std::iterable::Iterable;
 use ark_std::log2;
 use lattirust_arithmetic::polynomials::eq_eval;
@@ -15,11 +20,6 @@ use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
-};
-
-use super::{
-    error::LinearizationError::{self, ParametersError},
-    NIFSProver, NIFSVerifier,
 };
 
 #[derive(Clone)]
@@ -69,7 +69,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
 
         // Step 1: Generate the public coin randomness
         let beta_s = transcript.get_small_challenges(log_m);
-
+        transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
         // Step 2: Sum check protocol
         // z_ccs vector
         let mut z_ccs: Vec<R> = Vec::new();
@@ -127,7 +127,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
         let log_m = ccs.s;
         let beta_s = transcript.get_small_challenges(log_m);
-
+        transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
         let poly_info = VPAuxInfo {
             max_degree: ccs.d + 1,
             num_variables: log_m,
