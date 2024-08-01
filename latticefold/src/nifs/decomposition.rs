@@ -1,14 +1,15 @@
-use lattirust_arithmetic::{balanced_decomposition::decompose_balanced_polyring, challenge_set::latticefold_challenge_set::OverField, ring::Ring};
+use lattirust_arithmetic::{
+    balanced_decomposition::decompose_balanced_polyring,
+    challenge_set::latticefold_challenge_set::OverField,
+    mle::DenseMultilinearExtension,
+    ring::{PolyRing, Ring},
+};
 
 use ark_ff::Field;
 use ark_std::iterable::Iterable;
-use lattirust_arithmetic::{
-     mle::DenseMultilinearExtension,
-    ring::PolyRing,
-};
 
+use super::{error::{LinearizationError, DecompositionError}, NIFSProver, NIFSVerifier};
 
-use super::{error::LinearizationError, NIFSProver, NIFSVerifier};
 
 
 use crate::{
@@ -16,7 +17,6 @@ use crate::{
     transcript::Transcript,
 };
 
-use super::{error::DecompositionError};
 
 #[derive(Clone)]
 pub struct DecompositionProof<R: OverField> {
