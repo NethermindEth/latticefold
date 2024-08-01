@@ -9,12 +9,12 @@ use crate::{
     },
 };
 use ark_std::iterable::Iterable;
+use ark_std::log2;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
 };
-use libm::log2;
 
 use super::{
     error::LinearizationError::{self, ParametersError},
@@ -174,7 +174,7 @@ fn create_u<R: OverField>(
 
     for M_i in M.iter() {
         for i in 1..M_i.len() {
-            let b = usize_to_binary_vector::<R>(i, log2(M_i.len() as f64) as usize)?;
+            let b = usize_to_binary_vector::<R>(i, log2(M_i.len()) as usize)?;
             let mle_matrix_val = mle_val_from_matrix(M_i, r_arr, &b)?;
             let mle_vector_val = mle_val_from_vector(z_ccs, &b)?;
             u.push(mle_matrix_val * mle_vector_val);
@@ -197,7 +197,7 @@ fn create_sumcheck_polynomial<R: OverField>(
 
         for matrix in M.iter() {
             // Initialize MLE for the zero vector
-            let zero_vector = usize_to_binary_vector::<R>(0, log2(matrix.len() as f64) as usize)?;
+            let zero_vector = usize_to_binary_vector::<R>(0, log2(matrix.len()) as usize)?;
             let mle_z_ccs_b = mle_val_from_vector(z_ccs, &zero_vector)?;
             let evaluations: Vec<R> = mle_matrix_to_val_eval_second(matrix, &zero_vector)?
                 .iter()
@@ -207,7 +207,7 @@ fn create_sumcheck_polynomial<R: OverField>(
 
             // Accumulate MLEs for other binary vectors
             for i in 1..matrix.len() {
-                let b = usize_to_binary_vector::<R>(i, log2(matrix.len() as f64) as usize)?;
+                let b = usize_to_binary_vector::<R>(i, log2(matrix.len()) as usize)?;
                 let mle_z_ccs_b = mle_val_from_vector(z_ccs, &b)?;
                 let evaluations: Vec<R> = mle_matrix_to_val_eval_second(matrix, &b)?
                     .iter()
