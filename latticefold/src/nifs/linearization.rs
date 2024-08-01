@@ -10,6 +10,7 @@ use crate::{
 };
 use ark_std::iterable::Iterable;
 use ark_std::log2;
+use lattirust_arithmetic::polynomials::eq_eval;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
@@ -139,7 +140,8 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
         let subclaim = verifier
             .verify(&proof.linearization_sumcheck, transcript)
             .unwrap();
-        let e = eq(&beta_s, &subclaim.point)?;
+
+        let e = eq_eval(&subclaim.point, &beta_s).unwrap();
         let s = subclaim.expected_evaluation;
 
         let should_equal_s = e * ccs.c.iter().fold(R::zero(), |sum, c| {
@@ -228,17 +230,6 @@ fn create_sumcheck_polynomial<R: OverField>(
     let _ = g.mul_by_mle(eq, R::one());
 
     Ok(g)
-}
-
-fn eq<R: OverField>(b_arr: &Vec<R>, x_arr: &Vec<R>) -> Result<R, LinearizationError<R>> {
-    if b_arr.len() != x_arr.len() {
-        return Err(LinearizationError::ParametersError(String::from(
-            "Eq function takes two vectors of the same length!",
-        )));
-    }
-    Ok(b_arr.iter().zip(x_arr).fold(R::one(), |ret_value, (b, x)| {
-        ret_value * ((R::one() - b) * (R::one() - x) + *b * x)
-    }))
 }
 
 fn usize_to_binary_vector<R: OverField>(
@@ -348,7 +339,7 @@ mod tests {
     use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRingNTT, Zq};
 
     use crate::nifs::linearization::{
-        eq, mle_matrix_to_val_eval_first, mle_matrix_to_val_eval_second, mle_val_from_matrix,
+        mle_matrix_to_val_eval_first, mle_matrix_to_val_eval_second, mle_val_from_matrix,
         mle_val_from_vector, usize_to_binary_vector,
     };
 
@@ -408,16 +399,6 @@ mod tests {
             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
             zero()
         );
-
-        // Test the eq function
-        let vector_one = vec![zero(), one(), one(), zero()];
-        let vector_two = vec![zero(), one(), one(), zero()];
-        let vector_three = vec![zero(), one(), one(), one()];
-
-        assert_eq!(eq(&vector_one, &vector_two).unwrap(), one());
-        assert_ne!(eq(&vector_one, &vector_two).unwrap(), zero());
-        assert_eq!(eq(&vector_one, &vector_three).unwrap(), zero());
-        assert_ne!(eq(&vector_one, &vector_three).unwrap(), one());
 
         assert_eq!(
             usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8).unwrap(),
