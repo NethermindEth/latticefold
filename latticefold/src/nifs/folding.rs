@@ -9,7 +9,7 @@ use lattirust_arithmetic::{
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::SumCheckProof,
+    utils::sumcheck::{prover::SumCheckProver, SumCheckProof},
 };
 
 use super::{error::FoldingError, NIFSProver, NIFSVerifier};
@@ -60,22 +60,73 @@ impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
     ) -> Result<(LCCCS<R>, Witness<R>, FoldingProof<R>), FoldingError<R>> {
         let m = _ccs.m;
         let log_m = log2(m as f64) as usize;
-        let k = 0; // this should come from the decomposition step
+        let k = 10000000; // this should come from the decomposition step
 
         // Generate challenges
         // Note: absorb commits
-        let alphas = (0..2 * k)
-            .map(|_| _transcript.get_big_challenge())
+        let alphas: Vec<R> = (0..2 * k)
+            .map(|_| _transcript.get_big_challenge().into())
             .collect::<Vec<_>>();
-        let zetas = (0..2 * k)
-            .map(|_| _transcript.get_big_challenge())
+        let zetas: Vec<R> = (0..2 * k)
+            .map(|_| _transcript.get_big_challenge().into())
             .collect::<Vec<_>>();
-        let mut mus = (0..2 * k - 1)
-            .map(|_| _transcript.get_big_challenge())
+        let mut mus: Vec<R> = (0..2 * k - 1)
+            .map(|_| _transcript.get_big_challenge().into())
             .collect::<Vec<_>>();
-        let Beta = (0..log_m)
-            .map(|_| _transcript.get_big_challenge())
+        let Beta: Vec<R> = (0..log_m)
+            .map(|_| _transcript.get_big_challenge().into())
             .collect::<Vec<_>>();
+
+        let f_hat_mles = _w_s
+            .iter()
+            .map(|w| {
+                let f_i = w.f_arr.clone();
+                DenseMultilinearExtension::from_evaluations_vec(log_m, f_i)
+            })
+            .collect::<Vec<_>>();
+
+        let zis: Vec<Vec<R>> = Vec::new(); // Grab zis from decomposition step
+        let ris: Vec<Vec<R>> = Vec::new(); // Grab ris from decomposition step
+        let vs: Vec<R> = Vec::new(); // Grab ris from decomposition step
+        let us: Vec<R> = Vec::new(); // Grab us from the decomposition step
+
+        let g = create_sumcheck_polynomial(
+            k,
+            log_m,
+            &f_hat_mles,
+            &alphas,
+            &_ccs.M,
+            zis.as_slice(),
+            &zetas,
+            ris,
+            &Beta,
+        );
+
+        let claim_g1 = alphas
+            .iter()
+            .zip(vs.iter())
+            .fold(R::zero(), |acc, (&alpha, &vi)| acc + (alpha * vi));
+        let claim_g2 = zetas
+            .iter()
+            .zip(us.iter())
+            .fold(R::zero(), |acc, (&zeta, &ui)| acc + (zeta * ui));
+
+        let prover = SumCheckProver {
+            polynomial: g,
+            claimed_sum: claim_g1 + claim_g2,
+            _marker: std::marker::PhantomData::default(),
+        };
+
+        // Run sum check prover
+        let (_, sum_check_proof, subclaim) = prover.prove(_transcript).unwrap();
+        let r0: Vec<R> = Vec::new(); //  take r0 from transcript
+
+        let thetas = f_hat_mles
+            .iter()
+            .map(|f_hat_mle| f_hat_mle.evaluate(r0.as_slice()))
+            .collect::<Vec<_>>();
+        let etas: Vec<R> = Vec::new();
+
         todo!()
     }
 }
@@ -96,18 +147,18 @@ impl<R: OverField, T: Transcript<R>> FoldingVerifier<R, T> for NIFSVerifier<R, T
 fn create_sumcheck_polynomial<R: OverField>(
     k: usize,
     log_m: usize,
-    fis: &[Vec<R>],
-    alpha_is: Vec<R>,
+    f_hat_mles: &Vec<DenseMultilinearExtension<R>>,
+    alpha_is: &Vec<R>,
     Mis: &[Vec<Vec<R>>],
     zis: &[Vec<R>],
-    zeta_is: Vec<R>,
+    zeta_is: &Vec<R>,
     ris: Vec<Vec<R>>,
     Beta: &Vec<R>,
 ) -> VirtualPolynomial<R> {
     let mut g = VirtualPolynomial::new(2 * k);
     let mut g1_plus_g3 = VirtualPolynomial::new(2 * k);
     for i in 0..2 * k {
-        let gi_1 = create_g1_i_polynomial(log_m, fis[i].as_slice(), alpha_is[i]);
+        let gi_1 = create_g1_i_polynomial(&f_hat_mles[i], alpha_is[i]);
         let gi_3 = create_g3_i_polynomial(log_m, Mis[i].clone(), zis[i].clone(), zeta_is[i]);
         let gi_1_plus_gi_3 = Arc::from(gi_1 + gi_3);
         let mut g1_and_g3_virtual = VirtualPolynomial::new_from_mle(&gi_1_plus_gi_3, R::ONE);
@@ -130,34 +181,13 @@ fn create_sumcheck_polynomial<R: OverField>(
     g
 }
 
-fn create_gi_polynomial<R: OverField>(
-    log_m: usize,
-    Mi: Vec<Vec<R>>,
-    fi: Vec<R>,
-    alpha_i: R,
-    zeta_i: R,
-    zi: Vec<R>,
-    ri: &[R],
-) -> VirtualPolynomial<R> {
-    let g1 = create_g1_i_polynomial(log_m, &fi, alpha_i);
-    let g2 = create_g2_i_polynomial::<R>();
-    let g3 = create_g3_i_polynomial(log_m, Mi, zi, zeta_i);
-    let g1_g3 = Arc::from(g1 + g3);
-    let mut g1_and_g3_virtual = VirtualPolynomial::new_from_mle(&g1_g3, R::ONE);
-    let eq_r_i = build_eq_x_r(ri).unwrap();
-    g1_and_g3_virtual.mul_by_mle(eq_r_i, R::one());
-    g1_and_g3_virtual =
-        &g1_and_g3_virtual + &VirtualPolynomial::new_from_mle(&Arc::from(g2), R::one());
-    todo!()
-}
-
 fn create_g1_i_polynomial<R: OverField>(
-    log_m: usize,
-    fi: &[R],
+    fi_mle: &DenseMultilinearExtension<R>,
     alpha_i: R,
 ) -> DenseMultilinearExtension<R> {
-    let evals = fi.iter().map(|&e| e * alpha_i).collect();
-    DenseMultilinearExtension::from_evaluations_vec(log_m, evals)
+    let mut mle = fi_mle.clone(); // remove clone
+    mle.evaluations.iter_mut().for_each(|e| *e = *e * alpha_i);
+    mle
 }
 
 fn create_g2_i_polynomial<R: OverField>() -> DenseMultilinearExtension<R> {
@@ -174,9 +204,10 @@ fn create_g3_i_polynomial<R: OverField>(
     let mle_z_ccs_b = mle_val_from_vector(&zi, &zero_vector);
     let evaluations: Vec<R> = mle_matrix_to_val_eval_second(&Mi, &zero_vector)
         .iter()
-        .map(|val| zeta_i * *val * mle_z_ccs_b)
+        .map(|val| *val * mle_z_ccs_b)
         .collect();
-    let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+    let mut mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+    mle.evaluations.iter_mut().for_each(|e| *e = *e * zeta_i);
 
     let matrix_mle = (1..Mi.len())
         .into_iter()
@@ -185,9 +216,10 @@ fn create_g3_i_polynomial<R: OverField>(
             let mle_z_ccs_b = mle_val_from_vector(&zi, &b);
             let evaluations: Vec<R> = mle_matrix_to_val_eval_second(&Mi, &b)
                 .iter()
-                .map(|val| zeta_i * *val * mle_z_ccs_b)
+                .map(|val| *val * mle_z_ccs_b)
                 .collect();
-            let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+            let mut mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+            mle.evaluations.iter_mut().for_each(|e| *e = *e * zeta_i);
             acc + mle
         });
     matrix_mle
