@@ -37,7 +37,7 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckProver<R, CS> {
                 .collect();
 
             let challenge: R = transcript.get_big_challenge().into();
-            subclaim.point.push(challenge.into());
+            subclaim.point.push(challenge);
             flattened_ml_extensions.iter_mut().for_each(|mle| {
                 let eval0 = (0..1 << (num_vars - j - 1))
                     .fold(R::zero(), |acc, index| acc + mle.evaluations[index]);
@@ -62,7 +62,7 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckProver<R, CS> {
             subclaim.expected_evaluation = uni.evaluate(&[challenge])?;
             sum_check_proof.add_round(transcript, UnivPoly::try_from(uni)?);
             poly.flattened_ml_extensions.iter_mut().for_each(|mle| {
-                *mle = Arc::from(fix_variables(mle, &[challenge.into()]));
+                *mle = Arc::from(fix_variables(mle, &[challenge]));
             });
         }
 
