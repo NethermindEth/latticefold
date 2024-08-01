@@ -1,12 +1,14 @@
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
+use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, mle::{self, DenseMultilinearExtension}, polynomials::VirtualPolynomial};
 
 use crate::{
-    arith::{Witness, CCS, LCCCS},
+    arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::SumCheckProof,
 };
 
 use super::{error::FoldingError, NIFSProver, NIFSVerifier};
+use libm::log2;
+
 
 #[derive(Clone)]
 pub struct FoldingProof<R: OverField> {
@@ -51,6 +53,16 @@ impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
         _transcript: &mut impl Transcript<R>,
         _ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, Witness<R>, FoldingProof<R>), FoldingError<R>> {
+        let m = _ccs.m;
+        let log_m = log2(m as f64) as usize;
+        let k = 0; // this should come from the decomposition step
+
+        // Generate challenges
+        // Note: absorb commits
+        let alphas = (0..2*k).map(|_| _transcript.get_big_challenge()).collect::<Vec<_>>();
+        let zetas = (0..2*k).map(|_| _transcript.get_big_challenge()).collect::<Vec<_>>();
+        let mus = (0..2*k - 1).map(|_| _transcript.get_big_challenge()).collect::<Vec<_>>();
+        let Beta = (0..log_m).map(|_| _transcript.get_big_challenge()).collect::<Vec<_>>();
         todo!()
     }
 }
@@ -66,4 +78,9 @@ impl<R: OverField, T: Transcript<R>> FoldingVerifier<R, T> for NIFSVerifier<R, T
     ) -> Result<LCCCS<R>, FoldingError<R>> {
         todo!()
     }
+}
+
+fn create_sumcheck_polynomial<R: OverField>(k: usize) -> VirtualPolynomial<R> {
+    let mut g = VirtualPolynomial::new(2*k);
+    g
 }
