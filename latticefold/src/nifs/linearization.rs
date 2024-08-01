@@ -16,7 +16,10 @@ use lattirust_arithmetic::{
 };
 use libm::log2;
 
-use super::{error::LinearizationError, NIFSProver, NIFSVerifier};
+use super::{
+    error::LinearizationError::{self, ParametersError},
+    NIFSProver, NIFSVerifier,
+};
 
 #[derive(Clone)]
 pub struct LinearizationProof<R: OverField> {
@@ -56,41 +59,41 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
     type Error = LinearizationError<R>;
 
     fn prove(
-        _cm_i: &CCCS<R>,
-        _wit: &Witness<R>,
-        _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>,
+        cm_i: &CCCS<R>,
+        wit: &Witness<R>,
+        transcript: &mut impl Transcript<R>,
+        ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, LinearizationProof<R>), LinearizationError<R>> {
-        let log_m = _ccs.s;
+        let log_m = ccs.s;
 
         // Step 1: Generate the public coin randomness
-        let Beta = get_challenge_vector(_cm_i, _transcript, log_m);
+        let beta_s = transcript.get_small_challenges(log_m);
 
         // Step 2: Sum check protocol
         // z_ccs vector
         let mut z_ccs: Vec<R> = Vec::new();
-        let x_ccs = _cm_i.x_ccs.clone();
+        let x_ccs = cm_i.x_ccs.clone();
         let one = vec![R::one()];
-        let w_ccs = _wit.w_ccs.clone();
+        let w_ccs = wit.w_ccs.clone();
         z_ccs.extend(x_ccs);
         z_ccs.extend(one);
         z_ccs.extend(w_ccs);
 
         // Create polynomial
-        let g = create_sumcheck_polynomial(log_m, &_ccs.c, &_ccs.M, &z_ccs, &Beta);
+        let g = create_sumcheck_polynomial(log_m, &ccs.c, &ccs.M, &z_ccs, &beta_s)?;
         let prover = SumCheckProver {
             polynomial: g,
             claimed_sum: R::zero(),
             _marker: std::marker::PhantomData,
         };
         // Run sum check prover
-        let (_, sum_check_proof, subclaim) = prover.prove(_transcript).unwrap();
+        let (_, sum_check_proof, subclaim) = prover.prove(transcript).unwrap();
 
         // Step 3: Compute v, u_vector
         let r_arr = subclaim.point;
 
-        let v = mle_val_from_vector(&_wit.f_hat, &r_arr);
-        let u = create_u(_ccs.t, &_ccs.M, &r_arr, &z_ccs);
+        let v = mle_val_from_vector(&wit.f_hat, &r_arr)?;
+        let u = create_u(ccs.t, &ccs.M, &r_arr, &z_ccs)?;
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
@@ -102,9 +105,9 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
         let lcccs = LCCCS {
             r_arr,
             v,
-            y: _cm_i.cm.clone(),
+            y: cm_i.cm.clone(),
             u: u.clone(),
-            x_w: _cm_i.x_ccs.clone(),
+            x_w: cm_i.x_ccs.clone(),
             h: R::one(),
         };
 
@@ -116,51 +119,46 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
     type Prover = NIFSProver<R, T>;
 
     fn verify(
-        _cm_i: &CCCS<R>,
-        _proof: &<Self::Prover as LinearizationProver<R, T>>::Proof,
-        _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>,
+        cm_i: &CCCS<R>,
+        proof: &<Self::Prover as LinearizationProver<R, T>>::Proof,
+        transcript: &mut impl Transcript<R>,
+        ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
-        let log_m = _ccs.s;
-        let Beta = get_challenge_vector(_cm_i, _transcript, log_m);
+        let log_m = ccs.s;
+        let beta_s = transcript.get_small_challenges(log_m);
 
         let poly_info = VPAuxInfo {
-            max_degree: _ccs.d + 1,
+            max_degree: ccs.d + 1,
             num_variables: log_m,
             phantom: std::marker::PhantomData,
         };
-        let protocol = SumCheckIP {
-            claimed_sum: R::zero(),
-            poly_info,
-        };
+        let protocol = SumCheckIP::new(R::zero(), poly_info);
         let verifier = SumCheckVerifier::new(protocol);
 
         // Verify the transcript
         let subclaim = verifier
-            .verify(&_proof.linearization_sumcheck, _transcript)
+            .verify(&proof.linearization_sumcheck, transcript)
             .unwrap();
-        let e = eq(&Beta, &subclaim.point);
+        let e = eq(&beta_s, &subclaim.point)?;
         let s = subclaim.expected_evaluation;
 
-        let should_equal_s = e * _ccs.c.iter().fold(R::zero(), |sum, c| {
-            sum + *c * _proof.u.iter().fold(R::one(), |product, u_j| product * u_j)
+        let should_equal_s = e * ccs.c.iter().fold(R::zero(), |sum, c| {
+            sum + *c * proof.u.iter().fold(R::one(), |product, u_j| product * u_j)
         });
 
-        match should_equal_s == s {
-            true => {}
-            false => {
-                return Err(LinearizationError::SumCheckError(SumCheckFailed(
-                    should_equal_s,
-                    s,
-                )));
-            }
+        if should_equal_s != s {
+            return Err(LinearizationError::SumCheckError(SumCheckFailed(
+                should_equal_s,
+                s,
+            )));
         }
+
         Ok(LCCCS {
             r_arr: subclaim.point,
-            v: _proof.v,
-            y: _cm_i.cm.clone(),
-            u: _proof.u.clone(),
-            x_w: _cm_i.x_ccs.clone(),
+            v: proof.v,
+            y: cm_i.cm.clone(),
+            u: proof.u.clone(),
+            x_w: cm_i.x_ccs.clone(),
             h: R::one(),
         })
     }
@@ -171,17 +169,18 @@ fn create_u<R: OverField>(
     M: &Vec<Vec<Vec<R>>>,
     r_arr: &Vec<R>,
     z_ccs: &[R],
-) -> Vec<R> {
+) -> Result<Vec<R>, LinearizationError<R>> {
     let mut u: Vec<R> = Vec::with_capacity(length);
-    M.iter().for_each(|M_i| {
-        (1..M_i.len())
-            .map(|i| usize_to_binary_vector::<R>(i, log2(M_i.len() as f64) as usize))
-            .for_each(|b| {
-                let u_i = mle_val_from_matrix(M_i, r_arr, &b) * mle_val_from_vector(z_ccs, &b);
-                u.push(u_i);
-            })
-    });
-    u
+
+    for M_i in M.iter() {
+        for i in 1..M_i.len() {
+            let b = usize_to_binary_vector::<R>(i, log2(M_i.len() as f64) as usize)?;
+            let mle_matrix_val = mle_val_from_matrix(M_i, r_arr, &b)?;
+            let mle_vector_val = mle_val_from_vector(z_ccs, &b)?;
+            u.push(mle_matrix_val * mle_vector_val);
+        }
+    }
+    Ok(u)
 }
 
 fn create_sumcheck_polynomial<R: OverField>(
@@ -189,68 +188,68 @@ fn create_sumcheck_polynomial<R: OverField>(
     c: &Vec<R>,
     M: &Vec<Vec<Vec<R>>>,
     z_ccs: &[R],
-    Beta: &Vec<R>,
-) -> VirtualPolynomial<R> {
+    beta_s: &[R],
+) -> Result<VirtualPolynomial<R>, LinearizationError<R>> {
     let mut g = VirtualPolynomial::new(log_m);
-    c.iter().for_each(|coefficient| {
+
+    for coefficient in c.iter() {
         let mut mle_list: Vec<Arc<DenseMultilinearExtension<R>>> = Vec::new();
-        M.iter().for_each(|matrix| {
-            //Initialise MLE
-            let zero_vector = usize_to_binary_vector::<R>(0, log2(matrix.len() as f64) as usize);
-            let mle_z_ccs_b = mle_val_from_vector(z_ccs, &zero_vector);
-            let evaluations: Vec<R> = mle_matrix_to_val_eval_second(matrix, &zero_vector)
+
+        for matrix in M.iter() {
+            // Initialize MLE for the zero vector
+            let zero_vector = usize_to_binary_vector::<R>(0, log2(matrix.len() as f64) as usize)?;
+            let mle_z_ccs_b = mle_val_from_vector(z_ccs, &zero_vector)?;
+            let evaluations: Vec<R> = mle_matrix_to_val_eval_second(matrix, &zero_vector)?
                 .iter()
                 .map(|val| *val * mle_z_ccs_b)
                 .collect();
-            let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+            let mut mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
 
-            let matrix_mle = (1..matrix.len())
-                .map(|i| usize_to_binary_vector::<R>(i, log2(matrix.len() as f64) as usize))
-                .fold(mle, |acc, b| {
-                    let mle_z_ccs_b = mle_val_from_vector(z_ccs, &b);
-                    let evaluations: Vec<R> = mle_matrix_to_val_eval_second(matrix, &b)
-                        .iter()
-                        .map(|val| *val * mle_z_ccs_b)
-                        .collect();
-                    let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
-                    acc + mle
-                });
-            mle_list.push(Arc::from(matrix_mle));
-        });
+            // Accumulate MLEs for other binary vectors
+            for i in 1..matrix.len() {
+                let b = usize_to_binary_vector::<R>(i, log2(matrix.len() as f64) as usize)?;
+                let mle_z_ccs_b = mle_val_from_vector(z_ccs, &b)?;
+                let evaluations: Vec<R> = mle_matrix_to_val_eval_second(matrix, &b)?
+                    .iter()
+                    .map(|val| *val * mle_z_ccs_b)
+                    .collect();
+                let mle_next = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+                mle += mle_next;
+            }
+
+            mle_list.push(Arc::new(mle));
+        }
+
         let _ = g.add_mle_list(mle_list, *coefficient);
-    });
+    }
 
-    // multiply by eq function
-    let eq = build_eq_x_r::<R>(Beta.as_slice()).unwrap();
+    // Multiply by eq function
+    let eq = build_eq_x_r::<R>(beta_s).unwrap();
     let _ = g.mul_by_mle(eq, R::one());
-    g
-}
-fn get_challenge_vector<R: OverField, T: Transcript<R>>(
-    _cm_i: &CCCS<R>,
-    _transcript: &mut T,
-    len: usize,
-) -> Vec<R> {
-    (0..len)
-        .map(|_| {
-            let challenge = _transcript.get_big_challenge().into();
-            _transcript.absorb_ring_vec(&_cm_i.cm);
-            challenge
-        })
-        .collect()
+
+    Ok(g)
 }
 
-fn eq<R: OverField>(b_arr: &Vec<R>, x_arr: &Vec<R>) -> R {
-    assert_eq!(
-        b_arr.len(),
-        x_arr.len(),
-        "Eq function takes two vectors of the same length!"
-    );
-    b_arr.iter().zip(x_arr).fold(R::one(), |ret_value, (b, x)| {
+fn eq<R: OverField>(b_arr: &Vec<R>, x_arr: &Vec<R>) -> Result<R, LinearizationError<R>> {
+    if b_arr.len() != x_arr.len() {
+        return Err(LinearizationError::ParametersError(String::from(
+            "Eq function takes two vectors of the same length!",
+        )));
+    }
+    Ok(b_arr.iter().zip(x_arr).fold(R::one(), |ret_value, (b, x)| {
         ret_value * ((R::one() - b) * (R::one() - x) + *b * x)
-    })
+    }))
 }
 
-fn usize_to_binary_vector<R: OverField>(n: usize, length: usize) -> Vec<R> {
+fn usize_to_binary_vector<R: OverField>(
+    n: usize,
+    length: usize,
+) -> Result<Vec<R>, LinearizationError<R>> {
+    if 1 << length <= n {
+        return Err(LinearizationError::ParametersError(String::from(
+            "Cannot put number in binary, number is too big",
+        )));
+    }
     let mut bits = Vec::new();
     let mut current = n;
 
@@ -270,42 +269,65 @@ fn usize_to_binary_vector<R: OverField>(n: usize, length: usize) -> Vec<R> {
     }
 
     // Convert to the target field elements
-    bits.into_iter()
+    Ok(bits
+        .into_iter()
         .map(|bit| if bit == 1 { R::one() } else { R::zero() })
-        .collect()
+        .collect())
 }
 
-fn mle_val_from_vector<R: OverField>(vector: &[R], values: &Vec<R>) -> R {
-    assert_eq!(values.len(), log2(vector.len() as f64) as usize);
+fn mle_val_from_vector<R: OverField>(
+    vector: &[R],
+    values: &Vec<R>,
+) -> Result<R, LinearizationError<R>> {
+    if (1 << values.len()) != vector.len() {
+        return Err(LinearizationError::ParametersError(String::from(
+            "values and MLE do not match",
+        )));
+    }
     let mle = DenseMultilinearExtension::from_evaluations_vec(values.len(), vector.to_owned());
-    mle.evaluate(values.as_slice()).unwrap()
+    Ok(mle.evaluate(values.as_slice()).unwrap())
 }
 
 fn mle_val_from_matrix<R: OverField>(
     matrix: &Vec<Vec<R>>,
     values_x: &Vec<R>,
     values_y: &Vec<R>,
-) -> R {
-    assert_eq!(values_y.len(), log2(matrix.len() as f64) as usize);
-    assert_eq!(values_x.len(), log2(matrix[0].len() as f64) as usize);
-    let univariate_mle_evaluations = matrix
+) -> Result<R, LinearizationError<R>> {
+    if (1 << values_y.len()) != matrix.len() || (1 << values_x.len()) != matrix[0].len() {
+        return Err(LinearizationError::ParametersError(String::from(
+            "values and MLE do not match",
+        )));
+    }
+
+    let univariate_mle_evaluations: Result<Vec<R>, LinearizationError<R>> = matrix
         .iter()
         .map(|col| mle_val_from_vector(col, values_x))
-        .collect::<Vec<R>>();
+        .collect();
 
-    mle_val_from_vector(&univariate_mle_evaluations, values_y)
+    mle_val_from_vector(&univariate_mle_evaluations?, values_y)
 }
 #[allow(dead_code)]
-fn mle_matrix_to_val_eval_first<R: OverField>(matrix: &Vec<Vec<R>>, values_x: &Vec<R>) -> Vec<R> {
-    assert_eq!(values_x.len(), log2(matrix[0].len() as f64) as usize);
+fn mle_matrix_to_val_eval_first<R: OverField>(
+    matrix: &Vec<Vec<R>>,
+    values_x: &Vec<R>,
+) -> Result<Vec<R>, LinearizationError<R>> {
+    if (1 << values_x.len()) != matrix[0].len() {
+        return Err(ParametersError(String::from("values and MLE do not match")));
+    }
     matrix
         .iter()
         .map(|col| mle_val_from_vector(col, values_x))
         .collect()
 }
 // Convert a bivariate MLE to a univariate MLE by evaluating the second vector
-fn mle_matrix_to_val_eval_second<R: OverField>(matrix: &Vec<Vec<R>>, values_y: &Vec<R>) -> Vec<R> {
-    assert_eq!(values_y.len(), log2(matrix.len() as f64) as usize);
+fn mle_matrix_to_val_eval_second<R: OverField>(
+    matrix: &Vec<Vec<R>>,
+    values_y: &Vec<R>,
+) -> Result<Vec<R>, LinearizationError<R>> {
+    if (1 << values_y.len()) != matrix.len() {
+        return Err(ParametersError(String::from("values and MLE do not match")));
+    }
+
     (0..matrix[0].len())
         .map(|i| {
             mle_val_from_vector(
@@ -353,37 +375,37 @@ mod tests {
         // Test evaluation of mle from a vector
         let evaluation_vector = vec![poly_ntt(), zero()];
         assert_eq!(
-            mle_val_from_vector(&evaluation_vector, &vec![one()]),
+            mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
             zero()
         );
         assert_ne!(
-            mle_val_from_vector(&evaluation_vector, &vec![one()]),
+            mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
             poly_ntt()
         );
         assert_eq!(
-            mle_val_from_vector(&evaluation_vector, &vec![zero()]),
+            mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
             poly_ntt()
         );
         assert_ne!(
-            mle_val_from_vector(&evaluation_vector, &vec![zero()]),
+            mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
             zero()
         );
 
         let evaluation_matrix = vec![vec![poly_ntt(), zero()], vec![one(), poly_ntt()]];
         assert_eq!(
-            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]),
+            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
             one()
         );
         assert_ne!(
-            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]),
+            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
             poly_ntt()
         );
         assert_eq!(
-            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]),
+            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
             poly_ntt()
         );
         assert_ne!(
-            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]),
+            mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
             zero()
         );
 
@@ -392,13 +414,13 @@ mod tests {
         let vector_two = vec![zero(), one(), one(), zero()];
         let vector_three = vec![zero(), one(), one(), one()];
 
-        assert_eq!(eq(&vector_one, &vector_two), one());
-        assert_ne!(eq(&vector_one, &vector_two), zero());
-        assert_eq!(eq(&vector_one, &vector_three), zero());
-        assert_ne!(eq(&vector_one, &vector_three), one());
+        assert_eq!(eq(&vector_one, &vector_two).unwrap(), one());
+        assert_ne!(eq(&vector_one, &vector_two).unwrap(), zero());
+        assert_eq!(eq(&vector_one, &vector_three).unwrap(), zero());
+        assert_ne!(eq(&vector_one, &vector_three).unwrap(), one());
 
         assert_eq!(
-            usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8),
+            usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8).unwrap(),
             vec![
                 zero(),
                 zero(),
@@ -411,7 +433,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(5, 5),
+            usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(5, 5).unwrap(),
             vec![zero(), zero(), one(), zero(), one()]
         );
         // Test the conversion of Bivariate MLE to univariate MLE by evaluating first values
@@ -420,21 +442,21 @@ mod tests {
             vec![zero(), poly_ntt(), zero(), one()],
         ];
         assert_eq!(
-            mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]),
+            mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]).unwrap(),
             vec![poly_ntt(), zero()]
         );
         assert_eq!(
-            mle_matrix_to_val_eval_first(&bivariate_mle, &vec![one(), zero()]),
+            mle_matrix_to_val_eval_first(&bivariate_mle, &vec![one(), zero()]).unwrap(),
             vec![poly_ntt(), poly_ntt()]
         );
 
         // Test the conversion of Bivariate MLE to univariate MLE by evaluating second values
         assert_eq!(
-            mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]),
+            mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]).unwrap(),
             vec![zero(), poly_ntt(), zero(), one()]
         );
         assert_eq!(
-            mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]),
+            mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]).unwrap(),
             vec![poly_ntt(), poly_ntt(), one(), zero()]
         );
     }

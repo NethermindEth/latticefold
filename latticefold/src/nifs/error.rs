@@ -17,6 +17,8 @@ pub enum LatticefoldError<R: Ring> {
 pub enum LinearizationError<R: Ring> {
     #[error("sum check failed at linearization step: {0}")]
     SumCheckError(#[from] SumCheckError<R>),
+    #[error("parameters error: {0}")]
+    ParametersError(String),
 }
 
 #[derive(Debug, Error)]
