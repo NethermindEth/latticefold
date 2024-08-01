@@ -122,7 +122,7 @@ pub struct LCCCS<R: Ring> {
 pub struct Witness<R: Ring> {
     // F is B decomposed ccs witness
     pub f: Vec<R>,
-    // NTT(f_hat) = Vec(f)
+    // NTT(f_hat) = vec(f)
     pub f_hat: Vec<R>,
     pub w_ccs: Vec<R>,
 }
