@@ -94,7 +94,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
         let r_arr = subclaim.point;
 
         let v = mle_val_from_vector(&wit.f_hat, &r_arr)?;
-        let u = create_u(ccs.t, &ccs.M, &r_arr, &z_ccs)?;
+        let u = create_u(ccs.t, ccs.n, &ccs.M, &r_arr, &z_ccs)?;
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
@@ -165,20 +165,17 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
 }
 
 fn create_u<R: OverField>(
-    length: usize,
+    t: usize,
+    n_c: usize,
     M: &Vec<Vec<Vec<R>>>,
     r_arr: &Vec<R>,
     z_ccs: &[R],
 ) -> Result<Vec<R>, LinearizationError<R>> {
-    let mut u: Vec<R> = Vec::with_capacity(length);
+    let mut u: Vec<R> = Vec::with_capacity(t);
 
     for M_i in M.iter() {
-        for i in 1..M_i.len() {
-            let b = usize_to_binary_vector::<R>(i, log2(M_i.len()) as usize)?;
-            let mle_matrix_val = mle_val_from_matrix(M_i, r_arr, &b)?;
-            let mle_vector_val = mle_val_from_vector(z_ccs, &b)?;
-            u.push(mle_matrix_val * mle_vector_val);
-        }
+        let mle = mle_matrix_to_val_eval_first(M_i, r_arr)?;
+        u.push((0..n_c).fold(R::zero(), |acc, b| acc + mle[b] * z_ccs[b]));
     }
     Ok(u)
 }
@@ -276,7 +273,7 @@ fn mle_val_from_vector<R: OverField>(
     let mle = DenseMultilinearExtension::from_evaluations_vec(values.len(), vector.to_owned());
     Ok(mle.evaluate(values.as_slice()).unwrap())
 }
-
+#[allow(dead_code)]
 fn mle_val_from_matrix<R: OverField>(
     matrix: &Vec<Vec<R>>,
     values_x: &Vec<R>,
@@ -295,7 +292,7 @@ fn mle_val_from_matrix<R: OverField>(
 
     mle_val_from_vector(&univariate_mle_evaluations?, values_y)
 }
-#[allow(dead_code)]
+
 fn mle_matrix_to_val_eval_first<R: OverField>(
     matrix: &Vec<Vec<R>>,
     values_x: &Vec<R>,
