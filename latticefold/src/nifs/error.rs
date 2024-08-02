@@ -1,4 +1,4 @@
-use lattirust_arithmetic::ring::Ring;
+use lattirust_arithmetic::{polynomials::ArithErrors, ring::Ring};
 use thiserror::Error;
 
 use crate::utils::sumcheck::SumCheckError;
@@ -19,6 +19,20 @@ pub enum LinearizationError<R: Ring> {
     SumCheckError(#[from] SumCheckError<R>),
     #[error("parameters error: {0}")]
     ParametersError(String),
+}
+
+impl<R: Ring> From<ArithErrors> for LinearizationError<R> {
+    fn from(err: ArithErrors) -> Self {
+        match err {
+            ArithErrors::InvalidParameters(param) => LinearizationError::ParametersError(param),
+            ArithErrors::ShouldNotArrive => LinearizationError::ParametersError(
+                "Unexpected error: Should not arrive".to_string(),
+            ),
+            ArithErrors::SerializationErrors(e) => {
+                LinearizationError::ParametersError(format!("Serialization error: {:?}", e))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Error)]

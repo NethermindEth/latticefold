@@ -66,13 +66,13 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
         ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, LinearizationProof<R>), LinearizationError<R>> {
         let log_m = ccs.s;
-
         // Step 1: Generate the public coin randomness
-        let beta_s = transcript.get_small_challenges(log_m);
         transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
+        let beta_s = transcript.get_small_challenges(log_m);
+
         // Step 2: Sum check protocol
         // z_ccs vector
-        let mut z_ccs: Vec<R> = Vec::new();
+        let mut z_ccs: Vec<R> = Vec::with_capacity(ccs.n);
         let x_ccs = cm_i.x_ccs.clone();
         let one = vec![R::one()];
         let w_ccs = wit.w_ccs.clone();
@@ -88,7 +88,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
             _marker: std::marker::PhantomData,
         };
         // Run sum check prover
-        let (_, sum_check_proof, subclaim) = prover.prove(transcript).unwrap();
+        let (_, sum_check_proof, subclaim) = prover.prove(transcript)?;
 
         // Step 3: Compute v, u_vector
         let r_arr = subclaim.point;
@@ -126,8 +126,8 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
         ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
         let log_m = ccs.s;
-        let beta_s = transcript.get_small_challenges(log_m);
         transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
+        let beta_s = transcript.get_small_challenges(log_m);
         let poly_info = VPAuxInfo {
             max_degree: ccs.d + 1,
             num_variables: log_m,
@@ -137,11 +137,9 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
         let verifier = SumCheckVerifier::new(protocol);
 
         // Verify the transcript
-        let subclaim = verifier
-            .verify(&proof.linearization_sumcheck, transcript)
-            .unwrap();
+        let subclaim = verifier.verify(&proof.linearization_sumcheck, transcript)?;
 
-        let e = eq_eval(&subclaim.point, &beta_s).unwrap();
+        let e = eq_eval(&subclaim.point, &beta_s)?;
         let s = subclaim.expected_evaluation;
 
         let should_equal_s = e * ccs.c.iter().fold(R::zero(), |sum, c| {
@@ -226,7 +224,7 @@ fn create_sumcheck_polynomial<R: OverField>(
     }
 
     // Multiply by eq function
-    let eq = build_eq_x_r::<R>(beta_s).unwrap();
+    let eq = build_eq_x_r::<R>(beta_s)?;
     let _ = g.mul_by_mle(eq, R::one());
 
     Ok(g)
