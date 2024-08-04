@@ -1,7 +1,7 @@
 use lattirust_arithmetic::{polynomials::ArithErrors, ring::Ring};
 use thiserror::Error;
 
-use crate::utils::sumcheck::SumCheckError;
+use crate::{arith::error::CSError, utils::sumcheck::SumCheckError};
 
 #[derive(Debug, Error)]
 pub enum LatticefoldError<R: Ring> {
@@ -19,6 +19,8 @@ pub enum LinearizationError<R: Ring> {
     SumCheckError(#[from] SumCheckError<R>),
     #[error("parameters error: {0}")]
     ParametersError(String),
+    #[error("constraint system related error: {0}")]
+    ConstraintSystemError(#[from] CSError),
 }
 
 impl<R: Ring> From<ArithErrors> for LinearizationError<R> {

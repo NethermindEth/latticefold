@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
-use super::{univ_poly::UnivPoly, SumCheckError, SumCheckIP, SumCheckProof, SumCheckSubClaim};
+use super::{univ_poly::UnivPoly, SumCheckError, SumCheckProof, SumCheckSubClaim};
 use crate::transcript::Transcript;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::{LatticefoldChallengeSet, OverField},
@@ -16,15 +16,24 @@ pub struct SumCheckProver<R: OverField, CS: LatticefoldChallengeSet<R>> {
 }
 
 impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckProver<R, CS> {
+    pub fn new(polynomial: VirtualPolynomial<R>, claimed_sum: R) -> Self {
+        SumCheckProver {
+            _marker: PhantomData,
+            polynomial,
+            claimed_sum,
+        }
+    }
+}
+
+impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckProver<R, CS> {
     pub fn prove(
         &self,
         transcript: &mut impl Transcript<R, ChallengeSet = CS>,
-    ) -> Result<(SumCheckIP<R>, SumCheckProof<R>, SumCheckSubClaim<R>), SumCheckError<R>> {
+    ) -> Result<(SumCheckProof<R>, SumCheckSubClaim<R>), SumCheckError<R>> {
         let num_vars = self.polynomial.aux_info.num_variables;
         let mut poly = self.polynomial.clone();
         let mut sum_check_proof = SumCheckProof::<R>::new(num_vars);
 
-        let protocol = SumCheckIP::new(self.claimed_sum, self.polynomial.aux_info.clone());
         let mut subclaim: SumCheckSubClaim<R> = SumCheckSubClaim {
             point: Vec::with_capacity(num_vars),
             expected_evaluation: R::zero(),
@@ -66,6 +75,6 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckProver<R, CS> {
             });
         }
 
-        Ok((protocol, sum_check_proof, subclaim))
+        Ok((sum_check_proof, subclaim))
     }
 }

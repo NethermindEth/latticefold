@@ -1,20 +1,7 @@
+use lattirust_arithmetic::linear_algebra::SparseMatrix;
 use lattirust_arithmetic::ring::Ring;
 
-// Takes a matrix in the form of vec by vec and a separate vec, and multiplies them to result in a column vector
-pub fn mat_by_vec<R: Ring>(lhs: &[Vec<R>], rhs: &[R]) -> Vec<R> {
-    let rows = lhs.len();
-    // Initialize the result vector with zeros
-    let mut result = vec![R::zero(); rows];
-
-    // Perform matrix-vector multiplication
-    for i in 0..lhs.len() {
-        result[i] = lhs[i]
-            .iter()
-            .zip(rhs)
-            .fold(R::zero(), |acc, (lhs, rhs)| acc + *lhs * rhs);
-    }
-    result
-}
+use super::error::CSError as Error;
 
 //  Computes the hadamard product of two ring
 pub fn hadamard_vec<R: Ring>(lhs: &[R], rhs: &[R]) -> Vec<R> {
@@ -27,6 +14,48 @@ pub fn vec_value_mul<R: Ring>(lhs: &[R], rhs: &R) -> Vec<R> {
 }
 
 // Adds two ring vectors
-pub fn vec_add<R: Ring>(lhs: &[R], rhs: &[R]) -> Vec<R> {
-    lhs.iter().zip(rhs).map(|(a, b)| *a + b).collect()
+pub fn vec_add<R: Ring>(a: &[R], b: &[R]) -> Result<Vec<R>, Error> {
+    if a.len() != b.len() {
+        return Err(Error::LengthsNotEqual(
+            "a".to_string(),
+            "b".to_string(),
+            a.len(),
+            b.len(),
+        ));
+    }
+    Ok(a.iter().zip(b.iter()).map(|(x, y)| *x + y).collect())
+}
+
+pub fn vec_scalar_mul<R: Ring>(vec: &[R], c: &R) -> Vec<R> {
+    vec.iter().map(|a| *a * c).collect()
+}
+
+pub fn hadamard<R: Ring>(a: &[R], b: &[R]) -> Result<Vec<R>, Error> {
+    if a.len() != b.len() {
+        return Err(Error::LengthsNotEqual(
+            "a".to_string(),
+            "b".to_string(),
+            a.len(),
+            b.len(),
+        ));
+    }
+    Ok(a.iter().zip(b).map(|(a, b)| *a * b).collect())
+}
+
+pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Error> {
+    if M.ncols() != z.len() {
+        return Err(Error::LengthsNotEqual(
+            "M".to_string(),
+            "z".to_string(),
+            M.ncols(),
+            z.len(),
+        ));
+    }
+    let mut res = vec![R::zero(); M.nrows()];
+
+    for (col, row, val) in M.triplet_iter() {
+        res[row] += *val * z[col];
+    }
+
+    Ok(res)
 }

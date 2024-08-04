@@ -68,14 +68,15 @@ mod test {
 
     use super::SumCheckVerifier;
     use crate::{
-        transcript::poseidon::PoseidonTranscript, utils::sumcheck::prover::SumCheckProver,
+        transcript::poseidon::PoseidonTranscript,
+        utils::sumcheck::{prover::SumCheckProver, SumCheckIP},
     };
 
     use ark_ff::{One, Zero};
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
         mle::DenseMultilinearExtension,
-        polynomials::VirtualPolynomial,
+        polynomials::{VPAuxInfo, VirtualPolynomial},
         ring::{Pow2CyclotomicPolyRingNTT, Zq},
     };
 
@@ -135,7 +136,7 @@ mod test {
         let mut transcript = PoseidonTranscript::default();
 
         // Prove the statement
-        let (protocol, proof, _) = prover.prove(&mut transcript).unwrap();
+        let (proof, subclaim) = prover.prove(&mut transcript).unwrap();
 
         let mut transcript = PoseidonTranscript::default();
         // Create an instance of the verifier
@@ -199,14 +200,16 @@ mod test {
 
         let mut transcript = PoseidonTranscript::default();
         // Create an instance of the prover
-        let prover = SumCheckProver::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>> {
-            _marker: std::marker::PhantomData,
-            polynomial: polynomial.clone(),
-            claimed_sum: Into::into(claimed_sum),
-        };
 
+        // TODO: FIX >THIS
+        //let protocol = SumCheckIP::new(claimed_sum, VPAuxInfo::new(polynomial. 3))
+
+        let prover = SumCheckProver::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::new(
+            polynomial,
+            claimed_sum,
+        );
         // Prove the statement
-        let (protocol, proof, _) = prover.prove(&mut transcript).unwrap();
+        let (proof, _) = prover.prove(&mut transcript).unwrap();
 
         // Create an instance of the verifier
         let verifier =
