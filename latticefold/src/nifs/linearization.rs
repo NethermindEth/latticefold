@@ -145,9 +145,18 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
         let e = eq_eval(&subclaim.point, &beta_s)?;
         let s = subclaim.expected_evaluation;
 
-        let should_equal_s = e * ccs.c.iter().fold(R::zero(), |sum, c| {
-            sum + *c * proof.u.iter().fold(R::one(), |product, u_j| product * u_j)
-        });
+        let mut should_equal_s = R::zero();
+
+        for (i, c) in ccs.c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
+            let mut product = R::one();
+            for &j in &ccs.S[i] {
+                product *= proof.u[j];
+            }
+
+            should_equal_s += *c * product;
+        }
+
+        should_equal_s *= e;
 
         if should_equal_s != s {
             return Err(LinearizationError::SumCheckError(SumCheckFailed(

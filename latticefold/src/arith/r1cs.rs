@@ -75,4 +75,101 @@ impl<R: Ring> RelaxedR1CS<R> {
     }
 }
 
-// TODO Find an example to test on
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Ring, Zq};
+
+    pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
+        let M = to_F_dense_matrix::<R>(M);
+
+        let nrows = M.len();
+        let ncols = M[0].len();
+
+        let mut col_offsets = Vec::<usize>::new();
+        let mut row_indices = Vec::<usize>::new();
+        let mut values = Vec::<R>::new();
+
+        for (i, row) in M.iter().enumerate() {
+            for (j, value) in row.iter().enumerate() {
+                if !value.is_zero() {
+                    col_offsets.push(j);
+                    row_indices.push(i);
+                    values.push(M[i][j]);
+                }
+            }
+        }
+
+        SparseMatrix::try_from_csc_data(nrows, ncols, col_offsets, row_indices, values).unwrap()
+    }
+
+    pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
+        M.iter()
+            .map(|m| m.iter().map(|r| R::from(*r as u64)).collect())
+            .collect()
+    }
+    pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
+        z.iter().map(|c| R::from(*c as u64)).collect()
+    }
+
+    pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
+        // R1CS for: x^3 + x + 5 = y (example from article
+        // https://www.vitalik.ca/general/2016/12/10/qap.html )
+        let A = to_F_matrix::<R>(vec![
+            vec![0, 1, 0, 0, 0, 0],
+            vec![0, 0, 0, 1, 0, 0],
+            vec![0, 1, 0, 0, 1, 0],
+            vec![5, 0, 0, 0, 0, 1],
+        ]);
+        let B = to_F_matrix::<R>(vec![
+            vec![0, 1, 0, 0, 0, 0],
+            vec![0, 1, 0, 0, 0, 0],
+            vec![1, 0, 0, 0, 0, 0],
+            vec![1, 0, 0, 0, 0, 0],
+        ]);
+        let C = to_F_matrix::<R>(vec![
+            vec![0, 0, 0, 1, 0, 0],
+            vec![0, 0, 0, 0, 1, 0],
+            vec![0, 0, 0, 0, 0, 1],
+            vec![0, 0, 1, 0, 0, 0],
+        ]);
+
+        R1CS::<R> { l: 1, A, B, C }
+    }
+
+    pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
+        // z = (1, io, w)
+        to_F_vec(vec![
+            1,
+            input,                             // io
+            input * input * input + input + 5, // x^3 + x + 5
+            input * input,                     // x^2
+            input * input * input,             // x^2 * x
+            input * input * input + input,     // x^3 + x
+        ])
+    }
+
+    pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
+        // z = (1, io, w)
+        (
+            R::one(),
+            to_F_vec(vec![
+                input, // io
+            ]),
+            to_F_vec(vec![
+                input * input * input + input + 5, // x^3 + x + 5
+                input * input,                     // x^2
+                input * input * input,             // x^2 * x
+                input * input * input + input,     // x^3 + x
+            ]),
+        )
+    }
+
+    #[test]
+    fn test_check_relation() {
+        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRing<Zq<101>, 16>>();
+        let z = get_test_z(5);
+        r1cs.check_relation(&z).unwrap();
+        r1cs.relax().check_relation(&z).unwrap();
+    }
+}
