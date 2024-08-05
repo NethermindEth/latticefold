@@ -4,7 +4,7 @@ use super::{
     error::LinearizationError::{self},
     NIFSProver, NIFSVerifier,
 };
-use crate::arith::utils::mat_vec_mul;
+use crate::{arith::utils::mat_vec_mul, commitment::AjtaiParams};
 use crate::{
     arith::Instance,
     utils::{mle::dense_vec_to_dense_mle, sumcheck::SumCheckError::SumCheckFailed},
@@ -17,12 +17,12 @@ use crate::{
     },
 };
 use ark_ff::PrimeField;
-use lattirust_arithmetic::polynomials::eq_eval;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
 };
+use lattirust_arithmetic::{polynomials::eq_eval, ring::ConvertibleRing};
 
 #[derive(Clone)]
 pub struct LinearizationProof<R: OverField> {
@@ -33,40 +33,54 @@ pub struct LinearizationProof<R: OverField> {
     pub u: Vec<R>,
 }
 
-pub trait LinearizationProver<R: OverField, T: Transcript<R>> {
+pub trait LinearizationProver<
+    CR: ConvertibleRing,
+    R: OverField,
+    P: AjtaiParams<CR>,
+    T: Transcript<R>,
+>
+{
     type Proof: Clone;
     type Error: std::error::Error;
 
     fn prove(
-        cm_i: &CCCS<R>,
-        wit: &Witness<R>,
+        cm_i: &CCCS<CR, R, P>,
+        wit: &Witness<CR, R>,
         transcript: &mut impl Transcript<R>,
         ccs: &CCS<R>,
-    ) -> Result<(LCCCS<R>, Self::Proof), Self::Error>;
+    ) -> Result<(LCCCS<CR, R, P>, Self::Proof), Self::Error>;
 }
 
-pub trait LinearizationVerifier<R: OverField, T: Transcript<R>> {
-    type Prover: LinearizationProver<R, T>;
-    type Error = <Self::Prover as LinearizationProver<R, T>>::Error;
+pub trait LinearizationVerifier<
+    CR: ConvertibleRing,
+    R: OverField,
+    P: AjtaiParams<CR>,
+    T: Transcript<R>,
+>
+{
+    type Prover: LinearizationProver<CR, R, P, T>;
+    type Error = <Self::Prover as LinearizationProver<CR, R, P, T>>::Error;
 
     fn verify(
-        cm_i: &CCCS<R>,
-        proof: &<Self::Prover as LinearizationProver<R, T>>::Proof,
+        cm_i: &CCCS<CR, R, P>,
+        proof: &<Self::Prover as LinearizationProver<CR, R, P, T>>::Proof,
         transcript: &mut impl Transcript<R>,
         ccs: &CCS<R>,
-    ) -> Result<LCCCS<R>, Self::Error>;
+    ) -> Result<LCCCS<CR, R, P>, Self::Error>;
 }
 
-impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R, T> {
+impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
+    LinearizationProver<CR, R, P, T> for NIFSProver<CR, R, P, T>
+{
     type Proof = LinearizationProof<R>;
     type Error = LinearizationError<R>;
 
     fn prove(
-        cm_i: &CCCS<R>,
-        wit: &Witness<R>,
+        cm_i: &CCCS<CR, R, P>,
+        wit: &Witness<CR, R>,
         transcript: &mut impl Transcript<R>,
         ccs: &CCS<R>,
-    ) -> Result<(LCCCS<R>, LinearizationProof<R>), LinearizationError<R>> {
+    ) -> Result<(LCCCS<CR, R, P>, LinearizationProof<R>), LinearizationError<R>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
@@ -121,15 +135,17 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
     }
 }
 
-impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifier<R, T> {
-    type Prover = NIFSProver<R, T>;
+impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
+    LinearizationVerifier<CR, R, P, T> for NIFSVerifier<CR, R, P, T>
+{
+    type Prover = NIFSProver<CR, R, P, T>;
 
     fn verify(
-        cm_i: &CCCS<R>,
-        proof: &<Self::Prover as LinearizationProver<R, T>>::Proof,
+        cm_i: &CCCS<CR, R, P>,
+        proof: &<Self::Prover as LinearizationProver<CR, R, P, T>>::Proof,
         transcript: &mut impl Transcript<R>,
         ccs: &CCS<R>,
-    ) -> Result<LCCCS<R>, LinearizationError<R>> {
+    ) -> Result<LCCCS<CR, R, P>, LinearizationError<R>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
