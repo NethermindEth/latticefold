@@ -218,112 +218,128 @@ fn prepare_lin_sumcheck_polynomial<R: OverField>(
     Ok(g)
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use ark_ff::{One, Zero};
-//     use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRingNTT, Zq};
+#[cfg(test)]
+mod tests {
+    use ark_ff::UniformRand;
+    use lattirust_arithmetic::{mle::DenseMultilinearExtension, ring::{Pow2CyclotomicPolyRingNTT, Zq}};
+    use rand::thread_rng;
 
-//     use crate::nifs::linearization::{
-//         mle_matrix_to_val_eval_first, mle_matrix_to_val_eval_second, mle_val_from_matrix,
-//         mle_val_from_vector, usize_to_binary_vector,
-//     };
+    use super::compute_u;
 
-//     // Boilerplate code to generate values needed for testing
-//     const Q: u64 = 17; // Replace with an appropriate modulus
-//     const N: usize = 8;
+    // Boilerplate code to generate values needed for testing
+    const Q: u64 = 17; // Replace with an appropriate modulus
+    const N: usize = 8;
 
-//     fn generate_coefficient_i(index: usize) -> Zq<Q> {
-//         Zq::<Q>::from(index as u64) // Simple example: use the index as the coefficient value
-//     }
-//     fn poly_ntt() -> Pow2CyclotomicPolyRingNTT<Q, N> {
-//         Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient_i)
-//     }
-//     fn one() -> Pow2CyclotomicPolyRingNTT<Q, N> {
-//         Pow2CyclotomicPolyRingNTT::<Q, N>::one()
-//     }
-//     fn zero() -> Pow2CyclotomicPolyRingNTT<17, 8> {
-//         Pow2CyclotomicPolyRingNTT::<Q, N>::zero()
-//     }
+    fn generate_coefficient_i(_i: usize) -> Zq<Q> {
+        let mut rng = thread_rng();
+        Zq::<Q>::rand(&mut rng)
+    }
 
-//     // Actual Tests
-//     #[test]
-//     fn test_utils() {
-//         // Test evaluation of mle from a vector
-//         let evaluation_vector = vec![poly_ntt(), zero()];
-//         assert_eq!(
-//             mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
-//             zero()
-//         );
-//         assert_ne!(
-//             mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
-//             poly_ntt()
-//         );
-//         assert_eq!(
-//             mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
-//             poly_ntt()
-//         );
-//         assert_ne!(
-//             mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
-//             zero()
-//         );
+    fn generate_a_ring_elem() -> Pow2CyclotomicPolyRingNTT<Q, N> {
+        Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient_i)
+    }
 
-//         let evaluation_matrix = vec![vec![poly_ntt(), zero()], vec![one(), poly_ntt()]];
-//         assert_eq!(
-//             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
-//             one()
-//         );
-//         assert_ne!(
-//             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
-//             poly_ntt()
-//         );
-//         assert_eq!(
-//             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
-//             poly_ntt()
-//         );
-//         assert_ne!(
-//             mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
-//             zero()
-//         );
+    #[test]
+    fn test_compute_u() {
+        let mut mles = Vec::with_capacity(10);
 
-//         assert_eq!(
-//             usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8).unwrap(),
-//             vec![
-//                 zero(),
-//                 zero(),
-//                 zero(),
-//                 zero(),
-//                 zero(),
-//                 one(),
-//                 zero(),
-//                 zero()
-//             ]
-//         );
-//         assert_eq!(
-//             usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(5, 5).unwrap(),
-//             vec![zero(), zero(), one(), zero(), one()]
-//         );
-//         // Test the conversion of Bivariate MLE to univariate MLE by evaluating first values
-//         let bivariate_mle = vec![
-//             vec![poly_ntt(), poly_ntt(), one(), zero()],
-//             vec![zero(), poly_ntt(), zero(), one()],
-//         ];
-//         assert_eq!(
-//             mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]).unwrap(),
-//             vec![poly_ntt(), zero()]
-//         );
-//         assert_eq!(
-//             mle_matrix_to_val_eval_first(&bivariate_mle, &vec![one(), zero()]).unwrap(),
-//             vec![poly_ntt(), poly_ntt()]
-//         );
+        // generate evals
+        for _i in 0..10 {
+            let evals: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..8).map(|_| generate_a_ring_elem()).collect();
 
-//         // Test the conversion of Bivariate MLE to univariate MLE by evaluating second values
-//         assert_eq!(
-//             mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]).unwrap(),
-//             vec![zero(), poly_ntt(), zero(), one()]
-//         );
-//         assert_eq!(
-//             mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]).unwrap(),
-//             vec![poly_ntt(), poly_ntt(), one(), zero()]
-//         );
-//     }
-// }
+            mles.push(DenseMultilinearExtension::from_evaluations_slice(3, &evals))
+        }
+
+        for b in 0..8_u8 {
+            let us: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = compute_u(&mles, &[(b & 0x01).into(), ((b & 0x2) >> 1).into(), ((b & 0x4) >> 2).into()]).unwrap();
+
+            for (i, &u) in us.iter().enumerate() {
+                assert_eq!(
+                    u, mles[i].evaluations[b.to_le() as usize]
+                );
+            }
+        }
+    }
+
+    // Actual Tests
+    // #[test]
+    // fn test_utils() {
+    //     // Test evaluation of mle from a vector
+    //     let evaluation_vector = vec![generate_a_ring_elem(), zero()];
+    //     assert_eq!(
+    //         mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
+    //         zero()
+    //     );
+    //     assert_ne!(
+    //         mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
+    //         generate_a_ring_elem()
+    //     );
+    //     assert_eq!(
+    //         mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
+    //         generate_a_ring_elem()
+    //     );
+    //     assert_ne!(
+    //         mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
+    //         zero()
+    //     );
+
+    //     let evaluation_matrix = vec![vec![generate_a_ring_elem(), zero()], vec![one(), generate_a_ring_elem()]];
+    //     assert_eq!(
+    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
+    //         one()
+    //     );
+    //     assert_ne!(
+    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
+    //         generate_a_ring_elem()
+    //     );
+    //     assert_eq!(
+    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
+    //         generate_a_ring_elem()
+    //     );
+    //     assert_ne!(
+    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
+    //         zero()
+    //     );
+
+    //     assert_eq!(
+    //         usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8).unwrap(),
+    //         vec![
+    //             zero(),
+    //             zero(),
+    //             zero(),
+    //             zero(),
+    //             zero(),
+    //             one(),
+    //             zero(),
+    //             zero()
+    //         ]
+    //     );
+    //     assert_eq!(
+    //         usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(5, 5).unwrap(),
+    //         vec![zero(), zero(), one(), zero(), one()]
+    //     );
+    //     // Test the conversion of Bivariate MLE to univariate MLE by evaluating first values
+    //     let bivariate_mle = vec![
+    //         vec![generate_a_ring_elem(), generate_a_ring_elem(), one(), zero()],
+    //         vec![zero(), generate_a_ring_elem(), zero(), one()],
+    //     ];
+    //     assert_eq!(
+    //         mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]).unwrap(),
+    //         vec![generate_a_ring_elem(), zero()]
+    //     );
+    //     assert_eq!(
+    //         mle_matrix_to_val_eval_first(&bivariate_mle, &vec![one(), zero()]).unwrap(),
+    //         vec![generate_a_ring_elem(), generate_a_ring_elem()]
+    //     );
+
+    //     // Test the conversion of Bivariate MLE to univariate MLE by evaluating second values
+    //     assert_eq!(
+    //         mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]).unwrap(),
+    //         vec![zero(), generate_a_ring_elem(), zero(), one()]
+    //     );
+    //     assert_eq!(
+    //         mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]).unwrap(),
+    //         vec![generate_a_ring_elem(), generate_a_ring_elem(), one(), zero()]
+    //     );
+    // }
+}
