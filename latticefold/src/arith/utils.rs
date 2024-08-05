@@ -54,8 +54,109 @@ pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Erro
     let mut res = vec![R::zero(); M.nrows()];
 
     for (col, row, val) in M.triplet_iter() {
-        res[row] += *val * z[col];
+        res[col] += *val * z[row];
     }
 
     Ok(res)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ark_ff::Zero;
+    use lattirust_arithmetic::linear_algebra::SparseMatrix;
+    use lattirust_arithmetic::ring::Z2_64;
+
+    pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
+        to_F_dense_matrix::<R>(M).as_slice().into()
+    }
+
+    pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
+        M.iter()
+            .map(|m| m.iter().map(|r| R::from(*r as u64)).collect())
+            .collect()
+    }
+    pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
+        z.iter().map(|c| R::from(*c as u64)).collect()
+    }
+    #[test]
+    fn test_hadamard_vec() {
+        let a = [Z2_64::from(2u64), Z2_64::from(3u64), Z2_64::from(4u64)];
+        let b = [Z2_64::from(5u64), Z2_64::from(6u64), Z2_64::from(7u64)];
+        let result = hadamard_vec(&a, &b);
+        let expected = vec![Z2_64::from(10u64), Z2_64::from(18u64), Z2_64::from(28u64)];
+        assert_eq!(result, expected);
+    }
+
+    // Add similar tests for other functions here...
+
+    #[test]
+    fn test_vec_value_mul() {
+        let a = [Z2_64::from(2u64), Z2_64::from(3u64), Z2_64::from(4u64)];
+        let scalar = Z2_64::from(2u64);
+        let result = vec_value_mul(&a, &scalar);
+        let expected = vec![Z2_64::from(4u64), Z2_64::from(6u64), Z2_64::from(8u64)];
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_vec_add() {
+        let a = [Z2_64::from(1u64), Z2_64::from(2u64), Z2_64::from(3u64)];
+        let b = [Z2_64::from(4u64), Z2_64::from(5u64), Z2_64::from(6u64)];
+        let result = vec_add(&a, &b);
+        let expected = vec![Z2_64::from(5u64), Z2_64::from(7u64), Z2_64::from(9u64)];
+        assert_eq!(result.unwrap(), expected);
+
+        // Test error case
+        let a = [Z2_64::from(1u64), Z2_64::from(2u64)];
+        let b = [Z2_64::from(3u64), Z2_64::from(4u64), Z2_64::from(5u64)];
+        let result = vec_add(&a, &b);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_vec_scalar_mul() {
+        let vec = [Z2_64::from(1u64), Z2_64::from(2u64), Z2_64::from(3u64)];
+        let c = Z2_64::from(3u64);
+        let result = vec_scalar_mul(&vec, &c);
+        let expected = vec![Z2_64::from(3u64), Z2_64::from(6u64), Z2_64::from(9u64)];
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_hadamard() {
+        let a = [Z2_64::from(2u64), Z2_64::from(3u64), Z2_64::from(4u64)];
+        let b = [Z2_64::from(5u64), Z2_64::from(6u64), Z2_64::from(7u64)];
+        let result = hadamard(&a, &b);
+        let expected = vec![Z2_64::from(10u64), Z2_64::from(18u64), Z2_64::from(28u64)];
+        assert_eq!(result.unwrap(), expected);
+
+        // Test error case
+        let a = [Z2_64::from(2u64), Z2_64::from(3u64)];
+        let b = [Z2_64::from(5u64), Z2_64::from(6u64), Z2_64::from(7u64)];
+        let result = hadamard(&a, &b);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_mat_vec_mul() {
+        // Construct a sparse matrix M
+        let dense_matrix = vec![
+            vec![Z2_64::from(1u64), Z2_64::zero(), Z2_64::zero()], // Row 0
+            vec![Z2_64::zero(), Z2_64::from(2u64), Z2_64::from(1u64)], // Row 1
+            vec![Z2_64::zero(), Z2_64::zero(), Z2_64::from(3u64)], // Row 2
+        ];
+
+        let M = SparseMatrix::from(dense_matrix.as_slice());
+
+        let z = [Z2_64::from(1u64), Z2_64::from(1u64), Z2_64::from(1u64)];
+        let result = mat_vec_mul(&M, &z);
+        let expected = vec![Z2_64::from(1u64), Z2_64::from(3u64), Z2_64::from(3u64)];
+        assert_eq!(result.unwrap(), expected);
+
+        // Test error case
+        let z = [Z2_64::from(1u64), Z2_64::from(1u64)]; // Wrong size vector
+        let result = mat_vec_mul(&M, &z);
+        assert!(result.is_err());
+    }
 }

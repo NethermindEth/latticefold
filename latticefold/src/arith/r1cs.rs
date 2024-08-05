@@ -81,26 +81,7 @@ pub mod tests {
     use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Ring, Zq};
 
     pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-        let M = to_F_dense_matrix::<R>(M);
-
-        let nrows = M.len();
-        let ncols = M[0].len();
-
-        let mut col_offsets = Vec::<usize>::new();
-        let mut row_indices = Vec::<usize>::new();
-        let mut values = Vec::<R>::new();
-
-        for (i, row) in M.iter().enumerate() {
-            for (j, value) in row.iter().enumerate() {
-                if !value.is_zero() {
-                    col_offsets.push(j);
-                    row_indices.push(i);
-                    values.push(M[i][j]);
-                }
-            }
-        }
-
-        SparseMatrix::try_from_csc_data(nrows, ncols, col_offsets, row_indices, values).unwrap()
+        to_F_dense_matrix::<R>(M).as_slice().into()
     }
 
     pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
@@ -168,7 +149,8 @@ pub mod tests {
     #[test]
     fn test_check_relation() {
         let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRing<Zq<101>, 16>>();
-        let z = get_test_z(5);
+        let z: Vec<Pow2CyclotomicPolyRing<Zq<101>, 16>> = get_test_z(5);
+
         r1cs.check_relation(&z).unwrap();
         r1cs.relax().check_relation(&z).unwrap();
     }

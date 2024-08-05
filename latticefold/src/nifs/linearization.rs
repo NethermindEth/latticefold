@@ -221,7 +221,10 @@ fn prepare_lin_sumcheck_polynomial<R: OverField>(
 #[cfg(test)]
 mod tests {
     use ark_ff::UniformRand;
-    use lattirust_arithmetic::{mle::DenseMultilinearExtension, ring::{Pow2CyclotomicPolyRingNTT, Zq}};
+    use lattirust_arithmetic::{
+        mle::DenseMultilinearExtension,
+        ring::{Pow2CyclotomicPolyRingNTT, Zq},
+    };
     use rand::thread_rng;
 
     use super::compute_u;
@@ -245,18 +248,25 @@ mod tests {
 
         // generate evals
         for _i in 0..10 {
-            let evals: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..8).map(|_| generate_a_ring_elem()).collect();
+            let evals: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> =
+                (0..8).map(|_| generate_a_ring_elem()).collect();
 
             mles.push(DenseMultilinearExtension::from_evaluations_slice(3, &evals))
         }
 
         for b in 0..8_u8 {
-            let us: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = compute_u(&mles, &[(b & 0x01).into(), ((b & 0x2) >> 1).into(), ((b & 0x4) >> 2).into()]).unwrap();
+            let us: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = compute_u(
+                &mles,
+                &[
+                    (b & 0x01).into(),
+                    ((b & 0x2) >> 1).into(),
+                    ((b & 0x4) >> 2).into(),
+                ],
+            )
+            .unwrap();
 
             for (i, &u) in us.iter().enumerate() {
-                assert_eq!(
-                    u, mles[i].evaluations[b.to_le() as usize]
-                );
+                assert_eq!(u, mles[i].evaluations[b.to_le() as usize]);
             }
         }
     }
