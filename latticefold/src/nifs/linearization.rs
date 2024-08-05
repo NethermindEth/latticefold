@@ -148,7 +148,6 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
             .c
             .iter()
             .enumerate()
-            .filter(|&(_, &c)| !c.is_zero())
             .map(|(i, &c)| c * ccs.S[i].iter().map(|&j| proof.u[j]).product::<R>())
             .sum::<R>();
 
