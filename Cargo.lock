@@ -608,7 +608,7 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#b019915577f522b0c809aaeea1d43199ffa345ed"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#111bceddef0dd1883bf18311e602d6d101c36291"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
