@@ -68,33 +68,36 @@ impl<R: OverField, T: Transcript<R>> LinearizationProver<R, T> for NIFSProver<R,
         ccs: &CCS<R>,
     ) -> Result<(LCCCS<R>, LinearizationProof<R>), LinearizationError<R>> {
         let log_m = ccs.s;
-        // Step 1: Generate the public coin randomness
+        // Step 1: Generate the beta challenges.
         transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
 
         // Step 2: Sum check protocol
-        // z_ccs vector
+
+        // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs: Vec<R> = cm_i.get_z_vector(&wit.w_ccs);
 
+        // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
         let Mz_mles: Vec<DenseMultilinearExtension<R>> = ccs
             .M
             .iter()
             .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, &z_ccs)?)))
             .collect::<Result<_, LinearizationError<_>>>()?;
 
-        // Create polynomial
+        // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
         // Run sum check prover
         let (sum_check_proof, subclaim) = SumCheckProver::new(g, R::zero()).prove(transcript)?;
-
-        // Step 3: Compute v, u_vector
+        // Extract the evaluation point
         let r = subclaim.point;
 
+        // Step 3: Compute v, u_vector
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
             .evaluate(&r)
             .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
         let u = compute_u(&Mz_mles, &r)?;
 
+        // Absorbing the prover's messages to the verifier.
         transcript.absorb_ring(&v);
         transcript.absorb_ring_vec(&u);
 
@@ -128,28 +131,34 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
         ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, LinearizationError<R>> {
         let log_m = ccs.s;
-
+        // Step 1: Generate the beta challenges.
         transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
 
-        let poly_info = VPAuxInfo::new(ccs.d + 1, log_m);
+        //Step 2: The sumcheck.
+        // The polynomial has degree <= ccs.d + 1 and log_m vars.
+        let poly_info = VPAuxInfo::new(log_m, ccs.d + 1);
         let verifier = SumCheckVerifier::new(SumCheckIP::new(R::zero(), poly_info));
 
-        // Verify the transcript
+        // Verify the sumcheck proof.
         let subclaim = verifier.verify(&proof.linearization_sumcheck, transcript)?;
 
+        // Absorbing the prover's messages to the verifier.
         transcript.absorb_ring(&proof.v);
         transcript.absorb_ring_vec(&proof.u);
 
-        let e = eq_eval(&subclaim.point, &beta_s)?;
+        // The final evaluation claim from the sumcheck.
         let s = subclaim.expected_evaluation;
 
-        let should_equal_s = e * ccs
+        // Step 4: reshaping the evaluation claim.
+        // eq(beta, r)
+        let e = eq_eval(&subclaim.point, &beta_s)?;
+        let should_equal_s = e * ccs // e * (\sum c_i * \Pi_{j \in S_i} u_j)
             .c
             .iter()
             .enumerate()
-            .map(|(i, &c)| c * ccs.S[i].iter().map(|&j| proof.u[j]).product::<R>())
-            .sum::<R>();
+            .map(|(i, &c)| c * ccs.S[i].iter().map(|&j| proof.u[j]).product::<R>()) // c_i * \Pi_{j \in S_i} u_j
+            .sum::<R>(); // \sum c_i * \Pi_{j \in S_i} u_j
 
         if should_equal_s != s {
             return Err(LinearizationError::SumCheckError(SumCheckFailed(
@@ -169,6 +178,7 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
     }
 }
 
+/// Batch compute the values of mles at the point r.
 fn compute_u<R: OverField>(
     Mz_mles: &[DenseMultilinearExtension<R>],
     r: &[R],
@@ -187,6 +197,7 @@ fn compute_u<R: OverField>(
         .collect()
 }
 
+/// Prepare the main linearization polynomial.
 fn prepare_lin_sumcheck_polynomial<R: OverField>(
     log_m: usize,
     c: &[R],
