@@ -23,7 +23,6 @@ use lattirust_arithmetic::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
 };
-use num_traits::pow;
 
 #[derive(Clone)]
 pub struct LinearizationProof<R: OverField> {
@@ -145,18 +144,13 @@ impl<R: OverField, T: Transcript<R>> LinearizationVerifier<R, T> for NIFSVerifie
         let e = eq_eval(&subclaim.point, &beta_s)?;
         let s = subclaim.expected_evaluation;
 
-        let mut should_equal_s = R::zero();
-
-        for (i, c) in ccs.c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
-            let mut product = R::one();
-            for &j in &ccs.S[i] {
-                product *= proof.u[j];
-            }
-
-            should_equal_s += *c * product;
-        }
-
-        should_equal_s *= e;
+        let should_equal_s = e * ccs
+            .c
+            .iter()
+            .enumerate()
+            .filter(|&(_, &c)| !c.is_zero())
+            .map(|(i, &c)| c * ccs.S[i].iter().map(|&j| proof.u[j]).product::<R>())
+            .sum::<R>();
 
         if should_equal_s != s {
             return Err(LinearizationError::SumCheckError(SumCheckFailed(
@@ -188,7 +182,7 @@ fn compute_u<R: OverField>(
                 .ok_or(LinearizationError::ParametersError(format!(
                     "one of the CCS matrices has an incorrect length {}, expected {}",
                     M_i_mle.evaluations.len(),
-                    pow(r.len(), 2)
+                    1 << r.len(),
                 )))
         })
         .collect()
