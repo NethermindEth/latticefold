@@ -67,18 +67,6 @@ mod tests {
     use lattirust_arithmetic::linear_algebra::SparseMatrix;
     use lattirust_arithmetic::ring::Z2_64;
 
-    pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-        to_F_dense_matrix::<R>(M).as_slice().into()
-    }
-
-    pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
-        M.iter()
-            .map(|m| m.iter().map(|r| R::from(*r as u64)).collect())
-            .collect()
-    }
-    pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
-        z.iter().map(|c| R::from(*c as u64)).collect()
-    }
     #[test]
     fn test_hadamard_vec() {
         let a = [Z2_64::from(2u64), Z2_64::from(3u64), Z2_64::from(4u64)];

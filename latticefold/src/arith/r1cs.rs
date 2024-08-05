@@ -78,7 +78,7 @@ impl<R: Ring> RelaxedR1CS<R> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Ring, Zq};
+    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRingNTT, Ring};
 
     pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
         to_F_dense_matrix::<R>(M).as_slice().into()
