@@ -182,7 +182,7 @@ pub struct Witness<R: Ring> {
 pub mod tests {
     use super::*;
     use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Zq};
+    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRingNTT, Z2_64};
 
     pub fn get_test_ccs<R: Ring>() -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
@@ -195,7 +195,7 @@ pub mod tests {
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_ccs::<Pow2CyclotomicPolyRing<Zq<17912658149728070801u64>, 64>>();
+        let ccs = get_test_ccs::<Z2_64>();
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();

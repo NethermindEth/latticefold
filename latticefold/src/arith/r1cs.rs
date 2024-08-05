@@ -62,7 +62,7 @@ impl<R: Ring> RelaxedR1CS<R> {
     pub fn check_relation(&self, z: &[R]) -> Result<(), Error> {
         let Az = mat_vec_mul(&self.A, z)?;
         let Bz = mat_vec_mul(&self.B, z)?;
-        let Cz = mat_vec_mul(&self.B, z)?;
+        let Cz = mat_vec_mul(&self.C, z)?;
 
         let uCz = vec_scalar_mul(&Cz, &self.u);
         let uCzE = vec_add(&uCz, &self.E)?;
@@ -78,7 +78,7 @@ impl<R: Ring> RelaxedR1CS<R> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Ring, Zq};
+    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Ring, Zq};
 
     pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
         to_F_dense_matrix::<R>(M).as_slice().into()
@@ -148,8 +148,8 @@ pub mod tests {
 
     #[test]
     fn test_check_relation() {
-        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRing<Zq<101>, 16>>();
-        let z: Vec<Pow2CyclotomicPolyRing<Zq<101>, 16>> = get_test_z(5);
+        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>>();
+        let z = get_test_z(5);
 
         r1cs.check_relation(&z).unwrap();
         r1cs.relax().check_relation(&z).unwrap();
