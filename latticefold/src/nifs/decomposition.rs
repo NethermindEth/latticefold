@@ -104,11 +104,10 @@ impl<R: OverField, T: Transcript<R>> DecompositionVerifier<R, T> for NIFSVerifie
     result
 }
  
-  fn mle<Rn: Ring>(f: &Vec<Rn>, r: &Vec<Rn>) -> Rn {
-             
-         //compute f hat and call mle from lattirust
-       todo!()
-       }
+fn mle<R: OverField>(f: &Vec<R>, r: &Vec<R>) -> R {
+    let mle = DenseMultilinearExtension::from_evaluations_vec(r.len(), f.clone());
+    mle.evaluate(r.as_slice()).unwrap()
+}
 
        fn l_function<Rn: Ring>(f: &Vec<Rn>) -> Rn {
                  // Implementation of L(f) (Ajtai Commitment)
