@@ -21,20 +21,8 @@ pub enum LinearizationError<R: Ring> {
     ParametersError(String),
     #[error("constraint system related error: {0}")]
     ConstraintSystemError(#[from] CSError),
-}
-
-impl<R: Ring> From<ArithErrors> for LinearizationError<R> {
-    fn from(err: ArithErrors) -> Self {
-        match err {
-            ArithErrors::InvalidParameters(param) => LinearizationError::ParametersError(param),
-            ArithErrors::ShouldNotArrive => LinearizationError::ParametersError(
-                "Unexpected error: Should not arrive".to_string(),
-            ),
-            ArithErrors::SerializationErrors(e) => {
-                LinearizationError::ParametersError(format!("Serialization error: {:?}", e))
-            }
-        }
-    }
+    #[error("Arithmetic error: {0}")]
+    ArithmeticError(#[from] ArithErrors),
 }
 
 #[derive(Debug, Error)]
