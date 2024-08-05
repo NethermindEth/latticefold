@@ -1,7 +1,7 @@
 use lattirust_arithmetic::ring::Ring;
 use thiserror::Error;
 
-use crate::utils::sumcheck::SumCheckError;
+use crate::{arith::error::NotSatisfiedError, utils::sumcheck::SumCheckError};
 
 #[derive(Debug, Error)]
 pub enum LatticefoldError<R: Ring> {
@@ -25,6 +25,8 @@ pub enum DecompositionError<R: Ring> {
     PhantomRRemoveThisLater(R),
     #[error("input vectors have incorrect length")]
     IncorrectLength,
+    #[error("verification failed: {0}")]
+    VerificationFailed(#[from] NotSatisfiedError),
 }
 
 #[derive(Debug, Error)]
