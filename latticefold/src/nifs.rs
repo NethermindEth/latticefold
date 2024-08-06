@@ -20,12 +20,12 @@ use crate::{arith::CCCS, transcript::Transcript};
 #[derive(Debug, Clone)]
 pub struct ComposedProof<
     CR: ConvertibleRing,
-    R: OverField,
+    NTT: OverField,
     P: AjtaiParams<CR>,
-    T: Transcript<R>,
-    L: LinearizationProver<CR, R, P, T>,
-    D: DecompositionProver<CR, R, P, T>,
-    FD: FoldingProver<CR, R, P, T>,
+    T: Transcript<NTT>,
+    L: LinearizationProver<CR, NTT, P, T>,
+    D: DecompositionProver<CR, NTT, P, T>,
+    FD: FoldingProver<CR, NTT, P, T>,
 > {
     pub linearization_proof: L::Proof,
     pub decomposition_proof_l: D::Proof,
@@ -33,61 +33,61 @@ pub struct ComposedProof<
     pub folding_proof: FD::Proof,
 }
 
-type LatticefoldProof<CR, R, P, T> = ComposedProof<
+type LatticefoldProof<CR, NTT, P, T> = ComposedProof<
     CR,
-    R,
+    NTT,
     P,
     T,
-    NIFSProver<CR, R, P, T>,
-    NIFSProver<CR, R, P, T>,
-    NIFSProver<CR, R, P, T>,
+    NIFSProver<CR, NTT, P, T>,
+    NIFSProver<CR, NTT, P, T>,
+    NIFSProver<CR, NTT, P, T>,
 >;
 
-pub struct NIFSProver<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>> {
+pub struct NIFSProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
-    _r: PhantomData<R>,
+    _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    NIFSProver<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    NIFSProver<CR, NTT, P, T>
 {
     pub fn prove(
-        acc: &LCCCS<CR, R, P>,
-        w_acc: &Witness<CR, R>,
-        cm_i: &CCCS<CR, R, P>,
-        w_i: &Witness<CR, R>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
+        acc: &LCCCS<CR, NTT, P>,
+        w_acc: &Witness<CR, NTT>,
+        cm_i: &CCCS<CR, NTT, P>,
+        w_i: &Witness<CR, NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
     ) -> Result<
         (
-            LCCCS<CR, R, P>,
-            Witness<CR, R>,
-            LatticefoldProof<CR, R, P, T>,
+            LCCCS<CR, NTT, P>,
+            Witness<CR, NTT>,
+            LatticefoldProof<CR, NTT, P, T>,
         ),
-        LatticefoldError<R>,
+        LatticefoldError<NTT>,
     > {
         Self::prove_aux(acc, w_acc, cm_i, w_i, transcript, ccs)
     }
 
     fn prove_aux<
-        L: LinearizationProver<CR, R, P, T>,
-        D: DecompositionProver<CR, R, P, T>,
-        FP: FoldingProver<CR, R, P, T>,
+        L: LinearizationProver<CR, NTT, P, T>,
+        D: DecompositionProver<CR, NTT, P, T>,
+        FP: FoldingProver<CR, NTT, P, T>,
         E: From<L::Error> + From<D::Error> + From<FP::Error>,
     >(
-        acc: &LCCCS<CR, R, P>,
-        w_acc: &Witness<CR, R>,
-        cm_i: &CCCS<CR, R, P>,
-        w_i: &Witness<CR, R>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
+        acc: &LCCCS<CR, NTT, P>,
+        w_acc: &Witness<CR, NTT>,
+        cm_i: &CCCS<CR, NTT, P>,
+        w_i: &Witness<CR, NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
     ) -> Result<
         (
-            LCCCS<CR, R, P>,
-            Witness<CR, R>,
-            ComposedProof<CR, R, P, T, L, D, FP>,
+            LCCCS<CR, NTT, P>,
+            Witness<CR, NTT>,
+            ComposedProof<CR, NTT, P, T, L, D, FP>,
         ),
         E,
     > {
@@ -124,43 +124,43 @@ impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
     }
 }
 
-pub struct NIFSVerifier<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>> {
+pub struct NIFSVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
-    _r: PhantomData<R>,
+    _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    NIFSVerifier<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    NIFSVerifier<CR, NTT, P, T>
 {
     pub fn verify(
-        acc: &LCCCS<CR, R, P>,
-        cm_i: &CCCS<CR, R, P>,
-        proof: &LatticefoldProof<CR, R, P, T>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<CR, R, P>, LatticefoldError<R>> {
+        acc: &LCCCS<CR, NTT, P>,
+        cm_i: &CCCS<CR, NTT, P>,
+        proof: &LatticefoldProof<CR, NTT, P, T>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<CR, NTT, P>, LatticefoldError<NTT>> {
         Self::verify_aux::<
-            NIFSVerifier<CR, R, P, T>,
-            NIFSVerifier<CR, R, P, T>,
-            NIFSVerifier<CR, R, P, T>,
-            LatticefoldError<R>,
+            NIFSVerifier<CR, NTT, P, T>,
+            NIFSVerifier<CR, NTT, P, T>,
+            NIFSVerifier<CR, NTT, P, T>,
+            LatticefoldError<NTT>,
         >(acc, cm_i, proof, transcript, ccs)
     }
 
     fn verify_aux<
-        L: LinearizationVerifier<CR, R, P, T>,
-        D: DecompositionVerifier<CR, R, P, T>,
-        FV: FoldingVerifier<CR, R, P, T>,
+        L: LinearizationVerifier<CR, NTT, P, T>,
+        D: DecompositionVerifier<CR, NTT, P, T>,
+        FV: FoldingVerifier<CR, NTT, P, T>,
         E: From<L::Error> + From<D::Error> + From<FV::Error>,
     >(
-        acc: &LCCCS<CR, R, P>,
-        cm_i: &CCCS<CR, R, P>,
-        proof: &ComposedProof<CR, R, P, T, L::Prover, D::Prover, FV::Prover>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<CR, R, P>, E> {
+        acc: &LCCCS<CR, NTT, P>,
+        cm_i: &CCCS<CR, NTT, P>,
+        proof: &ComposedProof<CR, NTT, P, T, L::Prover, D::Prover, FV::Prover>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<CR, NTT, P>, E> {
         let linearized_cm_i = L::verify(cm_i, &proof.linearization_proof, transcript, ccs)?;
         let decomposed_acc = D::verify(acc, &proof.decomposition_proof_l, transcript, ccs)?;
         let decomposed_cm_i = D::verify(

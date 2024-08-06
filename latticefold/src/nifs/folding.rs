@@ -11,65 +11,72 @@ use crate::{
 use super::{error::FoldingError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
-pub struct FoldingProof<R: OverField> {
+pub struct FoldingProof<NTT: OverField> {
     // Step 2.
-    pub pointshift_sumcheck_proof: SumCheckProof<R>,
+    pub pointshift_sumcheck_proof: SumCheckProof<NTT>,
     // Step 3
-    pub theta_s: Vec<R>,
-    pub eta_s: Vec<R>,
+    pub theta_s: Vec<NTT>,
+    pub eta_s: Vec<NTT>,
 }
 
-pub trait FoldingProver<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>> {
+pub trait FoldingProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+{
     type Proof: Clone;
     type Error: std::error::Error;
 
     fn prove(
-        cm_i_s: &[LCCCS<CR, R, P>],
-        w_s: &[Witness<CR, R>],
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<(LCCCS<CR, R, P>, Witness<CR, R>, Self::Proof), Self::Error>;
+        cm_i_s: &[LCCCS<CR, NTT, P>],
+        w_s: &[Witness<CR, NTT>],
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<CR, NTT, P>, Witness<CR, NTT>, Self::Proof), Self::Error>;
 }
 
-pub trait FoldingVerifier<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>> {
-    type Prover: FoldingProver<CR, R, P, T>;
-    type Error = <Self::Prover as FoldingProver<CR, R, P, T>>::Error;
+pub trait FoldingVerifier<
+    CR: ConvertibleRing,
+    NTT: OverField,
+    P: AjtaiParams<CR>,
+    T: Transcript<NTT>,
+>
+{
+    type Prover: FoldingProver<CR, NTT, P, T>;
+    type Error = <Self::Prover as FoldingProver<CR, NTT, P, T>>::Error;
 
     fn verify(
-        cm_i_s: &[LCCCS<CR, R, P>],
-        proof: &<Self::Prover as FoldingProver<CR, R, P, T>>::Proof,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<CR, R, P>, Self::Error>;
+        cm_i_s: &[LCCCS<CR, NTT, P>],
+        proof: &<Self::Prover as FoldingProver<CR, NTT, P, T>>::Proof,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<CR, NTT, P>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    FoldingProver<CR, R, P, T> for NIFSProver<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    FoldingProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
-    type Proof = FoldingProof<R>;
-    type Error = FoldingError<R>;
+    type Proof = FoldingProof<NTT>;
+    type Error = FoldingError<NTT>;
 
     fn prove(
-        _cm_i_s: &[LCCCS<CR, R, P>],
-        _w_s: &[Witness<CR, R>],
-        _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>,
-    ) -> Result<(LCCCS<CR, R, P>, Witness<CR, R>, FoldingProof<R>), FoldingError<R>> {
+        _cm_i_s: &[LCCCS<CR, NTT, P>],
+        _w_s: &[Witness<CR, NTT>],
+        _transcript: &mut impl Transcript<NTT>,
+        _ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<CR, NTT, P>, Witness<CR, NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         todo!()
     }
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    FoldingVerifier<CR, R, P, T> for NIFSVerifier<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    FoldingVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
-    type Prover = NIFSProver<CR, R, P, T>;
+    type Prover = NIFSProver<CR, NTT, P, T>;
 
     fn verify(
-        _cm_i_s: &[LCCCS<CR, R, P>],
-        _proof: &<Self::Prover as FoldingProver<CR, R, P, T>>::Proof,
-        _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>,
-    ) -> Result<LCCCS<CR, R, P>, FoldingError<R>> {
+        _cm_i_s: &[LCCCS<CR, NTT, P>],
+        _proof: &<Self::Prover as FoldingProver<CR, NTT, P, T>>::Proof,
+        _transcript: &mut impl Transcript<NTT>,
+        _ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<CR, NTT, P>, FoldingError<NTT>> {
         todo!()
     }
 }

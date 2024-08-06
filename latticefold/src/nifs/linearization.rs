@@ -25,74 +25,74 @@ use lattirust_arithmetic::{
 use lattirust_arithmetic::{polynomials::eq_eval, ring::ConvertibleRing};
 
 #[derive(Clone)]
-pub struct LinearizationProof<R: OverField> {
+pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
-    pub linearization_sumcheck: SumCheckProof<R>,
+    pub linearization_sumcheck: SumCheckProof<NTT>,
     // Sent in the step 3.
-    pub v: R,
-    pub u: Vec<R>,
+    pub v: NTT,
+    pub u: Vec<NTT>,
 }
 
 pub trait LinearizationProver<
     CR: ConvertibleRing,
-    R: OverField,
+    NTT: OverField,
     P: AjtaiParams<CR>,
-    T: Transcript<R>,
+    T: Transcript<NTT>,
 >
 {
     type Proof: Clone;
     type Error: std::error::Error;
 
     fn prove(
-        cm_i: &CCCS<CR, R, P>,
-        wit: &Witness<CR, R>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<(LCCCS<CR, R, P>, Self::Proof), Self::Error>;
+        cm_i: &CCCS<CR, NTT, P>,
+        wit: &Witness<CR, NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<CR, NTT, P>, Self::Proof), Self::Error>;
 }
 
 pub trait LinearizationVerifier<
     CR: ConvertibleRing,
-    R: OverField,
+    NTT: OverField,
     P: AjtaiParams<CR>,
-    T: Transcript<R>,
+    T: Transcript<NTT>,
 >
 {
-    type Prover: LinearizationProver<CR, R, P, T>;
-    type Error = <Self::Prover as LinearizationProver<CR, R, P, T>>::Error;
+    type Prover: LinearizationProver<CR, NTT, P, T>;
+    type Error = <Self::Prover as LinearizationProver<CR, NTT, P, T>>::Error;
 
     fn verify(
-        cm_i: &CCCS<CR, R, P>,
-        proof: &<Self::Prover as LinearizationProver<CR, R, P, T>>::Proof,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<CR, R, P>, Self::Error>;
+        cm_i: &CCCS<CR, NTT, P>,
+        proof: &<Self::Prover as LinearizationProver<CR, NTT, P, T>>::Proof,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<CR, NTT, P>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    LinearizationProver<CR, R, P, T> for NIFSProver<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    LinearizationProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
-    type Proof = LinearizationProof<R>;
-    type Error = LinearizationError<R>;
+    type Proof = LinearizationProof<NTT>;
+    type Error = LinearizationError<NTT>;
 
     fn prove(
-        cm_i: &CCCS<CR, R, P>,
-        wit: &Witness<CR, R>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<(LCCCS<CR, R, P>, LinearizationProof<R>), LinearizationError<R>> {
+        cm_i: &CCCS<CR, NTT, P>,
+        wit: &Witness<CR, NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<CR, NTT, P>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
+        transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
 
         // Step 2: Sum check protocol
 
         // z_ccs vector, i.e. concatenation x || 1 || w.
-        let z_ccs: Vec<R> = cm_i.get_z_vector(&wit.w_ccs);
+        let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
 
         // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
-        let Mz_mles: Vec<DenseMultilinearExtension<R>> = ccs
+        let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
             .M
             .iter()
             .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, &z_ccs)?)))
@@ -101,7 +101,7 @@ impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
         // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
         // Run sum check prover
-        let (sum_check_proof, subclaim) = SumCheckProver::new(g, R::zero()).prove(transcript)?;
+        let (sum_check_proof, subclaim) = SumCheckProver::new(g, NTT::zero()).prove(transcript)?;
         // Extract the evaluation point
         let r = subclaim.point;
 
@@ -128,33 +128,33 @@ impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
             cm: cm_i.cm.clone(),
             u,
             x_w: cm_i.x_ccs.clone(),
-            h: R::one(),
+            h: NTT::one(),
         };
 
         Ok((lcccs, linearization_proof))
     }
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    LinearizationVerifier<CR, R, P, T> for NIFSVerifier<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    LinearizationVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
-    type Prover = NIFSProver<CR, R, P, T>;
+    type Prover = NIFSProver<CR, NTT, P, T>;
 
     fn verify(
-        cm_i: &CCCS<CR, R, P>,
-        proof: &<Self::Prover as LinearizationProver<CR, R, P, T>>::Proof,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<CR, R, P>, LinearizationError<R>> {
+        cm_i: &CCCS<CR, NTT, P>,
+        proof: &<Self::Prover as LinearizationProver<CR, NTT, P, T>>::Proof,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<CR, NTT, P>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb(&R::F::from_be_bytes_mod_order(b"beta_s"));
+        transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
 
         //Step 2: The sumcheck.
         // The polynomial has degree <= ccs.d + 1 and log_m vars.
         let poly_info = VPAuxInfo::new(log_m, ccs.d + 1);
-        let verifier = SumCheckVerifier::new(SumCheckIP::new(R::zero(), poly_info));
+        let verifier = SumCheckVerifier::new(SumCheckIP::new(NTT::zero(), poly_info));
 
         // Verify the sumcheck proof.
         let subclaim = verifier.verify(&proof.linearization_sumcheck, transcript)?;
@@ -173,8 +173,8 @@ impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
             .c
             .iter()
             .enumerate()
-            .map(|(i, &c)| c * ccs.S[i].iter().map(|&j| proof.u[j]).product::<R>()) // c_i * \Pi_{j \in S_i} u_j
-            .sum::<R>(); // \sum c_i * \Pi_{j \in S_i} u_j
+            .map(|(i, &c)| c * ccs.S[i].iter().map(|&j| proof.u[j]).product::<NTT>()) // c_i * \Pi_{j \in S_i} u_j
+            .sum::<NTT>(); // \sum c_i * \Pi_{j \in S_i} u_j
 
         if should_equal_s != s {
             return Err(LinearizationError::SumCheckError(SumCheckFailed(
@@ -189,16 +189,16 @@ impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
             cm: cm_i.cm.clone(),
             u: proof.u.clone(),
             x_w: cm_i.x_ccs.clone(),
-            h: R::one(),
+            h: NTT::one(),
         })
     }
 }
 
 /// Batch compute the values of mles at the point r.
-fn compute_u<R: OverField>(
-    Mz_mles: &[DenseMultilinearExtension<R>],
-    r: &[R],
-) -> Result<Vec<R>, LinearizationError<R>> {
+fn compute_u<NTT: OverField>(
+    Mz_mles: &[DenseMultilinearExtension<NTT>],
+    r: &[NTT],
+) -> Result<Vec<NTT>, LinearizationError<NTT>> {
     Mz_mles
         .iter()
         .map(|M_i_mle| {
@@ -214,17 +214,17 @@ fn compute_u<R: OverField>(
 }
 
 /// Prepare the main linearization polynomial.
-fn prepare_lin_sumcheck_polynomial<R: OverField>(
+fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     log_m: usize,
-    c: &[R],
-    M_mles: &[DenseMultilinearExtension<R>],
+    c: &[NTT],
+    M_mles: &[DenseMultilinearExtension<NTT>],
     S: &[Vec<usize>],
-    beta_s: &[R],
-) -> Result<VirtualPolynomial<R>, LinearizationError<R>> {
+    beta_s: &[NTT],
+) -> Result<VirtualPolynomial<NTT>, LinearizationError<NTT>> {
     let mut g = VirtualPolynomial::new(log_m);
 
     for (i, coefficient) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
-        let mut mle_list: Vec<Arc<DenseMultilinearExtension<R>>> = Vec::with_capacity(S[i].len());
+        let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::with_capacity(S[i].len());
 
         for &j in &S[i] {
             mle_list.push(Arc::new(M_mles[j].clone()));
@@ -233,7 +233,7 @@ fn prepare_lin_sumcheck_polynomial<R: OverField>(
         g.add_mle_list(mle_list, *coefficient)?;
     }
 
-    g.mul_by_mle(build_eq_x_r(beta_s)?, R::one())?;
+    g.mul_by_mle(build_eq_x_r(beta_s)?, NTT::one())?;
 
     Ok(g)
 }

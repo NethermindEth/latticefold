@@ -11,83 +11,83 @@ use crate::{
 use super::{error::DecompositionError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
-pub struct DecompositionProof<R: OverField> {
-    pub u_s: Vec<Vec<R>>,
-    pub v_s: Vec<R>,
-    pub x_s: Vec<Vec<R>>,
-    pub y_s: Vec<Vec<R>>,
+pub struct DecompositionProof<NTT: OverField> {
+    pub u_s: Vec<Vec<NTT>>,
+    pub v_s: Vec<NTT>,
+    pub x_s: Vec<Vec<NTT>>,
+    pub y_s: Vec<Vec<NTT>>,
 }
 
 pub trait DecompositionProver<
     CR: ConvertibleRing,
-    R: OverField,
+    NTT: OverField,
     P: AjtaiParams<CR>,
-    T: Transcript<R>,
+    T: Transcript<NTT>,
 >
 {
     type Proof: Clone;
     type Error: std::error::Error;
 
     fn prove(
-        cm_i: &LCCCS<CR, R, P>,
-        wit: &Witness<CR, R>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<(Vec<LCCCS<CR, R, P>>, Vec<Witness<CR, R>>, Self::Proof), Self::Error>;
+        cm_i: &LCCCS<CR, NTT, P>,
+        wit: &Witness<CR, NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(Vec<LCCCS<CR, NTT, P>>, Vec<Witness<CR, NTT>>, Self::Proof), Self::Error>;
 }
 
 pub trait DecompositionVerifier<
     CR: ConvertibleRing,
-    R: OverField,
+    NTT: OverField,
     P: AjtaiParams<CR>,
-    T: Transcript<R>,
+    T: Transcript<NTT>,
 >
 {
-    type Prover: DecompositionProver<CR, R, P, T>;
-    type Error = <Self::Prover as DecompositionProver<CR, R, P, T>>::Error;
+    type Prover: DecompositionProver<CR, NTT, P, T>;
+    type Error = <Self::Prover as DecompositionProver<CR, NTT, P, T>>::Error;
 
     fn verify(
-        cm_i: &LCCCS<CR, R, P>,
-        proof: &<Self::Prover as DecompositionProver<CR, R, P, T>>::Proof,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<Vec<LCCCS<CR, R, P>>, Self::Error>;
+        cm_i: &LCCCS<CR, NTT, P>,
+        proof: &<Self::Prover as DecompositionProver<CR, NTT, P, T>>::Proof,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<Vec<LCCCS<CR, NTT, P>>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    DecompositionProver<CR, R, P, T> for NIFSProver<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    DecompositionProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
-    type Proof = DecompositionProof<R>;
-    type Error = DecompositionError<R>;
+    type Proof = DecompositionProof<NTT>;
+    type Error = DecompositionError<NTT>;
 
     fn prove(
-        _cm_i: &LCCCS<CR, R, P>,
-        _wit: &Witness<CR, R>,
-        _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>,
+        _cm_i: &LCCCS<CR, NTT, P>,
+        _wit: &Witness<CR, NTT>,
+        _transcript: &mut impl Transcript<NTT>,
+        _ccs: &CCS<NTT>,
     ) -> Result<
         (
-            Vec<LCCCS<CR, R, P>>,
-            Vec<Witness<CR, R>>,
-            DecompositionProof<R>,
+            Vec<LCCCS<CR, NTT, P>>,
+            Vec<Witness<CR, NTT>>,
+            DecompositionProof<NTT>,
         ),
-        DecompositionError<R>,
+        DecompositionError<NTT>,
     > {
         todo!()
     }
 }
 
-impl<CR: ConvertibleRing, R: OverField, P: AjtaiParams<CR>, T: Transcript<R>>
-    DecompositionVerifier<CR, R, P, T> for NIFSVerifier<CR, R, P, T>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+    DecompositionVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
-    type Prover = NIFSProver<CR, R, P, T>;
+    type Prover = NIFSProver<CR, NTT, P, T>;
 
     fn verify(
-        _cm_i: &LCCCS<CR, R, P>,
-        _proof: &<Self::Prover as DecompositionProver<CR, R, P, T>>::Proof,
-        _transcript: &mut impl Transcript<R>,
-        _ccs: &CCS<R>,
-    ) -> Result<Vec<LCCCS<CR, R, P>>, DecompositionError<R>> {
+        _cm_i: &LCCCS<CR, NTT, P>,
+        _proof: &<Self::Prover as DecompositionProver<CR, NTT, P, T>>::Proof,
+        _transcript: &mut impl Transcript<NTT>,
+        _ccs: &CCS<NTT>,
+    ) -> Result<Vec<LCCCS<CR, NTT, P>>, DecompositionError<NTT>> {
         todo!()
     }
 }
