@@ -10,7 +10,7 @@ use decomposition::{DecompositionProver, DecompositionVerifier};
 use error::LatticefoldError;
 use folding::{FoldingProver, FoldingVerifier};
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::ring::ConvertibleRing;
+use lattirust_arithmetic::ring::PolyRing;
 use linearization::{LinearizationProver, LinearizationVerifier};
 
 use crate::arith::{Witness, CCS, LCCCS};
@@ -19,7 +19,7 @@ use crate::{arith::CCCS, transcript::Transcript};
 
 #[derive(Debug, Clone)]
 pub struct ComposedProof<
-    CR: ConvertibleRing,
+    CR: PolyRing,
     NTT: OverField,
     P: AjtaiParams,
     T: Transcript<NTT>,
@@ -47,16 +47,14 @@ type LatticefoldProof<CR, NTT, P, T> = ComposedProof<
 /// `NTT` is the NTT representation of the same ring.
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+pub struct NIFSProver<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    NIFSProver<CR, NTT, P, T>
-{
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> NIFSProver<CR, NTT, P, T> {
     pub fn prove(
         acc: &LCCCS<NTT, P>,
         w_acc: &Witness<NTT>,
@@ -126,16 +124,14 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
 /// `NTT` is the NTT representation of the same ring.
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+pub struct NIFSVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    NIFSVerifier<CR, NTT, P, T>
-{
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> NIFSVerifier<CR, NTT, P, T> {
     pub fn verify(
         acc: &LCCCS<NTT, P>,
         cm_i: &CCCS<NTT, P>,

@@ -3,12 +3,11 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-use lattirust_arithmetic::ring::Ring;
+use lattirust_arithmetic::balanced_decomposition::decompose_balanced_slice_polyring;
+use lattirust_arithmetic::ring::{PolyRing, Ring};
 use lattirust_arithmetic::{
-    balanced_decomposition::decompose_balanced_vec,
     challenge_set::latticefold_challenge_set::OverField,
     linear_algebra::{Matrix, Vector},
-    ring::ConvertibleRing,
 };
 use thiserror::Error;
 
@@ -282,7 +281,7 @@ impl<'a, R: Ring, P: AjtaiParams> Mul<R> for &'a Commitment<R, P> {
 /// `CR` is the type parameter for the coefficient representation of the ring
 /// `NTT` is the NTT representation of the same ring.
 #[derive(Clone, Debug)]
-pub struct AjtaiCommitmentScheme<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams>
+pub struct AjtaiCommitmentScheme<CR: PolyRing, NTT: OverField, P: AjtaiParams>
 where
     NTT: Into<CR> + From<CR>,
 {
@@ -291,7 +290,7 @@ where
     matrix: Matrix<NTT>,
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
 where
     NTT: Into<CR> + From<CR>,
 {
@@ -304,7 +303,7 @@ where
     }
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
 where
     NTT: Into<CR> + From<CR>,
 {
@@ -337,7 +336,7 @@ where
         &self,
         f: &[CR],
     ) -> Result<Commitment<NTT, P>, CommitmentError> {
-        let f = decompose_balanced_vec(f, P::B, Some(P::L))
+        let f = decompose_balanced_slice_polyring(f, P::B, Some(P::L))
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
@@ -350,7 +349,7 @@ where
         &self,
         w: &[NTT],
     ) -> Result<Commitment<NTT, P>, CommitmentError> {
-        let f: Vec<NTT> = decompose_balanced_vec(
+        let f: Vec<NTT> = decompose_balanced_slice_polyring(
             &w.iter().map(|&x| x.into()).collect::<Vec<CR>>(),
             P::B,
             Some(P::L),

@@ -22,7 +22,7 @@ use lattirust_arithmetic::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
 };
-use lattirust_arithmetic::{polynomials::eq_eval, ring::ConvertibleRing};
+use lattirust_arithmetic::{polynomials::eq_eval, ring::PolyRing};
 
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {
@@ -57,7 +57,7 @@ pub trait LinearizationVerifier<NTT: OverField, P: AjtaiParams, T: Transcript<NT
     ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     LinearizationProver<NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
     type Proof = LinearizationProof<NTT>;
@@ -123,7 +123,7 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     }
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     LinearizationVerifier<NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
     type Prover = NIFSProver<CR, NTT, P, T>;

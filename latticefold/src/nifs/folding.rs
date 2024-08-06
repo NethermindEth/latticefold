@@ -1,6 +1,6 @@
 use crate::commitment::AjtaiParams;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::ring::ConvertibleRing;
+use lattirust_arithmetic::ring::PolyRing;
 
 use crate::{
     arith::{Witness, CCS, LCCCS},
@@ -19,7 +19,7 @@ pub struct FoldingProof<NTT: OverField> {
     pub eta_s: Vec<NTT>,
 }
 
-pub trait FoldingProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+pub trait FoldingProver<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     type Proof: Clone;
     type Error: std::error::Error;
 
@@ -31,7 +31,7 @@ pub trait FoldingProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: 
     ) -> Result<(LCCCS<NTT, P>, Witness<NTT>, Self::Proof), Self::Error>;
 }
 
-pub trait FoldingVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+pub trait FoldingVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     type Prover: FoldingProver<CR, NTT, P, T>;
     type Error = <Self::Prover as FoldingProver<CR, NTT, P, T>>::Error;
 
@@ -43,8 +43,8 @@ pub trait FoldingVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T
     ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    FoldingProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> FoldingProver<CR, NTT, P, T>
+    for NIFSProver<CR, NTT, P, T>
 {
     type Proof = FoldingProof<NTT>;
     type Error = FoldingError<NTT>;
@@ -59,7 +59,7 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     }
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     FoldingVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
     type Prover = NIFSProver<CR, NTT, P, T>;

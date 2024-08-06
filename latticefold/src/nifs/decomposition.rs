@@ -1,5 +1,5 @@
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::ring::ConvertibleRing;
+use lattirust_arithmetic::ring::PolyRing;
 
 use crate::commitment::{AjtaiParams, Commitment};
 
@@ -18,13 +18,7 @@ pub struct DecompositionProof<NTT: OverField, P: AjtaiParams> {
     pub y_s: Vec<Commitment<NTT, P>>,
 }
 
-pub trait DecompositionProver<
-    CR: ConvertibleRing,
-    NTT: OverField,
-    P: AjtaiParams,
-    T: Transcript<NTT>,
->
-{
+pub trait DecompositionProver<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     type Proof: Clone;
     type Error: std::error::Error;
 
@@ -36,13 +30,7 @@ pub trait DecompositionProver<
     ) -> Result<(Vec<LCCCS<NTT, P>>, Vec<Witness<NTT>>, Self::Proof), Self::Error>;
 }
 
-pub trait DecompositionVerifier<
-    CR: ConvertibleRing,
-    NTT: OverField,
-    P: AjtaiParams,
-    T: Transcript<NTT>,
->
-{
+pub trait DecompositionVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     type Prover: DecompositionProver<CR, NTT, P, T>;
     type Error = <Self::Prover as DecompositionProver<CR, NTT, P, T>>::Error;
 
@@ -54,7 +42,7 @@ pub trait DecompositionVerifier<
     ) -> Result<Vec<LCCCS<NTT, P>>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     DecompositionProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
     type Proof = DecompositionProof<NTT, P>;
@@ -77,7 +65,7 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     }
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     DecompositionVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
     type Prover = NIFSProver<CR, NTT, P, T>;
