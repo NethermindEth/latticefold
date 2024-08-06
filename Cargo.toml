@@ -1,1 +1,1 @@
-workspace = { members = [ "latticefold",], resolver = "2" }
+workspace = { members = [ "latticefold", "cyclotomic-rings"], resolver = "2" }

@@ -330,6 +330,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyclotomic-rings"
+version = "0.1.0"
+dependencies = [
+ "ark-ff",
+ "lattirust-arithmetic",
+ "num-bigint",
+ "rand",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -608,7 +618,7 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#111bceddef0dd1883bf18311e602d6d101c36291"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#73d45c34ad66d90e98e4a682561de5c5431d0a86"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
