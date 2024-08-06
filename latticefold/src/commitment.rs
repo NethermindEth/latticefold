@@ -14,8 +14,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CommitmentError {
-    #[error("Wrong length of the witness {0}")]
-    WrongWitnessLength(usize),
+    #[error("Wrong length of the witness: {0}, expected: {1}")]
+    WrongWitnessLength(usize, usize),
 }
 
 /// Ajtai commitment parameters.
@@ -56,7 +56,10 @@ impl<'a, R: Ring, P: AjtaiParams> TryFrom<&'a [R]> for Commitment<R, P> {
 
     fn try_from(slice: &'a [R]) -> Result<Self, Self::Error> {
         if slice.len() != P::WITNESS_SIZE {
-            return Err(CommitmentError::WrongWitnessLength(slice.len()));
+            return Err(CommitmentError::WrongWitnessLength(
+                slice.len(),
+                P::WITNESS_SIZE,
+            ));
         }
 
         Ok(Self {
@@ -71,7 +74,10 @@ impl<R: Ring, P: AjtaiParams> TryFrom<Vec<R>> for Commitment<R, P> {
 
     fn try_from(vec: Vec<R>) -> Result<Self, Self::Error> {
         if vec.len() != P::WITNESS_SIZE {
-            return Err(CommitmentError::WrongWitnessLength(vec.len()));
+            return Err(CommitmentError::WrongWitnessLength(
+                vec.len(),
+                P::WITNESS_SIZE,
+            ));
         }
 
         Ok(Self {
@@ -305,7 +311,10 @@ where
     pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<NTT, P>, CommitmentError> {
         // TODO: a lot of clones and copies. Can we optimise this somehow?
         if f.len() != P::WITNESS_SIZE {
-            return Err(CommitmentError::WrongWitnessLength(f.len()));
+            return Err(CommitmentError::WrongWitnessLength(
+                f.len(),
+                P::WITNESS_SIZE,
+            ));
         }
 
         let commitment_vec = self.matrix.clone() * Vector::from(Vec::from(f));
@@ -315,7 +324,10 @@ where
 
     pub fn commit_coeff(&self, f: &[CR]) -> Result<Commitment<NTT, P>, CommitmentError> {
         if f.len() != P::WITNESS_SIZE {
-            return Err(CommitmentError::WrongWitnessLength(f.len()));
+            return Err(CommitmentError::WrongWitnessLength(
+                f.len(),
+                P::WITNESS_SIZE,
+            ));
         }
 
         self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<NTT>>())
