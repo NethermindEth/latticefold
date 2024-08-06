@@ -11,6 +11,100 @@ use lattirust_arithmetic::{
 };
 use thiserror::Error;
 
+/// A concrete instantiation of the Ajtai commitment scheme.
+/// Contains a random Ajtai matrix for the coresssponding Ajtai parameters
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
+#[derive(Clone, Debug)]
+pub struct AjtaiCommitmentScheme<CR: PolyRing, NTT: OverField, P: AjtaiParams>
+where
+    NTT: Into<CR> + From<CR>,
+{
+    _cr: PhantomData<CR>,
+    _p: PhantomData<P>,
+    matrix: Matrix<NTT>,
+}
+
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
+where
+    NTT: Into<CR> + From<CR>,
+{
+    pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
+        Self {
+            _cr: PhantomData,
+            _p: PhantomData,
+            matrix: Matrix::rand(P::WITNESS_SIZE, P::OUTPUT_SIZE, rng),
+        }
+    }
+}
+
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
+where
+    NTT: Into<CR> + From<CR>,
+{
+    /// Commit to a witness in the NTT form.
+    /// The most basic one just multiplies by the matrix.
+    pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<NTT, P>, CommitmentError> {
+        // TODO: a lot of clones and copies. Can we optimise this somehow?
+        if f.len() != P::WITNESS_SIZE {
+            return Err(CommitmentError::WrongWitnessLength(
+                f.len(),
+                P::WITNESS_SIZE,
+            ));
+        }
+
+        let commitment_vec = self.matrix.clone() * Vector::from(Vec::from(f));
+
+        Commitment::try_from(commitment_vec.iter().copied().collect::<Vec<_>>())
+    }
+
+    /// Commit to a witness in the coefficient form.
+    /// Performs NTT on each component of the witness and then does Ajtai commitment.
+    pub fn commit_coeff(&self, f: &[CR]) -> Result<Commitment<NTT, P>, CommitmentError> {
+        if f.len() != P::WITNESS_SIZE {
+            return Err(CommitmentError::WrongWitnessLength(
+                f.len(),
+                P::WITNESS_SIZE,
+            ));
+        }
+
+        self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<NTT>>())
+    }
+
+    /// Takes a coefficient form witness, decomposes it vertically in radix-B
+    /// and Ajtai commits to the result.
+    pub fn decompose_and_commit_coeff(
+        &self,
+        f: &[CR],
+    ) -> Result<Commitment<NTT, P>, CommitmentError> {
+        let f = decompose_balanced_slice_polyring(f, P::B, Some(P::L))
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>();
+
+        self.commit_coeff(&f)
+    }
+
+    /// Takes an NTT form witness, transforms it into the coefficient form,
+    /// decomposes it vertically in radix-B and Ajtai commits to the result.
+    pub fn decompose_and_commit_ntt(
+        &self,
+        w: &[NTT],
+    ) -> Result<Commitment<NTT, P>, CommitmentError> {
+        let f: Vec<NTT> = decompose_balanced_slice_polyring(
+            &w.iter().map(|&x| x.into()).collect::<Vec<CR>>(),
+            P::B,
+            Some(P::L),
+        )
+        .iter()
+        .flatten()
+        .map(|&x| x.into())
+        .collect();
+
+        self.commit_ntt(&f)
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum CommitmentError {
     #[error("Wrong length of the witness: {0}, expected: {1}")]
@@ -92,7 +186,7 @@ impl<R: Ring, P: AjtaiParams> AsRef<[R]> for Commitment<R, P> {
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams> Add<&'a Commitment<R, P>> for &'a Commitment<R, P> {
+impl<'a, 'b, R: Ring, P: AjtaiParams> Add<&'a Commitment<R, P>> for &'b Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: &'a Commitment<R, P>) -> Self::Output {
@@ -112,15 +206,7 @@ impl<'a, R: Ring, P: AjtaiParams> Add<Commitment<R, P>> for &'a Commitment<R, P>
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a + b);
-
-        Commitment::from_vec_raw(res_vec)
+        self + &rhs
     }
 }
 
@@ -128,15 +214,7 @@ impl<'a, R: Ring, P: AjtaiParams> Add<&'a Commitment<R, P>> for Commitment<R, P>
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: &'a Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a + b);
-
-        Commitment::from_vec_raw(res_vec)
+        &self + rhs
     }
 }
 
@@ -144,19 +222,11 @@ impl<R: Ring, P: AjtaiParams> Add<Commitment<R, P>> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a + b);
-
-        Commitment::from_vec_raw(res_vec)
+        &self + &rhs
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams> Sub<&'a Commitment<R, P>> for &'a Commitment<R, P> {
+impl<'a, 'b, R: Ring, P: AjtaiParams> Sub<&'a Commitment<R, P>> for &'b Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: &'a Commitment<R, P>) -> Self::Output {
@@ -176,15 +246,7 @@ impl<'a, R: Ring, P: AjtaiParams> Sub<Commitment<R, P>> for &'a Commitment<R, P>
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a - b);
-
-        Commitment::from_vec_raw(res_vec)
+        self - &rhs
     }
 }
 
@@ -192,15 +254,7 @@ impl<'a, R: Ring, P: AjtaiParams> Sub<&'a Commitment<R, P>> for Commitment<R, P>
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: &'a Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a - b);
-
-        Commitment::from_vec_raw(res_vec)
+        &self - rhs
     }
 }
 
@@ -208,22 +262,14 @@ impl<R: Ring, P: AjtaiParams> Sub<Commitment<R, P>> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a - b);
-
-        Commitment::from_vec_raw(res_vec)
+        &self - &rhs
     }
 }
 
-impl<'a, 'b, R: Ring, P: AjtaiParams> Mul<&'b R> for &'a Commitment<R, P> {
+impl<'a, 'b, R: Ring, P: AjtaiParams> Mul<&'a R> for &'b Commitment<R, P> {
     type Output = Commitment<R, P>;
 
-    fn mul(self, rhs: &'b R) -> Self::Output {
+    fn mul(self, rhs: &'a R) -> Self::Output {
         let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
 
         res_vec
@@ -235,136 +281,30 @@ impl<'a, 'b, R: Ring, P: AjtaiParams> Mul<&'b R> for &'a Commitment<R, P> {
     }
 }
 
-impl<'b, R: Ring, P: AjtaiParams> Mul<&'b R> for Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Mul<&'a R> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
-    fn mul(self, rhs: &'b R) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .for_each(|(res, &a)| *res = a * rhs);
-
-        Commitment::from_vec_raw(res_vec)
+    fn mul(self, rhs: &'a R) -> Self::Output {
+        &self * rhs
     }
 }
 
 impl<R: Ring, P: AjtaiParams> Mul<R> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
+    #[allow(clippy::op_ref)]
     fn mul(self, rhs: R) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .for_each(|(res, &a)| *res = a * rhs);
-
-        Commitment::from_vec_raw(res_vec)
+        &self * &rhs
     }
 }
 
 impl<'a, R: Ring, P: AjtaiParams> Mul<R> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
+    #[allow(clippy::op_ref)]
     fn mul(self, rhs: R) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
-        res_vec
-            .iter_mut()
-            .zip(self.val.iter())
-            .for_each(|(res, &a)| *res = a * rhs);
-
-        Commitment::from_vec_raw(res_vec)
+        self * &rhs
     }
 }
 
 // TODO: use macros to implement the other operations
-
-/// A concrete instantiation of the Ajtai commitment scheme.
-/// Contains a random Ajtai matrix for the coresssponding Ajtai parameters
-/// `CR` is the type parameter for the coefficient representation of the ring
-/// `NTT` is the NTT representation of the same ring.
-#[derive(Clone, Debug)]
-pub struct AjtaiCommitmentScheme<CR: PolyRing, NTT: OverField, P: AjtaiParams>
-where
-    NTT: Into<CR> + From<CR>,
-{
-    _cr: PhantomData<CR>,
-    _p: PhantomData<P>,
-    matrix: Matrix<NTT>,
-}
-
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
-where
-    NTT: Into<CR> + From<CR>,
-{
-    pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
-        Self {
-            _cr: PhantomData,
-            _p: PhantomData,
-            matrix: Matrix::rand(P::WITNESS_SIZE, P::OUTPUT_SIZE, rng),
-        }
-    }
-}
-
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
-where
-    NTT: Into<CR> + From<CR>,
-{
-    pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<NTT, P>, CommitmentError> {
-        // TODO: a lot of clones and copies. Can we optimise this somehow?
-        if f.len() != P::WITNESS_SIZE {
-            return Err(CommitmentError::WrongWitnessLength(
-                f.len(),
-                P::WITNESS_SIZE,
-            ));
-        }
-
-        let commitment_vec = self.matrix.clone() * Vector::from(Vec::from(f));
-
-        Commitment::try_from(commitment_vec.iter().copied().collect::<Vec<_>>())
-    }
-
-    pub fn commit_coeff(&self, f: &[CR]) -> Result<Commitment<NTT, P>, CommitmentError> {
-        if f.len() != P::WITNESS_SIZE {
-            return Err(CommitmentError::WrongWitnessLength(
-                f.len(),
-                P::WITNESS_SIZE,
-            ));
-        }
-
-        self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<NTT>>())
-    }
-
-    pub fn decompose_and_commit_coeff(
-        &self,
-        f: &[CR],
-    ) -> Result<Commitment<NTT, P>, CommitmentError> {
-        let f = decompose_balanced_slice_polyring(f, P::B, Some(P::L))
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-
-        self.commit_coeff(&f)
-    }
-
-    /// Commits the gadgeted witness, i.e. w = G_B f, for some f.
-    pub fn decompose_and_commit_ntt(
-        &self,
-        w: &[NTT],
-    ) -> Result<Commitment<NTT, P>, CommitmentError> {
-        let f: Vec<NTT> = decompose_balanced_slice_polyring(
-            &w.iter().map(|&x| x.into()).collect::<Vec<CR>>(),
-            P::B,
-            Some(P::L),
-        )
-        .iter()
-        .flatten()
-        .map(|&x| x.into())
-        .collect();
-
-        self.commit_ntt(&f)
-    }
-}

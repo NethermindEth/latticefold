@@ -127,14 +127,33 @@ impl<R: Ring> CCS<R> {
     }
 }
 
-pub trait Instance<R: Ring> {
-    fn get_z_vector(&self, w: &[R]) -> Vec<R>;
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct CCCS<R: Ring, P: AjtaiParams> {
     pub cm: Commitment<R, P>,
     pub x_ccs: Vec<R>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LCCCS<R: Ring, P: AjtaiParams> {
+    pub r: Vec<R>,
+    pub v: R,
+    pub cm: Commitment<R, P>,
+    pub u: Vec<R>,
+    pub x_w: Vec<R>,
+    pub h: R,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Witness<NTT: Ring> {
+    // F is B-decomposed ccs witness
+    pub f: Vec<NTT>,
+    // f_hat = vec(CR repr of f)
+    pub f_hat: Vec<NTT>,
+    pub w_ccs: Vec<NTT>,
+}
+
+pub trait Instance<R: Ring> {
+    fn get_z_vector(&self, w: &[R]) -> Vec<R>;
 }
 
 impl<R: Ring, P: AjtaiParams> Instance<R> for CCCS<R, P> {
@@ -149,16 +168,6 @@ impl<R: Ring, P: AjtaiParams> Instance<R> for CCCS<R, P> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct LCCCS<R: Ring, P: AjtaiParams> {
-    pub r: Vec<R>,
-    pub v: R,
-    pub cm: Commitment<R, P>,
-    pub u: Vec<R>,
-    pub x_w: Vec<R>,
-    pub h: R,
-}
-
 impl<R: Ring, P: AjtaiParams> Instance<R> for LCCCS<R, P> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_w.len() + w.len() + 1);
@@ -169,15 +178,6 @@ impl<R: Ring, P: AjtaiParams> Instance<R> for LCCCS<R, P> {
 
         z
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Witness<NTT: Ring> {
-    // F is B-decomposed ccs witness
-    pub f: Vec<NTT>,
-    // f_hat = vec(CR repr of f)
-    pub f_hat: Vec<NTT>,
-    pub w_ccs: Vec<NTT>,
 }
 
 #[cfg(test)]

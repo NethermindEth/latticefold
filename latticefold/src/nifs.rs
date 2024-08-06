@@ -17,6 +17,10 @@ use crate::arith::{Witness, CCS, LCCCS};
 use crate::commitment::AjtaiParams;
 use crate::{arith::CCCS, transcript::Transcript};
 
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
+/// `P` is the Ajtai commitment parameters.
+/// `T` is the FS-transform transcript.
 #[derive(Debug, Clone)]
 pub struct ComposedProof<
     CR: PolyRing,
