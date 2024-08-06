@@ -18,7 +18,7 @@ use thiserror::Error;
 #[derive(Clone, Debug)]
 pub struct AjtaiCommitmentScheme<CR: PolyRing, NTT: OverField, P: AjtaiParams>
 where
-    NTT: Into<CR> + From<CR>,
+    CR: Into<NTT> + From<NTT>,
 {
     _cr: PhantomData<CR>,
     _p: PhantomData<P>,
@@ -27,7 +27,7 @@ where
 
 impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
 where
-    NTT: Into<CR> + From<CR>,
+    CR: Into<NTT> + From<NTT>,
 {
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
         Self {
@@ -40,7 +40,7 @@ where
 
 impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
 where
-    NTT: Into<CR> + From<CR>,
+    CR: Into<NTT> + From<NTT>,
 {
     /// Commit to a witness in the NTT form.
     /// The most basic one just multiplies by the matrix.

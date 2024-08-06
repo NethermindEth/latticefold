@@ -8,11 +8,16 @@ use crate::arith::utils::hadamard;
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::utils::vec_add;
 use crate::arith::utils::vec_scalar_mul;
+use crate::commitment::AjtaiCommitmentScheme;
 use crate::commitment::AjtaiParams;
 use crate::commitment::Commitment;
+use crate::commitment::CommitmentError;
 use ark_std::log2;
 use error::CSError as Error;
+use lattirust_arithmetic::balanced_decomposition::decompose_balanced_slice_polyring;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::linear_algebra::SparseMatrix;
+use lattirust_arithmetic::ring::PolyRing;
 use lattirust_arithmetic::ring::Ring;
 use r1cs::R1CS;
 
@@ -150,6 +155,47 @@ pub struct Witness<NTT: Ring> {
     // f_hat = vec(CR repr of f)
     pub f_hat: Vec<NTT>,
     pub w_ccs: Vec<NTT>,
+}
+
+impl<NTT: OverField> Witness<NTT> {
+    pub fn from_w_ccs<
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
+        P: AjtaiParams,
+    >(
+        w_ccs: &[NTT],
+    ) -> Self {
+        // iNTT
+        let coef_repr: Vec<CR> = w_ccs.iter().map(|&x| x.into()).collect();
+
+        // decompose radix-B
+        let coef_repr_decomposed: Vec<CR> =
+            decompose_balanced_slice_polyring(&coef_repr, P::B, Some(P::L))
+                .into_iter()
+                .flatten()
+                .collect();
+
+        // NTT(coef_repr_decomposed)
+        let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
+        // coef_repr_decomposed -> coefs -> NTT = coeffs.
+        let f_hat: Vec<NTT> = coef_repr_decomposed
+            .into_iter()
+            .map(|x| NTT::from(x.coeffs()))
+            .collect();
+
+        Self {
+            f,
+            f_hat,
+            w_ccs: Vec::from(w_ccs),
+        }
+    }
+
+    pub fn commit<CR: PolyRing + From<NTT> + Into<NTT>, P: AjtaiParams>(
+        &self,
+        ajtai: &AjtaiCommitmentScheme<CR, NTT, P>,
+    ) -> Result<Commitment<NTT, P>, CommitmentError>
+    {
+        ajtai.commit_ntt(&self.f)
+    }
 }
 
 pub trait Instance<R: Ring> {
