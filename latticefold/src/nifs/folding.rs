@@ -110,6 +110,7 @@ impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
             &mus,
         );
 
+
         let claim_g1 = alphas
             .iter()
             .zip(vs.iter())
@@ -131,12 +132,20 @@ impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
 
         let thetas = f_hat_mles
             .iter()
-            .map(|f_hat_mle| f_hat_mle.evaluate(r0.as_slice()))
+            .map(|f_hat_mle| f_hat_mle.evaluate(r0.as_slice()).unwrap())
             .collect::<Vec<_>>();
+        drop(f_hat_mles);
         let etas = matrix_mles
             .iter()
-            .map(|matrix_mle| matrix_mle.evaluate(r0.as_slice()))
+            .map(|matrix_mle| matrix_mle.evaluate(r0.as_slice()).unwrap())
             .collect::<Vec<_>>();
+        drop(matrix_mles);
+
+        let folding_proof = FoldingProof {
+            pointshift_sumcheck_proof: sum_check_proof,
+            theta_s: thetas,
+            eta_s: etas,
+        };
 
         todo!()
     }
