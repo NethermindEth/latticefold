@@ -1,7 +1,7 @@
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::ring::ConvertibleRing;
 
-use crate::commitment::AjtaiParams;
+use crate::commitment::{AjtaiParams, Commitment};
 
 use crate::{
     arith::{Witness, CCS, LCCCS},
@@ -11,11 +11,11 @@ use crate::{
 use super::{error::DecompositionError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
-pub struct DecompositionProof<NTT: OverField> {
+pub struct DecompositionProof<NTT: OverField, P: AjtaiParams> {
     pub u_s: Vec<Vec<NTT>>,
     pub v_s: Vec<NTT>,
     pub x_s: Vec<Vec<NTT>>,
-    pub y_s: Vec<Vec<NTT>>,
+    pub y_s: Vec<Commitment<NTT, P>>,
 }
 
 pub trait DecompositionProver<
@@ -57,7 +57,7 @@ pub trait DecompositionVerifier<
 impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     DecompositionProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
-    type Proof = DecompositionProof<NTT>;
+    type Proof = DecompositionProof<NTT, P>;
     type Error = DecompositionError<NTT>;
 
     fn prove(
@@ -69,7 +69,7 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
         (
             Vec<LCCCS<NTT, P>>,
             Vec<Witness<NTT>>,
-            DecompositionProof<NTT>,
+            DecompositionProof<NTT, P>,
         ),
         DecompositionError<NTT>,
     > {
