@@ -67,7 +67,6 @@ impl<R: Ring> TryFrom<VirtualPolynomial<R>> for UnivPoly<R> {
             // Start with the polynomial from the first MLE in the list
             let mut unipoly = UnivPoly::try_from(&flattened_ml_extensions[list[0]])?;
 
-            // Multiply by subsequent MLEs
             for &index in &list[1..] {
                 unipoly = unipoly * &flattened_ml_extensions[index];
             }
