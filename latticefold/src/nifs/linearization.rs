@@ -226,12 +226,19 @@ fn prepare_lin_sumcheck_polynomial<R: OverField>(
 mod tests {
     use ark_ff::UniformRand;
     use lattirust_arithmetic::{
+        challenge_set::latticefold_challenge_set::BinarySmallSet,
         mle::DenseMultilinearExtension,
-        ring::{Pow2CyclotomicPolyRingNTT, Zq},
+        ring::{Pow2CyclotomicPolyRingNTT, Ring, Zq, Z2_64},
     };
     use rand::thread_rng;
 
-    use super::compute_u;
+    use crate::{
+        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS, CCS},
+        nifs::NIFSProver,
+        transcript::poseidon::PoseidonTranscript,
+    };
+
+    use super::{compute_u, LinearizationProver};
 
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
@@ -276,84 +283,30 @@ mod tests {
     }
 
     // Actual Tests
-    // #[test]
-    // fn test_utils() {
-    //     // Test evaluation of mle from a vector
-    //     let evaluation_vector = vec![generate_a_ring_elem(), zero()];
-    //     assert_eq!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
-    //         zero()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_eq!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
-    //         zero()
-    //     );
+    #[test]
+    fn test_linearization() {
+        const Q: u64 = 101;
+        const N: usize = 16;
+        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CS = BinarySmallSet<Q, N>;
+        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
+        let ccs = get_test_ccs::<R>();
+        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
 
-    //     let evaluation_matrix = vec![vec![generate_a_ring_elem(), zero()], vec![one(), generate_a_ring_elem()]];
-    //     assert_eq!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
-    //         one()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_eq!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
-    //         zero()
-    //     );
+        let cccs: CCCS<R> = CCCS { x_ccs, cm: vec![] };
+        let witness: Witness<R> = Witness {
+            f: vec![],
+            f_hat: vec![],
+            w_ccs,
+        };
+        let mut transcript: PoseidonTranscript<Pow2CyclotomicPolyRingNTT<101, 16>, CS> =
+            PoseidonTranscript::default();
 
-    //     assert_eq!(
-    //         usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8).unwrap(),
-    //         vec![
-    //             zero(),
-    //             zero(),
-    //             zero(),
-    //             zero(),
-    //             zero(),
-    //             one(),
-    //             zero(),
-    //             zero()
-    //         ]
-    //     );
-    //     assert_eq!(
-    //         usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(5, 5).unwrap(),
-    //         vec![zero(), zero(), one(), zero(), one()]
-    //     );
-    //     // Test the conversion of Bivariate MLE to univariate MLE by evaluating first values
-    //     let bivariate_mle = vec![
-    //         vec![generate_a_ring_elem(), generate_a_ring_elem(), one(), zero()],
-    //         vec![zero(), generate_a_ring_elem(), zero(), one()],
-    //     ];
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]).unwrap(),
-    //         vec![generate_a_ring_elem(), zero()]
-    //     );
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_first(&bivariate_mle, &vec![one(), zero()]).unwrap(),
-    //         vec![generate_a_ring_elem(), generate_a_ring_elem()]
-    //     );
-
-    //     // Test the conversion of Bivariate MLE to univariate MLE by evaluating second values
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]).unwrap(),
-    //         vec![zero(), generate_a_ring_elem(), zero(), one()]
-    //     );
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]).unwrap(),
-    //         vec![generate_a_ring_elem(), generate_a_ring_elem(), one(), zero()]
-    //     );
-    // }
+        let prover = <NIFSProver<R, T> as LinearizationProver<R, T>>::prove(
+            &cccs,
+            &witness,
+            &mut transcript,
+            &ccs,
+        );
+    }
 }
