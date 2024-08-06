@@ -330,6 +330,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyclotomic-rings"
+version = "0.1.0"
+dependencies = [
+ "ark-ff",
+ "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/add-overfield-splitted-ntt)",
+ "num-bigint",
+ "rand",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -599,10 +609,39 @@ dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
  "ark-std",
- "lattirust-arithmetic",
+ "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main)",
  "num-traits",
  "rand",
  "thiserror",
+]
+
+[[package]]
+name = "lattirust-arithmetic"
+version = "0.0.1-alpha"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/add-overfield-splitted-ntt#a04e91d4a82a4d5478740ed3fd094bf74894c2be"
+dependencies = [
+ "ark-crypto-primitives",
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "bincode",
+ "bitter",
+ "delegate",
+ "delegate-attr",
+ "derive_more",
+ "displaydoc",
+ "nalgebra",
+ "nalgebra-sparse",
+ "nimue",
+ "num-bigint",
+ "num-traits",
+ "rand",
+ "rayon",
+ "rounded-div",
+ "serde",
+ "serde_with",
+ "thiserror",
+ "zeroize",
 ]
 
 [[package]]

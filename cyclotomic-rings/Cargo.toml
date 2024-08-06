@@ -5,5 +5,6 @@ edition = "2021"
 
 [dependencies]
 num-bigint = "0.4.5"
-lattirust-arithmetic = { git="ssh://git@github.com/cknabs/lattirust.git", branch = "partially-splitting-ntt"}
+lattirust-arithmetic = { git="ssh://git@github.com/NethermindEth/lattirust.git", branch = "MatthewKlein/add-overfield-splitted-ntt"}
 rand = "0.8.5"
+ark-ff = "0.4.2"
