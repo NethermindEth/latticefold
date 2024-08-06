@@ -6,7 +6,7 @@ pub mod linearization;
 
 use std::marker::PhantomData;
 
-use decomposition::{DecompositionProver, DecompositionVerifier};
+use decomposition::{DecompositionParams, DecompositionProver, DecompositionVerifier};
 use error::LatticefoldError;
 use folding::{FoldingProver, FoldingVerifier};
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
@@ -26,9 +26,10 @@ pub struct ComposedProof<
     CR: PolyRing,
     NTT: OverField,
     P: AjtaiParams,
+    DP: DecompositionParams<AP = P>,
     T: Transcript<NTT>,
     L: LinearizationProver<NTT, P, T>,
-    D: DecompositionProver<CR, NTT, P, T>,
+    D: DecompositionProver<CR, NTT, DP, T>,
     FD: FoldingProver<CR, NTT, P, T>,
 > {
     pub linearization_proof: L::Proof,
@@ -37,28 +38,43 @@ pub struct ComposedProof<
     pub folding_proof: FD::Proof,
 }
 
-type LatticefoldProof<CR, NTT, P, T> = ComposedProof<
+type LatticefoldProof<CR, NTT, P, DP, T> = ComposedProof<
     CR,
     NTT,
     P,
+    DP,
     T,
-    NIFSProver<CR, NTT, P, T>,
-    NIFSProver<CR, NTT, P, T>,
-    NIFSProver<CR, NTT, P, T>,
+    NIFSProver<CR, NTT, P, DP, T>,
+    NIFSProver<CR, NTT, P, DP, T>,
+    NIFSProver<CR, NTT, P, DP, T>,
 >;
 
 /// `CR` is the type parameter for the coefficient representation of the ring
 /// `NTT` is the NTT representation of the same ring.
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSProver<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+pub struct NIFSProver<
+    CR: PolyRing,
+    NTT: OverField,
+    P: AjtaiParams,
+    DP: DecompositionParams,
+    T: Transcript<NTT>,
+> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
+    _dp: PhantomData<DP>,
     _t: PhantomData<T>,
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> NIFSProver<CR, NTT, P, T> {
+impl<
+        CR: PolyRing,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams<AP = P>,
+        T: Transcript<NTT>,
+    > NIFSProver<CR, NTT, P, DP, T>
+{
     pub fn prove(
         acc: &LCCCS<NTT, P>,
         w_acc: &Witness<NTT>,
@@ -66,14 +82,20 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> NIFSProve
         w_i: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<NTT, P>, Witness<NTT>, LatticefoldProof<CR, NTT, P, T>), LatticefoldError<NTT>>
-    {
+    ) -> Result<
+        (
+            LCCCS<NTT, P>,
+            Witness<NTT>,
+            LatticefoldProof<CR, NTT, P, DP, T>,
+        ),
+        LatticefoldError<NTT>,
+    > {
         Self::prove_aux(acc, w_acc, cm_i, w_i, transcript, ccs)
     }
 
     fn prove_aux<
         L: LinearizationProver<NTT, P, T>,
-        D: DecompositionProver<CR, NTT, P, T>,
+        D: DecompositionProver<CR, NTT, DP, T>,
         FP: FoldingProver<CR, NTT, P, T>,
         E: From<L::Error> + From<D::Error> + From<FP::Error>,
     >(
@@ -87,7 +109,7 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> NIFSProve
         (
             LCCCS<NTT, P>,
             Witness<NTT>,
-            ComposedProof<CR, NTT, P, T, L, D, FP>,
+            ComposedProof<CR, NTT, P, DP, T, L, D, FP>,
         ),
         E,
     > {
@@ -128,38 +150,52 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> NIFSProve
 /// `NTT` is the NTT representation of the same ring.
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+pub struct NIFSVerifier<
+    CR: PolyRing,
+    NTT: OverField,
+    P: AjtaiParams,
+    DP: DecompositionParams,
+    T: Transcript<NTT>,
+> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
+    _dp: PhantomData<DP>,
     _t: PhantomData<T>,
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> NIFSVerifier<CR, NTT, P, T> {
+impl<
+        CR: PolyRing,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams<AP = P>,
+        T: Transcript<NTT>,
+    > NIFSVerifier<CR, NTT, P, DP, T>
+{
     pub fn verify(
         acc: &LCCCS<NTT, P>,
         cm_i: &CCCS<NTT, P>,
-        proof: &LatticefoldProof<CR, NTT, P, T>,
+        proof: &LatticefoldProof<CR, NTT, P, DP, T>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT, P>, LatticefoldError<NTT>> {
         Self::verify_aux::<
-            NIFSVerifier<CR, NTT, P, T>,
-            NIFSVerifier<CR, NTT, P, T>,
-            NIFSVerifier<CR, NTT, P, T>,
+            NIFSVerifier<CR, NTT, P, DP, T>,
+            NIFSVerifier<CR, NTT, P, DP, T>,
+            NIFSVerifier<CR, NTT, P, DP, T>,
             LatticefoldError<NTT>,
         >(acc, cm_i, proof, transcript, ccs)
     }
 
     fn verify_aux<
         L: LinearizationVerifier<NTT, P, T>,
-        D: DecompositionVerifier<CR, NTT, P, T>,
+        D: DecompositionVerifier<CR, NTT, DP, T>,
         FV: FoldingVerifier<CR, NTT, P, T>,
         E: From<L::Error> + From<D::Error> + From<FV::Error>,
     >(
         acc: &LCCCS<NTT, P>,
         cm_i: &CCCS<NTT, P>,
-        proof: &ComposedProof<CR, NTT, P, T, L::Prover, D::Prover, FV::Prover>,
+        proof: &ComposedProof<CR, NTT, P, DP, T, L::Prover, D::Prover, FV::Prover>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT, P>, E> {

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::{
+    decomposition::DecompositionParams,
     error::LinearizationError::{self},
     NIFSProver, NIFSVerifier,
 };
@@ -57,8 +58,8 @@ pub trait LinearizationVerifier<NTT: OverField, P: AjtaiParams, T: Transcript<NT
     ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    LinearizationProver<NTT, P, T> for NIFSProver<CR, NTT, P, T>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, DP: DecompositionParams, T: Transcript<NTT>>
+    LinearizationProver<NTT, P, T> for NIFSProver<CR, NTT, P, DP, T>
 {
     type Proof = LinearizationProof<NTT>;
     type Error = LinearizationError<NTT>;
@@ -123,10 +124,10 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     }
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    LinearizationVerifier<NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, DP: DecompositionParams, T: Transcript<NTT>>
+    LinearizationVerifier<NTT, P, T> for NIFSVerifier<CR, NTT, P, DP, T>
 {
-    type Prover = NIFSProver<CR, NTT, P, T>;
+    type Prover = NIFSProver<CR, NTT, P, DP, T>;
 
     fn verify(
         cm_i: &CCCS<NTT, P>,

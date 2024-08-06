@@ -8,7 +8,7 @@ use crate::{
     utils::sumcheck::SumCheckProof,
 };
 
-use super::{error::FoldingError, NIFSProver, NIFSVerifier};
+use super::{decomposition::DecompositionParams, error::FoldingError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
 pub struct FoldingProof<NTT: OverField> {
@@ -43,8 +43,8 @@ pub trait FoldingVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Trans
     ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> FoldingProver<CR, NTT, P, T>
-    for NIFSProver<CR, NTT, P, T>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, DP: DecompositionParams, T: Transcript<NTT>>
+    FoldingProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, DP, T>
 {
     type Proof = FoldingProof<NTT>;
     type Error = FoldingError<NTT>;
@@ -59,10 +59,10 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> FoldingPr
     }
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    FoldingVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, DP: DecompositionParams, T: Transcript<NTT>>
+    FoldingVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, DP, T>
 {
-    type Prover = NIFSProver<CR, NTT, P, T>;
+    type Prover = NIFSProver<CR, NTT, P, DP, T>;
 
     fn verify(
         _cm_i_s: &[LCCCS<NTT, P>],
