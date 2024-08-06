@@ -1,15 +1,16 @@
 use std::sync::Arc;
 
+use ark_std::iterable::Iterable;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::{self, DenseMultilinearExtension},
-    polynomials::{build_eq_x_r, VirtualPolynomial},
+    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{prover::SumCheckProver, SumCheckProof},
+    utils::sumcheck::{prover::SumCheckProver, verifier::SumCheckVerifier, SumCheckIP, SumCheckProof},
 };
 
 use super::{error::FoldingError, NIFSProver, NIFSVerifier};
@@ -88,14 +89,14 @@ impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
 
         let zis: Vec<Vec<R>> = Vec::with_capacity(_ccs.M.len()); // Grab zis from decomposition step
         let ris: Vec<Vec<R>> = Vec::new(); // Grab ris from decomposition step
-        let vs: Vec<R> = Vec::new(); // Grab ris from decomposition step
+        let vs = _cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<R>>();
         let us: Vec<R> = Vec::new(); // Grab us from the decomposition step
 
         let matrix_mles = _ccs
             .M
             .iter()
             .zip(zis.iter())
-            .map(|(Mi, zi)| create_matrix_mle(log_m, Mi, zi))
+            .map(|(Mi, zi)| create_matrix_mle(log_m, &Mi, &zi))
             .collect::<Vec<_>>();
 
         let g = create_sumcheck_polynomial(
@@ -141,11 +142,46 @@ impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
             .collect::<Vec<_>>();
         drop(matrix_mles);
 
+        let mut rhos = Vec::with_capacity(2*k); // need to absorb here as well
+        rhos.push(R::one());
+        for _ in 1..2*k {
+            rhos.push(_transcript.get_small_challenge());
+        }
+        
+        // let yi_s = _cm_i_s.iter().map(|cm_i| cm_i.y);
+        let u_0 = rhos.iter().zip(etas.iter()).fold(R::zero(), |acc, (&rho, &eta)| {
+            acc + (rho * eta)
+        });
+        // let x_w_len = _cm_i_s[0].x_w.len();
+        // let x_0 = rhos.iter().zip(_cm_i_s.iter())
+        //     .fold(vec![R::zero(); x_w_len], |acc, (rho, cm_i)| {
+        //         let mut x_w = cm_i.x_w.clone();
+        //         x_w.iter_mut().map(|&mut x| x * rho);
+        //         acc.iter().zip(x_w.iter())
+        //         .map(|(a, x)| *a + *x).collect()
+        //     });
+        // let y_o = rhos.iter().zip(_cm_i_s.iter())
+        //     .fold(vec![R::zero(); x_w_len], |acc, (rho, cm_i)| {
+        //         let mut y_i = cm_i.y.clone();
+        //         y_i.iter_mut().map(|&mut x| x * rho);
+        //         acc.iter().zip(y_i.iter())
+        //         .map(|(a, x)| *a + *x).collect()
+        //     });
+
+        let f_0 = rhos.iter().zip(_w_s.iter())
+            .fold(vec![R::zero();4], |acc, (rho, w_i_s)| {
+                let mut f_i = w_i_s.f_arr.clone();
+                f_i.iter_mut().for_each(|c| *c = *c * rho);
+                acc.iter().zip(f_i.iter()).map(|(a, f)| *a + f).collect()
+            }
+        );
+
         let folding_proof = FoldingProof {
             pointshift_sumcheck_proof: sum_check_proof,
             theta_s: thetas,
             eta_s: etas,
         };
+
 
         todo!()
     }
@@ -160,6 +196,89 @@ impl<R: OverField, T: Transcript<R>> FoldingVerifier<R, T> for NIFSVerifier<R, T
         _transcript: &mut impl Transcript<R>,
         _ccs: &CCS<R>,
     ) -> Result<LCCCS<R>, FoldingError<R>> {
+        let m = _ccs.m;
+        let k_times_2 = _cm_i_s.len();
+        let log_m = log2(m as f64) as usize;
+        // Generate challenges
+        // Note: absorb commits
+        let alphas: Vec<R> = (0..k_times_2)
+            .map(|_| _transcript.get_big_challenge().into())
+            .collect::<Vec<_>>();
+        let zetas: Vec<R> = (0..k_times_2)
+            .map(|_| _transcript.get_big_challenge().into())
+            .collect::<Vec<_>>();
+        let mut mus: Vec<R> = (0..k_times_2 - 1)
+            .map(|_| _transcript.get_big_challenge().into())
+            .collect::<Vec<_>>();
+        mus.push(R::one());
+        let Beta: Vec<R> = (0..log_m)
+            .map(|_| _transcript.get_big_challenge().into())
+            .collect::<Vec<_>>();
+
+        let poly_info = VPAuxInfo {
+            max_degree: _ccs.d + 1,
+            num_variables: log_m,
+            phantom: std::marker::PhantomData,
+        };
+        let zis: Vec<Vec<R>> = Vec::with_capacity(_ccs.M.len()); // Grab zis from decomposition step
+        let ris: Vec<Vec<R>> = Vec::new(); // Grab ris from decomposition step
+        let vs = _cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<R>>();
+        let us: Vec<R> = Vec::new(); // Grab us from the decomposition step
+        let claim_g1 = alphas
+            .iter()
+            .zip(vs.iter())
+            .fold(R::zero(), |acc, (&alpha, &vi)| acc + (alpha * vi));
+        let claim_g2 = zetas
+            .iter()
+            .zip(us.iter())
+            .fold(R::zero(), |acc, (&zeta, &ui)| acc + (zeta * ui));
+        let protocol = SumCheckIP {
+            claimed_sum: claim_g1 + claim_g2,
+            poly_info,
+        };
+        let verifier = SumCheckVerifier::new(protocol);
+        let sub_claim = verifier
+            .verify(&_proof.pointshift_sumcheck_proof, _transcript).unwrap();
+        let e_asterisk = eq_eval(&Beta, &sub_claim.point).unwrap();
+        let e_i_s: Vec<R> = ris.iter().map(|r| eq_eval(r, &sub_claim.point).unwrap()).collect::<Vec<_>>();
+        let s = sub_claim.expected_evaluation.clone();
+
+        let b = 2 as u64; // Get this from decomposition step and also remove from create_sumcheck_poly
+        let mut should_equal_s = R::one();
+        for i in 0..mus.len() {
+            let res = _proof.theta_s[i].clone();
+            should_equal_s = (0..b).fold(res, |acc, j| {
+                let j_ring = R::from(j);
+                acc*(_proof.theta_s[i] - j_ring)
+            });
+            should_equal_s = (0..b).fold(should_equal_s, |acc, j| {
+                let j_ring = R::from(j);
+                acc*(_proof.theta_s[i] + j_ring)
+            });
+            should_equal_s = should_equal_s * mus[i];
+        }
+        should_equal_s = should_equal_s * e_asterisk;
+        for i in 0..e_i_s.len() {
+           should_equal_s = should_equal_s + (alphas[i] * e_i_s[i] * _proof.theta_s[i]);
+        }
+        for i in 0..e_i_s.len() {
+           should_equal_s = should_equal_s + (zetas[i] * e_i_s[i] * _proof.eta_s[i]);
+        }
+        match should_equal_s == s {
+            true => {},
+            false => {
+                return Err(FoldingError::SumCheckError(crate::utils::sumcheck::SumCheckError::SumCheckFailed(should_equal_s, s)));
+            }
+        }
+
+        let mut rhos = Vec::with_capacity(k_times_2); // need to absorb here as well
+        rhos.push(R::one());
+        for _ in 1..k_times_2 {
+            rhos.push(_transcript.get_small_challenge());
+        }
+
+        // get y0, u0, v0 and x_w0
+
         todo!()
     }
 }

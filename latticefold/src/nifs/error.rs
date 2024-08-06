@@ -29,6 +29,6 @@ pub enum DecompositionError<R: Ring> {
 
 #[derive(Debug, Error)]
 pub enum FoldingError<R: Ring> {
-    #[error("phantom folding error")]
-    PhantomRRemoveThisLater(R),
+    #[error("sum check failed at folding step: {0}")]
+    SumCheckError(#[from] SumCheckError<R>),
 }
