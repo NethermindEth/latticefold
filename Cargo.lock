@@ -334,7 +334,7 @@ name = "cyclotomic-rings"
 version = "0.1.0"
 dependencies = [
  "ark-ff",
- "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/add-overfield-splitted-ntt)",
+ "lattirust-arithmetic",
  "num-bigint",
  "rand",
 ]
@@ -609,7 +609,7 @@ dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
  "ark-std",
- "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main)",
+ "lattirust-arithmetic",
  "num-traits",
  "rand",
  "thiserror",
@@ -618,36 +618,7 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/add-overfield-splitted-ntt#a04e91d4a82a4d5478740ed3fd094bf74894c2be"
-dependencies = [
- "ark-crypto-primitives",
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "bincode",
- "bitter",
- "delegate",
- "delegate-attr",
- "derive_more",
- "displaydoc",
- "nalgebra",
- "nalgebra-sparse",
- "nimue",
- "num-bigint",
- "num-traits",
- "rand",
- "rayon",
- "rounded-div",
- "serde",
- "serde_with",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "lattirust-arithmetic"
-version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#111bceddef0dd1883bf18311e602d6d101c36291"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#b5e7e6abad576a6bfcf94acd5c7eecea20407510"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
