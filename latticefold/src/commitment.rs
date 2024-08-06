@@ -18,15 +18,24 @@ pub enum CommitmentError {
     WrongWitnessLength(usize),
 }
 
+/// Ajtai commitment parameters.
+/// Convenient to enforce them compile-time.
 pub trait AjtaiParams: Clone {
-    // The MSIS bound.
+    /// The MSIS bound.
     const B: u128;
-    // The ring modulus should be < B^L.
+    /// The ring modulus should be < B^L.
     const L: usize;
+    /// The number of rows of the Ajtai matrix.
     const WITNESS_SIZE: usize;
+    /// The number of columns of the Ajtai matrix.
     const OUTPUT_SIZE: usize;
 }
 
+/// The Ajtai commitment type. Meant to contain the output of the
+/// matrix-vector multiplication `A \cdot x`.
+/// Enforced to have the length `P::OUTPUT_SIZE`.
+/// Since Ajtai commitment is bounded-additively homomorphic
+/// one can add commitments and multiply them by a scalar.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Commitment<R: Ring, P: AjtaiParams> {
     _phantom: PhantomData<P>,
@@ -262,6 +271,10 @@ impl<'a, R: Ring, P: AjtaiParams> Mul<R> for &'a Commitment<R, P> {
 
 // TODO: use macros to implement the other operations
 
+/// A concrete instantiation of the Ajtai commitment scheme.
+/// Contains a random Ajtai matrix for the coresssponding Ajtai parameters
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
 #[derive(Clone, Debug)]
 pub struct AjtaiCommitmentScheme<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams>
 where

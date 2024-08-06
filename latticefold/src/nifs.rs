@@ -43,6 +43,10 @@ type LatticefoldProof<CR, NTT, P, T> = ComposedProof<
     NIFSProver<CR, NTT, P, T>,
 >;
 
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
+/// `P` is the Ajtai commitment parameters.
+/// `T` is the FS-transform transcript.
 pub struct NIFSProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
@@ -118,6 +122,10 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     }
 }
 
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
+/// `P` is the Ajtai commitment parameters.
+/// `T` is the FS-transform transcript.
 pub struct NIFSVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
