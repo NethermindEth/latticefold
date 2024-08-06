@@ -36,12 +36,7 @@ where
             matrix: Matrix::rand(P::WITNESS_SIZE, P::OUTPUT_SIZE, rng),
         }
     }
-}
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
-where
-    CR: Into<NTT> + From<NTT>,
-{
     /// Commit to a witness in the NTT form.
     /// The most basic one just multiplies by the matrix.
     pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<NTT, P>, CommitmentError> {

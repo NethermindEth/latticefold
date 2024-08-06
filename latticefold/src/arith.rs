@@ -192,8 +192,7 @@ impl<NTT: OverField> Witness<NTT> {
     pub fn commit<CR: PolyRing + From<NTT> + Into<NTT>, P: AjtaiParams>(
         &self,
         ajtai: &AjtaiCommitmentScheme<CR, NTT, P>,
-    ) -> Result<Commitment<NTT, P>, CommitmentError>
-    {
+    ) -> Result<Commitment<NTT, P>, CommitmentError> {
         ajtai.commit_ntt(&self.f)
     }
 }
