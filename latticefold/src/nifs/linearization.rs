@@ -58,8 +58,13 @@ pub trait LinearizationVerifier<NTT: OverField, P: AjtaiParams, T: Transcript<NT
     ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, DP: DecompositionParams, T: Transcript<NTT>>
-    LinearizationProver<NTT, P, T> for NIFSProver<CR, NTT, P, DP, T>
+impl<
+        CR: PolyRing + From<NTT> + Into<NTT>,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams,
+        T: Transcript<NTT>,
+    > LinearizationProver<NTT, P, T> for NIFSProver<CR, NTT, P, DP, T>
 {
     type Proof = LinearizationProof<NTT>;
     type Error = LinearizationError<NTT>;
@@ -124,8 +129,13 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, DP: DecompositionParams, T: T
     }
 }
 
-impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, DP: DecompositionParams, T: Transcript<NTT>>
-    LinearizationVerifier<NTT, P, T> for NIFSVerifier<CR, NTT, P, DP, T>
+impl<
+        CR: PolyRing + From<NTT> + Into<NTT>,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams,
+        T: Transcript<NTT>,
+    > LinearizationVerifier<NTT, P, T> for NIFSVerifier<CR, NTT, P, DP, T>
 {
     type Prover = NIFSProver<CR, NTT, P, DP, T>;
 

@@ -3,7 +3,9 @@ use std::{
     ops::{Add, Mul, Sub},
 };
 
-use lattirust_arithmetic::balanced_decomposition::decompose_balanced_slice_polyring;
+use lattirust_arithmetic::balanced_decomposition::{
+    decompose_balanced_slice_polyring, pad_and_transpose,
+};
 use lattirust_arithmetic::ring::{PolyRing, Ring};
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
@@ -72,7 +74,7 @@ where
         &self,
         f: &[CR],
     ) -> Result<Commitment<NTT, P>, CommitmentError> {
-        let f = decompose_balanced_slice_polyring(f, P::B, Some(P::L))
+        let f = pad_and_transpose(decompose_balanced_slice_polyring(f, P::B, Some(P::L)))
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
@@ -86,11 +88,11 @@ where
         &self,
         w: &[NTT],
     ) -> Result<Commitment<NTT, P>, CommitmentError> {
-        let f: Vec<NTT> = decompose_balanced_slice_polyring(
+        let f: Vec<NTT> = pad_and_transpose(decompose_balanced_slice_polyring(
             &w.iter().map(|&x| x.into()).collect::<Vec<CR>>(),
             P::B,
             Some(P::L),
-        )
+        ))
         .iter()
         .flatten()
         .map(|&x| x.into())

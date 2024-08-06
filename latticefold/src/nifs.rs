@@ -14,6 +14,7 @@ use lattirust_arithmetic::ring::PolyRing;
 use linearization::{LinearizationProver, LinearizationVerifier};
 
 use crate::arith::{Witness, CCS, LCCCS};
+use crate::commitment::AjtaiCommitmentScheme;
 use crate::commitment::AjtaiParams;
 use crate::{arith::CCCS, transcript::Transcript};
 
@@ -23,7 +24,7 @@ use crate::{arith::CCCS, transcript::Transcript};
 /// `T` is the FS-transform transcript.
 #[derive(Debug, Clone)]
 pub struct ComposedProof<
-    CR: PolyRing,
+    CR: PolyRing + From<NTT> + Into<NTT>,
     NTT: OverField,
     P: AjtaiParams,
     DP: DecompositionParams<AP = P>,
@@ -54,7 +55,7 @@ type LatticefoldProof<CR, NTT, P, DP, T> = ComposedProof<
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
 pub struct NIFSProver<
-    CR: PolyRing,
+    CR: PolyRing + From<NTT> + Into<NTT>,
     NTT: OverField,
     P: AjtaiParams,
     DP: DecompositionParams,
@@ -68,7 +69,7 @@ pub struct NIFSProver<
 }
 
 impl<
-        CR: PolyRing,
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
         NTT: OverField,
         P: AjtaiParams,
         DP: DecompositionParams<AP = P>,
@@ -82,6 +83,7 @@ impl<
         w_i: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
+        ajtai: &AjtaiCommitmentScheme<CR, NTT, P>,
     ) -> Result<
         (
             LCCCS<NTT, P>,
@@ -90,7 +92,7 @@ impl<
         ),
         LatticefoldError<NTT>,
     > {
-        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript, ccs)
+        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript, ccs, ajtai)
     }
 
     fn prove_aux<
@@ -105,6 +107,7 @@ impl<
         w_i: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
+        ajtai: &AjtaiCommitmentScheme<CR, NTT, P>,
     ) -> Result<
         (
             LCCCS<NTT, P>,
@@ -115,9 +118,9 @@ impl<
     > {
         let (linearized_cm_i, linearization_proof) = L::prove(cm_i, w_i, transcript, ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            D::prove(acc, w_acc, transcript, ccs)?;
+            D::prove(acc, w_acc, transcript, ccs, ajtai)?;
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
-            D::prove(&linearized_cm_i, w_i, transcript, ccs)?;
+            D::prove(&linearized_cm_i, w_i, transcript, ccs, ajtai)?;
 
         let (lcccs, wit_s) = {
             let mut lcccs = decomposed_lcccs_l;
@@ -151,7 +154,7 @@ impl<
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
 pub struct NIFSVerifier<
-    CR: PolyRing,
+    CR: PolyRing + From<NTT> + Into<NTT>,
     NTT: OverField,
     P: AjtaiParams,
     DP: DecompositionParams,
@@ -165,7 +168,7 @@ pub struct NIFSVerifier<
 }
 
 impl<
-        CR: PolyRing,
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
         NTT: OverField,
         P: AjtaiParams,
         DP: DecompositionParams<AP = P>,
