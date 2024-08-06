@@ -36,7 +36,7 @@ pub struct LinearizationProof<NTT: OverField> {
 pub trait LinearizationProver<
     CR: ConvertibleRing,
     NTT: OverField,
-    P: AjtaiParams<CR>,
+    P: AjtaiParams,
     T: Transcript<NTT>,
 >
 {
@@ -54,7 +54,7 @@ pub trait LinearizationProver<
 pub trait LinearizationVerifier<
     CR: ConvertibleRing,
     NTT: OverField,
-    P: AjtaiParams<CR>,
+    P: AjtaiParams,
     T: Transcript<NTT>,
 >
 {
@@ -69,7 +69,7 @@ pub trait LinearizationVerifier<
     ) -> Result<LCCCS<CR, NTT, P>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     LinearizationProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
     type Proof = LinearizationProof<NTT>;
@@ -135,7 +135,7 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>
     }
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     LinearizationVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
     type Prover = NIFSProver<CR, NTT, P, T>;

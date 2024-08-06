@@ -21,7 +21,7 @@ pub struct DecompositionProof<NTT: OverField> {
 pub trait DecompositionProver<
     CR: ConvertibleRing,
     NTT: OverField,
-    P: AjtaiParams<CR>,
+    P: AjtaiParams,
     T: Transcript<NTT>,
 >
 {
@@ -39,7 +39,7 @@ pub trait DecompositionProver<
 pub trait DecompositionVerifier<
     CR: ConvertibleRing,
     NTT: OverField,
-    P: AjtaiParams<CR>,
+    P: AjtaiParams,
     T: Transcript<NTT>,
 >
 {
@@ -54,7 +54,7 @@ pub trait DecompositionVerifier<
     ) -> Result<Vec<LCCCS<CR, NTT, P>>, Self::Error>;
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     DecompositionProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
     type Proof = DecompositionProof<NTT>;
@@ -77,7 +77,7 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>
     }
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     DecompositionVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
     type Prover = NIFSProver<CR, NTT, P, T>;

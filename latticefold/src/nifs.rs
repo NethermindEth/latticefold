@@ -21,7 +21,7 @@ use crate::{arith::CCCS, transcript::Transcript};
 pub struct ComposedProof<
     CR: ConvertibleRing,
     NTT: OverField,
-    P: AjtaiParams<CR>,
+    P: AjtaiParams,
     T: Transcript<NTT>,
     L: LinearizationProver<CR, NTT, P, T>,
     D: DecompositionProver<CR, NTT, P, T>,
@@ -43,14 +43,14 @@ type LatticefoldProof<CR, NTT, P, T> = ComposedProof<
     NIFSProver<CR, NTT, P, T>,
 >;
 
-pub struct NIFSProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>> {
+pub struct NIFSProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     NIFSProver<CR, NTT, P, T>
 {
     pub fn prove(
@@ -124,14 +124,14 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>
     }
 }
 
-pub struct NIFSVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>> {
+pub struct NIFSVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     _cr: PhantomData<CR>,
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
-impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams<CR>, T: Transcript<NTT>>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     NIFSVerifier<CR, NTT, P, T>
 {
     pub fn verify(

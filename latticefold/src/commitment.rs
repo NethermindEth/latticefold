@@ -18,7 +18,7 @@ pub enum CommitmentError {
     WrongWitnessLength(usize),
 }
 
-pub trait AjtaiParams<R: Ring>: Clone {
+pub trait AjtaiParams: Clone {
     // The MSIS bound.
     const B: u128;
     // The ring modulus should be < B^L.
@@ -28,12 +28,12 @@ pub trait AjtaiParams<R: Ring>: Clone {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Commitment<R: Ring, P: AjtaiParams<R>> {
+pub struct Commitment<R: Ring, P: AjtaiParams> {
     _phantom: PhantomData<P>,
     val: Vec<R>,
 }
 
-impl<R: Ring, P: AjtaiParams<R>> Commitment<R, P> {
+impl<R: Ring, P: AjtaiParams> Commitment<R, P> {
     fn from_vec_raw(vec: Vec<R>) -> Self {
         Self {
             _phantom: PhantomData,
@@ -42,7 +42,7 @@ impl<R: Ring, P: AjtaiParams<R>> Commitment<R, P> {
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> TryFrom<&'a [R]> for Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> TryFrom<&'a [R]> for Commitment<R, P> {
     type Error = CommitmentError;
 
     fn try_from(slice: &'a [R]) -> Result<Self, Self::Error> {
@@ -57,7 +57,7 @@ impl<'a, R: Ring, P: AjtaiParams<R>> TryFrom<&'a [R]> for Commitment<R, P> {
     }
 }
 
-impl<R: Ring, P: AjtaiParams<R>> TryFrom<Vec<R>> for Commitment<R, P> {
+impl<R: Ring, P: AjtaiParams> TryFrom<Vec<R>> for Commitment<R, P> {
     type Error = CommitmentError;
 
     fn try_from(vec: Vec<R>) -> Result<Self, Self::Error> {
@@ -72,7 +72,7 @@ impl<R: Ring, P: AjtaiParams<R>> TryFrom<Vec<R>> for Commitment<R, P> {
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> Add<&'a Commitment<R, P>> for &'a Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Add<&'a Commitment<R, P>> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: &'a Commitment<R, P>) -> Self::Output {
@@ -88,7 +88,7 @@ impl<'a, R: Ring, P: AjtaiParams<R>> Add<&'a Commitment<R, P>> for &'a Commitmen
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> Add<Commitment<R, P>> for &'a Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Add<Commitment<R, P>> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: Commitment<R, P>) -> Self::Output {
@@ -104,7 +104,7 @@ impl<'a, R: Ring, P: AjtaiParams<R>> Add<Commitment<R, P>> for &'a Commitment<R,
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> Add<&'a Commitment<R, P>> for Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Add<&'a Commitment<R, P>> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: &'a Commitment<R, P>) -> Self::Output {
@@ -120,7 +120,7 @@ impl<'a, R: Ring, P: AjtaiParams<R>> Add<&'a Commitment<R, P>> for Commitment<R,
     }
 }
 
-impl<R: Ring, P: AjtaiParams<R>> Add<Commitment<R, P>> for Commitment<R, P> {
+impl<R: Ring, P: AjtaiParams> Add<Commitment<R, P>> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: Commitment<R, P>) -> Self::Output {
@@ -136,7 +136,7 @@ impl<R: Ring, P: AjtaiParams<R>> Add<Commitment<R, P>> for Commitment<R, P> {
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> Sub<&'a Commitment<R, P>> for &'a Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Sub<&'a Commitment<R, P>> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: &'a Commitment<R, P>) -> Self::Output {
@@ -152,7 +152,7 @@ impl<'a, R: Ring, P: AjtaiParams<R>> Sub<&'a Commitment<R, P>> for &'a Commitmen
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> Sub<Commitment<R, P>> for &'a Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Sub<Commitment<R, P>> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: Commitment<R, P>) -> Self::Output {
@@ -168,7 +168,7 @@ impl<'a, R: Ring, P: AjtaiParams<R>> Sub<Commitment<R, P>> for &'a Commitment<R,
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> Sub<&'a Commitment<R, P>> for Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Sub<&'a Commitment<R, P>> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: &'a Commitment<R, P>) -> Self::Output {
@@ -184,7 +184,7 @@ impl<'a, R: Ring, P: AjtaiParams<R>> Sub<&'a Commitment<R, P>> for Commitment<R,
     }
 }
 
-impl<R: Ring, P: AjtaiParams<R>> Sub<Commitment<R, P>> for Commitment<R, P> {
+impl<R: Ring, P: AjtaiParams> Sub<Commitment<R, P>> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: Commitment<R, P>) -> Self::Output {
@@ -200,7 +200,7 @@ impl<R: Ring, P: AjtaiParams<R>> Sub<Commitment<R, P>> for Commitment<R, P> {
     }
 }
 
-impl<'a, 'b, R: Ring, P: AjtaiParams<R>> Mul<&'b R> for &'a Commitment<R, P> {
+impl<'a, 'b, R: Ring, P: AjtaiParams> Mul<&'b R> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn mul(self, rhs: &'b R) -> Self::Output {
@@ -215,7 +215,7 @@ impl<'a, 'b, R: Ring, P: AjtaiParams<R>> Mul<&'b R> for &'a Commitment<R, P> {
     }
 }
 
-impl<'b, R: Ring, P: AjtaiParams<R>> Mul<&'b R> for Commitment<R, P> {
+impl<'b, R: Ring, P: AjtaiParams> Mul<&'b R> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn mul(self, rhs: &'b R) -> Self::Output {
@@ -230,7 +230,7 @@ impl<'b, R: Ring, P: AjtaiParams<R>> Mul<&'b R> for Commitment<R, P> {
     }
 }
 
-impl<R: Ring, P: AjtaiParams<R>> Mul<R> for Commitment<R, P> {
+impl<R: Ring, P: AjtaiParams> Mul<R> for Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn mul(self, rhs: R) -> Self::Output {
@@ -245,7 +245,7 @@ impl<R: Ring, P: AjtaiParams<R>> Mul<R> for Commitment<R, P> {
     }
 }
 
-impl<'a, R: Ring, P: AjtaiParams<R>> Mul<R> for &'a Commitment<R, P> {
+impl<'a, R: Ring, P: AjtaiParams> Mul<R> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn mul(self, rhs: R) -> Self::Output {
@@ -266,14 +266,14 @@ impl<'a, R: Ring, P: AjtaiParams<R>> Mul<R> for &'a Commitment<R, P> {
 pub struct AjtaiCommitmentScheme<
     CR: ConvertibleRing,
     R: OverField + Into<CR> + From<CR>,
-    P: AjtaiParams<R>,
+    P: AjtaiParams,
 > {
     _cr: PhantomData<CR>,
     _p: PhantomData<P>,
     matrix: Matrix<R>,
 }
 
-impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams<R>>
+impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams>
     AjtaiCommitmentScheme<CR, R, P>
 {
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
@@ -285,7 +285,7 @@ impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams<R>>
     }
 }
 
-impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams<R>>
+impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams>
     AjtaiCommitmentScheme<CR, R, P>
 {
     pub fn commit_ntt(&self, f: &[R]) -> Result<Commitment<R, P>, CommitmentError> {

@@ -133,12 +133,12 @@ pub trait Instance<R: Ring> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CCCS<CR: ConvertibleRing, R: Ring, P: AjtaiParams<CR>> {
+pub struct CCCS<CR: ConvertibleRing, R: Ring, P: AjtaiParams> {
     pub cm: Commitment<CR, P>,
     pub x_ccs: Vec<R>,
 }
 
-impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams<CR>> Instance<R> for CCCS<CR, R, P> {
+impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams> Instance<R> for CCCS<CR, R, P> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_ccs.len() + w.len() + 1);
 
@@ -151,7 +151,7 @@ impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams<CR>> Instance<R> for CCCS<CR, 
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LCCCS<CR: ConvertibleRing, R: Ring, P: AjtaiParams<CR>> {
+pub struct LCCCS<CR: ConvertibleRing, R: Ring, P: AjtaiParams> {
     pub r: Vec<R>,
     pub v: R,
     pub cm: Commitment<CR, P>,
@@ -160,7 +160,7 @@ pub struct LCCCS<CR: ConvertibleRing, R: Ring, P: AjtaiParams<CR>> {
     pub h: R,
 }
 
-impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams<CR>> Instance<R> for LCCCS<CR, R, P> {
+impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams> Instance<R> for LCCCS<CR, R, P> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_w.len() + w.len() + 1);
 
