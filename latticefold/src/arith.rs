@@ -13,7 +13,6 @@ use crate::commitment::Commitment;
 use ark_std::log2;
 use error::CSError as Error;
 use lattirust_arithmetic::linear_algebra::SparseMatrix;
-use lattirust_arithmetic::ring::ConvertibleRing;
 use lattirust_arithmetic::ring::Ring;
 use r1cs::R1CS;
 
@@ -133,12 +132,12 @@ pub trait Instance<R: Ring> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CCCS<CR: ConvertibleRing, R: Ring, P: AjtaiParams> {
-    pub cm: Commitment<CR, P>,
+pub struct CCCS<R: Ring, P: AjtaiParams> {
+    pub cm: Commitment<R, P>,
     pub x_ccs: Vec<R>,
 }
 
-impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams> Instance<R> for CCCS<CR, R, P> {
+impl<R: Ring, P: AjtaiParams> Instance<R> for CCCS<R, P> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_ccs.len() + w.len() + 1);
 
@@ -151,16 +150,16 @@ impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams> Instance<R> for CCCS<CR, R, P
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LCCCS<CR: ConvertibleRing, R: Ring, P: AjtaiParams> {
+pub struct LCCCS<R: Ring, P: AjtaiParams> {
     pub r: Vec<R>,
     pub v: R,
-    pub cm: Commitment<CR, P>,
+    pub cm: Commitment<R, P>,
     pub u: Vec<R>,
     pub x_w: Vec<R>,
     pub h: R,
 }
 
-impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams> Instance<R> for LCCCS<CR, R, P> {
+impl<R: Ring, P: AjtaiParams> Instance<R> for LCCCS<R, P> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_w.len() + w.len() + 1);
 
@@ -173,12 +172,12 @@ impl<CR: ConvertibleRing, R: Ring, P: AjtaiParams> Instance<R> for LCCCS<CR, R, 
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Witness<CR: ConvertibleRing, R: Ring> {
+pub struct Witness<NTT: Ring> {
     // F is B-decomposed ccs witness
-    pub f: Vec<CR>,
-    // f_hat = vec(f)
-    pub f_hat: Vec<R>,
-    pub w_ccs: Vec<R>,
+    pub f: Vec<NTT>,
+    // f_hat = vec(CR repr of f)
+    pub f_hat: Vec<NTT>,
+    pub w_ccs: Vec<NTT>,
 }
 
 #[cfg(test)]

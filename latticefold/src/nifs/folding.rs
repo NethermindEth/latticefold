@@ -24,11 +24,11 @@ pub trait FoldingProver<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: 
     type Error: std::error::Error;
 
     fn prove(
-        cm_i_s: &[LCCCS<CR, NTT, P>],
-        w_s: &[Witness<CR, NTT>],
+        cm_i_s: &[LCCCS<NTT, P>],
+        w_s: &[Witness<NTT>],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<CR, NTT, P>, Witness<CR, NTT>, Self::Proof), Self::Error>;
+    ) -> Result<(LCCCS<NTT, P>, Witness<NTT>, Self::Proof), Self::Error>;
 }
 
 pub trait FoldingVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
@@ -36,11 +36,11 @@ pub trait FoldingVerifier<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T
     type Error = <Self::Prover as FoldingProver<CR, NTT, P, T>>::Error;
 
     fn verify(
-        cm_i_s: &[LCCCS<CR, NTT, P>],
+        cm_i_s: &[LCCCS<NTT, P>],
         proof: &<Self::Prover as FoldingProver<CR, NTT, P, T>>::Proof,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<CR, NTT, P>, Self::Error>;
+    ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
 impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
@@ -50,11 +50,11 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     type Error = FoldingError<NTT>;
 
     fn prove(
-        _cm_i_s: &[LCCCS<CR, NTT, P>],
-        _w_s: &[Witness<CR, NTT>],
+        _cm_i_s: &[LCCCS<NTT, P>],
+        _w_s: &[Witness<NTT>],
         _transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<CR, NTT, P>, Witness<CR, NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
+    ) -> Result<(LCCCS<NTT, P>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         todo!()
     }
 }
@@ -65,11 +65,11 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     type Prover = NIFSProver<CR, NTT, P, T>;
 
     fn verify(
-        _cm_i_s: &[LCCCS<CR, NTT, P>],
+        _cm_i_s: &[LCCCS<NTT, P>],
         _proof: &<Self::Prover as FoldingProver<CR, NTT, P, T>>::Proof,
         _transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<CR, NTT, P>, FoldingError<NTT>> {
+    ) -> Result<LCCCS<NTT, P>, FoldingError<NTT>> {
         todo!()
     }
 }

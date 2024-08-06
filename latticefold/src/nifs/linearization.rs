@@ -33,54 +33,42 @@ pub struct LinearizationProof<NTT: OverField> {
     pub u: Vec<NTT>,
 }
 
-pub trait LinearizationProver<
-    CR: ConvertibleRing,
-    NTT: OverField,
-    P: AjtaiParams,
-    T: Transcript<NTT>,
->
-{
+pub trait LinearizationProver<NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     type Proof: Clone;
     type Error: std::error::Error;
 
     fn prove(
-        cm_i: &CCCS<CR, NTT, P>,
-        wit: &Witness<CR, NTT>,
+        cm_i: &CCCS<NTT, P>,
+        wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<CR, NTT, P>, Self::Proof), Self::Error>;
+    ) -> Result<(LCCCS<NTT, P>, Self::Proof), Self::Error>;
 }
 
-pub trait LinearizationVerifier<
-    CR: ConvertibleRing,
-    NTT: OverField,
-    P: AjtaiParams,
-    T: Transcript<NTT>,
->
-{
-    type Prover: LinearizationProver<CR, NTT, P, T>;
-    type Error = <Self::Prover as LinearizationProver<CR, NTT, P, T>>::Error;
+pub trait LinearizationVerifier<NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+    type Prover: LinearizationProver<NTT, P, T>;
+    type Error = <Self::Prover as LinearizationProver<NTT, P, T>>::Error;
 
     fn verify(
-        cm_i: &CCCS<CR, NTT, P>,
-        proof: &<Self::Prover as LinearizationProver<CR, NTT, P, T>>::Proof,
+        cm_i: &CCCS<NTT, P>,
+        proof: &<Self::Prover as LinearizationProver<NTT, P, T>>::Proof,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<CR, NTT, P>, Self::Error>;
+    ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
 impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    LinearizationProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, T>
+    LinearizationProver<NTT, P, T> for NIFSProver<CR, NTT, P, T>
 {
     type Proof = LinearizationProof<NTT>;
     type Error = LinearizationError<NTT>;
 
     fn prove(
-        cm_i: &CCCS<CR, NTT, P>,
-        wit: &Witness<CR, NTT>,
+        cm_i: &CCCS<NTT, P>,
+        wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<CR, NTT, P>, LinearizationProof<NTT>), LinearizationError<NTT>> {
+    ) -> Result<(LCCCS<NTT, P>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
@@ -136,16 +124,16 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
 }
 
 impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
-    LinearizationVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
+    LinearizationVerifier<NTT, P, T> for NIFSVerifier<CR, NTT, P, T>
 {
     type Prover = NIFSProver<CR, NTT, P, T>;
 
     fn verify(
-        cm_i: &CCCS<CR, NTT, P>,
-        proof: &<Self::Prover as LinearizationProver<CR, NTT, P, T>>::Proof,
+        cm_i: &CCCS<NTT, P>,
+        proof: &<Self::Prover as LinearizationProver<NTT, P, T>>::Proof,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<CR, NTT, P>, LinearizationError<NTT>> {
+    ) -> Result<LCCCS<NTT, P>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
@@ -183,7 +171,7 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
             )));
         }
 
-        Ok(LCCCS {
+        Ok(LCCCS::<NTT, P> {
             r: subclaim.point,
             v: proof.v,
             cm: cm_i.cm.clone(),

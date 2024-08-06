@@ -263,18 +263,18 @@ impl<'a, R: Ring, P: AjtaiParams> Mul<R> for &'a Commitment<R, P> {
 // TODO: use macros to implement the other operations
 
 #[derive(Clone, Debug)]
-pub struct AjtaiCommitmentScheme<
-    CR: ConvertibleRing,
-    R: OverField + Into<CR> + From<CR>,
-    P: AjtaiParams,
-> {
+pub struct AjtaiCommitmentScheme<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams>
+where
+    NTT: Into<CR> + From<CR>,
+{
     _cr: PhantomData<CR>,
     _p: PhantomData<P>,
-    matrix: Matrix<R>,
+    matrix: Matrix<NTT>,
 }
 
-impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams>
-    AjtaiCommitmentScheme<CR, R, P>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
+where
+    NTT: Into<CR> + From<CR>,
 {
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
         Self {
@@ -285,10 +285,11 @@ impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams>
     }
 }
 
-impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams>
-    AjtaiCommitmentScheme<CR, R, P>
+impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
+where
+    NTT: Into<CR> + From<CR>,
 {
-    pub fn commit_ntt(&self, f: &[R]) -> Result<Commitment<R, P>, CommitmentError> {
+    pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<NTT, P>, CommitmentError> {
         // TODO: a lot of clones and copies. Can we optimise this somehow?
         if f.len() != P::WITNESS_SIZE {
             return Err(CommitmentError::WrongWitnessLength(f.len()));
@@ -299,18 +300,18 @@ impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams>
         Commitment::try_from(commitment_vec.iter().copied().collect::<Vec<_>>())
     }
 
-    pub fn commit_coeff(&self, f: &[CR]) -> Result<Commitment<R, P>, CommitmentError> {
+    pub fn commit_coeff(&self, f: &[CR]) -> Result<Commitment<NTT, P>, CommitmentError> {
         if f.len() != P::WITNESS_SIZE {
             return Err(CommitmentError::WrongWitnessLength(f.len()));
         }
 
-        self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<R>>())
+        self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<NTT>>())
     }
 
     pub fn decompose_and_commit_coeff(
         &self,
         f: &[CR],
-    ) -> Result<Commitment<R, P>, CommitmentError> {
+    ) -> Result<Commitment<NTT, P>, CommitmentError> {
         let f = decompose_balanced_vec(f, P::B, Some(P::L))
             .into_iter()
             .flatten()
@@ -320,8 +321,11 @@ impl<CR: ConvertibleRing, R: OverField + Into<CR> + From<CR>, P: AjtaiParams>
     }
 
     /// Commits the gadgeted witness, i.e. w = G_B f, for some f.
-    pub fn decompose_and_commit_ntt(&self, w: &[R]) -> Result<Commitment<R, P>, CommitmentError> {
-        let f: Vec<R> = decompose_balanced_vec(
+    pub fn decompose_and_commit_ntt(
+        &self,
+        w: &[NTT],
+    ) -> Result<Commitment<NTT, P>, CommitmentError> {
+        let f: Vec<NTT> = decompose_balanced_vec(
             &w.iter().map(|&x| x.into()).collect::<Vec<CR>>(),
             P::B,
             Some(P::L),

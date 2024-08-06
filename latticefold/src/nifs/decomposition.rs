@@ -29,11 +29,11 @@ pub trait DecompositionProver<
     type Error: std::error::Error;
 
     fn prove(
-        cm_i: &LCCCS<CR, NTT, P>,
-        wit: &Witness<CR, NTT>,
+        cm_i: &LCCCS<NTT, P>,
+        wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(Vec<LCCCS<CR, NTT, P>>, Vec<Witness<CR, NTT>>, Self::Proof), Self::Error>;
+    ) -> Result<(Vec<LCCCS<NTT, P>>, Vec<Witness<NTT>>, Self::Proof), Self::Error>;
 }
 
 pub trait DecompositionVerifier<
@@ -47,11 +47,11 @@ pub trait DecompositionVerifier<
     type Error = <Self::Prover as DecompositionProver<CR, NTT, P, T>>::Error;
 
     fn verify(
-        cm_i: &LCCCS<CR, NTT, P>,
+        cm_i: &LCCCS<NTT, P>,
         proof: &<Self::Prover as DecompositionProver<CR, NTT, P, T>>::Proof,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<CR, NTT, P>>, Self::Error>;
+    ) -> Result<Vec<LCCCS<NTT, P>>, Self::Error>;
 }
 
 impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
@@ -61,14 +61,14 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     type Error = DecompositionError<NTT>;
 
     fn prove(
-        _cm_i: &LCCCS<CR, NTT, P>,
-        _wit: &Witness<CR, NTT>,
+        _cm_i: &LCCCS<NTT, P>,
+        _wit: &Witness<NTT>,
         _transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
     ) -> Result<
         (
-            Vec<LCCCS<CR, NTT, P>>,
-            Vec<Witness<CR, NTT>>,
+            Vec<LCCCS<NTT, P>>,
+            Vec<Witness<NTT>>,
             DecompositionProof<NTT>,
         ),
         DecompositionError<NTT>,
@@ -83,11 +83,11 @@ impl<CR: ConvertibleRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
     type Prover = NIFSProver<CR, NTT, P, T>;
 
     fn verify(
-        _cm_i: &LCCCS<CR, NTT, P>,
+        _cm_i: &LCCCS<NTT, P>,
         _proof: &<Self::Prover as DecompositionProver<CR, NTT, P, T>>::Proof,
         _transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<CR, NTT, P>>, DecompositionError<NTT>> {
+    ) -> Result<Vec<LCCCS<NTT, P>>, DecompositionError<NTT>> {
         todo!()
     }
 }
