@@ -86,6 +86,12 @@ impl<R: Ring, P: AjtaiParams> TryFrom<Vec<R>> for Commitment<R, P> {
     }
 }
 
+impl<R: Ring, P: AjtaiParams> AsRef<[R]> for Commitment<R, P> {
+    fn as_ref(&self) -> &[R] {
+        &self.val
+    }
+}
+
 impl<'a, R: Ring, P: AjtaiParams> Add<&'a Commitment<R, P>> for &'a Commitment<R, P> {
     type Output = Commitment<R, P>;
 
