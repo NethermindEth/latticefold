@@ -104,9 +104,9 @@ impl<
             .zip(_w_s.iter())
             .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
             .collect::<Vec<_>>();
-        let ris = _cm_i_s.iter().map(|cm_i| cm_i.r).collect::<Vec<_>>();
+        let ris = _cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
         let vs = _cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<NTT>>();
-        let us = _cm_i_s.iter().map(|cm_i| cm_i.u).collect::<Vec<_>>();
+        let us = _cm_i_s.iter().map(|cm_i| cm_i.u.clone()).collect::<Vec<_>>();
 
         // Setup matrix_mles for later evaluation of etas
         // Review creation of this Mi*z mles
@@ -263,7 +263,7 @@ impl<
         let e_asterisk = eq_eval(&Beta, &sub_claim.point).unwrap();
         let e_i_s: Vec<NTT> = ris
             .iter()
-            .map(|r| eq_eval(r, &sub_claim.point).unwrap())
+            .map(|r| eq_eval(r.as_slice(), &sub_claim.point).unwrap())
             .collect::<Vec<_>>();
         let s = sub_claim.expected_evaluation.clone();
 
