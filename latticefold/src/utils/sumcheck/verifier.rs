@@ -34,6 +34,9 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckVerifier<R, CS> {
         let mut challenge_vector: Vec<R> = Vec::with_capacity(proof.rounds.len());
 
         for round in proof.rounds.iter() {
+            println!("claimed sum {:?}", check_sum);
+            println!("unipoly {:?}", round.unipoly);
+
             let eval1 = round
                 .unipoly
                 .coeffs
@@ -51,7 +54,7 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckVerifier<R, CS> {
             transcript.absorb_ring_vec(&round.unipoly.coeffs);
 
             let challenge = transcript.get_big_challenge().into();
-
+            println!("challenge {:?}", challenge);
             check_sum = round.unipoly.evaluate(challenge);
             challenge_vector.push(challenge);
         }

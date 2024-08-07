@@ -73,11 +73,12 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
-
+        println!("Beta s {:?}", beta_s);
         // Step 2: Sum check protocol
 
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
+        println!("\n\nZ_CCS {:?}\n", z_ccs);
 
         // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
         let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
@@ -85,15 +86,20 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
             .iter()
             .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, &z_ccs)?)))
             .collect::<Result<_, LinearizationError<_>>>()?;
-
+        for (i, m) in Mz_mles.iter().enumerate() {
+            println!("\nM_{:?}: {:?}\n", i, m);
+        }
         // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+
+        println!("\nG: {:?}\n", g);
         // Run sum check prover
         let (sum_check_proof, subclaim) = SumCheckProver::new(g, NTT::zero()).prove(transcript)?;
         // Extract the evaluation point
         let r = subclaim.point;
 
         // Step 3: Compute v, u_vector
+
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
             .evaluate(&r)
             .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
@@ -232,13 +238,14 @@ mod tests {
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
         mle::DenseMultilinearExtension,
-        ring::{Pow2CyclotomicPolyRingNTT, Ring, Zq, Z2_64},
+        ring::{Pow2CyclotomicPolyRingNTT, Zq},
     };
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS, CCS},
-        nifs::NIFSProver,
+        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        commitment::{AjtaiCommitmentScheme, AjtaiParams},
+        nifs::{linearization::LinearizationVerifier, NIFSProver, NIFSVerifier},
         transcript::poseidon::PoseidonTranscript,
     };
 
@@ -289,28 +296,56 @@ mod tests {
     // Actual Tests
     #[test]
     fn test_linearization() {
-        const Q: u64 = 101;
-        const N: usize = 16;
+        const Q: u64 = 17;
+        const N: usize = 8;
         type R = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CR = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<R>();
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
+        println!("\n\nx_CCS {:?}\n", x_ccs);
+        println!("\n\nw_CCS {:?}\n", w_ccs);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        #[derive(Clone)]
+        struct PP;
 
-        let cccs: CCCS<R> = CCCS { x_ccs, cm: vec![] };
-        let witness: Witness<R> = Witness {
-            f: vec![],
-            f_hat: vec![],
-            w_ccs,
+        impl AjtaiParams for PP {
+            const B: u128 = 1_000;
+            const L: usize = 1;
+            const WITNESS_SIZE: usize = 4;
+            const OUTPUT_SIZE: usize = 4;
+        }
+
+        let wit: Witness<R> = Witness::<R>::from_w_ccs::<CR, PP>(&w_ccs);
+        println!("\n\nF {:?}\n", wit.f);
+        println!("\n\nf_hat {:?}\n", wit.f_hat);
+        let cm_i: CCCS<R, PP> = CCCS {
+            cm: wit.commit::<R, PP>(&scheme).unwrap(),
+            x_ccs,
         };
-        let mut transcript: PoseidonTranscript<Pow2CyclotomicPolyRingNTT<101, 16>, CS> =
-            PoseidonTranscript::default();
+        println!(
+            "\n\nCM: {:?}\n\n",
+            wit.commit::<R, PP>(&scheme).unwrap().val
+        );
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let prover = <NIFSProver<R, T> as LinearizationProver<R, T>>::prove(
-            &cccs,
-            &witness,
+        let res = <NIFSProver<CR, R, PP, T> as LinearizationProver<R, PP, T>>::prove(
+            &cm_i,
+            &wit,
             &mut transcript,
             &ccs,
         );
+
+        // let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let res = <NIFSVerifier<CR, R, PP, T> as LinearizationVerifier<R, PP, T>>::verify(
+            &cm_i,
+            &res.unwrap().1,
+            &mut transcript,
+            &ccs,
+        );
+
+        // res.unwrap();
     }
 }
