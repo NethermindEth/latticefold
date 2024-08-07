@@ -127,7 +127,7 @@ pub trait AjtaiParams: Clone {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Commitment<R: Ring, P: AjtaiParams> {
     _phantom: PhantomData<P>,
-    val: Vec<R>,
+    pub val: Vec<R>,
 }
 
 impl<R: Ring, P: AjtaiParams> Commitment<R, P> {
