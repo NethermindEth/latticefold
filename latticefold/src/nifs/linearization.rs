@@ -303,7 +303,7 @@ mod tests {
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<R>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
+        let (x_ccs, _, w_ccs) = get_test_z_split::<R>(3);
         println!("\n\nx_CCS {:?}\n", x_ccs);
         println!("\n\nw_CCS {:?}\n", w_ccs);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());

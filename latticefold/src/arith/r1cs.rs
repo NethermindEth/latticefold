@@ -121,8 +121,8 @@ pub mod tests {
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         // z = (1, io, w)
         to_F_vec(vec![
+            input, //io
             1,
-            input,                             // io
             input * input * input + input + 5, // x^3 + x + 5
             input * input,                     // x^2
             input * input * input,             // x^2 * x
@@ -130,13 +130,13 @@ pub mod tests {
         ])
     }
 
-    pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
-        // z = (1, io, w)
+    pub fn get_test_z_split<R: Ring>(input: usize) -> (Vec<R>, R, Vec<R>) {
+        // z = (io, 1, w)
         (
-            R::one(),
             to_F_vec(vec![
                 input, // io
             ]),
+            R::one(),
             to_F_vec(vec![
                 input * input * input + input + 5, // x^3 + x + 5
                 input * input,                     // x^2
@@ -148,7 +148,7 @@ pub mod tests {
 
     #[test]
     fn test_check_relation() {
-        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>>();
+        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRingNTT<17, 8>>();
         let z = get_test_z(5);
 
         r1cs.check_relation(&z).unwrap();
