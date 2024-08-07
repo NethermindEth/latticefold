@@ -4,6 +4,7 @@ use lattirust_arithmetic::balanced_decomposition::{
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::ring::PolyRing;
 
+use crate::arith::error::CSError;
 use crate::arith::utils::mat_vec_mul;
 use crate::commitment::{AjtaiCommitmentScheme, AjtaiParams, Commitment};
 
@@ -223,9 +224,12 @@ impl<
             let bi_part = y * b.pow([i as u64]);
             should_equal_y0 = should_equal_y0.clone() + bi_part;
         });
+
         match should_equal_y0 == cm_i.cm {
-            true => {},
-            false => {},
+            true => {}
+            false => {
+                return Err(DecompositionError::RecomposedError);
+            }
         }
 
         let mut should_equal_u0 = proof.u_s[0].clone();
@@ -238,11 +242,25 @@ impl<
                 .collect();
         });
 
+        match should_equal_u0 == cm_i.u {
+            true => {}
+            false => {
+                return Err(DecompositionError::RecomposedError);
+            }
+        }
+
         let mut should_equal_v0 = proof.v_s[0];
         proof.v_s.iter().enumerate().skip(1).for_each(|(i, &v_i)| {
             let bi_part = v_i * b.pow([i as u64]);
             should_equal_v0 = should_equal_v0 + bi_part;
         });
+
+        match should_equal_v0 == cm_i.v {
+            true => {}
+            false => {
+                return Err(DecompositionError::RecomposedError);
+            }
+        }
 
         let mut should_equal_xw = proof.x_s[0].clone();
         proof.x_s.iter().enumerate().skip(1).for_each(|(i, x_i)| {
@@ -254,7 +272,14 @@ impl<
                 .collect();
         });
 
-        todo!()
+        match should_equal_xw == cm_i.x_w {
+            true => {}
+            false => {
+                return Err(DecompositionError::RecomposedError);
+            }
+        }
+
+        Ok(lcccs_s)
     }
 }
 

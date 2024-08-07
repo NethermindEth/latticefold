@@ -35,6 +35,8 @@ pub enum DecompositionError {
     WitnessMleEvalFail,
     #[error("constraint system related error: {0}")]
     ConstraintSystemError(#[from] CSError),
+    #[error("recomposing proof checked failed")]
+    RecomposedError,
 }
 
 #[derive(Debug, Error)]
