@@ -4,7 +4,6 @@ use lattirust_arithmetic::balanced_decomposition::{
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::ring::PolyRing;
 
-use crate::arith::error::CSError;
 use crate::arith::utils::mat_vec_mul;
 use crate::commitment::{AjtaiCommitmentScheme, AjtaiParams, Commitment};
 
