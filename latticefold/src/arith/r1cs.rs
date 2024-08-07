@@ -97,16 +97,16 @@ pub mod tests {
         // R1CS for: x^3 + x + 5 = y (example from article
         // https://www.vitalik.ca/general/2016/12/10/qap.html )
         let A = to_F_matrix::<R>(vec![
-            vec![0, 1, 0, 0, 0, 0],
+            vec![1, 0, 0, 0, 0, 0],
             vec![0, 0, 0, 1, 0, 0],
-            vec![0, 1, 0, 0, 1, 0],
-            vec![5, 0, 0, 0, 0, 1],
+            vec![1, 0, 0, 0, 1, 0],
+            vec![0, 5, 0, 0, 0, 1],
         ]);
         let B = to_F_matrix::<R>(vec![
-            vec![0, 1, 0, 0, 0, 0],
-            vec![0, 1, 0, 0, 0, 0],
             vec![1, 0, 0, 0, 0, 0],
             vec![1, 0, 0, 0, 0, 0],
+            vec![0, 1, 0, 0, 0, 0],
+            vec![0, 1, 0, 0, 0, 0],
         ]);
         let C = to_F_matrix::<R>(vec![
             vec![0, 0, 0, 1, 0, 0],

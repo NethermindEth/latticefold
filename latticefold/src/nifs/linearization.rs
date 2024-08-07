@@ -337,7 +337,7 @@ mod tests {
             &ccs,
         );
 
-        // let mut transcript = PoseidonTranscript::<R, CS>::default();
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
 
         let res = <NIFSVerifier<CR, R, PP, T> as LinearizationVerifier<R, PP, T>>::verify(
             &cm_i,
@@ -346,6 +346,6 @@ mod tests {
             &ccs,
         );
 
-        // res.unwrap();
+        res.unwrap();
     }
 }
