@@ -9,6 +9,7 @@ use lattirust_arithmetic::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
+use num_traits::zero;
 
 use crate::{
     arith::{Witness, CCS, LCCCS},
@@ -154,11 +155,16 @@ impl<
             .collect::<Vec<_>>();
         drop(matrix_mles);
 
-        let mut rhos = Vec::with_capacity(2 * DP::K); // need to absorb here as well
-        rhos.push(NTT::one());
-        for _ in 1..2 * DP::K {
-            rhos.push(_transcript.get_small_challenge());
-        }
+        _transcript.absorb_ring_vec(&thetas);
+        _transcript.absorb_ring_vec(&etas);
+        let mut rhos = vec![NTT::one(); 1];
+        rhos.extend(_transcript.get_small_challenges((2 * DP::K) - 1));
+
+        let v0 = rhos.iter().zip(thetas.iter())
+            .fold(NTT::zero(), |acc, (rho_i, theta_i)| {
+                // acc + rho_i.rot_sum(theta_i) // Note that theta_i is already in NTT form
+                todo!() // Add WithRot to OverField in lattirust
+            }).coeffs(); // Coeffs create INTT
 
         // let yi_s = _cm_i_s.iter().map(|cm_i| cm_i.y);
         let u_0 = rhos
