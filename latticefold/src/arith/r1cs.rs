@@ -121,7 +121,7 @@ pub mod tests {
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         // z = (1, io, w)
         to_F_vec(vec![
-            input,                             // io
+            input, // io
             1,
             input * input * input + input + 5, // x^3 + x + 5
             input * input,                     // x^2
