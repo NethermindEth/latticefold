@@ -1,7 +1,8 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use super::{univ_poly::UnivPoly, SumCheckError, SumCheckProof, SumCheckSubClaim};
+use super::{SumCheckError, SumCheckProof, SumCheckSubClaim};
 use crate::transcript::Transcript;
+use crate::utils::uv_polynomial::UVPolynomial;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::{LatticefoldChallengeSet, OverField},
     mle::DenseMultilinearExtension,
@@ -69,7 +70,7 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> SumCheckProver<R, CS> {
                 uni = &uni + &new_poly;
             }
             subclaim.expected_evaluation = uni.evaluate(&[challenge])?;
-            sum_check_proof.add_round(transcript, UnivPoly::try_from(uni)?);
+            sum_check_proof.add_round(transcript, UVPolynomial::try_from(uni)?);
             poly.flattened_ml_extensions.iter_mut().for_each(|mle| {
                 *mle = Arc::from(fix_variables(mle, &[challenge]));
             });

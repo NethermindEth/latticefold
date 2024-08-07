@@ -1,16 +1,15 @@
 pub mod prover;
-pub mod univ_poly;
 pub mod verifier;
 
 use std::fmt::Display;
 
 use crate::transcript::Transcript;
+use crate::utils::uv_polynomial::UVPolynomial;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::polynomials::ArithErrors;
 use lattirust_arithmetic::polynomials::VPAuxInfo;
 use lattirust_arithmetic::ring::Ring;
 use thiserror::Error;
-use univ_poly::UnivPoly;
 
 pub struct SumCheckIP<R: OverField> {
     pub claimed_sum: R,
@@ -33,7 +32,7 @@ pub struct SumCheckProof<R: OverField> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SumCheckRound<R: OverField> {
-    pub unipoly: UnivPoly<R>,
+    pub unipoly: UVPolynomial<R>,
 }
 
 #[derive(Error, Debug)]
@@ -59,7 +58,7 @@ impl<R: OverField> SumCheckProof<R> {
         }
     }
 
-    pub fn add_round(&mut self, transcript: &mut impl Transcript<R>, unipoly: UnivPoly<R>) {
+    pub fn add_round(&mut self, transcript: &mut impl Transcript<R>, unipoly: UVPolynomial<R>) {
         transcript.absorb_ring_vec(&unipoly.coeffs);
         let round = SumCheckRound { unipoly };
 
@@ -68,7 +67,7 @@ impl<R: OverField> SumCheckProof<R> {
 }
 
 impl<R: OverField> SumCheckRound<R> {
-    pub fn new(unipoly: UnivPoly<R>) -> SumCheckRound<R> {
+    pub fn new(unipoly: UVPolynomial<R>) -> SumCheckRound<R> {
         SumCheckRound { unipoly }
     }
 }
