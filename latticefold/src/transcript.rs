@@ -12,7 +12,10 @@ pub trait Transcript<R: OverField> {
     fn absorb_vec(&mut self, v: &[R::F]);
     fn absorb_ring(&mut self, v: &R);
     fn absorb_ring_vec(&mut self, v: &[R]);
-    fn get_big_challenge(&mut self) -> R::BaseRing;
+    fn get_big_field_challenge(&mut self) -> R::F;
+    fn get_big_challenge(&mut self) -> R::BaseRing {
+        R::field_to_base_ring(&self.get_big_field_challenge())
+    }
     fn get_small_challenge(&mut self) -> R;
     fn get_small_challenges(&mut self, n: usize) -> Vec<R> {
         let mut challenges = Vec::with_capacity(n);

@@ -4,7 +4,7 @@ use super::{
     error::LinearizationError::{self},
     NIFSProver, NIFSVerifier,
 };
-use crate::{arith::utils::mat_vec_mul, commitment::AjtaiParams};
+use crate::{arith::utils::mat_vec_mul, commitment::AjtaiParams, utils::sumcheck};
 use crate::{
     arith::Instance,
     utils::{mle::dense_vec_to_dense_mle, sumcheck::SumCheckError::SumCheckFailed},
@@ -12,9 +12,7 @@ use crate::{
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{
-        prover::SumCheckProver, verifier::SumCheckVerifier, SumCheckIP, SumCheckProof,
-    },
+    utils::sumcheck::MLSumcheck,
 };
 use ark_ff::PrimeField;
 use lattirust_arithmetic::{
@@ -27,7 +25,7 @@ use lattirust_arithmetic::{polynomials::eq_eval, ring::PolyRing};
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
-    pub linearization_sumcheck: SumCheckProof<NTT>,
+    pub linearization_sumcheck: sumcheck::Proof<NTT>,
     // Sent in the step 3.
     pub v: NTT,
     pub u: Vec<NTT>,
@@ -73,12 +71,10 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
-        println!("Beta s {:?}", beta_s);
         // Step 2: Sum check protocol
 
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
-        println!("\n\nZ_CCS {:?}\n", z_ccs);
 
         // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
         let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
@@ -86,17 +82,18 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
             .iter()
             .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, &z_ccs)?)))
             .collect::<Result<_, LinearizationError<_>>>()?;
-        for (i, m) in Mz_mles.iter().enumerate() {
-            println!("\nM_{:?}: {:?}\n", i, m);
-        }
+
         // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
 
-        println!("\nG: {:?}\n", g);
         // Run sum check prover
-        let (sum_check_proof, subclaim) = SumCheckProver::new(g, NTT::zero()).prove(transcript)?;
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
         // Extract the evaluation point
-        let r = subclaim.point;
+        let r = prover_state
+            .randomness
+            .into_iter()
+            .map(|x| NTT::field_to_base_ring(&x).into())
+            .collect::<Vec<NTT>>();
 
         // Step 3: Compute v, u_vector
 
@@ -148,10 +145,14 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
         //Step 2: The sumcheck.
         // The polynomial has degree <= ccs.d + 1 and log_m vars.
         let poly_info = VPAuxInfo::new(log_m, ccs.d + 1);
-        let verifier = SumCheckVerifier::new(SumCheckIP::new(NTT::zero(), poly_info));
 
         // Verify the sumcheck proof.
-        let subclaim = verifier.verify(&proof.linearization_sumcheck, transcript)?;
+        let subclaim = MLSumcheck::verify_as_subprotocol(
+            transcript,
+            &poly_info,
+            NTT::zero(),
+            &proof.linearization_sumcheck,
+        )?;
 
         // Absorbing the prover's messages to the verifier.
         transcript.absorb_ring(&proof.v);
@@ -160,9 +161,15 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
         // The final evaluation claim from the sumcheck.
         let s = subclaim.expected_evaluation;
 
+        let point_r = subclaim
+            .point
+            .into_iter()
+            .map(|x| NTT::field_to_base_ring(&x).into())
+            .collect::<Vec<NTT>>();
+
         // Step 4: reshaping the evaluation claim.
         // eq(beta, r)
-        let e = eq_eval(&subclaim.point, &beta_s)?;
+        let e = eq_eval(&point_r, &beta_s)?;
         let should_equal_s = e * ccs // e * (\sum c_i * \Pi_{j \in S_i} u_j)
             .c
             .iter()
@@ -178,7 +185,7 @@ impl<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>>
         }
 
         Ok(LCCCS::<NTT, P> {
-            r: subclaim.point,
+            r: point_r,
             v: proof.v,
             cm: cm_i.cm.clone(),
             u: proof.u.clone(),
@@ -304,8 +311,6 @@ mod tests {
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<R>();
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        println!("\n\nx_CCS {:?}\n", x_ccs);
-        println!("\n\nw_CCS {:?}\n", w_ccs);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         #[derive(Clone)]
         struct PP;
@@ -318,16 +323,10 @@ mod tests {
         }
 
         let wit: Witness<R> = Witness::<R>::from_w_ccs::<CR, PP>(&w_ccs);
-        println!("\n\nF {:?}\n", wit.f);
-        println!("\n\nf_hat {:?}\n", wit.f_hat);
         let cm_i: CCCS<R, PP> = CCCS {
             cm: wit.commit::<R, PP>(&scheme).unwrap(),
             x_ccs,
         };
-        println!(
-            "\n\nCM: {:?}\n\n",
-            wit.commit::<R, PP>(&scheme).unwrap().val
-        );
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
         let res = <NIFSProver<CR, R, PP, T> as LinearizationProver<R, PP, T>>::prove(

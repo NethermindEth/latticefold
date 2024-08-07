@@ -64,10 +64,10 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> Transcript<R> for PoseidonTra
         }
     }
 
-    fn get_big_challenge(&mut self) -> <R>::BaseRing {
+    fn get_big_field_challenge(&mut self) -> <R>::F {
         let c: Vec<R::F> = self.sponge.squeeze_field_elements(1);
         self.sponge.absorb(&c);
-        Self::ChallengeSet::big_challenge_from_field(&c[0])
+        c[0]
     }
 
     fn get_small_challenge(&mut self) -> R {
