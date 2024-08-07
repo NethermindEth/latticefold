@@ -6,6 +6,9 @@ use lattirust_arithmetic::{
     mle::{self, DenseMultilinearExtension},
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
+use crate::commitment::AjtaiParams;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
+use lattirust_arithmetic::ring::PolyRing;
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
@@ -13,45 +16,52 @@ use crate::{
     utils::sumcheck::{prover::SumCheckProver, verifier::SumCheckVerifier, SumCheckIP, SumCheckProof},
 };
 
-use super::{error::FoldingError, NIFSProver, NIFSVerifier};
 use libm::log2;
+use super::{decomposition::DecompositionParams, error::FoldingError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
-pub struct FoldingProof<R: OverField> {
+pub struct FoldingProof<NTT: OverField> {
     // Step 2.
-    pub pointshift_sumcheck_proof: SumCheckProof<R>,
+    pub pointshift_sumcheck_proof: SumCheckProof<NTT>,
     // Step 3
-    pub theta_s: Vec<R>,
-    pub eta_s: Vec<R>,
+    pub theta_s: Vec<NTT>,
+    pub eta_s: Vec<NTT>,
 }
 
-pub trait FoldingProver<R: OverField, T: Transcript<R>> {
+pub trait FoldingProver<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
     type Proof: Clone;
     type Error: std::error::Error;
 
     fn prove(
-        cm_i_s: &[LCCCS<R>],
-        w_s: &[Witness<R>],
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<(LCCCS<R>, Witness<R>, Self::Proof), Self::Error>;
+        cm_i_s: &[LCCCS<NTT, P>],
+        w_s: &[Witness<NTT>],
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<NTT, P>, Witness<NTT>, Self::Proof), Self::Error>;
 }
 
-pub trait FoldingVerifier<R: OverField, T: Transcript<R>> {
-    type Prover: FoldingProver<R, T>;
-    type Error = <Self::Prover as FoldingProver<R, T>>::Error;
+pub trait FoldingVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
+    type Prover: FoldingProver<CR, NTT, P, T>;
+    type Error = <Self::Prover as FoldingProver<CR, NTT, P, T>>::Error;
 
     fn verify(
-        cm_i_s: &[LCCCS<R>],
-        proof: &<Self::Prover as FoldingProver<R, T>>::Proof,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<R>, Self::Error>;
+        cm_i_s: &[LCCCS<NTT, P>],
+        proof: &<Self::Prover as FoldingProver<CR, NTT, P, T>>::Proof,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<NTT, P>, Self::Error>;
 }
 
-impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
-    type Proof = FoldingProof<R>;
-    type Error = FoldingError<R>;
+impl<
+        CR: PolyRing + From<NTT> + Into<NTT>,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams,
+        T: Transcript<NTT>,
+    > FoldingProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, DP, T>
+{
+    type Proof = FoldingProof<NTT>;
+    type Error = FoldingError<NTT>;
 
     fn prove(
         _cm_i_s: &[LCCCS<R>],
@@ -187,8 +197,15 @@ impl<R: OverField, T: Transcript<R>> FoldingProver<R, T> for NIFSProver<R, T> {
     }
 }
 
-impl<R: OverField, T: Transcript<R>> FoldingVerifier<R, T> for NIFSVerifier<R, T> {
-    type Prover = NIFSProver<R, T>;
+impl<
+        CR: PolyRing + From<NTT> + Into<NTT>,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams,
+        T: Transcript<NTT>,
+    > FoldingVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, DP, T>
+{
+    type Prover = NIFSProver<CR, NTT, P, DP, T>;
 
     fn verify(
         _cm_i_s: &[LCCCS<R>],

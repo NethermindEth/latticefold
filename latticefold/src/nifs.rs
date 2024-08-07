@@ -1,26 +1,37 @@
 pub mod decomposition;
 pub mod error;
 pub mod folding;
+#[allow(non_snake_case)]
 pub mod linearization;
 
 use std::marker::PhantomData;
 
-use decomposition::{DecompositionProver, DecompositionVerifier};
+use decomposition::{DecompositionParams, DecompositionProver, DecompositionVerifier};
 use error::LatticefoldError;
 use folding::{FoldingProver, FoldingVerifier};
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
+use lattirust_arithmetic::ring::PolyRing;
 use linearization::{LinearizationProver, LinearizationVerifier};
 
 use crate::arith::{Witness, CCS, LCCCS};
+use crate::commitment::AjtaiCommitmentScheme;
+use crate::commitment::AjtaiParams;
 use crate::{arith::CCCS, transcript::Transcript};
 
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
+/// `P` is the Ajtai commitment parameters.
+/// `T` is the FS-transform transcript.
 #[derive(Debug, Clone)]
 pub struct ComposedProof<
-    R: OverField,
-    T: Transcript<R>,
-    L: LinearizationProver<R, T>,
-    D: DecompositionProver<R, T>,
-    FD: FoldingProver<R, T>,
+    CR: PolyRing + From<NTT> + Into<NTT>,
+    NTT: OverField,
+    P: AjtaiParams,
+    DP: DecompositionParams<AP = P>,
+    T: Transcript<NTT>,
+    L: LinearizationProver<NTT, P, T>,
+    D: DecompositionProver<CR, NTT, DP, T>,
+    FD: FoldingProver<CR, NTT, P, T>,
 > {
     pub linearization_proof: L::Proof,
     pub decomposition_proof_l: D::Proof,
@@ -28,44 +39,88 @@ pub struct ComposedProof<
     pub folding_proof: FD::Proof,
 }
 
-type LatticefoldProof<R, T> =
-    ComposedProof<R, T, NIFSProver<R, T>, NIFSProver<R, T>, NIFSProver<R, T>>;
+type LatticefoldProof<CR, NTT, P, DP, T> = ComposedProof<
+    CR,
+    NTT,
+    P,
+    DP,
+    T,
+    NIFSProver<CR, NTT, P, DP, T>,
+    NIFSProver<CR, NTT, P, DP, T>,
+    NIFSProver<CR, NTT, P, DP, T>,
+>;
 
-pub struct NIFSProver<R: OverField, T: Transcript<R>> {
-    _r: PhantomData<R>,
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
+/// `P` is the Ajtai commitment parameters.
+/// `T` is the FS-transform transcript.
+pub struct NIFSProver<
+    CR: PolyRing + From<NTT> + Into<NTT>,
+    NTT: OverField,
+    P: AjtaiParams,
+    DP: DecompositionParams,
+    T: Transcript<NTT>,
+> {
+    _cr: PhantomData<CR>,
+    _r: PhantomData<NTT>,
+    _p: PhantomData<P>,
+    _dp: PhantomData<DP>,
     _t: PhantomData<T>,
 }
 
-impl<R: OverField, T: Transcript<R>> NIFSProver<R, T> {
+impl<
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams<AP = P>,
+        T: Transcript<NTT>,
+    > NIFSProver<CR, NTT, P, DP, T>
+{
     pub fn prove(
-        acc: &LCCCS<R>,
-        w_acc: &Witness<R>,
-        cm_i: &CCCS<R>,
-        w_i: &Witness<R>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<(LCCCS<R>, Witness<R>, LatticefoldProof<R, T>), LatticefoldError<R>> {
-        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript, ccs)
+        acc: &LCCCS<NTT, P>,
+        w_acc: &Witness<NTT>,
+        cm_i: &CCCS<NTT, P>,
+        w_i: &Witness<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+        ajtai: &AjtaiCommitmentScheme<CR, NTT, P>,
+    ) -> Result<
+        (
+            LCCCS<NTT, P>,
+            Witness<NTT>,
+            LatticefoldProof<CR, NTT, P, DP, T>,
+        ),
+        LatticefoldError<NTT>,
+    > {
+        Self::prove_aux(acc, w_acc, cm_i, w_i, transcript, ccs, ajtai)
     }
 
     fn prove_aux<
-        L: LinearizationProver<R, T>,
-        D: DecompositionProver<R, T>,
-        FP: FoldingProver<R, T>,
+        L: LinearizationProver<NTT, P, T>,
+        D: DecompositionProver<CR, NTT, DP, T>,
+        FP: FoldingProver<CR, NTT, P, T>,
         E: From<L::Error> + From<D::Error> + From<FP::Error>,
     >(
-        acc: &LCCCS<R>,
-        w_acc: &Witness<R>,
-        cm_i: &CCCS<R>,
-        w_i: &Witness<R>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<(LCCCS<R>, Witness<R>, ComposedProof<R, T, L, D, FP>), E> {
+        acc: &LCCCS<NTT, P>,
+        w_acc: &Witness<NTT>,
+        cm_i: &CCCS<NTT, P>,
+        w_i: &Witness<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+        ajtai: &AjtaiCommitmentScheme<CR, NTT, P>,
+    ) -> Result<
+        (
+            LCCCS<NTT, P>,
+            Witness<NTT>,
+            ComposedProof<CR, NTT, P, DP, T, L, D, FP>,
+        ),
+        E,
+    > {
         let (linearized_cm_i, linearization_proof) = L::prove(cm_i, w_i, transcript, ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            D::prove(acc, w_acc, transcript, ccs)?;
+            D::prove(acc, w_acc, transcript, ccs, ajtai)?;
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
-            D::prove(&linearized_cm_i, w_i, transcript, ccs)?;
+            D::prove(&linearized_cm_i, w_i, transcript, ccs, ajtai)?;
 
         let (lcccs, wit_s) = {
             let mut lcccs = decomposed_lcccs_l;
@@ -94,39 +149,59 @@ impl<R: OverField, T: Transcript<R>> NIFSProver<R, T> {
     }
 }
 
-pub struct NIFSVerifier<R: OverField, T: Transcript<R>> {
-    _r: PhantomData<R>,
+/// `CR` is the type parameter for the coefficient representation of the ring
+/// `NTT` is the NTT representation of the same ring.
+/// `P` is the Ajtai commitment parameters.
+/// `T` is the FS-transform transcript.
+pub struct NIFSVerifier<
+    CR: PolyRing + From<NTT> + Into<NTT>,
+    NTT: OverField,
+    P: AjtaiParams,
+    DP: DecompositionParams,
+    T: Transcript<NTT>,
+> {
+    _cr: PhantomData<CR>,
+    _r: PhantomData<NTT>,
+    _p: PhantomData<P>,
+    _dp: PhantomData<DP>,
     _t: PhantomData<T>,
 }
 
-impl<R: OverField, T: Transcript<R>> NIFSVerifier<R, T> {
+impl<
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
+        NTT: OverField,
+        P: AjtaiParams,
+        DP: DecompositionParams<AP = P>,
+        T: Transcript<NTT>,
+    > NIFSVerifier<CR, NTT, P, DP, T>
+{
     pub fn verify(
-        acc: &LCCCS<R>,
-        cm_i: &CCCS<R>,
-        proof: &LatticefoldProof<R, T>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<R>, LatticefoldError<R>> {
+        acc: &LCCCS<NTT, P>,
+        cm_i: &CCCS<NTT, P>,
+        proof: &LatticefoldProof<CR, NTT, P, DP, T>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<NTT, P>, LatticefoldError<NTT>> {
         Self::verify_aux::<
-            NIFSVerifier<R, T>,
-            NIFSVerifier<R, T>,
-            NIFSVerifier<R, T>,
-            LatticefoldError<R>,
+            NIFSVerifier<CR, NTT, P, DP, T>,
+            NIFSVerifier<CR, NTT, P, DP, T>,
+            NIFSVerifier<CR, NTT, P, DP, T>,
+            LatticefoldError<NTT>,
         >(acc, cm_i, proof, transcript, ccs)
     }
 
     fn verify_aux<
-        L: LinearizationVerifier<R, T>,
-        D: DecompositionVerifier<R, T>,
-        FV: FoldingVerifier<R, T>,
+        L: LinearizationVerifier<NTT, P, T>,
+        D: DecompositionVerifier<CR, NTT, DP, T>,
+        FV: FoldingVerifier<CR, NTT, P, T>,
         E: From<L::Error> + From<D::Error> + From<FV::Error>,
     >(
-        acc: &LCCCS<R>,
-        cm_i: &CCCS<R>,
-        proof: &ComposedProof<R, T, L::Prover, D::Prover, FV::Prover>,
-        transcript: &mut impl Transcript<R>,
-        ccs: &CCS<R>,
-    ) -> Result<LCCCS<R>, E> {
+        acc: &LCCCS<NTT, P>,
+        cm_i: &CCCS<NTT, P>,
+        proof: &ComposedProof<CR, NTT, P, DP, T, L::Prover, D::Prover, FV::Prover>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<NTT, P>, E> {
         let linearized_cm_i = L::verify(cm_i, &proof.linearization_proof, transcript, ccs)?;
         let decomposed_acc = D::verify(acc, &proof.decomposition_proof_l, transcript, ccs)?;
         let decomposed_cm_i = D::verify(

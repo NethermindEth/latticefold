@@ -68,14 +68,15 @@ mod test {
 
     use super::SumCheckVerifier;
     use crate::{
-        transcript::poseidon::PoseidonTranscript, utils::sumcheck::prover::SumCheckProver,
+        transcript::poseidon::PoseidonTranscript,
+        utils::sumcheck::{prover::SumCheckProver, SumCheckIP},
     };
 
     use ark_ff::{One, Zero};
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
         mle::DenseMultilinearExtension,
-        polynomials::VirtualPolynomial,
+        polynomials::{VPAuxInfo, VirtualPolynomial},
         ring::{Pow2CyclotomicPolyRingNTT, Zq},
     };
 
@@ -112,30 +113,32 @@ mod test {
             &[zero, zero, zero, zero, zero, zero, poly_ntt, poly_ntt],
         );
         let mut polynomial = VirtualPolynomial::new(3);
-        let _ = polynomial.add_mle_list(
-            vec![
-                Arc::from(mle1.clone()),
-                Arc::from(mle2),
-                Arc::from(mle3),
-                Arc::from(mle4),
-            ],
-            one,
-        );
-        let _ = polynomial.add_mle_list(vec![Arc::from(mle1)], one);
+        polynomial
+            .add_mle_list(
+                vec![
+                    Arc::from(mle1.clone()),
+                    Arc::from(mle2),
+                    Arc::from(mle3),
+                    Arc::from(mle4),
+                ],
+                one,
+            )
+            .unwrap();
+        polynomial.add_mle_list(vec![Arc::from(mle1)], one).unwrap();
         // Define the claimed sum for testing
         let claimed_sum = poly_ntt + poly_ntt; // Example sum
 
+        let protocol = SumCheckIP::new(claimed_sum, VPAuxInfo::new(3, 4));
         // Create an instance of the prover
-        let prover = SumCheckProver::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>> {
-            _marker: std::marker::PhantomData,
-            polynomial: polynomial.clone(),
-            claimed_sum: Into::into(claimed_sum),
-        };
+        let prover = SumCheckProver::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::new(
+            polynomial.clone(),
+            claimed_sum,
+        );
 
         let mut transcript = PoseidonTranscript::default();
 
         // Prove the statement
-        let (protocol, proof, _) = prover.prove(&mut transcript).unwrap();
+        let (proof, _subclaim) = prover.prove(&mut transcript).unwrap();
 
         let mut transcript = PoseidonTranscript::default();
         // Create an instance of the verifier
@@ -184,29 +187,32 @@ mod test {
             &[zero, zero, zero, zero, zero, zero, poly_ntt, poly_ntt],
         );
         let mut polynomial = VirtualPolynomial::new(3);
-        let _ = polynomial.add_mle_list(
-            vec![
-                Arc::from(mle1.clone()),
-                Arc::from(mle2),
-                Arc::from(mle3),
-                Arc::from(mle4),
-            ],
-            one,
-        );
-        let _ = polynomial.add_mle_list(vec![Arc::from(mle1)], one);
+        polynomial
+            .add_mle_list(
+                vec![
+                    Arc::from(mle1.clone()),
+                    Arc::from(mle2),
+                    Arc::from(mle3),
+                    Arc::from(mle4),
+                ],
+                one,
+            )
+            .unwrap();
+        polynomial.add_mle_list(vec![Arc::from(mle1)], one).unwrap();
         // Define the claimed sum for testing
         let claimed_sum = poly_ntt; // Example sum
 
         let mut transcript = PoseidonTranscript::default();
         // Create an instance of the prover
-        let prover = SumCheckProver::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>> {
-            _marker: std::marker::PhantomData,
-            polynomial: polynomial.clone(),
-            claimed_sum: Into::into(claimed_sum),
-        };
 
+        let protocol = SumCheckIP::new(claimed_sum, VPAuxInfo::new(3, 4));
+
+        let prover = SumCheckProver::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::new(
+            polynomial,
+            claimed_sum,
+        );
         // Prove the statement
-        let (protocol, proof, _) = prover.prove(&mut transcript).unwrap();
+        let (proof, _) = prover.prove(&mut transcript).unwrap();
 
         // Create an instance of the verifier
         let verifier =
