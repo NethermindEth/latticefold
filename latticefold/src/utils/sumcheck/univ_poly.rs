@@ -69,7 +69,7 @@ impl<R: Ring> TryFrom<VirtualPolynomial<R>> for UnivPoly<R> {
 
             // Multiply by subsequent MLEs
             for &index in &list[1..] {
-                unipoly = unipoly * &flattened_ml_extensions[list[index]];
+                unipoly = unipoly * &flattened_ml_extensions[index];
             }
 
             // Scale the polynomial by the coefficient
