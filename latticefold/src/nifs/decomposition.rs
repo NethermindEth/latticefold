@@ -216,6 +216,43 @@ impl<
         }
 
         // TODO: Add consistency checks! That small commitments sum up to the big commitment etc.
+        let b = NTT::from(DP::SMALL_B);
+
+        let mut should_equal_y0 = proof.y_s[0].clone();
+        proof.y_s.iter().enumerate().skip(1).for_each(|(i, y)| {
+            let bi_part = y * b.pow([i as u64]);
+            should_equal_y0 = should_equal_y0.clone() + bi_part;
+        });
+        match should_equal_y0 == cm_i.cm {
+            true => {},
+            false => {},
+        }
+
+        let mut should_equal_u0 = proof.u_s[0].clone();
+        proof.u_s.iter().enumerate().skip(1).for_each(|(i, u_i)| {
+            let bi_part: Vec<NTT> = u_i.iter().map(|&u| u * b.pow([i as u64])).collect();
+            should_equal_u0 = should_equal_u0
+                .iter()
+                .zip(&bi_part)
+                .map(|(&u0, ui)| u0 + ui)
+                .collect();
+        });
+
+        let mut should_equal_v0 = proof.v_s[0];
+        proof.v_s.iter().enumerate().skip(1).for_each(|(i, &v_i)| {
+            let bi_part = v_i * b.pow([i as u64]);
+            should_equal_v0 = should_equal_v0 + bi_part;
+        });
+
+        let mut should_equal_xw = proof.x_s[0].clone();
+        proof.x_s.iter().enumerate().skip(1).for_each(|(i, x_i)| {
+            let bi_part: Vec<NTT> = x_i.iter().map(|&u| u * b.pow([i as u64])).collect();
+            should_equal_xw = should_equal_xw
+                .iter()
+                .zip(&bi_part)
+                .map(|(&xw, xwi)| xw + xwi)
+                .collect();
+        });
 
         todo!()
     }
