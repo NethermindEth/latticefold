@@ -272,48 +272,64 @@ impl<
         _ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT, P>, FoldingError<NTT>> {
         let m = _ccs.m;
-        let k_times_2 = _cm_i_s.len();
         let log_m = log2(m as f64) as usize;
-        // Generate challenges
-        // Note: absorb commits
-        let alphas: Vec<NTT> = (0..k_times_2)
-            .map(|_| _transcript.get_big_challenge().into())
-            .collect::<Vec<_>>();
-        let zetas: Vec<NTT> = (0..k_times_2)
-            .map(|_| _transcript.get_big_challenge().into())
-            .collect::<Vec<_>>();
-        let mut mus: Vec<NTT> = (0..k_times_2 - 1)
-            .map(|_| _transcript.get_big_challenge().into())
-            .collect::<Vec<_>>();
-        let beta_s: Vec<NTT> = (0..log_m)
-            .map(|_| _transcript.get_big_challenge().into())
-            .collect::<Vec<_>>();
+
+        // Step 1: Generate alpha, zeta, mu, beta challenges
+        _cm_i_s.iter().for_each(|lcccs| {
+            _transcript.absorb_ring_vec(&lcccs.r);
+            _transcript.absorb_ring(&lcccs.v);
+            // _transcript.absorb_ring_vec(&lcccs.cm); Not absorbed by transcript?
+            _transcript.absorb_ring_vec(&lcccs.u);
+            _transcript.absorb_ring_vec(&lcccs.x_w);
+        });
+        // TODO: Get challenges from big set but as NTT
+        let alpha_s = _transcript.get_small_challenges(2 * DP::K);
+        let zeta_s = _transcript.get_small_challenges(2 * DP::K);
+        let mu_s = _transcript.get_small_challenges((2 * DP::K) - 1); // Note is one challenge less
+        let beta_s = _transcript.get_small_challenges(log_m);
 
         let poly_info = VPAuxInfo {
             max_degree: _ccs.d + 1,
             num_variables: log_m,
             phantom: std::marker::PhantomData,
         };
-        let zis: Vec<Vec<NTT>> = Vec::with_capacity(_ccs.M.len()); // Grab zis from decomposition step
-        let ris: Vec<Vec<NTT>> = Vec::new(); // Grab ris from decomposition step
+        // let zis = _cm_i_s
+        //     .iter()
+        //     .zip(_w_s.iter())
+        //     .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
+        //     .collect::<Vec<_>>();
+        let ris = _cm_i_s
+            .iter()
+            .map(|cm_i| cm_i.r.clone())
+            .collect::<Vec<_>>();
         let vs = _cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<NTT>>();
-        let us: Vec<NTT> = Vec::new(); // Grab us from the decomposition step
-        let claim_g1 = alphas
+        let us = _cm_i_s
+            .iter()
+            .map(|cm_i| cm_i.u.clone())
+            .collect::<Vec<_>>();
+
+        let claim_g1 = alpha_s
             .iter()
             .zip(vs.iter())
             .fold(NTT::zero(), |acc, (&alpha, &vi)| acc + (alpha * vi));
-        let claim_g2 = zetas
+        let claim_g2 = zeta_s
             .iter()
             .zip(us.iter())
-            .fold(NTT::zero(), |acc, (&zeta, &ui)| acc + (zeta * ui));
+            .fold(NTT::zero(), |acc, (zeta, ui)| {
+                ui.iter()
+                    .fold(NTT::zero(), |acc, &u_i_t| acc + (u_i_t * zeta))
+            });
+
         let protocol = SumCheckIP {
             claimed_sum: claim_g1 + claim_g2,
             poly_info,
         };
+
         let verifier = SumCheckVerifier::new(protocol);
         let sub_claim = verifier
             .verify(&_proof.pointshift_sumcheck_proof, _transcript)
             .unwrap();
+
         let e_asterisk = eq_eval(&beta_s, &sub_claim.point).unwrap();
         let e_i_s: Vec<NTT> = ris
             .iter()
@@ -321,43 +337,7 @@ impl<
             .collect::<Vec<_>>();
         let s = sub_claim.expected_evaluation.clone();
 
-        let b = 2 as u64; // Get this from decomposition step and also remove from create_sumcheck_poly
-        let mut should_equal_s = NTT::one();
-        for i in 0..mus.len() {
-            let res = _proof.theta_s[i].clone();
-            should_equal_s = (0..b).fold(res, |acc, j| {
-                let j_ring = NTT::from(j);
-                acc * (_proof.theta_s[i] - j_ring)
-            });
-            should_equal_s = (0..b).fold(should_equal_s, |acc, j| {
-                let j_ring = NTT::from(j);
-                acc * (_proof.theta_s[i] + j_ring)
-            });
-            should_equal_s = should_equal_s * mus[i];
-        }
-        should_equal_s = should_equal_s * e_asterisk;
-        for i in 0..e_i_s.len() {
-            should_equal_s = should_equal_s + (alphas[i] * e_i_s[i] * _proof.theta_s[i]);
-        }
-        for i in 0..e_i_s.len() {
-            should_equal_s = should_equal_s + (zetas[i] * e_i_s[i] * _proof.eta_s[i]);
-        }
-        match should_equal_s == s {
-            true => {}
-            false => {
-                return Err(FoldingError::SumCheckError(
-                    crate::utils::sumcheck::SumCheckError::SumCheckFailed(should_equal_s, s),
-                ));
-            }
-        }
-
-        let mut rhos = Vec::with_capacity(k_times_2); // need to absorb here as well
-        rhos.push(NTT::one());
-        for _ in 1..k_times_2 {
-            rhos.push(_transcript.get_small_challenge());
-        }
-
-        // get y0, u0, v0 and x_w0
+        // check claim and output o, u0, x0, y0
 
         todo!()
     }
