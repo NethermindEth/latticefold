@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use crate::arith::utils::mat_vec_mul;
 use crate::arith::Instance;
 use crate::commitment::AjtaiParams;
+use crate::utils::mle::dense_vec_to_dense_mle;
 use ark_std::iterable::Iterable;
 use lattirust_arithmetic::ring::PolyRing;
 use lattirust_arithmetic::{
@@ -105,19 +107,40 @@ impl<
             .zip(_w_s.iter())
             .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
             .collect::<Vec<_>>();
-        let ris = _cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+        let ris = _cm_i_s
+            .iter()
+            .map(|cm_i| cm_i.r.clone())
+            .collect::<Vec<_>>();
         let vs = _cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<NTT>>();
-        let us = _cm_i_s.iter().map(|cm_i| cm_i.u.clone()).collect::<Vec<_>>();
+        let us = _cm_i_s
+            .iter()
+            .map(|cm_i| cm_i.u.clone())
+            .collect::<Vec<_>>();
 
         // Setup matrix_mles for later evaluation of etas
         // Review creation of this Mi*z mles
-        let matrix_mles = zis.iter().map(|zi| todo!()).collect::<Vec<_>>();
+        let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = zis
+            .iter()
+            .map(|zi| {
+                let Mz_mle = _ccs
+                    .M
+                    .iter()
+                    .map(|M| {
+                        let M_times_z = mat_vec_mul(&M, &zi)?;
+                        let Mz_mle = dense_vec_to_dense_mle(log_m, &M_times_z);
+                        Ok(Mz_mle)
+                    })
+                    .collect()?;
+                Ok(Mz_mle)
+            })
+            .collect::<Result<_, _>>()?;
+        let Mz_mle = Mz_mles_vec.iter().map(|Mz_mles| {});
 
         let g = create_sumcheck_polynomial::<NTT, DP>(
             log_m,
             &f_hat_mles,
             &alpha_s,
-            &matrix_mles,
+            &Mz_mles,
             &zeta_s,
             ris,
             &beta_s,
@@ -149,28 +172,46 @@ impl<
             .map(|f_hat_mle| f_hat_mle.evaluate(r0.as_slice()).unwrap())
             .collect::<Vec<_>>();
         drop(f_hat_mles);
-        let etas = matrix_mles
+        let etas: Vec<Vec<NTT>> = Mz_mles_vec
             .iter()
-            .map(|matrix_mle| matrix_mle.evaluate(r0.as_slice()).unwrap())
+            .map(|Mz_mles| {
+                Mz_mles
+                    .iter()
+                    .map(|mle| mle.evaluate(r0.as_slice()).unwrap())
+                    .collect::<Vec<_>>()
+            })
             .collect::<Vec<_>>();
-        drop(matrix_mles);
+        drop(Mz_mles_vec);
 
         _transcript.absorb_ring_vec(&thetas);
-        _transcript.absorb_ring_vec(&etas);
+        etas.iter()
+            .for_each(|etas| _transcript.absorb_ring_vec(&etas));
+
+        // Step 5 get rho challenges
         let mut rhos = vec![NTT::one(); 1];
         rhos.extend(_transcript.get_small_challenges((2 * DP::K) - 1));
 
-        let v0 = rhos.iter().zip(thetas.iter())
+        let v0 = rhos
+            .iter()
+            .zip(thetas.iter())
             .fold(NTT::zero(), |acc, (rho_i, theta_i)| {
                 // acc + rho_i.rot_sum(theta_i) // Note that theta_i is already in NTT form
                 todo!() // Add WithRot to OverField in lattirust
-            }).coeffs(); // Coeffs create INTT
+            })
+            .coeffs(); // Coeffs create INTT
 
         // let yi_s = _cm_i_s.iter().map(|cm_i| cm_i.y);
         let u_0 = rhos
             .iter()
             .zip(etas.iter())
-            .fold(NTT::zero(), |acc, (&rho, &eta)| acc + (rho * eta));
+            .skip(1)
+            .fold(etas[0], |acc, (&rho, &eta)| {
+                let new_eta = eta.iter().map(|e| rho * e).collect::<Vec<_>>();
+                acc.iter()
+                    .zip(new_eta.iter())
+                    .map(|(&a, &e)| a + e)
+                    .collect()
+            });
         // let x_w_len = _cm_i_s[0].x_w.len();
         // let x_0 = rhos.iter().zip(_cm_i_s.iter())
         //     .fold(vec![R::zero(); x_w_len], |acc, (rho, cm_i)| {
