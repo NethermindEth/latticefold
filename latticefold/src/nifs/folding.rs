@@ -191,18 +191,22 @@ impl<
             .for_each(|etas| _transcript.absorb_ring_vec(&etas));
 
         // Step 5 get rho challenges
-        let rhos = _transcript.get_small_challenges((2 * DP::K) - 1);
+        let rhos = _transcript.get_small_challenges((2 * DP::K) - 1); // Note that we are missing the first element
 
-        let v0 = rhos
+        // Step 6 compute v0, u0, y0, x_w0
+        let v0: NTT = rhos
             .iter()
-            .zip(thetas.iter())
-            .fold(NTT::zero(), |acc, (rho_i, theta_i)| {
+            .zip(thetas.iter().skip(1))
+            .fold(thetas[0], |acc, (rho_i, theta_i)| {
                 // acc + rho_i.rot_sum(theta_i) // Note that theta_i is already in NTT form
                 todo!() // Add WithRot to OverField in lattirust
-            })
-            .coeffs(); // Coeffs create INTT
+            }); // Do INTT here
 
-        // let yi_s = _cm_i_s.iter().map(|cm_i| cm_i.y);
+        let y_o = rhos.iter().zip(_cm_i_s.iter().skip(1))
+            .fold(_cm_i_s[0].cm, |acc, (rho, cm_i)| {
+                acc + (cm_i.cm * rho)
+            });
+
         let u_0 = rhos
             .iter()
             .zip(etas.iter().skip(1)) // Skip the first eta because rho = 1
@@ -213,38 +217,41 @@ impl<
                     .map(|(&a, &e)| a + e)
                     .collect()
             });
-        // let x_w_len = _cm_i_s[0].x_w.len();
-        // let x_0 = rhos.iter().zip(_cm_i_s.iter())
-        //     .fold(vec![R::zero(); x_w_len], |acc, (rho, cm_i)| {
-        //         let mut x_w = cm_i.x_w.clone();
-        //         x_w.iter_mut().map(|&mut x| x * rho);
-        //         acc.iter().zip(x_w.iter())
-        //         .map(|(a, x)| *a + *x).collect()
-        //     });
-        // let y_o = rhos.iter().zip(_cm_i_s.iter())
-        //     .fold(vec![R::zero(); x_w_len], |acc, (rho, cm_i)| {
-        //         let mut y_i = cm_i.y.clone();
-        //         y_i.iter_mut().map(|&mut x| x * rho);
-        //         acc.iter().zip(y_i.iter())
-        //         .map(|(a, x)| *a + *x).collect()
-        //     });
 
+        let x_0 = rhos.iter().zip(_cm_i_s.iter().skip(1)) // Skip the first x_w because rho = 1
+            .fold(_cm_i_s[0].x_w, |acc, (rho, cm_i)| {
+                let mut x_w = cm_i.x_w.clone();
+                x_w.iter_mut().map(|&mut x| x * rho);
+                acc.iter().zip(x_w.iter())
+                .map(|(a, x)| *a + *x).collect()
+            });
+
+        // Step 7: Compute f0 and Witness_0
         let f_0 = rhos
             .iter()
-            .zip(_w_s.iter())
-            .fold(vec![NTT::zero(); 4], |acc, (rho, w_i_s)| {
+            .zip(_w_s.iter().skip(1))
+            .fold(_w_s[0].f, |acc, (rho, w_i_s)| {
                 let mut f_i = w_i_s.f.clone();
                 f_i.iter_mut().for_each(|c| *c = *c * rho);
                 acc.iter().zip(f_i.iter()).map(|(a, f)| *a + f).collect()
             });
+        let w0 = Witness::from_f(f_0);
+
+        let lcccs = LCCCS {
+            r: r0,
+            v: v0[0],
+            cm: y_o,
+            u: u_0,
+            x_w: x_0,
+            h: todo!()
+        };
 
         let folding_proof = FoldingProof {
             pointshift_sumcheck_proof: sum_check_proof,
             theta_s: thetas,
             eta_s: etas,
         };
-
-        todo!()
+        Ok((lcccs, w0, folding_proof))
     }
 }
 
@@ -278,8 +285,7 @@ impl<
         let mut mus: Vec<NTT> = (0..k_times_2 - 1)
             .map(|_| _transcript.get_big_challenge().into())
             .collect::<Vec<_>>();
-        mus.push(NTT::one());
-        let Beta: Vec<NTT> = (0..log_m)
+        let beta_s: Vec<NTT> = (0..log_m)
             .map(|_| _transcript.get_big_challenge().into())
             .collect::<Vec<_>>();
 
@@ -308,7 +314,7 @@ impl<
         let sub_claim = verifier
             .verify(&_proof.pointshift_sumcheck_proof, _transcript)
             .unwrap();
-        let e_asterisk = eq_eval(&Beta, &sub_claim.point).unwrap();
+        let e_asterisk = eq_eval(&beta_s, &sub_claim.point).unwrap();
         let e_i_s: Vec<NTT> = ris
             .iter()
             .map(|r| eq_eval(r.as_slice(), &sub_claim.point).unwrap())
