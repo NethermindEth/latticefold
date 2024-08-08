@@ -30,7 +30,7 @@ pub struct FoldingProof<NTT: OverField> {
     pub pointshift_sumcheck_proof: SumCheckProof<NTT>,
     // Step 3
     pub theta_s: Vec<NTT>,
-    pub eta_s: Vec<NTT>,
+    pub eta_s: Vec<Vec<NTT>>,
 }
 
 pub trait FoldingProver<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
@@ -140,7 +140,7 @@ impl<
             log_m,
             &f_hat_mles,
             &alpha_s,
-            &Mz_mles,
+            &Mz_mles_vec,
             &zeta_s,
             ris,
             &beta_s,
@@ -154,7 +154,10 @@ impl<
         let claim_g2 = zeta_s
             .iter()
             .zip(us.iter())
-            .fold(NTT::zero(), |acc, (zeta, ui)| todo!());
+            .fold(NTT::zero(), |acc, (zeta, ui)| {
+                ui.iter()
+                    .fold(NTT::zero(), |acc, &u_i_t| acc + (u_i_t * zeta))
+            });
 
         let prover = SumCheckProver {
             polynomial: g,
@@ -188,8 +191,7 @@ impl<
             .for_each(|etas| _transcript.absorb_ring_vec(&etas));
 
         // Step 5 get rho challenges
-        let mut rhos = vec![NTT::one(); 1];
-        rhos.extend(_transcript.get_small_challenges((2 * DP::K) - 1));
+        let rhos = _transcript.get_small_challenges((2 * DP::K) - 1);
 
         let v0 = rhos
             .iter()
@@ -203,8 +205,7 @@ impl<
         // let yi_s = _cm_i_s.iter().map(|cm_i| cm_i.y);
         let u_0 = rhos
             .iter()
-            .zip(etas.iter())
-            .skip(1)
+            .zip(etas.iter().skip(1)) // Skip the first eta because rho = 1
             .fold(etas[0], |acc, (&rho, &eta)| {
                 let new_eta = eta.iter().map(|e| rho * e).collect::<Vec<_>>();
                 acc.iter()
@@ -388,7 +389,7 @@ fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     log_m: usize,
     f_hat_mles: &Vec<DenseMultilinearExtension<NTT>>,
     alpha_is: &Vec<NTT>,
-    matrix_mles: &Vec<DenseMultilinearExtension<NTT>>,
+    matrix_mles: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
     zeta_is: &Vec<NTT>,
     ris: Vec<Vec<NTT>>,
     Beta: &Vec<NTT>,
@@ -465,10 +466,15 @@ fn create_g2_i_polynomial<NTT: OverField>(
 }
 
 fn create_g3_i_polynomial<NTT: OverField>(
-    matrix_mle: &DenseMultilinearExtension<NTT>,
+    matrix_mle: &Vec<DenseMultilinearExtension<NTT>>,
     zeta_i: NTT,
 ) -> DenseMultilinearExtension<NTT> {
-    let mut mle = matrix_mle.clone();
+    let (first_mle, mles) = matrix_mle.split_first().unwrap();
+    let first_mle = first_mle.clone();
+    let mut mle = mles
+        .into_iter()
+        .fold(first_mle, |acc, mle_i_t| acc + mle_i_t.clone())
+        .to_owned();
     mle.evaluations.iter_mut().for_each(|e| *e = *e * zeta_i);
     mle
 }
