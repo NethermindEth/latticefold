@@ -113,15 +113,14 @@ mod tests {
         challenge_set::latticefold_challenge_set::BinarySmallSet, polynomials::VirtualPolynomial,
         ring::Pow2CyclotomicPolyRingNTT,
     };
+    const Q: u64 = 17;
+    const N: usize = 8;
+    type R = Pow2CyclotomicPolyRingNTT<Q, N>;
+
+    type CS = BinarySmallSet<Q, N>;
 
     #[test]
     fn test_sumcheck() {
-        const Q: u64 = 17;
-        const N: usize = 8;
-        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
-
-        type CS = BinarySmallSet<Q, N>;
-
         let mut rng = ark_std::test_rng();
 
         for _ in 0..20 {
@@ -130,7 +129,6 @@ mod tests {
             let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
             let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
 
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
             let res =
                 MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
             assert!(res.is_ok());
@@ -138,12 +136,6 @@ mod tests {
     }
     #[test]
     fn test_failing_sumcheck() {
-        const Q: u64 = 17;
-        const N: usize = 8;
-        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
-
-        type CS = BinarySmallSet<Q, N>;
-
         let mut rng = ark_std::test_rng();
 
         for _ in 0..20 {
@@ -152,11 +144,10 @@ mod tests {
             let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
             let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
 
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
             let not_sum = poly
                 .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
                 .unwrap();
+
             let res =
                 MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
             assert!(res.is_err());
