@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use crate::arith::error::CSError;
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::Instance;
 use crate::commitment::AjtaiParams;
 use crate::utils::mle::dense_vec_to_dense_mle;
 use ark_std::iterable::Iterable;
+use lattirust_arithmetic::polynomials::ArithErrors;
 use lattirust_arithmetic::ring::PolyRing;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
@@ -58,7 +60,7 @@ pub trait FoldingVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Trans
 }
 
 impl<
-        CR: PolyRing + From<NTT> + Into<NTT>,
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
         NTT: OverField,
         P: AjtaiParams,
         DP: DecompositionParams,
@@ -125,16 +127,11 @@ impl<
                 let Mz_mle = _ccs
                     .M
                     .iter()
-                    .map(|M| {
-                        let M_times_z = mat_vec_mul(&M, &zi)?;
-                        let Mz_mle = dense_vec_to_dense_mle(log_m, &M_times_z);
-                        Ok(Mz_mle)
-                    })
-                    .collect()?;
+                    .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(&M, &zi)?)))
+                    .collect::<Result<_, FoldingError<_>>>()?;
                 Ok(Mz_mle)
             })
-            .collect::<Result<_, _>>()?;
-        let Mz_mle = Mz_mles_vec.iter().map(|Mz_mles| {});
+            .collect::<Result<_, FoldingError<_>>>()?;
 
         let g = create_sumcheck_polynomial::<NTT, DP>(
             log_m,
@@ -170,12 +167,12 @@ impl<
 
         // Run sumcheck
         let (sum_check_proof, subclaim) = prover.prove(_transcript).unwrap();
-        let r0 = subclaim.point;
+        let r_0 = subclaim.point;
 
         // Step 3: Evaluate thetas and etas
         let thetas = f_hat_mles
             .iter()
-            .map(|f_hat_mle| f_hat_mle.evaluate(r0.as_slice()).unwrap())
+            .map(|f_hat_mle| f_hat_mle.evaluate(r_0.as_slice()).unwrap())
             .collect::<Vec<_>>();
         drop(f_hat_mles);
         let etas: Vec<Vec<NTT>> = Mz_mles_vec
@@ -183,7 +180,7 @@ impl<
             .map(|Mz_mles| {
                 Mz_mles
                     .iter()
-                    .map(|mle| mle.evaluate(r0.as_slice()).unwrap())
+                    .map(|mle| mle.evaluate(r_0.as_slice()).unwrap())
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -197,7 +194,7 @@ impl<
         let rhos = _transcript.get_small_challenges((2 * DP::K) - 1); // Note that we are missing the first element
 
         // Step 6 compute v0, u0, y0, x_w0
-        let v0: NTT =
+        let v_0: NTT =
             rhos.iter()
                 .zip(thetas.iter().skip(1))
                 .fold(thetas[0], |acc, (rho_i, theta_i)| {
@@ -205,49 +202,49 @@ impl<
                     todo!() // Add WithRot to OverField in lattirust
                 }); // Do INTT here
 
-        let y_o = rhos
+        let (y_0, u_0, x_0) = rhos
             .iter()
-            .zip(_cm_i_s.iter().skip(1))
-            .fold(_cm_i_s[0].cm, |acc, (rho, cm_i)| acc + (cm_i.cm * rho));
-
-        let u_0 = rhos
-            .iter()
-            .zip(etas.iter().skip(1)) // Skip the first eta because rho = 1
-            .fold(etas[0], |acc, (&rho, &eta)| {
-                let new_eta = eta.iter().map(|e| rho * e).collect::<Vec<_>>();
-                acc.iter()
-                    .zip(new_eta.iter())
-                    .map(|(&a, &e)| a + e)
-                    .collect()
-            });
-
-        let x_0 = rhos
-            .iter()
-            .zip(_cm_i_s.iter().skip(1)) // Skip the first x_w because rho = 1
-            .fold(_cm_i_s[0].x_w, |acc, (rho, cm_i)| {
-                let mut x_w = cm_i.x_w.clone();
-                x_w.iter_mut().map(|&mut x| x * rho);
-                acc.iter().zip(x_w.iter()).map(|(a, x)| *a + *x).collect()
-            });
+            .zip(_cm_i_s.iter().zip(etas.iter()).skip(1))
+            .fold(
+                (
+                    _cm_i_s[0].cm.clone(),
+                    etas[0].clone(),
+                    _cm_i_s[0].x_w.clone(),
+                ),
+                |(acc_y, acc_u, acc_x), (rho_i, (cm_i, eta))| {
+                    let y = acc_y + (cm_i.cm.clone() * rho_i);
+                    let u = acc_u
+                        .iter()
+                        .zip(eta.iter())
+                        .map(|(&a, &e)| a + (e * rho_i))
+                        .collect();
+                    let x = acc_x
+                        .iter()
+                        .zip(cm_i.x_w.iter())
+                        .map(|(&a, &x)| a + (x * rho_i))
+                        .collect();
+                    (y, u, x)
+                },
+            );
 
         // Step 7: Compute f0 and Witness_0
-        let f_0 = rhos
-            .iter()
-            .zip(_w_s.iter().skip(1))
-            .fold(_w_s[0].f, |acc, (rho, w_i_s)| {
-                let mut f_i = w_i_s.f.clone();
-                f_i.iter_mut().for_each(|c| *c = *c * rho);
-                acc.iter().zip(f_i.iter()).map(|(a, f)| *a + f).collect()
-            });
-        let w0 = Witness::from_f(f_0);
+        let f_0 =
+            rhos.iter()
+                .zip(_w_s.iter().skip(1))
+                .fold(_w_s[0].f.clone(), |acc, (rho, w_i_s)| {
+                    let mut f_i = w_i_s.f.clone();
+                    f_i.iter_mut().for_each(|c| *c = *c * rho);
+                    acc.iter().zip(f_i.iter()).map(|(a, f)| *a + f).collect()
+                });
 
+        let h = x_0.last().cloned().ok_or(FoldingError::IncorrectLength)?;
         let lcccs = LCCCS {
-            r: r0,
-            v: v0[0],
-            cm: y_o,
+            r: r_0,
+            v: v_0,
+            cm: y_0,
             u: u_0,
             x_w: x_0,
-            h: todo!(),
+            h,
         };
 
         let folding_proof = FoldingProof {
@@ -255,12 +252,14 @@ impl<
             theta_s: thetas,
             eta_s: etas,
         };
-        Ok((lcccs, w0, folding_proof))
+
+        let wit_0 = Witness::<NTT>::from_f::<CR, P>(f_0);
+        Ok((lcccs, wit_0, folding_proof))
     }
 }
 
 impl<
-        CR: PolyRing + From<NTT> + Into<NTT>,
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
         NTT: OverField,
         P: AjtaiParams,
         DP: DecompositionParams,
