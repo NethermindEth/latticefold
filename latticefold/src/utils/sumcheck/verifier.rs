@@ -43,14 +43,14 @@ pub struct SubClaim<R: OverField> {
 
 impl<R: OverField, T: Transcript<R>> IPForMLSumcheck<R, T> {
     /// initialize the verifier
-    pub fn verifier_init(index_info: &VPAuxInfo<R>) -> VerifierState<R> {
+    pub fn verifier_init(poly_info: &VPAuxInfo<R>) -> VerifierState<R> {
         VerifierState {
             round: 1,
-            nv: index_info.num_variables,
-            max_multiplicands: index_info.max_degree,
+            nv: poly_info.num_variables,
+            max_multiplicands: poly_info.max_degree,
             finished: false,
-            polynomials_received: Vec::with_capacity(index_info.num_variables),
-            randomness: Vec::with_capacity(index_info.num_variables),
+            polynomials_received: Vec::with_capacity(poly_info.num_variables),
+            randomness: Vec::with_capacity(poly_info.num_variables),
         }
     }
 
