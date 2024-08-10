@@ -1,26 +1,24 @@
-use std::sync::Arc;
-
-use super::{
-    error::LinearizationError::{self},
-    NIFSProver, NIFSVerifier,
-};
-use crate::{arith::utils::mat_vec_mul, commitment::AjtaiParams, utils::sumcheck};
-use crate::{
-    arith::Instance,
-    utils::{mle::dense_vec_to_dense_mle, sumcheck::SumCheckError::SumCheckFailed},
-};
-use crate::{
-    arith::{Witness, CCCS, CCS, LCCCS},
-    transcript::Transcript,
-    utils::sumcheck::MLSumcheck,
-};
+#![allow(non_snake_case)]
 use ark_ff::PrimeField;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
+    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+    ring::PolyRing,
 };
-use lattirust_arithmetic::{polynomials::eq_eval, ring::PolyRing};
+use std::sync::Arc;
+
+use super::{error::LinearizationError, NIFSProver, NIFSVerifier};
+use crate::{
+    arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
+    commitment::AjtaiParams,
+    transcript::Transcript,
+    utils::{
+        mle::dense_vec_to_dense_mle,
+        sumcheck,
+        sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
+    },
+};
 
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {

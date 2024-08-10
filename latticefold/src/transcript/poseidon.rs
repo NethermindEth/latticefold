@@ -1,15 +1,14 @@
-use super::Transcript;
 use ark_crypto_primitives::sponge::{
     poseidon::{PoseidonConfig, PoseidonSponge},
     CryptographicSponge,
 };
-use ark_ff::BigInteger;
-use ark_ff::PrimeField;
-use ark_ff::Zero;
+use ark_ff::{BigInteger, PrimeField, Zero};
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::{LatticefoldChallengeSet, OverField},
     ring::UnsignedRepresentative,
 };
+
+use super::Transcript;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>> {

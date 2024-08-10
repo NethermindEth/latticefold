@@ -1,4 +1,6 @@
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::*;
+use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
+    LatticefoldChallengeSet, OverField,
+};
 use std::fmt::Debug;
 
 pub mod poseidon;

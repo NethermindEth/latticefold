@@ -1,14 +1,13 @@
 //! Prover
 use ark_std::{cfg_iter_mut, vec::Vec};
-use lattirust_arithmetic::mle::MultilinearExtension;
-use lattirust_arithmetic::polynomials::DenseMultilinearExtension;
-use lattirust_arithmetic::ring::Ring;
 use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::OverField, polynomials::VirtualPolynomial,
+    challenge_set::latticefold_challenge_set::OverField,
+    mle::MultilinearExtension,
+    polynomials::{DenseMultilinearExtension, VirtualPolynomial},
+    ring::Ring,
 };
 
-use crate::utils::sumcheck::verifier::VerifierMsg;
-use crate::utils::sumcheck::IPForMLSumcheck;
+use super::{verifier::VerifierMsg, IPForMLSumcheck};
 
 /// Prover Message
 #[derive(Clone)]

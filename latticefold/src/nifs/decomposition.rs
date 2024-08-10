@@ -1,10 +1,8 @@
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::ring::PolyRing;
-
-use crate::commitment::{AjtaiParams, Commitment};
+use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::PolyRing};
 
 use crate::{
     arith::{Witness, CCS, LCCCS},
+    commitment::{AjtaiParams, Commitment},
     transcript::Transcript,
 };
 

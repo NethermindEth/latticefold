@@ -1,13 +1,13 @@
-use crate::{commitment::AjtaiParams, utils::sumcheck};
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::ring::PolyRing;
 
+use super::{error::FoldingError, NIFSProver, NIFSVerifier};
 use crate::{
     arith::{Witness, CCS, LCCCS},
+    commitment::AjtaiParams,
     transcript::Transcript,
+    utils::sumcheck,
 };
-
-use super::{error::FoldingError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
 pub struct FoldingProof<NTT: OverField> {

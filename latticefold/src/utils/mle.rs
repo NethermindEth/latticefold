@@ -1,9 +1,10 @@
 /// Some basic MLE utilities
 use ark_std::log2;
-use lattirust_arithmetic::linear_algebra::SparseMatrix;
-use lattirust_arithmetic::mle::DenseMultilinearExtension;
-use lattirust_arithmetic::mle::SparseMultilinearExtension;
-use lattirust_arithmetic::ring::Ring;
+use lattirust_arithmetic::{
+    linear_algebra::SparseMatrix,
+    mle::{DenseMultilinearExtension, SparseMultilinearExtension},
+    ring::Ring,
+};
 
 /// Pad matrix so that its columns and rows are powers of two
 pub fn pad_matrix<R: Ring>(m: &SparseMatrix<R>) -> SparseMatrix<R> {

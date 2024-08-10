@@ -1,19 +1,17 @@
-pub mod prover;
-pub mod verifier;
-
-use std::fmt::Display;
+use lattirust_arithmetic::{
+    challenge_set::latticefold_challenge_set::OverField,
+    polynomials::{ArithErrors, VPAuxInfo, VirtualPolynomial},
+    ring::Ring,
+};
+use std::{fmt::Display, marker::PhantomData};
+use thiserror::Error;
 
 use crate::transcript::Transcript;
-use crate::utils::sumcheck::prover::ProverMsg;
-use crate::utils::sumcheck::prover::ProverState;
-use crate::utils::sumcheck::verifier::SubClaim;
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::polynomials::ArithErrors;
-use lattirust_arithmetic::polynomials::VPAuxInfo;
-use lattirust_arithmetic::polynomials::VirtualPolynomial;
-use lattirust_arithmetic::ring::Ring;
-use std::marker::PhantomData;
-use thiserror::Error;
+use prover::{ProverMsg, ProverState};
+use verifier::SubClaim;
+
+pub mod prover;
+pub mod verifier;
 
 /// Interactive Proof for Multilinear Sumcheck
 pub struct IPForMLSumcheck<R, T> {

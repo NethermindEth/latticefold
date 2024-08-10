@@ -1,10 +1,9 @@
-use super::error::CSError as Error;
-use super::utils::mat_vec_mul;
-use super::utils::vec_add;
-use super::utils::vec_scalar_mul;
-use lattirust_arithmetic::linear_algebra::SparseMatrix;
-use lattirust_arithmetic::ring::Ring;
+use lattirust_arithmetic::{linear_algebra::SparseMatrix, ring::Ring};
 
+use super::{
+    error::CSError as Error,
+    utils::{mat_vec_mul, vec_add, vec_scalar_mul},
+};
 use crate::arith::hadamard;
 
 #[derive(Debug, Clone, PartialEq)]

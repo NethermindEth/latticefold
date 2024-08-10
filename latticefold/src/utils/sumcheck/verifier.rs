@@ -1,16 +1,12 @@
 //! Verifier
-use ark_ff::Field;
-use ark_ff::One;
-use ark_ff::Zero;
+use ark_ff::{Field, One, Zero};
 use ark_std::vec::Vec;
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::polynomials::VPAuxInfo;
+use lattirust_arithmetic::{
+    challenge_set::latticefold_challenge_set::OverField, polynomials::VPAuxInfo,
+};
 
+use super::{prover::ProverMsg, IPForMLSumcheck, SumCheckError};
 use crate::transcript::Transcript;
-use crate::utils::sumcheck::prover::ProverMsg;
-use crate::utils::sumcheck::IPForMLSumcheck;
-
-use super::SumCheckError;
 
 pub const SQUEEZE_NATIVE_ELEMENTS_NUM: usize = 1;
 

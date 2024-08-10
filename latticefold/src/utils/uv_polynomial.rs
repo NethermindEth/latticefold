@@ -1,13 +1,13 @@
+use lattirust_arithmetic::{
+    mle::DenseMultilinearExtension,
+    polynomials::{ArithErrors, VirtualPolynomial},
+    ring::Ring,
+};
 use std::ops::{AddAssign, Mul};
-
-use lattirust_arithmetic::mle::DenseMultilinearExtension;
-use lattirust_arithmetic::polynomials::ArithErrors;
-use lattirust_arithmetic::polynomials::VirtualPolynomial;
-use lattirust_arithmetic::ring::Ring;
-#[derive(Debug, Clone, PartialEq)]
 
 // Represents a univariate polynomial
 // Coefficients represented in ascending order
+#[derive(Debug, Clone, PartialEq)]
 pub struct UVPolynomial<R: Ring> {
     pub coeffs: Vec<R>,
 }
