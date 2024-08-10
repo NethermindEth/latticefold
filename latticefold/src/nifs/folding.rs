@@ -155,8 +155,11 @@ impl<
             .iter()
             .zip(us.iter())
             .fold(NTT::zero(), |acc, (zeta, ui)| {
-                ui.iter()
-                    .fold(NTT::zero(), |acc, &u_i_t| acc + (u_i_t * zeta))
+                let mut zeta_i = NTT::one();
+                ui.iter().fold(NTT::zero(), |acc, &u_i_t| {
+                    zeta_i = zeta_i * zeta;
+                    acc + (u_i_t * zeta_i)
+                })
             });
 
         let prover = SumCheckProver {
@@ -194,18 +197,18 @@ impl<
         let rhos = _transcript.get_small_challenges((2 * DP::K) - 1); // Note that we are missing the first element
 
         // Step 6 compute v0, u0, y0, x_w0
-        let v0: NTT = rhos
-            .iter()
-            .zip(thetas.iter().skip(1))
-            .fold(thetas[0], |acc, (rho_i, theta_i)| {
-                // acc + rho_i.rot_sum(theta_i) // Note that theta_i is already in NTT form
-                todo!() // Add WithRot to OverField in lattirust
-            }); // Do INTT here
+        let v0: NTT =
+            rhos.iter()
+                .zip(thetas.iter().skip(1))
+                .fold(thetas[0], |acc, (rho_i, theta_i)| {
+                    // acc + rho_i.rot_sum(theta_i) // Note that theta_i is already in NTT form
+                    todo!() // Add WithRot to OverField in lattirust
+                }); // Do INTT here
 
-        let y_o = rhos.iter().zip(_cm_i_s.iter().skip(1))
-            .fold(_cm_i_s[0].cm, |acc, (rho, cm_i)| {
-                acc + (cm_i.cm * rho)
-            });
+        let y_o = rhos
+            .iter()
+            .zip(_cm_i_s.iter().skip(1))
+            .fold(_cm_i_s[0].cm, |acc, (rho, cm_i)| acc + (cm_i.cm * rho));
 
         let u_0 = rhos
             .iter()
@@ -218,12 +221,13 @@ impl<
                     .collect()
             });
 
-        let x_0 = rhos.iter().zip(_cm_i_s.iter().skip(1)) // Skip the first x_w because rho = 1
+        let x_0 = rhos
+            .iter()
+            .zip(_cm_i_s.iter().skip(1)) // Skip the first x_w because rho = 1
             .fold(_cm_i_s[0].x_w, |acc, (rho, cm_i)| {
                 let mut x_w = cm_i.x_w.clone();
                 x_w.iter_mut().map(|&mut x| x * rho);
-                acc.iter().zip(x_w.iter())
-                .map(|(a, x)| *a + *x).collect()
+                acc.iter().zip(x_w.iter()).map(|(a, x)| *a + *x).collect()
             });
 
         // Step 7: Compute f0 and Witness_0
@@ -243,7 +247,7 @@ impl<
             cm: y_o,
             u: u_0,
             x_w: x_0,
-            h: todo!()
+            h: todo!(),
         };
 
         let folding_proof = FoldingProof {
@@ -385,8 +389,8 @@ fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     let mut g = VirtualPolynomial::new(2 * k);
     let mut g1_plus_g3 = VirtualPolynomial::new(2 * k);
     for i in 0..2 * k {
-        let gi_1 = create_g1_i_polynomial(&f_hat_mles[i], alpha_is[i]);
-        let gi_3 = create_g3_i_polynomial(&matrix_mles[i], zeta_is[i]);
+        let gi_1 = prepare_g1_i_mle(&f_hat_mles[i], alpha_is[i]);
+        let gi_3 = prepare_g3_i_mle(&matrix_mles[i], zeta_is[i]);
         let gi_1_plus_gi_3 = Arc::from(gi_1 + gi_3);
         let mut g1_and_g3_virtual = VirtualPolynomial::new_from_mle(&gi_1_plus_gi_3, NTT::ONE);
         let eq_r_i = build_eq_x_r(ris[i].as_slice()).unwrap();
@@ -395,13 +399,13 @@ fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     }
 
     let b = DP::SMALL_B; // Get this from the decomposition step
-    let mut g2 = create_g2_i_polynomial(log_m, &f_hat_mles[0], b, mus[0]);
+    let mut g2 = prepare_g2_i_mle(log_m, &f_hat_mles[0], b, mus[0]);
     for i in 1..2 * k - 1 {
-        let gi_2 = create_g2_i_polynomial(log_m, &f_hat_mles[i], b, mus[i]);
+        let gi_2 = prepare_g2_i_mle(log_m, &f_hat_mles[i], b, mus[i]);
         g2 = &g2 + &gi_2;
     }
     // Recall that the last mu is 1
-    let gi_2 = create_g2_i_polynomial(log_m, &f_hat_mles[2 * k - 1], b, NTT::one());
+    let gi_2 = prepare_g2_i_mle(log_m, &f_hat_mles[2 * k - 1], b, NTT::one());
     g2 = &g2 + &gi_2;
 
     let eq_beta = build_eq_x_r::<NTT>(Beta.as_slice()).unwrap();
@@ -411,7 +415,7 @@ fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     g
 }
 
-fn create_g1_i_polynomial<NTT: OverField>(
+fn prepare_g1_i_mle<NTT: OverField>(
     fi_mle: &DenseMultilinearExtension<NTT>,
     alpha_i: NTT,
 ) -> DenseMultilinearExtension<NTT> {
@@ -420,7 +424,7 @@ fn create_g1_i_polynomial<NTT: OverField>(
     mle
 }
 
-fn create_g2_i_polynomial<NTT: OverField>(
+fn prepare_g2_i_mle<NTT: OverField>(
     log_m: usize,
     fi_mle: &DenseMultilinearExtension<NTT>,
     b: u128,
@@ -451,7 +455,7 @@ fn create_g2_i_polynomial<NTT: OverField>(
     gi_2
 }
 
-fn create_g3_i_polynomial<NTT: OverField>(
+fn prepare_g3_i_mle<NTT: OverField>(
     matrix_mle: &Vec<DenseMultilinearExtension<NTT>>,
     zeta_i: NTT,
 ) -> DenseMultilinearExtension<NTT> {
@@ -461,7 +465,11 @@ fn create_g3_i_polynomial<NTT: OverField>(
         .into_iter()
         .fold(first_mle, |acc, mle_i_t| acc + mle_i_t.clone())
         .to_owned();
-    mle.evaluations.iter_mut().for_each(|e| *e = *e * zeta_i);
+    let mut zeta = NTT::one();
+    mle.evaluations.iter_mut().for_each(|e| {
+        zeta = zeta * zeta_i;
+        *e = *e * zeta_i
+    });
     mle
 }
 
