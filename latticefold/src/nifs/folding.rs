@@ -1,19 +1,16 @@
 use std::sync::Arc;
 
-use crate::arith::error::CSError;
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::Instance;
 use crate::commitment::AjtaiParams;
-use crate::utils::mle::dense_vec_to_dense_mle;
+use crate::utils::{mle::dense_vec_to_dense_mle, sumcheck::SumCheckError::SumCheckFailed};
 use ark_std::iterable::Iterable;
-use lattirust_arithmetic::polynomials::ArithErrors;
 use lattirust_arithmetic::ring::PolyRing;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
-use num_traits::zero;
 
 use crate::{
     arith::{Witness, CCS, LCCCS},
@@ -153,10 +150,11 @@ impl<
             .zip(us.iter())
             .fold(NTT::zero(), |acc, (zeta, ui)| {
                 let mut zeta_i = NTT::one();
-                ui.iter().fold(NTT::zero(), |acc, &u_i_t| {
+                let ui_sum = ui.iter().fold(NTT::zero(), |acc, &u_i_t| {
                     zeta_i = zeta_i * zeta;
                     acc + (u_i_t * zeta_i)
-                })
+                });
+                acc + ui_sum
             });
 
         let prover = SumCheckProver {
@@ -228,14 +226,6 @@ impl<
             );
 
         // Step 7: Compute f0 and Witness_0
-        let f_0 =
-            rhos.iter()
-                .zip(_w_s.iter().skip(1))
-                .fold(_w_s[0].f.clone(), |acc, (rho, w_i_s)| {
-                    let mut f_i = w_i_s.f.clone();
-                    f_i.iter_mut().for_each(|c| *c = *c * rho);
-                    acc.iter().zip(f_i.iter()).map(|(a, f)| *a + f).collect()
-                });
 
         let h = x_0.last().cloned().ok_or(FoldingError::IncorrectLength)?;
         let lcccs = LCCCS {
@@ -246,6 +236,15 @@ impl<
             x_w: x_0,
             h,
         };
+
+        let f_0 =
+            rhos.iter()
+                .zip(_w_s.iter().skip(1))
+                .fold(_w_s[0].f.clone(), |acc, (rho, w_i_s)| {
+                    let mut f_i = w_i_s.f.clone();
+                    f_i.iter_mut().for_each(|c| *c = *c * rho);
+                    acc.iter().zip(f_i.iter()).map(|(a, f)| *a + f).collect()
+                });
 
         let folding_proof = FoldingProof {
             pointshift_sumcheck_proof: sum_check_proof,
@@ -296,11 +295,6 @@ impl<
             num_variables: log_m,
             phantom: std::marker::PhantomData,
         };
-        // let zis = _cm_i_s
-        //     .iter()
-        //     .zip(_w_s.iter())
-        //     .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
-        //     .collect::<Vec<_>>();
         let ris = _cm_i_s
             .iter()
             .map(|cm_i| cm_i.r.clone())
@@ -319,8 +313,12 @@ impl<
             .iter()
             .zip(us.iter())
             .fold(NTT::zero(), |acc, (zeta, ui)| {
-                ui.iter()
-                    .fold(NTT::zero(), |acc, &u_i_t| acc + (u_i_t * zeta))
+                let mut zeta_i = NTT::one();
+                let ui_sum = ui.iter().fold(NTT::zero(), |acc, &u_i_t| {
+                    zeta_i = zeta_i * zeta;
+                    acc + (u_i_t * zeta_i)
+                });
+                acc + ui_sum
             });
 
         let protocol = SumCheckIP {
@@ -340,9 +338,102 @@ impl<
             .collect::<Vec<_>>();
         let s = sub_claim.expected_evaluation.clone();
 
-        // check claim and output o, u0, x0, y0
+        let mut should_equal_s =
+            mu_s.iter()
+                .zip(_proof.theta_s.iter())
+                .fold(NTT::zero(), |acc, (mu_i, &theta_i)| {
+                    let mut thetas_mul = theta_i;
+                    for j in 1..DP::SMALL_B {
+                        thetas_mul = thetas_mul * (theta_i - NTT::from(j));
+                        thetas_mul = thetas_mul * (theta_i + NTT::from(j));
+                    }
+                    acc + (thetas_mul * mu_i)
+                });
+        let last_theta = _proof
+            .theta_s
+            .last()
+            .cloned()
+            .ok_or(FoldingError::IncorrectLength)?;
+        // Recall last mu = 1
+        let mut theta_mul = last_theta;
+        for j in 1..DP::SMALL_B {
+            theta_mul = theta_mul * (last_theta - NTT::from(j));
+            theta_mul = theta_mul * (last_theta + NTT::from(j));
+        }
+        should_equal_s = should_equal_s + theta_mul;
+        should_equal_s = should_equal_s * e_asterisk;
 
-        todo!()
+        alpha_s
+            .iter()
+            .zip(zeta_s)
+            .zip(_proof.theta_s.iter())
+            .zip(_proof.eta_s.iter())
+            .zip(e_i_s.iter())
+            .for_each(|((((&alpha_i, zeta_i), theta_i), eta_i), e_i)| {
+                let mut zeta_i_t = NTT::one();
+                let combined_eta_i_t = eta_i.iter().fold(NTT::zero(), |acc, &eta_t| {
+                    zeta_i_t = zeta_i_t * zeta_i;
+                    acc + (eta_t * zeta_i_t)
+                });
+                let combined_theta_and_eta = (alpha_i * theta_i) + combined_eta_i_t;
+                should_equal_s += combined_theta_and_eta * e_i;
+            });
+
+        match should_equal_s == s {
+            true => {}
+            false => {
+                return Err(FoldingError::SumCheckError(SumCheckFailed(
+                    should_equal_s,
+                    s,
+                )));
+            }
+        }
+        // check claim and output o, u0, x0, y0
+        let rhos = _transcript.get_small_challenges((2 * DP::K) - 1); // Note that we are missing the first element
+
+        // Step 6 compute v0, u0, y0, x_w0
+        let v_0: NTT = rhos.iter().zip(_proof.theta_s.iter().skip(1)).fold(
+            _proof.theta_s[0],
+            |acc, (rho_i, theta_i)| {
+                // acc + rho_i.rot_sum(theta_i) // Note that theta_i is already in NTT form
+                todo!() // Add WithRot to OverField in lattirust
+            },
+        ); // Do INTT here
+
+        let (y_0, u_0, x_0) = rhos
+            .iter()
+            .zip(_cm_i_s.iter().zip(_proof.eta_s.iter()).skip(1))
+            .fold(
+                (
+                    _cm_i_s[0].cm.clone(),
+                    _proof.eta_s[0].clone(),
+                    _cm_i_s[0].x_w.clone(),
+                ),
+                |(acc_y, acc_u, acc_x), (rho_i, (cm_i, eta))| {
+                    let y = acc_y + (cm_i.cm.clone() * rho_i);
+                    let u = acc_u
+                        .iter()
+                        .zip(eta.iter())
+                        .map(|(&a, &e)| a + (e * rho_i))
+                        .collect();
+                    let x = acc_x
+                        .iter()
+                        .zip(cm_i.x_w.iter())
+                        .map(|(&a, &x)| a + (x * rho_i))
+                        .collect();
+                    (y, u, x)
+                },
+            );
+
+        let h = x_0.last().cloned().ok_or(FoldingError::IncorrectLength)?;
+        Ok(LCCCS {
+            r: sub_claim.point,
+            v: v_0,
+            cm: y_0,
+            u: u_0,
+            x_w: x_0,
+            h,
+        })
     }
 }
 
