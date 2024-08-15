@@ -333,7 +333,7 @@ mod tests {
     use ark_ff::UniformRand;
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
-        ring::{Pow2CyclotomicPolyRingNTT, Zq},
+        ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
     };
     use rand::thread_rng;
 
@@ -367,7 +367,7 @@ mod tests {
         const Q: u64 = 17;
         const N: usize = 8;
         type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CR = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<NTT>();
@@ -393,9 +393,9 @@ mod tests {
         }
         let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
-        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, P>(w_ccs);
-        let cm_i: CCCS<NTT, P> = CCCS {
-            cm: wit.commit::<NTT, P>(&scheme).unwrap(),
+        let wit = Witness::<NTT>::from_w_ccs::<CR, P>(w_ccs);
+        let cm_i = CCCS {
+            cm: wit.commit::<CR, P>(&scheme).unwrap(),
             x_ccs,
         };
 
