@@ -1,27 +1,20 @@
 #![allow(non_snake_case)]
+use ark_std::log2;
+use lattirust_arithmetic::{
+    balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose, recompose},
+    challenge_set::latticefold_challenge_set::OverField,
+    linear_algebra::SparseMatrix,
+    ring::{PolyRing, Ring},
+};
+
+use crate::commitment::{AjtaiCommitmentScheme, AjtaiParams, Commitment, CommitmentError};
+use error::CSError as Error;
+use r1cs::R1CS;
+use utils::{hadamard, mat_vec_mul, vec_add, vec_scalar_mul};
 
 pub mod error;
 pub mod r1cs;
 pub mod utils;
-
-use crate::arith::utils::hadamard;
-use crate::arith::utils::mat_vec_mul;
-use crate::arith::utils::vec_add;
-use crate::arith::utils::vec_scalar_mul;
-use crate::commitment::AjtaiCommitmentScheme;
-use crate::commitment::AjtaiParams;
-use crate::commitment::Commitment;
-use crate::commitment::CommitmentError;
-use ark_std::log2;
-use error::CSError as Error;
-use lattirust_arithmetic::balanced_decomposition::decompose_balanced_slice_polyring;
-use lattirust_arithmetic::balanced_decomposition::pad_and_transpose;
-use lattirust_arithmetic::balanced_decomposition::recompose;
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::linear_algebra::SparseMatrix;
-use lattirust_arithmetic::ring::PolyRing;
-use lattirust_arithmetic::ring::Ring;
-use r1cs::R1CS;
 
 pub trait Arith<R: Ring> {
     /// Checks that the given Arith structure is satisfied by a z vector. Used only for testing.

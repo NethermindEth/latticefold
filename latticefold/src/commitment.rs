@@ -1,15 +1,12 @@
+use lattirust_arithmetic::{
+    balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose},
+    challenge_set::latticefold_challenge_set::OverField,
+    linear_algebra::{Matrix, Vector},
+    ring::{PolyRing, Ring},
+};
 use std::{
     marker::PhantomData,
     ops::{Add, Mul, Sub},
-};
-
-use lattirust_arithmetic::balanced_decomposition::{
-    decompose_balanced_slice_polyring, pad_and_transpose,
-};
-use lattirust_arithmetic::ring::{PolyRing, Ring};
-use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::OverField,
-    linear_algebra::{Matrix, Vector},
 };
 use thiserror::Error;
 

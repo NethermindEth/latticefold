@@ -1,22 +1,20 @@
-pub mod decomposition;
-pub mod error;
-pub mod folding;
-#[allow(non_snake_case)]
-pub mod linearization;
-
+use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::PolyRing};
 use std::marker::PhantomData;
 
+use crate::{
+    arith::{Witness, CCCS, CCS, LCCCS},
+    commitment::{AjtaiCommitmentScheme, AjtaiParams},
+    transcript::Transcript,
+};
 use decomposition::{DecompositionParams, DecompositionProver, DecompositionVerifier};
 use error::LatticefoldError;
 use folding::{FoldingProver, FoldingVerifier};
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::ring::PolyRing;
 use linearization::{LinearizationProver, LinearizationVerifier};
 
-use crate::arith::{Witness, CCS, LCCCS};
-use crate::commitment::AjtaiCommitmentScheme;
-use crate::commitment::AjtaiParams;
-use crate::{arith::CCCS, transcript::Transcript};
+pub mod decomposition;
+pub mod error;
+pub mod folding;
+pub mod linearization;
 
 /// `CR` is the type parameter for the coefficient representation of the ring
 /// `NTT` is the NTT representation of the same ring.

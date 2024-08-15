@@ -1,19 +1,18 @@
-use crate::commitment::AjtaiParams;
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::ring::PolyRing;
 
+use super::{decomposition::DecompositionParams, error::FoldingError, NIFSProver, NIFSVerifier};
 use crate::{
     arith::{Witness, CCS, LCCCS},
+    commitment::AjtaiParams,
     transcript::Transcript,
-    utils::sumcheck::SumCheckProof,
+    utils::sumcheck,
 };
-
-use super::{decomposition::DecompositionParams, error::FoldingError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
 pub struct FoldingProof<NTT: OverField> {
     // Step 2.
-    pub pointshift_sumcheck_proof: SumCheckProof<NTT>,
+    pub pointshift_sumcheck_proof: sumcheck::Proof<NTT>,
     // Step 3
     pub theta_s: Vec<NTT>,
     pub eta_s: Vec<NTT>,

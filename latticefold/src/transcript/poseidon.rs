@@ -1,15 +1,14 @@
-use super::Transcript;
 use ark_crypto_primitives::sponge::{
     poseidon::{PoseidonConfig, PoseidonSponge},
     CryptographicSponge,
 };
-use ark_ff::BigInteger;
-use ark_ff::PrimeField;
-use ark_ff::Zero;
+use ark_ff::{BigInteger, PrimeField, Zero};
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::{LatticefoldChallengeSet, OverField},
     ring::UnsignedRepresentative,
 };
+
+use super::Transcript;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>> {
@@ -64,10 +63,10 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> Transcript<R> for PoseidonTra
         }
     }
 
-    fn get_big_challenge(&mut self) -> <R>::BaseRing {
+    fn get_big_field_challenge(&mut self) -> <R>::F {
         let c: Vec<R::F> = self.sponge.squeeze_field_elements(1);
         self.sponge.absorb(&c);
-        Self::ChallengeSet::big_challenge_from_field(&c[0])
+        c[0]
     }
 
     fn get_small_challenge(&mut self) -> R {

@@ -5,7 +5,7 @@ use super::{
     error::LinearizationError::{self},
     NIFSProver, NIFSVerifier,
 };
-use crate::{arith::utils::mat_vec_mul, commitment::AjtaiParams};
+use crate::{arith::utils::mat_vec_mul, commitment::AjtaiParams, utils::sumcheck::MLSumcheck};
 use crate::{
     arith::Instance,
     utils::{mle::dense_vec_to_dense_mle, sumcheck::SumCheckError::SumCheckFailed},
@@ -13,22 +13,20 @@ use crate::{
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{
-        prover::SumCheckProver, verifier::SumCheckVerifier, SumCheckIP, SumCheckProof,
-    },
+    utils::sumcheck,
 };
 use ark_ff::PrimeField;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, VPAuxInfo, VirtualPolynomial},
+    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+    ring::PolyRing,
 };
-use lattirust_arithmetic::{polynomials::eq_eval, ring::PolyRing};
 
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
-    pub linearization_sumcheck: SumCheckProof<NTT>,
+    pub linearization_sumcheck: sumcheck::Proof<NTT>,
     // Sent in the step 3.
     pub v: NTT,
     pub u: Vec<NTT>,
@@ -79,7 +77,6 @@ impl<
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
-
         // Step 2: Sum check protocol
 
         // z_ccs vector, i.e. concatenation x || 1 || w.
@@ -94,12 +91,18 @@ impl<
 
         // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+
         // Run sum check prover
-        let (sum_check_proof, subclaim) = SumCheckProver::new(g, NTT::zero()).prove(transcript)?;
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
         // Extract the evaluation point
-        let r = subclaim.point;
+        let r = prover_state
+            .randomness
+            .into_iter()
+            .map(|x| NTT::field_to_base_ring(&x).into())
+            .collect::<Vec<NTT>>();
 
         // Step 3: Compute v, u_vector
+
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
             .evaluate(&r)
             .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
@@ -153,10 +156,14 @@ impl<
         //Step 2: The sumcheck.
         // The polynomial has degree <= ccs.d + 1 and log_m vars.
         let poly_info = VPAuxInfo::new(log_m, ccs.d + 1);
-        let verifier = SumCheckVerifier::new(SumCheckIP::new(NTT::zero(), poly_info));
 
         // Verify the sumcheck proof.
-        let subclaim = verifier.verify(&proof.linearization_sumcheck, transcript)?;
+        let subclaim = MLSumcheck::verify_as_subprotocol(
+            transcript,
+            &poly_info,
+            NTT::zero(),
+            &proof.linearization_sumcheck,
+        )?;
 
         // Absorbing the prover's messages to the verifier.
         transcript.absorb_ring(&proof.v);
@@ -165,9 +172,15 @@ impl<
         // The final evaluation claim from the sumcheck.
         let s = subclaim.expected_evaluation;
 
+        let point_r = subclaim
+            .point
+            .into_iter()
+            .map(|x| NTT::field_to_base_ring(&x).into())
+            .collect::<Vec<NTT>>();
+
         // Step 4: reshaping the evaluation claim.
         // eq(beta, r)
-        let e = eq_eval(&subclaim.point, &beta_s)?;
+        let e = eq_eval(&point_r, &beta_s)?;
         let should_equal_s = e * ccs // e * (\sum c_i * \Pi_{j \in S_i} u_j)
             .c
             .iter()
@@ -183,7 +196,7 @@ impl<
         }
 
         Ok(LCCCS::<NTT, P> {
-            r: subclaim.point,
+            r: point_r,
             v: proof.v,
             cm: cm_i.cm.clone(),
             u: proof.u.clone(),
@@ -241,12 +254,23 @@ fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
 mod tests {
     use ark_ff::UniformRand;
     use lattirust_arithmetic::{
+        challenge_set::latticefold_challenge_set::BinarySmallSet,
         mle::DenseMultilinearExtension,
         ring::{Pow2CyclotomicPolyRingNTT, Zq},
     };
     use rand::thread_rng;
 
-    use super::compute_u;
+    use crate::{
+        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        commitment::{AjtaiCommitmentScheme, AjtaiParams},
+        nifs::{
+            decomposition::DecompositionParams, linearization::LinearizationVerifier, NIFSProver,
+            NIFSVerifier,
+        },
+        transcript::poseidon::PoseidonTranscript,
+    };
+
+    use super::{compute_u, LinearizationProver};
 
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
@@ -291,84 +315,61 @@ mod tests {
     }
 
     // Actual Tests
-    // #[test]
-    // fn test_utils() {
-    //     // Test evaluation of mle from a vector
-    //     let evaluation_vector = vec![generate_a_ring_elem(), zero()];
-    //     assert_eq!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
-    //         zero()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![one()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_eq!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_vector(&evaluation_vector, &vec![zero()]).unwrap(),
-    //         zero()
-    //     );
+    #[test]
+    fn test_linearization() {
+        const Q: u64 = 17;
+        const N: usize = 8;
+        type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CR = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CS = BinarySmallSet<Q, N>;
+        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
+        let ccs = get_test_ccs::<NTT>();
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        #[derive(Clone, Eq, PartialEq)]
+        struct P;
 
-    //     let evaluation_matrix = vec![vec![generate_a_ring_elem(), zero()], vec![one(), generate_a_ring_elem()]];
-    //     assert_eq!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
-    //         one()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![one()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_eq!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
-    //         generate_a_ring_elem()
-    //     );
-    //     assert_ne!(
-    //         mle_val_from_matrix(&evaluation_matrix, &vec![zero()], &vec![zero()]).unwrap(),
-    //         zero()
-    //     );
+        #[derive(Clone, Eq, PartialEq)]
+        struct DP;
 
-    //     assert_eq!(
-    //         usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(4, 8).unwrap(),
-    //         vec![
-    //             zero(),
-    //             zero(),
-    //             zero(),
-    //             zero(),
-    //             zero(),
-    //             one(),
-    //             zero(),
-    //             zero()
-    //         ]
-    //     );
-    //     assert_eq!(
-    //         usize_to_binary_vector::<Pow2CyclotomicPolyRingNTT<Q, N>>(5, 5).unwrap(),
-    //         vec![zero(), zero(), one(), zero(), one()]
-    //     );
-    //     // Test the conversion of Bivariate MLE to univariate MLE by evaluating first values
-    //     let bivariate_mle = vec![
-    //         vec![generate_a_ring_elem(), generate_a_ring_elem(), one(), zero()],
-    //         vec![zero(), generate_a_ring_elem(), zero(), one()],
-    //     ];
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_first(&bivariate_mle, &vec![zero(), zero()]).unwrap(),
-    //         vec![generate_a_ring_elem(), zero()]
-    //     );
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_first(&bivariate_mle, &vec![one(), zero()]).unwrap(),
-    //         vec![generate_a_ring_elem(), generate_a_ring_elem()]
-    //     );
+        impl AjtaiParams for P {
+            const B: u128 = 1_000;
+            const L: usize = 1;
+            const WITNESS_SIZE: usize = 4;
+            const OUTPUT_SIZE: usize = 4;
+        }
 
-    //     // Test the conversion of Bivariate MLE to univariate MLE by evaluating second values
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_second(&bivariate_mle, &vec![one()]).unwrap(),
-    //         vec![zero(), generate_a_ring_elem(), zero(), one()]
-    //     );
-    //     assert_eq!(
-    //         mle_matrix_to_val_eval_second(&bivariate_mle, &vec![zero()]).unwrap(),
-    //         vec![generate_a_ring_elem(), generate_a_ring_elem(), one(), zero()]
-    //     );
-    // }
+        impl DecompositionParams for DP {
+            type AP = P;
+
+            const SMALL_B: u128 = 10;
+
+            const K: usize = 3;
+        }
+
+        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, P>(w_ccs);
+        let cm_i: CCCS<NTT, P> = CCCS {
+            cm: wit.commit::<NTT, P>(&scheme).unwrap(),
+            x_ccs,
+        };
+        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let res = <NIFSProver<CR, NTT, P, DP, T> as LinearizationProver<NTT, P, T>>::prove(
+            &cm_i,
+            &wit,
+            &mut transcript,
+            &ccs,
+        );
+
+        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let res = <NIFSVerifier<CR, NTT, P, DP, T> as LinearizationVerifier<NTT, P, T>>::verify(
+            &cm_i,
+            &res.unwrap().1,
+            &mut transcript,
+            &ccs,
+        );
+
+        res.unwrap();
+    }
 }
