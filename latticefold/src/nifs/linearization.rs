@@ -333,7 +333,7 @@ mod tests {
         struct DP;
 
         impl AjtaiParams for P {
-            const B: u128 = 1_000;
+            const B: u128 = 1000;
             const L: usize = 1;
             const WITNESS_SIZE: usize = 4;
             const OUTPUT_SIZE: usize = 4;

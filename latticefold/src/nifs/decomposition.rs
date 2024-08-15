@@ -328,3 +328,114 @@ fn decompose_B_vec_into_k_vec<
         .map(|vec| vec.into_iter().map(|x| x.into()).collect())
         .collect()
 }
+#[cfg(test)]
+mod tests {
+    use ark_ff::UniformRand;
+    use lattirust_arithmetic::{
+        challenge_set::latticefold_challenge_set::BinarySmallSet,
+        ring::{Pow2CyclotomicPolyRingNTT, Zq},
+    };
+    use rand::thread_rng;
+
+    use crate::{
+        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        commitment::{AjtaiCommitmentScheme, AjtaiParams},
+        nifs::{
+            decomposition::{DecompositionParams, DecompositionProver, DecompositionVerifier},
+            linearization::{LinearizationProver, LinearizationVerifier},
+            NIFSProver, NIFSVerifier,
+        },
+        transcript::poseidon::PoseidonTranscript,
+    };
+
+    // Boilerplate code to generate values needed for testing
+    const Q: u64 = 17; // Replace with an appropriate modulus
+    const N: usize = 8;
+
+    fn generate_coefficient_i(_i: usize) -> Zq<Q> {
+        let mut rng = thread_rng();
+        Zq::<Q>::rand(&mut rng)
+    }
+
+    fn generate_a_ring_elem() -> Pow2CyclotomicPolyRingNTT<Q, N> {
+        Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient_i)
+    }
+
+    // Actual Tests
+    #[test]
+    fn test_decomposition() {
+        const Q: u64 = 17;
+        const N: usize = 8;
+        type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CR = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CS = BinarySmallSet<Q, N>;
+        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
+        let ccs = get_test_ccs::<NTT>();
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        #[derive(Clone, Eq, PartialEq)]
+        struct P;
+
+        #[derive(Clone, Eq, PartialEq)]
+        struct DP;
+
+        impl AjtaiParams for P {
+            const B: u128 = 1000;
+            const L: usize = 1;
+            const WITNESS_SIZE: usize = 4;
+            const OUTPUT_SIZE: usize = 4;
+        }
+
+        impl DecompositionParams for DP {
+            type AP = P;
+            const SMALL_B: u128 = 10;
+            const K: usize = 3;
+        }
+
+        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, P>(w_ccs);
+        let cm_i: CCCS<NTT, P> = CCCS {
+            cm: wit.commit::<NTT, P>(&scheme).unwrap(),
+            x_ccs,
+        };
+        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let (_, linearization_proof) = <NIFSProver<CR, NTT, P, DP, T> as LinearizationProver<
+            NTT,
+            P,
+            T,
+        >>::prove(&cm_i, &wit, &mut transcript, &ccs)
+        .unwrap();
+
+        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let lcccs = <NIFSVerifier<CR, NTT, P, DP, T> as LinearizationVerifier<NTT, P, T>>::verify(
+            &cm_i,
+            &linearization_proof,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let (_, _, decomposition_proof) = <NIFSProver<CR, NTT, P, DP, T> as DecompositionProver<
+            CR,
+            NTT,
+            DP,
+            T,
+        >>::prove(
+            &lcccs, &wit, &mut transcript, &ccs, &scheme
+        )
+        .unwrap();
+
+        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        <NIFSVerifier<CR, NTT, P, DP, T> as DecompositionVerifier<CR, NTT, DP, T>>::verify(
+            &lcccs,
+            &decomposition_proof,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+    }
+}
