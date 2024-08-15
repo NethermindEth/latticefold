@@ -391,32 +391,28 @@ mod tests {
             const SMALL_B: u128 = 10;
             const K: usize = 3;
         }
-
+        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
         let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, P>(w_ccs);
         let cm_i: CCCS<NTT, P> = CCCS {
             cm: wit.commit::<NTT, P>(&scheme).unwrap(),
             x_ccs,
         };
-        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
 
         let (_, linearization_proof) = <NIFSProver<CR, NTT, P, DP, T> as LinearizationProver<
             NTT,
             P,
             T,
-        >>::prove(&cm_i, &wit, &mut transcript, &ccs)
+        >>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
         .unwrap();
-
-        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
 
         let lcccs = <NIFSVerifier<CR, NTT, P, DP, T> as LinearizationVerifier<NTT, P, T>>::verify(
             &cm_i,
             &linearization_proof,
-            &mut transcript,
+            &mut verifier_transcript,
             &ccs,
         )
         .unwrap();
-
-        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
 
         let (_, _, decomposition_proof) = <NIFSProver<CR, NTT, P, DP, T> as DecompositionProver<
             CR,
@@ -424,16 +420,14 @@ mod tests {
             DP,
             T,
         >>::prove(
-            &lcccs, &wit, &mut transcript, &ccs, &scheme
+            &lcccs, &wit, &mut prover_transcript, &ccs, &scheme
         )
         .unwrap();
-
-        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
 
         <NIFSVerifier<CR, NTT, P, DP, T> as DecompositionVerifier<CR, NTT, DP, T>>::verify(
             &lcccs,
             &decomposition_proof,
-            &mut transcript,
+            &mut verifier_transcript,
             &ccs,
         )
         .unwrap();
