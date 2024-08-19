@@ -13,3 +13,10 @@ lattirust-arithmetic = { git = "ssh://git@github.com/NethermindEth/lattirust.git
 num-traits = "0.2.19"
 rand = "0.8.5"
 thiserror = "1.0.63"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "ajtai"
+harness = false

@@ -1,10 +1,10 @@
 use lattirust_arithmetic::{
     balanced_decomposition::decompose_balanced_slice_polyring,
     challenge_set::latticefold_challenge_set::OverField,
-    linear_algebra::{Matrix, Vector},
-    ring::{PolyRing, Ring},
+    ring::{PolyRing, Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Ring, Zq},
 };
 use std::{
+    fmt::Display,
     marker::PhantomData,
     ops::{Add, Mul, Sub},
 };
@@ -21,7 +21,32 @@ where
 {
     _cr: PhantomData<CR>,
     _p: PhantomData<P>,
-    matrix: Matrix<NTT>,
+    matrix: Vec<Vec<NTT>>,
+}
+
+impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> TryFrom<Vec<Vec<NTT>>>
+    for AjtaiCommitmentScheme<CR, NTT, P>
+where
+    CR: Into<NTT> + From<NTT>,
+{
+    type Error = CommitmentError;
+
+    fn try_from(matrix: Vec<Vec<NTT>>) -> Result<Self, Self::Error> {
+        if matrix.len() != P::OUTPUT_SIZE || matrix[0].len() != P::WITNESS_SIZE {
+            return Err(CommitmentError::WrongAjtaiMatrixDimensions(
+                matrix.len(),
+                matrix[0].len(),
+                P::OUTPUT_SIZE,
+                P::WITNESS_SIZE,
+            ));
+        }
+
+        Ok(Self {
+            _cr: PhantomData,
+            _p: PhantomData,
+            matrix,
+        })
+    }
 }
 
 impl<CR: PolyRing, NTT: OverField, P: AjtaiParams> AjtaiCommitmentScheme<CR, NTT, P>
@@ -29,17 +54,26 @@ where
     CR: Into<NTT> + From<NTT>,
 {
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
+        let mut matrix = Vec::<Vec<NTT>>::with_capacity(P::OUTPUT_SIZE);
+
+        for _i in 0..P::OUTPUT_SIZE {
+            let mut row = Vec::<NTT>::with_capacity(P::WITNESS_SIZE);
+            for _j in 0..P::WITNESS_SIZE {
+                row.push(NTT::rand(rng));
+            }
+            matrix.push(row);
+        }
+
         Self {
             _cr: PhantomData,
             _p: PhantomData,
-            matrix: Matrix::rand(P::WITNESS_SIZE, P::OUTPUT_SIZE, rng),
+            matrix,
         }
     }
 
     /// Commit to a witness in the NTT form.
     /// The most basic one just multiplies by the matrix.
     pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<NTT, P>, CommitmentError> {
-        // TODO: a lot of clones and copies. Can we optimise this somehow?
         if f.len() != P::WITNESS_SIZE {
             return Err(CommitmentError::WrongWitnessLength(
                 f.len(),
@@ -47,9 +81,12 @@ where
             ));
         }
 
-        let commitment_vec = self.matrix.clone() * Vector::from(Vec::from(f));
-
-        Commitment::try_from(commitment_vec.iter().copied().collect::<Vec<_>>())
+        Ok(Commitment::from_vec_raw(
+            self.matrix
+                .iter()
+                .map(|row| row.iter().zip(f).map(|(&m, &x)| m * x).sum())
+                .collect(),
+        ))
     }
 
     /// Commit to a witness in the coefficient form.
@@ -103,11 +140,13 @@ where
 pub enum CommitmentError {
     #[error("Wrong length of the witness: {0}, expected: {1}")]
     WrongWitnessLength(usize, usize),
+    #[error("Ajtai matrix has dimensions: {0}x{1}, expected: {2}x{3}")]
+    WrongAjtaiMatrixDimensions(usize, usize, usize, usize),
 }
 
 /// Ajtai commitment parameters.
 /// Convenient to enforce them compile-time.
-pub trait AjtaiParams: Clone {
+pub trait AjtaiParams: Clone + Display {
     /// The MSIS bound.
     const B: u128;
     /// The ring modulus should be < B^L.
@@ -302,3 +341,89 @@ impl<'a, R: Ring, P: AjtaiParams> Mul<R> for &'a Commitment<R, P> {
 }
 
 // TODO: use macros to implement the other operations
+
+// Some classic lattice parameter sets.
+
+pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001;
+
+pub type DilithiumCR = Pow2CyclotomicPolyRing<Zq<DILITHIUM_PRIME>, 256>;
+pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
+
+#[derive(Clone, Copy)]
+pub struct DilithiumTestParams;
+
+// TODO: Revise this later
+impl AjtaiParams for DilithiumTestParams {
+    const B: u128 = 1 << 13;
+    const L: usize = 2;
+    const WITNESS_SIZE: usize = 1 << 15;
+    const OUTPUT_SIZE: usize = 9;
+}
+
+impl Display for DilithiumTestParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "B={}, l={}, m={}, n={}",
+            Self::B,
+            Self::L,
+            Self::OUTPUT_SIZE,
+            Self::WITNESS_SIZE
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use lattirust_arithmetic::{
+        challenge_set::latticefold_challenge_set::OverField, ring::PolyRing,
+    };
+
+    use super::{
+        AjtaiCommitmentScheme, AjtaiParams, CommitmentError, DilithiumCR, DilithiumNTT,
+        DilithiumTestParams,
+    };
+
+    pub(crate) fn generate_ajtai<
+        CR: PolyRing + From<NTT> + Into<NTT>,
+        NTT: OverField,
+        P: AjtaiParams,
+    >(
+        m: usize,
+        n: usize,
+    ) -> Result<AjtaiCommitmentScheme<CR, NTT, P>, CommitmentError> {
+        let mut matrix = Vec::<Vec<NTT>>::new();
+
+        for i in 0..m {
+            let mut row = Vec::<NTT>::new();
+            for j in 0..n {
+                row.push(NTT::from((i * n + j) as u128));
+            }
+            matrix.push(row)
+        }
+
+        AjtaiCommitmentScheme::<CR, NTT, P>::try_from(matrix)
+    }
+
+    #[test]
+    fn test_commit_ntt() -> Result<(), CommitmentError> {
+        let ajtai_data: AjtaiCommitmentScheme<DilithiumCR, DilithiumNTT, DilithiumTestParams> =
+            generate_ajtai(
+                DilithiumTestParams::OUTPUT_SIZE,
+                DilithiumTestParams::WITNESS_SIZE,
+            )?;
+        let input: Vec<_> = (0..(1 << 15)).map(|_| 2_u128.into()).collect();
+
+        let committed = ajtai_data.commit_ntt(&input)?;
+
+        for (i, &x) in committed.as_ref().iter().enumerate() {
+            let expected: u128 = ((DilithiumTestParams::WITNESS_SIZE)
+                * (2 * i * DilithiumTestParams::WITNESS_SIZE
+                    + (DilithiumTestParams::WITNESS_SIZE - 1)))
+                as u128;
+            assert_eq!(x, expected.into());
+        }
+
+        Ok(())
+    }
+}

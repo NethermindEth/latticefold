@@ -246,6 +246,7 @@ mod tests {
         ring::{Pow2CyclotomicPolyRingNTT, Zq},
     };
     use rand::thread_rng;
+    use std::fmt::Display;
 
     use crate::{
         arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -312,6 +313,12 @@ mod tests {
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         #[derive(Clone)]
         struct PP;
+
+        impl Display for PP {
+            fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                Ok(())
+            }
+        }
 
         impl AjtaiParams for PP {
             const B: u128 = 1_000;
