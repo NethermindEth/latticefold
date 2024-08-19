@@ -337,7 +337,7 @@ name = "cyclotomic-rings"
 version = "0.1.0"
 dependencies = [
  "ark-ff",
- "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main)",
+ "lattirust-arithmetic",
  "num-bigint",
  "rand",
 ]
@@ -612,7 +612,7 @@ dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
  "ark-std",
- "lattirust-arithmetic 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/ntt_to_cr)",
+ "lattirust-arithmetic",
  "num-traits",
  "rand",
  "thiserror",
@@ -621,36 +621,7 @@ dependencies = [
 [[package]]
 name = "lattirust-arithmetic"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/ntt_to_cr#2c85d718020d5d5453018180be9d7d5e1484d5f3"
-dependencies = [
- "ark-crypto-primitives",
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "bincode",
- "bitter",
- "delegate",
- "delegate-attr",
- "derive_more",
- "displaydoc",
- "nalgebra",
- "nalgebra-sparse",
- "nimue",
- "num-bigint",
- "num-traits",
- "rand",
- "rayon",
- "rounded-div",
- "serde",
- "serde_with",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
-name = "lattirust-arithmetic"
-version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#288bb63ece4da4acb086715aba72f89e325b5588"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e2fad670ed361b6d531055fb3d519d9825b2907e"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
