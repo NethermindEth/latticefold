@@ -7,13 +7,12 @@ use lattirust_arithmetic::ring::PolyRing;
 use crate::arith::utils::mat_vec_mul;
 use crate::commitment::{AjtaiCommitmentScheme, AjtaiParams, Commitment};
 
+use super::{error::DecompositionError, NIFSProver, NIFSVerifier};
 use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{Witness, CCS, LCCCS},
     transcript::Transcript,
 };
-
-use super::{error::DecompositionError, NIFSProver, NIFSVerifier};
 
 #[derive(Clone)]
 pub struct DecompositionProof<NTT: OverField, P: AjtaiParams> {
@@ -133,7 +132,7 @@ impl<
 
             for M in &ccs.M {
                 u_s_for_i.push(
-                    dense_vec_to_dense_mle(ccs.m, &mat_vec_mul(M, &z)?)
+                    dense_vec_to_dense_mle(ccs.s, &mat_vec_mul(M, &z)?)
                         .evaluate(&cm_i.r)
                         .ok_or(DecompositionError::WitnessMleEvalFail)?,
                 );
@@ -219,8 +218,10 @@ impl<
         let b = NTT::from(DP::SMALL_B);
 
         let mut should_equal_y0 = proof.y_s[0].clone();
+
         proof.y_s.iter().enumerate().skip(1).for_each(|(i, y)| {
             let bi_part = y * b.pow([i as u64]);
+
             should_equal_y0 = should_equal_y0.clone() + bi_part;
         });
 
@@ -262,6 +263,7 @@ impl<
         }
 
         let mut should_equal_xw = proof.x_s[0].clone();
+
         proof.x_s.iter().enumerate().skip(1).for_each(|(i, x_i)| {
             let bi_part: Vec<NTT> = x_i.iter().map(|&u| u * b.pow([i as u64])).collect();
             should_equal_xw = should_equal_xw
@@ -270,7 +272,6 @@ impl<
                 .map(|(&xw, xwi)| xw + xwi)
                 .collect();
         });
-
         match should_equal_xw == cm_i.x_w {
             true => {}
             false => {
@@ -328,9 +329,9 @@ fn decompose_B_vec_into_k_vec<
         .map(|vec| vec.into_iter().map(|x| x.into()).collect())
         .collect()
 }
+
 #[cfg(test)]
 mod tests {
-    use ark_ff::UniformRand;
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
         ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
@@ -352,20 +353,9 @@ mod tests {
     const Q: u64 = 17; // Replace with an appropriate modulus
     const N: usize = 8;
 
-    fn generate_coefficient_i(_i: usize) -> Zq<Q> {
-        let mut rng = thread_rng();
-        Zq::<Q>::rand(&mut rng)
-    }
-
-    fn generate_a_ring_elem() -> Pow2CyclotomicPolyRingNTT<Q, N> {
-        Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient_i)
-    }
-
     // Actual Tests
     #[test]
     fn test_decomposition() {
-        const Q: u64 = 17;
-        const N: usize = 8;
         type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
         type CS = BinarySmallSet<Q, N>;
@@ -373,7 +363,7 @@ mod tests {
         let ccs = get_test_ccs::<NTT>();
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone, Eq, PartialEq)]
+        #[derive(Clone, Eq, PartialEq, Debug)]
         struct P;
 
         #[derive(Clone, Eq, PartialEq)]

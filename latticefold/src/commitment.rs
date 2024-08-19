@@ -184,7 +184,7 @@ impl<'a, 'b, R: Ring, P: AjtaiParams> Add<&'a Commitment<R, P>> for &'b Commitme
     type Output = Commitment<R, P>;
 
     fn add(self, rhs: &'a Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
+        let mut res_vec = vec![R::zero(); P::OUTPUT_SIZE];
 
         res_vec
             .iter_mut()
@@ -224,7 +224,7 @@ impl<'a, 'b, R: Ring, P: AjtaiParams> Sub<&'a Commitment<R, P>> for &'b Commitme
     type Output = Commitment<R, P>;
 
     fn sub(self, rhs: &'a Commitment<R, P>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
+        let mut res_vec = vec![R::zero(); P::OUTPUT_SIZE];
 
         res_vec
             .iter_mut()
@@ -264,8 +264,7 @@ impl<'a, 'b, R: Ring, P: AjtaiParams> Mul<&'a R> for &'b Commitment<R, P> {
     type Output = Commitment<R, P>;
 
     fn mul(self, rhs: &'a R) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(P::OUTPUT_SIZE);
-
+        let mut res_vec = vec![R::zero(); P::OUTPUT_SIZE];
         res_vec
             .iter_mut()
             .zip(self.val.iter())
