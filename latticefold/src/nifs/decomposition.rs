@@ -381,7 +381,7 @@ mod tests {
 
         let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
-        let wit = Witness::<NTT>::from_w_ccs::<CR, PP>(w_ccs);
+        let wit = Witness::<NTT>::from_w_ccs::<CR, PP>(&w_ccs);
         let cm_i = CCCS {
             cm: wit.commit::<CR, PP>(&scheme).unwrap(),
             x_ccs,

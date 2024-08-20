@@ -157,7 +157,7 @@ impl<NTT: OverField> Witness<NTT> {
         CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
         P: AjtaiParams,
     >(
-        w_ccs: Vec<NTT>,
+        w_ccs: &[NTT],
     ) -> Self {
         // iNTT
         let coef_repr: Vec<CR> = w_ccs.iter().map(|&x| x.into()).collect();
@@ -180,7 +180,11 @@ impl<NTT: OverField> Witness<NTT> {
             .map(|x| NTT::from(x.coeffs()))
             .collect();
 
-        Self { f, f_hat, w_ccs }
+        Self {
+            f,
+            f_hat,
+            w_ccs: w_ccs.to_vec(),
+        }
     }
 
     pub fn from_w_ccs_slice<
@@ -189,7 +193,7 @@ impl<NTT: OverField> Witness<NTT> {
     >(
         w_ccs: &[NTT],
     ) -> Self {
-        Self::from_w_ccs::<CR, P>(w_ccs.into())
+        Self::from_w_ccs::<CR, P>(w_ccs)
     }
 
     pub fn from_f<

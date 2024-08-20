@@ -22,7 +22,7 @@ pub mod linearization;
 /// `NTT` is the NTT representation of the same ring.
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ComposedProof<
     CR: PolyRing + From<NTT> + Into<NTT>,
     NTT: OverField,

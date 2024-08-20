@@ -145,7 +145,7 @@ pub enum CommitmentError {
 }
 /// Ajtai commitment parameters.
 /// Convenient to enforce them compile-time.
-pub trait AjtaiParams: Clone + Eq + PartialEq {
+pub trait AjtaiParams: Clone + PartialEq {
     /// The MSIS bound.
     const B: u128;
     /// The ring modulus should be < B^L.

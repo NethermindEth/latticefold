@@ -347,7 +347,7 @@ mod tests {
             const K: usize = 3;
         }
 
-        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, PP>(w_ccs);
+        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, PP>(&w_ccs);
         let cm_i: CCCS<NTT, PP> = CCCS {
             cm: wit.commit::<NTT, PP>(&scheme).unwrap(),
             x_ccs,
