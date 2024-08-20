@@ -19,9 +19,8 @@ fn ajtai_benchmark<const Q: u64, const N: usize, P: AjtaiParams>(c: &mut Criteri
         .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
         .collect();
 
-    let apd: AjtaiParamData = AjtaiParamData::from(p);
     c.bench_with_input(
-        BenchmarkId::new("Ajtai", apd),
+        BenchmarkId::new("Ajtai", AjtaiParamData::from(p)),
         &(ajtai_data, input),
         |b, (ajtai_data, input)| b.iter(|| ajtai_data.commit_ntt(input)),
     );
