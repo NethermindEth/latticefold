@@ -29,3 +29,9 @@ match_ref_pats = "warn"
 match_bool = "warn"
 needless_bool = "warn"
 implicit_clone = "warn"
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "ajtai"
+harness = false
