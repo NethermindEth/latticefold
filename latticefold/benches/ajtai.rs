@@ -5,7 +5,7 @@ use rand::thread_rng;
 use std::time::Duration;
 
 use latticefold::commitment::{
-    AjtaiCommitmentScheme, AjtaiParams, DilithiumTestParams, DILITHIUM_PRIME,
+    AjtaiCommitmentScheme, AjtaiParamData, AjtaiParams, DilithiumTestParams, DILITHIUM_PRIME,
 };
 
 fn ajtai_benchmark<const Q: u64, const N: usize, P: AjtaiParams>(c: &mut Criterion, p: P) {
@@ -19,8 +19,9 @@ fn ajtai_benchmark<const Q: u64, const N: usize, P: AjtaiParams>(c: &mut Criteri
         .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
         .collect();
 
+    let apd: AjtaiParamData = AjtaiParamData::from(p);
     c.bench_with_input(
-        BenchmarkId::new("Ajtai", p.display()),
+        BenchmarkId::new("Ajtai", apd),
         &(ajtai_data, input),
         |b, (ajtai_data, input)| b.iter(|| ajtai_data.commit_ntt(input)),
     );

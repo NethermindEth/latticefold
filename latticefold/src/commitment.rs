@@ -154,22 +154,39 @@ pub trait AjtaiParams: Clone {
     const WITNESS_SIZE: usize;
     /// The number of columns of the Ajtai matrix.
     const OUTPUT_SIZE: usize;
+}
 
-    fn display(&self) -> impl Display + '_ {
-        DisplayAP(self)
+impl<P: AjtaiParams> From<P> for AjtaiParamData {
+    fn from(_: P) -> Self {
+        {
+            Self {
+                b: P::B,
+                l: P::L,
+                witness_size: P::WITNESS_SIZE,
+                output_size: P::OUTPUT_SIZE,
+            }
+        }
     }
 }
 
-pub struct DisplayAP<T>(T);
-impl<T: AjtaiParams> Display for DisplayAP<&'_ T> {
+#[derive(Clone, Copy)]
+pub struct AjtaiParamData {
+    // The MSIS bound.
+    b: u128,
+    // The ring modulus should be < B^L.
+    l: usize,
+    // The number of rows of the Ajtai matrix.
+    witness_size: usize,
+    // The number of columns of the Ajtai matrix.
+    output_size: usize,
+}
+
+impl Display for AjtaiParamData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "B={}, l={}, m={}, n={}",
-            T::B,
-            T::L,
-            T::OUTPUT_SIZE,
-            T::WITNESS_SIZE
+            self.b, self.l, self.output_size, self.witness_size
         )
     }
 }
