@@ -322,6 +322,8 @@ fn decompose_B_vec_into_k_vec<
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Display;
+
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
         ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
@@ -354,12 +356,17 @@ mod tests {
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(10000);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         #[derive(Clone, Eq, PartialEq)]
-        struct P;
+        struct PP;
 
         #[derive(Clone, Eq, PartialEq)]
         struct DP;
 
-        impl AjtaiParams for P {
+        impl Display for PP {
+            fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                Ok(())
+            }
+        }
+        impl AjtaiParams for PP {
             const B: u128 = 16;
             const L: usize = 1;
             const WITNESS_SIZE: usize = 4;
@@ -367,28 +374,29 @@ mod tests {
         }
 
         impl DecompositionParams for DP {
-            type AP = P;
+            type AP = PP;
             const SMALL_B: u128 = 2;
             const K: usize = 4;
         }
+
         let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
-        let wit = Witness::<NTT>::from_w_ccs::<CR, P>(w_ccs);
+        let wit = Witness::<NTT>::from_w_ccs::<CR, PP>(w_ccs);
         let cm_i = CCCS {
-            cm: wit.commit::<CR, P>(&scheme).unwrap(),
+            cm: wit.commit::<CR, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
-        let (lcccs, linearization_proof) = <NIFSProver<CR, NTT, P, DP, T> as LinearizationProver<
-            NTT,
-            P,
-            T,
-        >>::prove(
-            &cm_i, &wit, &mut prover_transcript, &ccs
-        )
-        .unwrap();
+        let (lcccs, linearization_proof) =
+            <NIFSProver<CR, NTT, PP, DP, T> as LinearizationProver<NTT, PP, T>>::prove(
+                &cm_i,
+                &wit,
+                &mut prover_transcript,
+                &ccs,
+            )
+            .unwrap();
 
-        let _ = <NIFSVerifier<CR, NTT, P, DP, T> as LinearizationVerifier<NTT, P, T>>::verify(
+        let _ = <NIFSVerifier<CR, NTT, PP, DP, T> as LinearizationVerifier<NTT, PP, T>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -396,7 +404,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, decomposition_proof) = <NIFSProver<CR, NTT, P, DP, T> as DecompositionProver<
+        let (_, _, decomposition_proof) = <NIFSProver<CR, NTT, PP, DP, T> as DecompositionProver<
             CR,
             NTT,
             DP,
@@ -407,7 +415,7 @@ mod tests {
         .unwrap();
 
         let res =
-            <NIFSVerifier<CR, NTT, P, DP, T> as DecompositionVerifier<CR, NTT, DP, T>>::verify(
+            <NIFSVerifier<CR, NTT, PP, DP, T> as DecompositionVerifier<CR, NTT, DP, T>>::verify(
                 &lcccs,
                 &decomposition_proof,
                 &mut verifier_transcript,

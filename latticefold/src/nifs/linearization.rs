@@ -259,6 +259,7 @@ mod tests {
         ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
     };
     use rand::thread_rng;
+    use std::fmt::Display;
 
     use crate::{
         arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -327,34 +328,40 @@ mod tests {
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         #[derive(Clone, Eq, PartialEq)]
-        struct P;
+        struct PP;
 
         #[derive(Clone, Eq, PartialEq)]
         struct DP;
 
-        impl AjtaiParams for P {
-            const B: u128 = 1000;
+        impl Display for PP {
+            fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                Ok(())
+            }
+        }
+
+        impl AjtaiParams for PP {
+            const B: u128 = 1_000;
             const L: usize = 1;
             const WITNESS_SIZE: usize = 4;
             const OUTPUT_SIZE: usize = 4;
         }
 
         impl DecompositionParams for DP {
-            type AP = P;
+            type AP = PP;
 
             const SMALL_B: u128 = 10;
 
             const K: usize = 3;
         }
 
-        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, P>(w_ccs);
-        let cm_i: CCCS<NTT, P> = CCCS {
-            cm: wit.commit::<NTT, P>(&scheme).unwrap(),
+        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, PP>(w_ccs);
+        let cm_i: CCCS<NTT, PP> = CCCS {
+            cm: wit.commit::<NTT, PP>(&scheme).unwrap(),
             x_ccs,
         };
         let mut transcript = PoseidonTranscript::<NTT, CS>::default();
 
-        let res = <NIFSProver<CR, NTT, P, DP, T> as LinearizationProver<NTT, P, T>>::prove(
+        let res = <NIFSProver<CR, NTT, PP, DP, T> as LinearizationProver<NTT, PP, T>>::prove(
             &cm_i,
             &wit,
             &mut transcript,
@@ -363,7 +370,7 @@ mod tests {
 
         let mut transcript = PoseidonTranscript::<NTT, CS>::default();
 
-        let res = <NIFSVerifier<CR, NTT, P, DP, T> as LinearizationVerifier<NTT, P, T>>::verify(
+        let res = <NIFSVerifier<CR, NTT, PP, DP, T> as LinearizationVerifier<NTT, PP, T>>::verify(
             &cm_i,
             &res.unwrap().1,
             &mut transcript,
