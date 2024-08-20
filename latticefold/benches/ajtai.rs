@@ -20,7 +20,7 @@ fn ajtai_benchmark<const Q: u64, const N: usize, P: AjtaiParams>(c: &mut Criteri
         .collect();
 
     c.bench_with_input(
-        BenchmarkId::new("Ajtai", p),
+        BenchmarkId::new("Ajtai", p.display()),
         &(ajtai_data, input),
         |b, (ajtai_data, input)| b.iter(|| ajtai_data.commit_ntt(input)),
     );

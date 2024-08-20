@@ -143,10 +143,9 @@ pub enum CommitmentError {
     #[error("Ajtai matrix has dimensions: {0}x{1}, expected: {2}x{3}")]
     WrongAjtaiMatrixDimensions(usize, usize, usize, usize),
 }
-
 /// Ajtai commitment parameters.
 /// Convenient to enforce them compile-time.
-pub trait AjtaiParams: Clone + Display + Eq + PartialEq {
+pub trait AjtaiParams: Clone + Eq + PartialEq {
     /// The MSIS bound.
     const B: u128;
     /// The ring modulus should be < B^L.
@@ -155,8 +154,25 @@ pub trait AjtaiParams: Clone + Display + Eq + PartialEq {
     const WITNESS_SIZE: usize;
     /// The number of columns of the Ajtai matrix.
     const OUTPUT_SIZE: usize;
+
+    fn display(&self) -> impl Display + '_ {
+        DisplayAP(self)
+    }
 }
 
+pub struct DisplayAP<T>(T);
+impl<T: AjtaiParams> Display for DisplayAP<&'_ T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "B={}, l={}, m={}, n={}",
+            T::B,
+            T::L,
+            T::OUTPUT_SIZE,
+            T::WITNESS_SIZE
+        )
+    }
+}
 /// The Ajtai commitment type. Meant to contain the output of the
 /// matrix-vector multiplication `A \cdot x`.
 /// Enforced to have the length `P::OUTPUT_SIZE`.
@@ -357,19 +373,6 @@ impl AjtaiParams for DilithiumTestParams {
     const L: usize = 2;
     const WITNESS_SIZE: usize = 1 << 15;
     const OUTPUT_SIZE: usize = 9;
-}
-
-impl Display for DilithiumTestParams {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "B={}, l={}, m={}, n={}",
-            Self::B,
-            Self::L,
-            Self::OUTPUT_SIZE,
-            Self::WITNESS_SIZE
-        )
-    }
 }
 
 #[cfg(test)]
