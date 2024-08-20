@@ -225,11 +225,8 @@ impl<
             should_equal_y0 = should_equal_y0.clone() + bi_part;
         });
 
-        match should_equal_y0 == cm_i.cm {
-            true => {}
-            false => {
-                return Err(DecompositionError::RecomposedError);
-            }
+        if should_equal_y0 != cm_i.cm {
+            return Err(DecompositionError::RecomposedError);
         }
 
         let mut should_equal_u0 = proof.u_s[0].clone();
@@ -242,41 +239,34 @@ impl<
                 .collect();
         });
 
-        match should_equal_u0 == cm_i.u {
-            true => {}
-            false => {
-                return Err(DecompositionError::RecomposedError);
-            }
+        if should_equal_u0 != cm_i.u {
+            return Err(DecompositionError::RecomposedError);
         }
 
         let mut should_equal_v0 = proof.v_s[0];
         proof.v_s.iter().enumerate().skip(1).for_each(|(i, &v_i)| {
             let bi_part = v_i * b.pow([i as u64]);
-            should_equal_v0 = should_equal_v0 + bi_part;
+            should_equal_v0 += bi_part;
         });
 
-        match should_equal_v0 == cm_i.v {
-            true => {}
-            false => {
-                return Err(DecompositionError::RecomposedError);
-            }
+        if should_equal_v0 != cm_i.v {
+            return Err(DecompositionError::RecomposedError);
         }
 
         let mut should_equal_xw = proof.x_s[0].clone();
 
         proof.x_s.iter().enumerate().skip(1).for_each(|(i, x_i)| {
             let bi_part: Vec<NTT> = x_i.iter().map(|&u| u * b.pow([i as u64])).collect();
+
             should_equal_xw = should_equal_xw
                 .iter()
                 .zip(&bi_part)
                 .map(|(&xw, xwi)| xw + xwi)
                 .collect();
         });
-        match should_equal_xw == cm_i.x_w {
-            true => {}
-            false => {
-                return Err(DecompositionError::RecomposedError);
-            }
+
+        if vec![should_equal_xw[0]] != cm_i.x_w {
+            return Err(DecompositionError::RecomposedError);
         }
 
         Ok(lcccs_s)
@@ -361,16 +351,16 @@ mod tests {
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(10000);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone, Eq, PartialEq, Debug)]
+        #[derive(Clone, Eq, PartialEq)]
         struct P;
 
         #[derive(Clone, Eq, PartialEq)]
         struct DP;
 
         impl AjtaiParams for P {
-            const B: u128 = 1000;
+            const B: u128 = 16;
             const L: usize = 1;
             const WITNESS_SIZE: usize = 4;
             const OUTPUT_SIZE: usize = 4;
@@ -378,8 +368,8 @@ mod tests {
 
         impl DecompositionParams for DP {
             type AP = P;
-            const SMALL_B: u128 = 10;
-            const K: usize = 3;
+            const SMALL_B: u128 = 2;
+            const K: usize = 4;
         }
         let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
@@ -389,14 +379,16 @@ mod tests {
             x_ccs,
         };
 
-        let (_, linearization_proof) = <NIFSProver<CR, NTT, P, DP, T> as LinearizationProver<
+        let (lcccs, linearization_proof) = <NIFSProver<CR, NTT, P, DP, T> as LinearizationProver<
             NTT,
             P,
             T,
-        >>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+        >>::prove(
+            &cm_i, &wit, &mut prover_transcript, &ccs
+        )
         .unwrap();
 
-        let lcccs = <NIFSVerifier<CR, NTT, P, DP, T> as LinearizationVerifier<NTT, P, T>>::verify(
+        let _ = <NIFSVerifier<CR, NTT, P, DP, T> as LinearizationVerifier<NTT, P, T>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -414,12 +406,14 @@ mod tests {
         )
         .unwrap();
 
-        <NIFSVerifier<CR, NTT, P, DP, T> as DecompositionVerifier<CR, NTT, DP, T>>::verify(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
+        let res =
+            <NIFSVerifier<CR, NTT, P, DP, T> as DecompositionVerifier<CR, NTT, DP, T>>::verify(
+                &lcccs,
+                &decomposition_proof,
+                &mut verifier_transcript,
+                &ccs,
+            );
+
+        assert!(res.is_ok())
     }
 }

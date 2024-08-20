@@ -11,16 +11,18 @@ use error::LatticefoldError;
 use folding::{FoldingProver, FoldingVerifier};
 use linearization::{LinearizationProver, LinearizationVerifier};
 
+#[allow(non_snake_case)]
 pub mod decomposition;
 pub mod error;
 pub mod folding;
+#[allow(non_snake_case)]
 pub mod linearization;
 
 /// `CR` is the type parameter for the coefficient representation of the ring
 /// `NTT` is the NTT representation of the same ring.
 /// `P` is the Ajtai commitment parameters.
 /// `T` is the FS-transform transcript.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ComposedProof<
     CR: PolyRing + From<NTT> + Into<NTT>,
     NTT: OverField,
