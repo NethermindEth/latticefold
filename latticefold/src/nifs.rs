@@ -11,11 +11,11 @@ use error::LatticefoldError;
 use folding::{FoldingProver, FoldingVerifier};
 use linearization::{LinearizationProver, LinearizationVerifier};
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::upper_case_acronyms)]
 pub mod decomposition;
 pub mod error;
 pub mod folding;
-#[allow(non_snake_case)]
+#[allow(non_snake_case, clippy::upper_case_acronyms)]
 pub mod linearization;
 
 /// `CR` is the type parameter for the coefficient representation of the ring
