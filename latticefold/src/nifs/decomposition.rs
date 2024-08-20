@@ -264,8 +264,8 @@ impl<
                 .map(|(&xw, xwi)| xw + xwi)
                 .collect();
         });
-
-        if vec![should_equal_xw[0]] != cm_i.x_w {
+        should_equal_xw.pop();
+        if should_equal_xw != cm_i.x_w {
             return Err(DecompositionError::RecomposedError);
         }
 
