@@ -14,6 +14,21 @@ num-traits = "0.2.19"
 rand = "0.8.5"
 thiserror = "1.0.63"
 
+[lints.clippy]
+single_match = "warn"
+single_match_else = "warn"
+needless_match = "warn"
+needless_late_init = "warn"
+redundant_pattern_matching = "warn"
+redundant_pattern = "warn"
+redundant_guards = "warn"
+collapsible_match = "warn"
+match_single_binding = "warn"
+match_same_arms = "warn"
+match_ref_pats = "warn"
+match_bool = "warn"
+needless_bool = "warn"
+implicit_clone = "warn"
 [dev-dependencies]
 criterion = "0.3"
 
