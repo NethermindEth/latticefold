@@ -422,6 +422,28 @@ mod tests {
                 &ccs,
             );
 
-        assert!(res.is_ok())
+        assert!(res.is_ok());
+
+        // Test failing decomposition
+        let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
+        let wit = Witness::<NTT>::from_w_ccs::<CR, PP>(&w_ccs);
+        let (_, _, decomposition_proof) = <NIFSProver<CR, NTT, PP, DP, T> as DecompositionProver<
+            CR,
+            NTT,
+            DP,
+            T,
+        >>::prove(
+            &lcccs, &wit, &mut prover_transcript, &ccs, &scheme
+        )
+        .unwrap();
+
+        let res =
+            <NIFSVerifier<CR, NTT, PP, DP, T> as DecompositionVerifier<CR, NTT, DP, T>>::verify(
+                &lcccs,
+                &decomposition_proof,
+                &mut verifier_transcript,
+                &ccs,
+            );
+        assert!(res.is_err());
     }
 }
