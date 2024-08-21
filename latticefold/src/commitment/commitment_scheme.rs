@@ -157,9 +157,9 @@ mod tests {
 
         let ajtai_data: AjtaiCommitmentScheme<OUTPUT_SIZE, WITNESS_SIZE, DilithiumNTT> =
             generate_ajtai()?;
-        let input: Vec<_> = (0..(1 << 15)).map(|_| 2_u128.into()).collect();
+        let witness: Vec<_> = (0..(1 << 15)).map(|_| 2_u128.into()).collect();
 
-        let committed = ajtai_data.commit_ntt(&input)?;
+        let committed = ajtai_data.commit_ntt(&witness)?;
 
         for (i, &x) in committed.as_ref().iter().enumerate() {
             let expected: u128 =

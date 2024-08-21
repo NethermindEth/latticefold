@@ -24,14 +24,14 @@ fn ajtai_benchmark<
     let ajtai_data: AjtaiCommitmentScheme<C, W, Pow2CyclotomicPolyRingNTT<Q, N>> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let input: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..W)
+    let witness: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..W)
         .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
         .collect();
 
     c.bench_with_input(
         BenchmarkId::new("Ajtai", DecompositionParamData::from(p)),
-        &(ajtai_data, input),
-        |b, (ajtai_data, input)| b.iter(|| ajtai_data.commit_ntt(input)),
+        &(ajtai_data, witness),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
     );
 }
 
