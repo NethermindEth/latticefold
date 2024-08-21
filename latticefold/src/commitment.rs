@@ -9,7 +9,7 @@ use thiserror::Error;
 use crate::parameters::DecompositionParams;
 
 /// A concrete instantiation of the Ajtai commitment scheme.
-/// Contains a random Ajtai matrix for the coresssponding Ajtai parameters
+/// Contains a random Ajtai matrix for the corresponding Ajtai parameters
 /// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
 /// `NTT` is a cyclotomic ring, for better results it should be in the NTT form.
