@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use ark_std::marker::PhantomData;
 
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::ring::PolyRing;

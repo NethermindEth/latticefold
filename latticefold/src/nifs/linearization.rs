@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 use ark_ff::PrimeField;
+use ark_std::{marker::PhantomData, sync::Arc};
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
-use std::{marker::PhantomData, sync::Arc};
 
 use super::error::LinearizationError;
 use crate::{

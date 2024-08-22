@@ -1,5 +1,5 @@
+use ark_std::marker::PhantomData;
 use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::PolyRing};
-use std::marker::PhantomData;
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},

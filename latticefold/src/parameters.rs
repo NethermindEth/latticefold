@@ -1,5 +1,5 @@
+use ark_std::fmt::Display;
 use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq};
-use std::fmt::Display;
 
 /// Decomposition parameters.
 /// Convenient to enforce them compile-time.
@@ -51,7 +51,7 @@ pub struct DecompositionParamData {
 }
 
 impl Display for DecompositionParamData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ark_std::fmt::Formatter<'_>) -> ark_std::fmt::Result {
         write!(f, "B={}, l={}", self.b, self.l,)
     }
 }

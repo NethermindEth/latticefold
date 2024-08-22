@@ -1,8 +1,8 @@
 use ark_ff::UniformRand;
+use ark_std::time::Duration;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use lattirust_arithmetic::ring::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
-use std::time::Duration;
 
 use latticefold::{
     commitment::AjtaiCommitmentScheme,

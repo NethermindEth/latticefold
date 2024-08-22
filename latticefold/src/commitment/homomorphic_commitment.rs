@@ -1,5 +1,5 @@
+use ark_std::ops::{Add, Mul, Sub};
 use lattirust_arithmetic::ring::Ring;
-use std::ops::{Add, Mul, Sub};
 
 use crate::commitment::CommitmentError;
 

@@ -3,6 +3,7 @@ use ark_crypto_primitives::sponge::{
     CryptographicSponge,
 };
 use ark_ff::{BigInteger, PrimeField, Zero};
+use ark_std::marker::PhantomData;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::{LatticefoldChallengeSet, OverField},
     ring::UnsignedRepresentative,
@@ -12,7 +13,7 @@ use super::Transcript;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>> {
-    _marker: std::marker::PhantomData<(R, CS)>,
+    _marker: PhantomData<CS>,
     sponge: PoseidonSponge<R::F>,
 }
 
@@ -41,7 +42,7 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> Transcript<R> for PoseidonTra
         let sponge = PoseidonSponge::<R::F>::new(config);
         Self {
             sponge,
-            _marker: std::marker::PhantomData,
+            _marker: PhantomData,
         }
     }
 

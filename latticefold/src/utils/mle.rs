@@ -52,7 +52,7 @@ pub fn vec_to_dense_mle<R: Ring>(n_vars: usize, v: &[R]) -> DenseMultilinearExte
         // pad to 2^n_vars
         [
             v.to_owned(),
-            std::iter::repeat(R::zero())
+            ark_std::iter::repeat(R::zero())
                 .take((1 << n_vars) - v.len())
                 .collect(),
         ]
@@ -91,7 +91,7 @@ pub fn dense_vec_to_dense_mle<R: Ring>(n_vars: usize, v: &[R]) -> DenseMultiline
     // Pad to 2^n_vars
     let v_padded: Vec<R> = [
         v.to_owned(),
-        std::iter::repeat(R::zero())
+        ark_std::iter::repeat(R::zero())
             .take((1 << n_vars) - v.len())
             .collect(),
     ]

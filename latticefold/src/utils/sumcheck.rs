@@ -1,9 +1,9 @@
+use ark_std::{fmt::Display, marker::PhantomData};
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     polynomials::{ArithErrors, VPAuxInfo, VirtualPolynomial},
     ring::Ring,
 };
-use std::{fmt::Display, marker::PhantomData};
 use thiserror::Error;
 
 use crate::transcript::Transcript;

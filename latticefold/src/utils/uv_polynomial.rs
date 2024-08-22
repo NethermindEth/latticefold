@@ -1,9 +1,9 @@
+use ark_std::ops::{AddAssign, Mul};
 use lattirust_arithmetic::{
     mle::DenseMultilinearExtension,
     polynomials::{ArithErrors, VirtualPolynomial},
     ring::Ring,
 };
-use std::ops::{AddAssign, Mul};
 
 // Represents a univariate polynomial
 // Coefficients represented in ascending order
@@ -114,7 +114,7 @@ impl<R: Ring> Mul<&R> for UVPolynomial<R> {
 impl<R: Ring> AddAssign<&UVPolynomial<R>> for UVPolynomial<R> {
     fn add_assign(&mut self, other: &UVPolynomial<R>) {
         // Ensure that both polynomials have the same degree by resizing the coefficients vectors
-        let max_len = std::cmp::max(self.coeffs.len(), other.coeffs.len());
+        let max_len = ark_std::cmp::max(self.coeffs.len(), other.coeffs.len());
         self.coeffs.resize(max_len, R::zero());
         let mut other_coeffs = other.coeffs.clone();
         other_coeffs.resize(max_len, R::zero());
@@ -127,7 +127,7 @@ impl<R: Ring> AddAssign<&UVPolynomial<R>> for UVPolynomial<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use ark_std::sync::Arc;
 
     use super::*;
     use lattirust_arithmetic::mle::DenseMultilinearExtension;
