@@ -55,9 +55,7 @@ impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W,
             matrix: vec![vec![NTT::rand(rng); W]; C],
         }
     }
-}
 
-impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W, NTT> {
     /// Commit to a witness in the NTT form.
     /// The most basic one just multiplies by the matrix.
     pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<C, NTT>, CommitmentError> {
