@@ -86,8 +86,8 @@ impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W,
         self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<NTT>>())
     }
 
-    /// Takes a coefficient form witness, decomposes it vertically in radix-B
-    /// and Ajtai commits to the result.
+    /// Takes a coefficient form witness, decomposes it vertically in radix-B,
+    /// i.e. computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
     pub fn decompose_and_commit_coeff<
         CR: PolyRing + From<NTT> + Into<NTT>,
         P: DecompositionParams,
@@ -104,7 +104,8 @@ impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W,
     }
 
     /// Takes an NTT form witness, transforms it into the coefficient form,
-    /// decomposes it vertically in radix-B and Ajtai commits to the result.
+    /// decomposes it vertically in radix-B, i.e.
+    /// computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
     pub fn decompose_and_commit_ntt<
         CR: PolyRing + From<NTT> + Into<NTT>,
         P: DecompositionParams,
