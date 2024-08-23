@@ -1,10 +1,12 @@
+use std::marker::PhantomData;
+
 use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
 use lattirust_arithmetic::ring::PolyRing;
 
-use super::{decomposition::DecompositionParams, error::FoldingError, NIFSProver, NIFSVerifier};
+use super::error::FoldingError;
 use crate::{
     arith::{Witness, CCS, LCCCS},
-    commitment::AjtaiParams,
+    parameters::DecompositionParams,
     transcript::Transcript,
     utils::sumcheck,
 };
@@ -18,67 +20,52 @@ pub struct FoldingProof<NTT: OverField> {
     pub eta_s: Vec<NTT>,
 }
 
-pub trait FoldingProver<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
-    type Proof: Clone;
-    type Error: std::error::Error;
-
-    fn prove(
-        cm_i_s: &[LCCCS<NTT, P>],
+pub trait FoldingProver<NTT: OverField, T: Transcript<NTT>> {
+    fn prove<const C: usize, CR: PolyRing, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<NTT, P>, Witness<NTT>, Self::Proof), Self::Error>;
+    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
 }
 
-pub trait FoldingVerifier<CR: PolyRing, NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
-    type Prover: FoldingProver<CR, NTT, P, T>;
-    type Error = <Self::Prover as FoldingProver<CR, NTT, P, T>>::Error;
-
-    fn verify(
-        cm_i_s: &[LCCCS<NTT, P>],
-        proof: &<Self::Prover as FoldingProver<CR, NTT, P, T>>::Proof,
+pub trait FoldingVerifier<NTT: OverField, T: Transcript<NTT>> {
+    fn verify<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        proof: &FoldingProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<NTT, P>, Self::Error>;
+    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>>;
 }
 
-impl<
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        NTT: OverField,
-        P: AjtaiParams,
-        DP: DecompositionParams,
-        T: Transcript<NTT>,
-    > FoldingProver<CR, NTT, P, T> for NIFSProver<CR, NTT, P, DP, T>
-{
-    type Proof = FoldingProof<NTT>;
-    type Error = FoldingError<NTT>;
+pub struct LFFoldingProver<NTT, T> {
+    _ntt: PhantomData<NTT>,
+    _t: PhantomData<T>,
+}
 
-    fn prove(
-        _cm_i_s: &[LCCCS<NTT, P>],
+pub struct LFFoldingVerifier<NTT, T> {
+    _ntt: PhantomData<NTT>,
+    _t: PhantomData<T>,
+}
+
+impl<NTT: OverField, T: Transcript<NTT>> FoldingProver<NTT, T> for LFFoldingProver<NTT, T> {
+    fn prove<const C: usize, CR: PolyRing, P: DecompositionParams>(
+        _cm_i_s: &[LCCCS<C, NTT>],
         _w_s: &[Witness<NTT>],
         _transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<NTT, P>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
+    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         todo!()
     }
 }
 
-impl<
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        NTT: OverField,
-        P: AjtaiParams,
-        DP: DecompositionParams,
-        T: Transcript<NTT>,
-    > FoldingVerifier<CR, NTT, P, T> for NIFSVerifier<CR, NTT, P, DP, T>
-{
-    type Prover = NIFSProver<CR, NTT, P, DP, T>;
-
-    fn verify(
-        _cm_i_s: &[LCCCS<NTT, P>],
-        _proof: &<Self::Prover as FoldingProver<CR, NTT, P, T>>::Proof,
+impl<NTT: OverField, T: Transcript<NTT>> FoldingVerifier<NTT, T> for LFFoldingVerifier<NTT, T> {
+    fn verify<const C: usize, P: DecompositionParams>(
+        _cm_i_s: &[LCCCS<C, NTT>],
+        _proof: &FoldingProof<NTT>,
         _transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<NTT, P>, FoldingError<NTT>> {
+    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
         todo!()
     }
 }

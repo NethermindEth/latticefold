@@ -1,26 +1,21 @@
-use std::sync::Arc;
-
-use super::{
-    decomposition::DecompositionParams,
-    error::LinearizationError::{self},
-    NIFSProver, NIFSVerifier,
-};
-use crate::{arith::utils::mat_vec_mul, commitment::AjtaiParams, utils::sumcheck::MLSumcheck};
-use crate::{
-    arith::Instance,
-    utils::{mle::dense_vec_to_dense_mle, sumcheck::SumCheckError::SumCheckFailed},
-};
-use crate::{
-    arith::{Witness, CCCS, CCS, LCCCS},
-    transcript::Transcript,
-    utils::sumcheck,
-};
+#![allow(non_snake_case)]
 use ark_ff::PrimeField;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
-    ring::PolyRing,
+};
+use std::{marker::PhantomData, sync::Arc};
+
+use super::error::LinearizationError;
+use crate::{
+    arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
+    transcript::Transcript,
+    utils::{
+        mle::dense_vec_to_dense_mle,
+        sumcheck,
+        sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
+    },
 };
 
 #[derive(Clone)]
@@ -32,47 +27,43 @@ pub struct LinearizationProof<NTT: OverField> {
     pub u: Vec<NTT>,
 }
 
-pub trait LinearizationProver<NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
-    type Proof: Clone;
-    type Error: std::error::Error;
-
-    fn prove(
-        cm_i: &CCCS<NTT, P>,
+pub trait LinearizationProver<NTT: OverField, T: Transcript<NTT>> {
+    fn prove<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<NTT, P>, Self::Proof), Self::Error>;
+    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
 }
 
-pub trait LinearizationVerifier<NTT: OverField, P: AjtaiParams, T: Transcript<NTT>> {
-    type Prover: LinearizationProver<NTT, P, T>;
-    type Error = <Self::Prover as LinearizationProver<NTT, P, T>>::Error;
-
-    fn verify(
-        cm_i: &CCCS<NTT, P>,
-        proof: &<Self::Prover as LinearizationProver<NTT, P, T>>::Proof,
+pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
+    fn verify<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
+        proof: &LinearizationProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<NTT, P>, Self::Error>;
+    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
 }
 
-impl<
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        NTT: OverField,
-        P: AjtaiParams,
-        DP: DecompositionParams,
-        T: Transcript<NTT>,
-    > LinearizationProver<NTT, P, T> for NIFSProver<CR, NTT, P, DP, T>
+pub struct LFLinearizationProver<NTT, T> {
+    _ntt: PhantomData<NTT>,
+    _t: PhantomData<T>,
+}
+
+pub struct LFLinearizationVerifier<NTT, T> {
+    _ntt: PhantomData<NTT>,
+    _t: PhantomData<T>,
+}
+
+impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
+    for LFLinearizationProver<NTT, T>
 {
-    type Proof = LinearizationProof<NTT>;
-    type Error = LinearizationError<NTT>;
-
-    fn prove(
-        cm_i: &CCCS<NTT, P>,
+    fn prove<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<NTT, P>, LinearizationProof<NTT>), LinearizationError<NTT>> {
+    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
@@ -132,22 +123,15 @@ impl<
     }
 }
 
-impl<
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        NTT: OverField,
-        P: AjtaiParams,
-        DP: DecompositionParams,
-        T: Transcript<NTT>,
-    > LinearizationVerifier<NTT, P, T> for NIFSVerifier<CR, NTT, P, DP, T>
+impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
+    for LFLinearizationVerifier<NTT, T>
 {
-    type Prover = NIFSProver<CR, NTT, P, DP, T>;
-
-    fn verify(
-        cm_i: &CCCS<NTT, P>,
-        proof: &<Self::Prover as LinearizationProver<NTT, P, T>>::Proof,
+    fn verify<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
+        proof: &LinearizationProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<NTT, P>, LinearizationError<NTT>> {
+    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
@@ -195,7 +179,7 @@ impl<
             )));
         }
 
-        Ok(LCCCS::<NTT, P> {
+        Ok(LCCCS::<C, NTT> {
             r: point_r,
             v: proof.v,
             cm: cm_i.cm.clone(),
@@ -256,17 +240,17 @@ mod tests {
     use lattirust_arithmetic::{
         challenge_set::latticefold_challenge_set::BinarySmallSet,
         mle::DenseMultilinearExtension,
-        ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
+        ring::{Pow2CyclotomicPolyRingNTT, Zq},
     };
     use rand::thread_rng;
 
     use crate::{
         arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
-        commitment::{AjtaiCommitmentScheme, AjtaiParams},
-        nifs::{
-            decomposition::DecompositionParams, linearization::LinearizationVerifier, NIFSProver,
-            NIFSVerifier,
+        commitment::AjtaiCommitmentScheme,
+        nifs::linearization::{
+            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
+        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
 
@@ -319,57 +303,41 @@ mod tests {
     fn test_linearization() {
         const Q: u64 = 17;
         const N: usize = 8;
-        type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
+        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CR = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
-        let ccs = get_test_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let ccs = get_test_ccs::<R>();
+        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone, Eq, PartialEq)]
+        #[derive(Clone)]
         struct PP;
 
-        #[derive(Clone, Eq, PartialEq)]
-        struct DP;
-
-        impl AjtaiParams for PP {
-            const B: u128 = 1_000;
+        impl DecompositionParams for PP {
+            const B: u128 = 1_024;
             const L: usize = 1;
-            const WITNESS_SIZE: usize = 4;
-            const OUTPUT_SIZE: usize = 4;
+            const B_SMALL: u128 = 2;
+            const K: usize = 10;
         }
 
-        impl DecompositionParams for DP {
-            type AP = PP;
-
-            const SMALL_B: u128 = 10;
-
-            const K: usize = 3;
-        }
-
-        let wit: Witness<NTT> = Witness::<NTT>::from_w_ccs::<CR, PP>(&w_ccs);
-        let cm_i: CCCS<NTT, PP> = CCCS {
-            cm: wit.commit::<NTT, PP>(&scheme).unwrap(),
+        let wit: Witness<R> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
+        let cm_i: CCCS<4, R> = CCCS {
+            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
             x_ccs,
         };
-        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let res = <NIFSProver<CR, NTT, PP, DP, T> as LinearizationProver<NTT, PP, T>>::prove(
-            &cm_i,
-            &wit,
-            &mut transcript,
-            &ccs,
-        );
+        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
 
-        let mut transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let res = <NIFSVerifier<CR, NTT, PP, DP, T> as LinearizationVerifier<NTT, PP, T>>::verify(
+        let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &res.unwrap().1,
             &mut transcript,
             &ccs,
         );
 
-        assert!(res.is_ok());
+        res.unwrap();
     }
 }

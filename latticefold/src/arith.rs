@@ -7,7 +7,10 @@ use lattirust_arithmetic::{
     ring::{PolyRing, Ring},
 };
 
-use crate::commitment::{AjtaiCommitmentScheme, AjtaiParams, Commitment, CommitmentError};
+use crate::{
+    commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
+    parameters::DecompositionParams,
+};
 use error::CSError as Error;
 use r1cs::R1CS;
 use utils::{hadamard, mat_vec_mul, vec_add, vec_scalar_mul};
@@ -128,16 +131,16 @@ impl<R: Ring> CCS<R> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CCCS<R: Ring, P: AjtaiParams> {
-    pub cm: Commitment<R, P>,
+pub struct CCCS<const C: usize, R: Ring> {
+    pub cm: Commitment<C, R>,
     pub x_ccs: Vec<R>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LCCCS<R: Ring, P: AjtaiParams> {
+pub struct LCCCS<const C: usize, R: Ring> {
     pub r: Vec<R>,
     pub v: R,
-    pub cm: Commitment<R, P>,
+    pub cm: Commitment<C, R>,
     pub u: Vec<R>,
     pub x_w: Vec<R>,
     pub h: R,
@@ -155,7 +158,7 @@ pub struct Witness<NTT: Ring> {
 impl<NTT: OverField> Witness<NTT> {
     pub fn from_w_ccs<
         CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: AjtaiParams,
+        P: DecompositionParams,
     >(
         w_ccs: &[NTT],
     ) -> Self {
@@ -187,18 +190,9 @@ impl<NTT: OverField> Witness<NTT> {
         }
     }
 
-    pub fn from_w_ccs_slice<
-        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: AjtaiParams,
-    >(
-        w_ccs: &[NTT],
-    ) -> Self {
-        Self::from_w_ccs::<CR, P>(w_ccs)
-    }
-
     pub fn from_f<
         CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: AjtaiParams,
+        P: DecompositionParams,
     >(
         f: Vec<NTT>,
     ) -> Self {
@@ -218,17 +212,22 @@ impl<NTT: OverField> Witness<NTT> {
 
     pub fn from_f_slice<
         CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: AjtaiParams,
+        P: DecompositionParams,
     >(
         f: &[NTT],
     ) -> Self {
         Self::from_f::<CR, P>(f.into())
     }
 
-    pub fn commit<CR: PolyRing + From<NTT> + Into<NTT>, P: AjtaiParams>(
+    pub fn commit<
+        const C: usize,
+        const W: usize,
+        CR: PolyRing + From<NTT> + Into<NTT>,
+        P: DecompositionParams,
+    >(
         &self,
-        ajtai: &AjtaiCommitmentScheme<CR, NTT, P>,
-    ) -> Result<Commitment<NTT, P>, CommitmentError> {
+        ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
+    ) -> Result<Commitment<C, NTT>, CommitmentError> {
         ajtai.commit_ntt(&self.f)
     }
 }
@@ -237,7 +236,7 @@ pub trait Instance<R: Ring> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R>;
 }
 
-impl<R: Ring, P: AjtaiParams> Instance<R> for CCCS<R, P> {
+impl<const C: usize, R: Ring> Instance<R> for CCCS<C, R> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_ccs.len() + w.len() + 1);
 
@@ -249,7 +248,7 @@ impl<R: Ring, P: AjtaiParams> Instance<R> for CCCS<R, P> {
     }
 }
 
-impl<R: Ring, P: AjtaiParams> Instance<R> for LCCCS<R, P> {
+impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_w.len() + w.len() + 1);
 

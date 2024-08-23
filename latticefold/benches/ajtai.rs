@@ -1,33 +1,42 @@
 use ark_ff::UniformRand;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq};
+use lattirust_arithmetic::ring::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 use std::time::Duration;
 
-use latticefold::commitment::{
-    AjtaiCommitmentScheme, AjtaiParams, DilithiumTestParams, DILITHIUM_PRIME,
+use latticefold::{
+    commitment::AjtaiCommitmentScheme,
+    parameters::{
+        DecompositionParamData, DecompositionParams, DilithiumTestParams, DILITHIUM_PRIME,
+    },
 };
 
-fn ajtai_benchmark<const Q: u64, const N: usize, P: AjtaiParams>(c: &mut Criterion, p: P) {
-    let ajtai_data: AjtaiCommitmentScheme<
-        Pow2CyclotomicPolyRing<Zq<Q>, N>,
-        Pow2CyclotomicPolyRingNTT<Q, N>,
-        P,
-    > = AjtaiCommitmentScheme::rand(&mut thread_rng());
+fn ajtai_benchmark<
+    const Q: u64,
+    const N: usize,
+    const C: usize,
+    const W: usize,
+    P: DecompositionParams,
+>(
+    c: &mut Criterion,
+    p: P,
+) {
+    let ajtai_data: AjtaiCommitmentScheme<C, W, Pow2CyclotomicPolyRingNTT<Q, N>> =
+        AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let input: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..P::WITNESS_SIZE)
+    let witness: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..W)
         .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
         .collect();
 
     c.bench_with_input(
-        BenchmarkId::new("Ajtai", p.display()),
-        &(ajtai_data, input),
-        |b, (ajtai_data, input)| b.iter(|| ajtai_data.commit_ntt(input)),
+        BenchmarkId::new("Ajtai", DecompositionParamData::from(p)),
+        &(ajtai_data, witness),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
     );
 }
 
 fn ajtai_benchmarks(c: &mut Criterion) {
-    ajtai_benchmark::<DILITHIUM_PRIME, 256, _>(c, DilithiumTestParams);
+    ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(c, DilithiumTestParams);
 
     // TODO: more benchmarks with different params.
 }
