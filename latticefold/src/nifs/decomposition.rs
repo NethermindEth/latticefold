@@ -333,34 +333,35 @@ mod tests {
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
     const N: usize = 8;
+    type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
+    type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+    type CS = BinarySmallSet<Q, N>;
+    type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
 
+    #[derive(Clone)]
+    struct PP;
+
+    impl DecompositionParams for PP {
+        const B: u128 = 1_024;
+        const L: usize = 1;
+        const B_SMALL: u128 = 2;
+        const K: usize = 10;
+    }
     // Actual Tests
     #[test]
     fn test_decomposition() {
-        type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
-        type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CS = BinarySmallSet<Q, N>;
-        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<NTT>();
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 1;
-            const B_SMALL: u128 = 2;
-            const K: usize = 10;
-        }
-
         let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
             cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
             x_ccs,
         };
+
         let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+
         let (_, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
@@ -394,30 +395,18 @@ mod tests {
 
     #[test]
     fn test_failing_decomposition() {
-        type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
-        type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CS = BinarySmallSet<Q, N>;
-        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<NTT>();
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 1;
-            const B_SMALL: u128 = 2;
-            const K: usize = 10;
-        }
-
         let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
             cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
             x_ccs,
         };
+
         let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+
         let (_, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
@@ -432,6 +421,7 @@ mod tests {
 
         let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
         let fake_witness = Witness::<NTT>::from_w_ccs::<CR, PP>(&w_ccs);
+
         let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, CR, PP>(
             &lcccs,
             &fake_witness,
