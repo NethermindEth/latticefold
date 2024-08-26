@@ -1,21 +1,21 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-use crate::commitment::AjtaiCommitmentScheme;
-use crate::utils::mle::dense_vec_to_dense_mle;
-use lattirust_arithmetic::balanced_decomposition::{
-    decompose_balanced_slice_polyring, pad_and_transpose, recompose,
+
+use lattirust_arithmetic::{
+    balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose, recompose},
+    challenge_set::latticefold_challenge_set::OverField,
+    ring::PolyRing,
 };
-use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::PolyRing};
 use std::marker::PhantomData;
 
-use super::error::DecompositionError;
 use crate::{
-    arith::{Witness, CCS, LCCCS},
+    arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
+    commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
+    nifs::error::DecompositionError,
     parameters::DecompositionParams,
     transcript::Transcript,
+    utils::mle::dense_vec_to_dense_mle,
 };
-
-use crate::arith::utils::mat_vec_mul;
 
 #[derive(Clone)]
 pub struct DecompositionProof<const C: usize, NTT: OverField> {
@@ -144,7 +144,6 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionProver<NTT, T>
             transcript.absorb_ring_vec(u);
             transcript.absorb_ring(v);
 
-            let x = x.clone();
             let h = x
                 .last()
                 .cloned()
@@ -154,7 +153,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 v: *v,
                 cm: y.clone(),
                 u: u.clone(),
-                x_w: x,
+                x_w: x.clone(),
                 h,
             })
         }
@@ -188,7 +187,6 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             transcript.absorb_ring_vec(u);
             transcript.absorb_ring(v);
 
-            let x = x.clone();
             let h = x
                 .last()
                 .cloned()
@@ -198,12 +196,11 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
                 v: *v,
                 cm: y.clone(),
                 u: u.clone(),
-                x_w: x,
+                x_w: x.clone(),
                 h,
             });
         }
 
-        // TODO: Add consistency checks! That small commitments sum up to the big commitment etc.
         let b = NTT::from(P::B_SMALL);
 
         let mut should_equal_y0 = proof.y_s[0].clone();
@@ -393,5 +390,64 @@ mod tests {
         );
 
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_failing_decomposition() {
+        type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
+        type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CS = BinarySmallSet<Q, N>;
+        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
+        let ccs = get_test_ccs::<NTT>();
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        #[derive(Clone)]
+        struct PP;
+
+        impl DecompositionParams for PP {
+            const B: u128 = 1_024;
+            const L: usize = 1;
+            const B_SMALL: u128 = 2;
+            const K: usize = 10;
+        }
+
+        let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
+        let cm_i: CCCS<4, NTT> = CCCS {
+            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let (_, linearization_proof) =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+                .unwrap();
+
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
+            &cm_i,
+            &linearization_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
+        let fake_witness = Witness::<NTT>::from_w_ccs::<CR, PP>(&w_ccs);
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, CR, PP>(
+            &lcccs,
+            &fake_witness,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
+
+        let res = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+            &lcccs,
+            &decomposition_proof,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        assert!(res.is_err());
     }
 }
