@@ -209,9 +209,10 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             .iter()
             .zip(&b_s)
             .map(|(y_i, b_i)| y_i * b_i)
-            .reduce(|acc, bi_part| acc + bi_part);
+            .reduce(|acc, bi_part| acc + bi_part)
+            .ok_or(DecompositionError::RecomposedError)?;
 
-        if should_equal_y0 != Some(cm_i.cm.clone()) {
+        if should_equal_y0 != cm_i.cm {
             return Err(DecompositionError::RecomposedError);
         }
 
