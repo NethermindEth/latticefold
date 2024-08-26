@@ -203,53 +203,58 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 
         let b = P::B_SMALL;
         let b_s: Vec<_> = (0..P::K).map(|i| NTT::from(b.pow(i as u32))).collect();
-        let mut should_equal_y0 = proof.y_s[0].clone();
 
-        proof.y_s.iter().enumerate().skip(1).for_each(|(i, y)| {
-            let bi_part = y * b_s[i];
+        let should_equal_y0 = proof
+            .y_s
+            .iter()
+            .zip(&b_s)
+            .map(|(y_i, b_i)| y_i * b_i)
+            .reduce(|acc, bi_part| acc + bi_part);
 
-            should_equal_y0 = should_equal_y0.clone() + bi_part;
-        });
-
-        if should_equal_y0 != cm_i.cm {
+        if should_equal_y0 != Some(cm_i.cm.clone()) {
             return Err(DecompositionError::RecomposedError);
         }
 
-        let mut should_equal_u0 = proof.u_s[0].clone();
-        proof.u_s.iter().enumerate().skip(1).for_each(|(i, u_i)| {
-            let bi_part: Vec<NTT> = u_i.iter().map(|&u| u * b_s[i]).collect();
-            should_equal_u0 = should_equal_u0
+        let should_equal_u0 =
+            proof
+                .u_s
                 .iter()
-                .zip(&bi_part)
-                .map(|(&u0, ui)| u0 + ui)
-                .collect();
-        });
+                .zip(&b_s)
+                .skip(1)
+                .fold(proof.u_s[0].clone(), |acc, (u_i, b_i)| {
+                    let bi_part: Vec<NTT> = u_i.iter().map(|&u| u * b_i).collect();
+                    acc.iter().zip(&bi_part).map(|(&u0, ui)| u0 + ui).collect()
+                });
 
         if should_equal_u0 != cm_i.u {
             return Err(DecompositionError::RecomposedError);
         }
 
-        let mut should_equal_v0 = proof.v_s[0];
-        proof.v_s.iter().enumerate().skip(1).for_each(|(i, &v_i)| {
-            let bi_part = v_i * b_s[i];
-            should_equal_v0 += bi_part;
-        });
+        let should_equal_v0: NTT = proof
+            .v_s
+            .iter()
+            .zip(&b_s)
+            .map(|(&v_i, b_i)| v_i * b_i)
+            .sum();
 
         if should_equal_v0 != cm_i.v {
             return Err(DecompositionError::RecomposedError);
         }
 
-        let mut should_equal_xw = proof.x_s[0].clone();
-
-        proof.x_s.iter().enumerate().skip(1).for_each(|(i, x_i)| {
-            let bi_part: Vec<NTT> = x_i.iter().map(|&u| u * b_s[i]).collect();
-
-            should_equal_xw = should_equal_xw
+        let mut should_equal_xw =
+            proof
+                .x_s
                 .iter()
-                .zip(&bi_part)
-                .map(|(&xw, xwi)| xw + xwi)
-                .collect();
-        });
+                .enumerate()
+                .skip(1)
+                .fold(proof.x_s[0].clone(), |acc, (i, x_i)| {
+                    let bi_part: Vec<NTT> = x_i.iter().map(|&u| u * b_s[i]).collect();
+                    acc.iter()
+                        .zip(&bi_part)
+                        .map(|(&xw, xwi)| xw + xwi)
+                        .collect()
+                });
+
         should_equal_xw.pop();
         if should_equal_xw != cm_i.x_w {
             return Err(DecompositionError::RecomposedError);
