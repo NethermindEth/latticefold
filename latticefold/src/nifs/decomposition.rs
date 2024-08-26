@@ -244,21 +244,27 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        let mut should_equal_xw =
-            proof
-                .x_s
-                .iter()
-                .enumerate()
-                .skip(1)
-                .fold(proof.x_s[0].clone(), |acc, (i, x_i)| {
-                    let bi_part: Vec<NTT> = x_i.iter().map(|&u| u * b_s[i]).collect();
-                    acc.iter()
-                        .zip(&bi_part)
-                        .map(|(&xw, xwi)| xw + xwi)
-                        .collect()
-                });
+        let mut should_equal_xw: Vec<NTT> = proof
+            .x_s
+            .iter()
+            .zip(&b_s)
+            .map(|(x_i, b_i)| x_i.iter().map(|&x| x * b_i).collect())
+            .reduce(|acc, x_i_times_b_i: Vec<NTT>| {
+                acc.into_iter()
+                    .zip(&x_i_times_b_i)
+                    .map(|(x0, xi)| x0 + xi)
+                    .collect()
+            })
+            .ok_or(DecompositionError::RecomposedError)?;
 
-        should_equal_xw.pop();
+        let should_equal_h = should_equal_xw
+            .pop()
+            .ok_or(DecompositionError::RecomposedError)?;
+
+        if should_equal_h != cm_i.h {
+            return Err(DecompositionError::RecomposedError);
+        }
+
         if should_equal_xw != cm_i.x_w {
             return Err(DecompositionError::RecomposedError);
         }
