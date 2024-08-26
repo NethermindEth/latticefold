@@ -216,16 +216,18 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        let should_equal_u0 =
-            proof
-                .u_s
-                .iter()
-                .zip(&b_s)
-                .skip(1)
-                .fold(proof.u_s[0].clone(), |acc, (u_i, b_i)| {
-                    let bi_part: Vec<NTT> = u_i.iter().map(|&u| u * b_i).collect();
-                    acc.iter().zip(&bi_part).map(|(&u0, ui)| u0 + ui).collect()
-                });
+        let should_equal_u0: Vec<NTT> = proof
+            .u_s
+            .iter()
+            .zip(&b_s)
+            .map(|(u_i, b_i)| u_i.iter().map(|&u| u * b_i).collect())
+            .reduce(|acc, u_i_times_b_i: Vec<NTT>| {
+                acc.into_iter()
+                    .zip(&u_i_times_b_i)
+                    .map(|(u0, ui)| u0 + ui)
+                    .collect()
+            })
+            .ok_or(DecompositionError::RecomposedError)?;
 
         if should_equal_u0 != cm_i.u {
             return Err(DecompositionError::RecomposedError);
