@@ -662,17 +662,27 @@ mod tests {
             &ccs,
         )
         .unwrap();
+        let (lcccs, wit_s) = {
+            let mut lcccs = vec_lcccs.clone();
+            let mut lcccs_r = vec_lcccs;
+            lcccs.append(&mut lcccs_r);
 
+            let mut wit_s = vec_wit.clone();
+            let mut wit_s_r = vec_wit;
+            wit_s.append(&mut wit_s_r);
+
+            (lcccs, wit_s)
+        };
         let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, CR, PP>(
-            &vec_lcccs,
-            &vec_wit,
+            &lcccs,
+            &wit_s,
             &mut prover_transcript,
             &ccs,
         )
         .unwrap();
 
         let res = LFFoldingVerifier::<_, T>::verify::<4, PP>(
-            &vec_lcccs,
+            &lcccs,
             &folding_proof,
             &mut verifier_transcript,
             &ccs,
