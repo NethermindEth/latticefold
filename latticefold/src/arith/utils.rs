@@ -1,5 +1,4 @@
-use lattirust_arithmetic::linear_algebra::SparseMatrix;
-use lattirust_arithmetic::ring::Ring;
+use lattirust_arithmetic::{linear_algebra::SparseMatrix, ring::Ring};
 
 use super::error::CSError as Error;
 
