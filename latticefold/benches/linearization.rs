@@ -1,10 +1,4 @@
-use ark_ff::UniformRand;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::BinarySmallSet,
-    linear_algebra::SparseMatrix,
-    ring::{Pow2CyclotomicPolyRingNTT, Ring},
-};
 use rand::thread_rng;
 use std::time::Duration;
 
@@ -19,6 +13,11 @@ use latticefold::{
         Pow2_59TestParams, DILITHIUM_PRIME, POW2_57_PRIME, POW2_59_PRIME,
     },
     transcript::poseidon::PoseidonTranscript,
+};
+use lattirust_arithmetic::{
+    challenge_set::latticefold_challenge_set::BinarySmallSet,
+    linear_algebra::SparseMatrix,
+    ring::{Pow2CyclotomicPolyRingNTT, Ring},
 };
 
 fn prover_linearization_benchmark<
