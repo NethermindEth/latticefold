@@ -7,7 +7,8 @@ use std::time::Duration;
 use latticefold::{
     commitment::AjtaiCommitmentScheme,
     parameters::{
-        DecompositionParamData, DecompositionParams, DilithiumTestParams, DILITHIUM_PRIME,
+        DecompositionParamData, DecompositionParams, DilithiumTestParams, Pow2_57TestParams,
+        Pow2_59TestParams, DILITHIUM_PRIME, POW2_57_PRIME, POW2_59_PRIME,
     },
 };
 
@@ -37,6 +38,8 @@ fn ajtai_benchmark<
 
 fn ajtai_benchmarks(c: &mut Criterion) {
     ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(c, DilithiumTestParams);
+    ajtai_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams);
+    ajtai_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams);
 
     // TODO: more benchmarks with different params.
 }

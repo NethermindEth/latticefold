@@ -33,6 +33,38 @@ impl DecompositionParams for DilithiumTestParams {
     const K: usize = 13;
 }
 
+// p = 27*2^59 + 1
+pub const POW2_59_PRIME: u64 = 0xd800000000000001;
+
+pub type POW2_59CR = Pow2CyclotomicPolyRing<Zq<POW2_59_PRIME>, 256>;
+pub type POW2_59NTT = Pow2CyclotomicPolyRingNTT<POW2_59_PRIME, 256>;
+#[derive(Clone, Copy)]
+pub struct Pow2_59TestParams;
+
+// TODO: Revise this later
+impl DecompositionParams for Pow2_59TestParams {
+    const B: u128 = 1 << 13;
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 13;
+}
+
+pub const POW2_57_PRIME: u64 = 0xf600000000000001;
+
+pub type POW2_57CR = Pow2CyclotomicPolyRing<Zq<POW2_57_PRIME>, 256>;
+pub type POW2_57NTT = Pow2CyclotomicPolyRingNTT<POW2_57_PRIME, 256>;
+
+#[derive(Clone, Copy)]
+pub struct Pow2_57TestParams;
+
+// TODO: Revise this later
+impl DecompositionParams for Pow2_57TestParams {
+    const B: u128 = 1 << 13;
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 13;
+}
+
 impl<P: DecompositionParams> From<P> for DecompositionParamData {
     fn from(_: P) -> Self {
         {

@@ -35,3 +35,11 @@ criterion = "0.3"
 [[bench]]
 name = "ajtai"
 harness = false
+
+[[bench]]
+name = "linearization"
+harness = false
+
+[[bench]]
+name = "decomposition"
+harness = false
