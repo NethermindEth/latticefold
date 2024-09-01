@@ -21,6 +21,7 @@ fn ajtai_benchmark<
 >(
     c: &mut Criterion,
     p: P,
+    prime_name: &str,
 ) {
     let ajtai_data: AjtaiCommitmentScheme<C, W, Pow2CyclotomicPolyRingNTT<Q, N>> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
@@ -29,17 +30,18 @@ fn ajtai_benchmark<
         .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
         .collect();
 
+    let bench_name = format!("Ajtai {}", prime_name);
     c.bench_with_input(
-        BenchmarkId::new("Ajtai", DecompositionParamData::from(p)),
+        BenchmarkId::new(bench_name, DecompositionParamData::from(p)),
         &(ajtai_data, witness),
         |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
     );
 }
 
 fn ajtai_benchmarks(c: &mut Criterion) {
-    ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(c, DilithiumTestParams);
-    ajtai_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams);
-    ajtai_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams);
+    ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(c, DilithiumTestParams, "Dilithium prime");
+    ajtai_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams, "p = 27*(1<<59) + 1");
+    ajtai_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams, "p = 71*(1<<57) + 1");
 
     // TODO: more benchmarks with different params.
 }

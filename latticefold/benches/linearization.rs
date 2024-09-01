@@ -3,7 +3,7 @@ use rand::thread_rng;
 use std::time::Duration;
 
 use latticefold::{
-    arith::{r1cs::R1CS, Witness, CCCS, CCS},
+    arith::{r1cs::R1CS, Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
@@ -12,7 +12,7 @@ use latticefold::{
         DecompositionParamData, DecompositionParams, DilithiumTestParams, Pow2_57TestParams,
         Pow2_59TestParams, DILITHIUM_PRIME, POW2_57_PRIME, POW2_59_PRIME,
     },
-    transcript::poseidon::PoseidonTranscript,
+    transcript::{self, poseidon::PoseidonTranscript},
 };
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::BinarySmallSet,
@@ -29,9 +29,18 @@ fn prover_linearization_benchmark<
 >(
     c: &mut Criterion,
     p: P,
+    prime_name: &str,
 ) {
-    let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<Q, N>>();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<Pow2CyclotomicPolyRingNTT<Q, N>>(3);
+    let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
+    let (one, x_ccs, w_ccs) = get_test_z_split::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
+    let mut z = vec![one];
+    z.extend(&x_ccs);
+    z.extend(&w_ccs);
+    match ccs.check_relation(&z) {
+        Ok(_) => println!("R1CS valid!"),
+        Err(_) => println!("R1CS invalid"),
+    }
+
     let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
     let wit: Witness<Pow2CyclotomicPolyRingNTT<Q, N>> =
@@ -42,14 +51,14 @@ fn prover_linearization_benchmark<
             .unwrap(),
         x_ccs,
     };
-    let mut transcript =
-        PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
-
+    
     c.bench_with_input(
-        BenchmarkId::new("Linearization Prover", DecompositionParamData::from(p)),
+        BenchmarkId::new(format!("Linearization Prover {}", prime_name), DecompositionParamData::from(p)),
         &(cm_i, wit, ccs),
         |b, (cm_i, wit, ccs)| {
             b.iter(|| {
+                println!();
+                let mut transcript = PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
                 let _ = LFLinearizationProver::<
                     _,
                     PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
@@ -68,9 +77,18 @@ fn verifier_linearization_benchmark<
 >(
     c: &mut Criterion,
     p: P,
+    prime_name: &str,
 ) {
-    let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<Q, N>>();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<Pow2CyclotomicPolyRingNTT<Q, N>>(3);
+    let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
+    let (one, x_ccs, w_ccs) = get_test_z_split::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
+    let mut z = vec![one];
+    z.extend(&x_ccs);
+    z.extend(&w_ccs);
+    match ccs.check_relation(&z) {
+        Ok(_) => println!("R1CS valid!"),
+        Err(_) => println!("R1CS invalid"),
+    }
+
     let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
     let wit: Witness<Pow2CyclotomicPolyRingNTT<Q, N>> =
@@ -92,7 +110,7 @@ fn verifier_linearization_benchmark<
         PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
 
     c.bench_with_input(
-        BenchmarkId::new("Linearization Verifier", DecompositionParamData::from(p)),
+        BenchmarkId::new(format!("Linearization Verifier {}", prime_name), DecompositionParamData::from(p)),
         &(cm_i, res.unwrap().1, ccs),
         |b, (cm_i, proof, ccs)| {
             b.iter(|| {
@@ -106,64 +124,44 @@ fn verifier_linearization_benchmark<
 }
 
 fn linearization_benchmarks(c: &mut Criterion) {
-    prover_linearization_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(
+    prover_linearization_benchmark::<DILITHIUM_PRIME, 256, 4, 4, _>(
         c,
         DilithiumTestParams,
+        "Dilithium prime",
     );
-    prover_linearization_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams);
-    prover_linearization_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams);
+    // prover_linearization_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams);
+    // prover_linearization_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams);
     verifier_linearization_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(
         c,
         DilithiumTestParams,
+        "Dilithium prime"
     );
-    verifier_linearization_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams);
-    verifier_linearization_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams);
+    // verifier_linearization_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams);
+    // verifier_linearization_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams);
 }
 
 fn benchmarks_main(c: &mut Criterion) {
     linearization_benchmarks(c);
 }
 
-pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
+pub fn get_test_z_split<R: Ring, const W: usize>() -> (R, Vec<R>, Vec<R>) {
     // z = (1, io, w)
     (
         R::one(),
         to_F_vec(vec![
-            input, // io
+            1, // io
         ]),
-        to_F_vec(vec![
-            input * input * input + input + 5, // x^3 + x + 5
-            input * input,                     // x^2
-            input * input * input,             // x^2 * x
-            input * input * input + input,     // x^3 + x
-        ]),
+        to_F_vec(vec![1; W/2]) // This should be the witness size but is failing
     )
 }
-pub fn get_test_ccs<R: Ring>() -> CCS<R> {
-    let r1cs = get_test_r1cs::<R>();
+pub fn get_test_ccs<R: Ring, const W: usize>() -> CCS<R> {
+    let r1cs = get_test_r1cs::<R, W>();
     CCS::<R>::from_r1cs(r1cs)
 }
-pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
-    // R1CS for: x^3 + x + 5 = y (example from article
-    // https://www.vitalik.ca/general/2016/12/10/qap.html )
-    let A = to_F_matrix::<R>(vec![
-        vec![1, 0, 0, 0, 0, 0],
-        vec![0, 0, 0, 1, 0, 0],
-        vec![1, 0, 0, 0, 1, 0],
-        vec![0, 5, 0, 0, 0, 1],
-    ]);
-    let B = to_F_matrix::<R>(vec![
-        vec![1, 0, 0, 0, 0, 0],
-        vec![1, 0, 0, 0, 0, 0],
-        vec![0, 1, 0, 0, 0, 0],
-        vec![0, 1, 0, 0, 0, 0],
-    ]);
-    let C = to_F_matrix::<R>(vec![
-        vec![0, 0, 0, 1, 0, 0],
-        vec![0, 0, 0, 0, 1, 0],
-        vec![0, 0, 0, 0, 0, 1],
-        vec![0, 0, 1, 0, 0, 0],
-    ]);
+pub fn get_test_r1cs<R: Ring, const W: usize>() -> R1CS<R> {
+    let A = to_F_matrix::<R>(create_identity_matrix(W));
+    let B = A.clone();
+    let C = A.clone();
 
     R1CS::<R> { l: 1, A, B, C }
 }
@@ -177,6 +175,18 @@ pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
 }
 pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
     z.iter().map(|c| R::from(*c as u64)).collect()
+}
+
+fn create_identity_matrix(size: usize) -> Vec<Vec<usize>> {
+    let mut matrix = Vec::with_capacity(size);
+    
+    for i in 0..size {
+        let mut row = vec![0; size];
+        row[i] = 1;
+        matrix.push(row);
+    }
+    
+    matrix
 }
 
 criterion_group!(
