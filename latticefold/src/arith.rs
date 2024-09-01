@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 use ark_std::log2;
 use lattirust_arithmetic::{
-    balanced_decomposition::decompose_balanced_slice_polyring,
+    balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose, recompose},
     challenge_set::latticefold_challenge_set::OverField,
     linear_algebra::SparseMatrix,
     ring::{PolyRing, Ring},
@@ -166,11 +166,14 @@ impl<NTT: OverField> Witness<NTT> {
         let coef_repr: Vec<CR> = w_ccs.iter().map(|&x| x.into()).collect();
 
         // decompose radix-B
-        let coef_repr_decomposed: Vec<CR> =
-            decompose_balanced_slice_polyring(&coef_repr, P::B, Some(P::L))
-                .into_iter()
-                .flatten()
-                .collect();
+        let coef_repr_decomposed: Vec<CR> = pad_and_transpose(decompose_balanced_slice_polyring(
+            &coef_repr,
+            P::B,
+            Some(P::L),
+        ))
+        .into_iter()
+        .flatten()
+        .collect();
 
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
@@ -183,8 +186,37 @@ impl<NTT: OverField> Witness<NTT> {
         Self {
             f,
             f_hat,
-            w_ccs: Vec::from(w_ccs),
+            w_ccs: w_ccs.to_vec(),
         }
+    }
+
+    pub fn from_f<
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
+        P: DecompositionParams,
+    >(
+        f: Vec<NTT>,
+    ) -> Self {
+        let coef_repr_decomposed: Vec<CR> = f.iter().map(|&x| x.into()).collect();
+        let f_hat: Vec<NTT> = coef_repr_decomposed
+            .into_iter()
+            .map(|x| NTT::from(x.coeffs()))
+            .collect();
+
+        let w_ccs = f
+            .chunks(P::L)
+            .map(|chunk| recompose(chunk, NTT::from(P::B)))
+            .collect();
+
+        Self { f, f_hat, w_ccs }
+    }
+
+    pub fn from_f_slice<
+        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
+        P: DecompositionParams,
+    >(
+        f: &[NTT],
+    ) -> Self {
+        Self::from_f::<CR, P>(f.into())
     }
 
     pub fn commit<

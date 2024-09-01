@@ -67,7 +67,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
-        let beta_s = transcript.get_small_challenges(log_m);
+        let beta_s = transcript.get_big_challenges(log_m);
         // Step 2: Sum check protocol
 
         // z_ccs vector, i.e. concatenation x || 1 || w.

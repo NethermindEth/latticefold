@@ -1,7 +1,13 @@
-use ark_std::ops::{Add, Mul, Sub};
+use ark_std::{
+    ops::{Add, Mul, Sub},
+    Zero,
+};
 use lattirust_arithmetic::ring::Ring;
 
-use crate::commitment::CommitmentError;
+use crate::{
+    commitment::CommitmentError, impl_additive_ops_from_ref, impl_multiplicative_ops_from_ref,
+    impl_subtractive_ops_from_ref,
+};
 
 /// The Ajtai commitment type. Meant to contain the output of the
 /// matrix-vector multiplication `A \cdot x`.
@@ -53,7 +59,7 @@ impl<'a, 'b, const C: usize, R: Ring> Add<&'a Commitment<C, R>> for &'b Commitme
     type Output = Commitment<C, R>;
 
     fn add(self, rhs: &'a Commitment<C, R>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(C);
+        let mut res_vec = vec![R::zero(); C];
 
         res_vec
             .iter_mut()
@@ -65,35 +71,11 @@ impl<'a, 'b, const C: usize, R: Ring> Add<&'a Commitment<C, R>> for &'b Commitme
     }
 }
 
-impl<'a, const C: usize, R: Ring> Add<Commitment<C, R>> for &'a Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn add(self, rhs: Commitment<C, R>) -> Self::Output {
-        self + &rhs
-    }
-}
-
-impl<'a, const C: usize, R: Ring> Add<&'a Commitment<C, R>> for Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn add(self, rhs: &'a Commitment<C, R>) -> Self::Output {
-        &self + rhs
-    }
-}
-
-impl<const C: usize, R: Ring> Add<Commitment<C, R>> for Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn add(self, rhs: Commitment<C, R>) -> Self::Output {
-        &self + &rhs
-    }
-}
-
 impl<'a, 'b, const C: usize, R: Ring> Sub<&'a Commitment<C, R>> for &'b Commitment<C, R> {
     type Output = Commitment<C, R>;
 
     fn sub(self, rhs: &'a Commitment<C, R>) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(C);
+        let mut res_vec = vec![R::zero(); C];
 
         res_vec
             .iter_mut()
@@ -105,35 +87,11 @@ impl<'a, 'b, const C: usize, R: Ring> Sub<&'a Commitment<C, R>> for &'b Commitme
     }
 }
 
-impl<'a, const C: usize, R: Ring> Sub<Commitment<C, R>> for &'a Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn sub(self, rhs: Commitment<C, R>) -> Self::Output {
-        self - &rhs
-    }
-}
-
-impl<'a, const C: usize, R: Ring> Sub<&'a Commitment<C, R>> for Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn sub(self, rhs: &'a Commitment<C, R>) -> Self::Output {
-        &self - rhs
-    }
-}
-
-impl<const C: usize, R: Ring> Sub<Commitment<C, R>> for Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn sub(self, rhs: Commitment<C, R>) -> Self::Output {
-        &self - &rhs
-    }
-}
-
 impl<'a, 'b, const C: usize, R: Ring> Mul<&'a R> for &'b Commitment<C, R> {
     type Output = Commitment<C, R>;
 
     fn mul(self, rhs: &'a R) -> Self::Output {
-        let mut res_vec = Vec::<R>::with_capacity(C);
+        let mut res_vec = vec![R::zero(); C];
 
         res_vec
             .iter_mut()
@@ -144,30 +102,16 @@ impl<'a, 'b, const C: usize, R: Ring> Mul<&'a R> for &'b Commitment<C, R> {
     }
 }
 
-impl<'a, const C: usize, R: Ring> Mul<&'a R> for Commitment<C, R> {
-    type Output = Commitment<C, R>;
+impl_additive_ops_from_ref!(Commitment, Ring, usize);
+impl_subtractive_ops_from_ref!(Commitment, Ring, usize);
+impl_multiplicative_ops_from_ref!(Commitment, Ring, usize);
 
-    fn mul(self, rhs: &'a R) -> Self::Output {
-        &self * rhs
+impl<const C: usize, R: Ring> Zero for Commitment<C, R> {
+    fn zero() -> Self {
+        Self::from([R::zero(); C])
+    }
+
+    fn is_zero(&self) -> bool {
+        self.val == [R::zero(); C]
     }
 }
-
-impl<const C: usize, R: Ring> Mul<R> for Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    #[allow(clippy::op_ref)]
-    fn mul(self, rhs: R) -> Self::Output {
-        &self * &rhs
-    }
-}
-
-impl<'a, const C: usize, R: Ring> Mul<R> for &'a Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    #[allow(clippy::op_ref)]
-    fn mul(self, rhs: R) -> Self::Output {
-        self * &rhs
-    }
-}
-
-// TODO: use macros to implement the other operations

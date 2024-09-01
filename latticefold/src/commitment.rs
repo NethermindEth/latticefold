@@ -2,7 +2,8 @@ use thiserror::Error;
 
 mod commitment_scheme;
 mod homomorphic_commitment;
-
+#[macro_use]
+mod operations;
 pub use commitment_scheme::*;
 pub use homomorphic_commitment::*;
 

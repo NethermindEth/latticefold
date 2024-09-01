@@ -1,14 +1,14 @@
 use lattirust_arithmetic::{polynomials::ArithErrors, ring::Ring};
 use thiserror::Error;
 
-use crate::{arith::error::CSError, utils::sumcheck::SumCheckError};
+use crate::{arith::error::CSError, commitment::CommitmentError, utils::sumcheck::SumCheckError};
 
 #[derive(Debug, Error)]
 pub enum LatticefoldError<R: Ring> {
     #[error("linearization failed: {0}")]
     LinearizationError(#[from] LinearizationError<R>),
     #[error("decomposition failed: {0}")]
-    DecompositionError(#[from] DecompositionError<R>),
+    DecompositionError(#[from] DecompositionError),
     #[error("folding failed: {0}")]
     FoldingError(#[from] FoldingError<R>),
 }
@@ -26,11 +26,17 @@ pub enum LinearizationError<R: Ring> {
 }
 
 #[derive(Debug, Error)]
-pub enum DecompositionError<R: Ring> {
-    #[error("phantom decomposition error constructor")]
-    PhantomRRemoveThisLater(R),
+pub enum DecompositionError {
     #[error("input vectors have incorrect length")]
     IncorrectLength,
+    #[error("ajtai commitment error: {0}")]
+    CommitmentError(#[from] CommitmentError),
+    #[error("failed to evaluate witness MLE")]
+    WitnessMleEvalFail,
+    #[error("constraint system related error: {0}")]
+    ConstraintSystemError(#[from] CSError),
+    #[error("recomposing proof checked failed")]
+    RecomposedError,
 }
 
 #[derive(Debug, Error)]
