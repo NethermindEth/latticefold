@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 use ark_std::log2;
+use cyclotomic_rings::SuitableRing;
 use lattirust_arithmetic::{
-    balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose, recompose},
-    challenge_set::latticefold_challenge_set::OverField,
+    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
     linear_algebra::SparseMatrix,
-    ring::{PolyRing, Ring},
+    ring::{PolynomialRing, Ring},
 };
 
 use crate::{
@@ -155,32 +155,25 @@ pub struct Witness<NTT: Ring> {
     pub w_ccs: Vec<NTT>,
 }
 
-impl<NTT: OverField> Witness<NTT> {
-    pub fn from_w_ccs<
-        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
-        w_ccs: &[NTT],
-    ) -> Self {
+impl<NTT: SuitableRing> Witness<NTT> {
+    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: &[NTT]) -> Self {
         // iNTT
-        let coef_repr: Vec<CR> = w_ccs.iter().map(|&x| x.into()).collect();
+        let coef_repr: Vec<NTT::CoefficientRepresentation> =
+            w_ccs.iter().map(|&x| x.into()).collect();
 
         // decompose radix-B
-        let coef_repr_decomposed: Vec<CR> = pad_and_transpose(decompose_balanced_slice_polyring(
-            &coef_repr,
-            P::B,
-            Some(P::L),
-        ))
-        .into_iter()
-        .flatten()
-        .collect();
+        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
+            pad_and_transpose(decompose_balanced_vec(&coef_repr, P::B, Some(P::L)))
+                .into_iter()
+                .flatten()
+                .collect();
 
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
         let f_hat: Vec<NTT> = coef_repr_decomposed
             .into_iter()
-            .map(|x| NTT::from(x.coeffs()))
+            .map(|x| x.coeffs().into())
             .collect();
 
         Self {
@@ -190,16 +183,12 @@ impl<NTT: OverField> Witness<NTT> {
         }
     }
 
-    pub fn from_f<
-        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
-        f: Vec<NTT>,
-    ) -> Self {
-        let coef_repr_decomposed: Vec<CR> = f.iter().map(|&x| x.into()).collect();
+    pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
+        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
+            f.iter().map(|&x| x.into()).collect();
         let f_hat: Vec<NTT> = coef_repr_decomposed
             .into_iter()
-            .map(|x| NTT::from(x.coeffs()))
+            .map(|x| x.coeffs().into())
             .collect();
 
         let w_ccs = f
@@ -210,21 +199,11 @@ impl<NTT: OverField> Witness<NTT> {
         Self { f, f_hat, w_ccs }
     }
 
-    pub fn from_f_slice<
-        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
-        f: &[NTT],
-    ) -> Self {
-        Self::from_f::<CR, P>(f.into())
+    pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
+        Self::from_f::<P>(f.into())
     }
 
-    pub fn commit<
-        const C: usize,
-        const W: usize,
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
+    pub fn commit<const C: usize, const W: usize, P: DecompositionParams>(
         &self,
         ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {

@@ -2,9 +2,9 @@
 use ark_ff::PrimeField;
 use ark_std::{marker::PhantomData, sync::Arc};
 use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+    ring::OverField,
 };
 
 use super::error::LinearizationError;
@@ -66,8 +66,12 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
-        let beta_s = transcript.get_big_challenges(log_m);
+        transcript.absorb_field_element(&NTT::BaseRing::from_be_bytes_mod_order(b"beta_s"));
+        let beta_s: Vec<NTT> = transcript
+            .get_big_challenges(log_m)
+            .into_iter()
+            .map(|x| x.into())
+            .collect();
         // Step 2: Sum check protocol
 
         // z_ccs vector, i.e. concatenation x || 1 || w.
@@ -89,7 +93,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let r = prover_state
             .randomness
             .into_iter()
-            .map(|x| NTT::field_to_base_ring(&x).into())
+            .map(|x| x.into())
             .collect::<Vec<NTT>>();
 
         // Step 3: Compute v, u_vector
@@ -100,8 +104,8 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let u = compute_u(&Mz_mles, &r)?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb_ring(&v);
-        transcript.absorb_ring_vec(&u);
+        transcript.absorb(&v);
+        transcript.absorb_slice(&u);
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
@@ -134,7 +138,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
+        transcript.absorb_field_element(&NTT::BaseRing::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
 
         //Step 2: The sumcheck.
@@ -150,8 +154,8 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         )?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb_ring(&proof.v);
-        transcript.absorb_ring_vec(&proof.u);
+        transcript.absorb(&proof.v);
+        transcript.absorb_slice(&proof.u);
 
         // The final evaluation claim from the sumcheck.
         let s = subclaim.expected_evaluation;
@@ -159,7 +163,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         let point_r = subclaim
             .point
             .into_iter()
-            .map(|x| NTT::field_to_base_ring(&x).into())
+            .map(|x| x.into())
             .collect::<Vec<NTT>>();
 
         // Step 4: reshaping the evaluation claim.
@@ -304,7 +308,6 @@ mod tests {
         const Q: u64 = 17;
         const N: usize = 8;
         type R = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CR = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
         let ccs = get_test_ccs::<R>();
@@ -320,9 +323,9 @@ mod tests {
             const K: usize = 10;
         }
 
-        let wit: Witness<R> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
+        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
             x_ccs,
         };
         let mut transcript = PoseidonTranscript::<R, CS>::default();

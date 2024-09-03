@@ -1,7 +1,6 @@
 use ark_std::marker::PhantomData;
 
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
-use lattirust_arithmetic::ring::PolyRing;
+use lattirust_arithmetic::ring::OverField;
 
 use super::error::FoldingError;
 use crate::{
@@ -21,7 +20,7 @@ pub struct FoldingProof<NTT: OverField> {
 }
 
 pub trait FoldingProver<NTT: OverField, T: Transcript<NTT>> {
-    fn prove<const C: usize, CR: PolyRing, P: DecompositionParams>(
+    fn prove<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
         transcript: &mut impl Transcript<NTT>,
@@ -49,7 +48,7 @@ pub struct LFFoldingVerifier<NTT, T> {
 }
 
 impl<NTT: OverField, T: Transcript<NTT>> FoldingProver<NTT, T> for LFFoldingProver<NTT, T> {
-    fn prove<const C: usize, CR: PolyRing, P: DecompositionParams>(
+    fn prove<const C: usize, P: DecompositionParams>(
         _cm_i_s: &[LCCCS<C, NTT>],
         _w_s: &[Witness<NTT>],
         _transcript: &mut impl Transcript<NTT>,

@@ -3,7 +3,7 @@
 use ark_ff::Field;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::LatticefoldChallengeSet,
-    ring::{CyclotomicPolyRingSplittedNTT, Zq},
+    ring::{CyclotomicPolyRingSplittedNTT, PolynomialRing, Zq},
 };
 
 const Q: u64 = 18446744069414584321;
@@ -25,7 +25,7 @@ impl<const N: usize> LatticefoldChallengeSet<CyclotomicPolyRingSplittedNTT<Q, RO
     fn small_challenge_coefficient_from_random_bytes(
         _i: usize,
         bs: &[u8],
-    ) -> <PGoldCyclotomicRing<N> as lattirust_arithmetic::ring::PolyRing>::BaseRing {
+    ) -> <PGoldCyclotomicRing<N> as PolynomialRing>::BaseRing {
         if bs[0] == 0 {
             <Zq<Q> as Field>::ZERO
         } else {

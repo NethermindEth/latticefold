@@ -1,6 +1,6 @@
 use ark_std::fmt::Debug;
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
-    LatticefoldChallengeSet, OverField,
+use lattirust_arithmetic::{
+    challenge_set::latticefold_challenge_set::LatticefoldChallengeSet, ring::OverField,
 };
 
 pub mod poseidon;
@@ -10,14 +10,12 @@ pub trait Transcript<R: OverField> {
     type TranscriptConfig: Debug;
 
     fn new(config: &Self::TranscriptConfig) -> Self;
-    fn absorb(&mut self, v: &R::F);
-    fn absorb_vec(&mut self, v: &[R::F]);
-    fn absorb_ring(&mut self, v: &R);
-    fn absorb_ring_vec(&mut self, v: &[R]);
-    fn get_big_field_challenge(&mut self) -> R::F;
-    fn get_big_challenge(&mut self) -> R {
-        R::field_to_base_ring(&self.get_big_field_challenge()).into()
+    fn absorb(&mut self, v: &R);
+    fn absorb_field_element(&mut self, v: &R::BaseRing) {
+        self.absorb(&From::from(*v))
     }
+    fn absorb_slice(&mut self, v: &[R]);
+    fn get_big_challenge(&mut self) -> R::BaseRing;
     fn get_small_challenge(&mut self) -> R;
     fn get_small_challenges(&mut self, n: usize) -> Vec<R> {
         let mut challenges = Vec::with_capacity(n);
@@ -25,7 +23,7 @@ pub trait Transcript<R: OverField> {
         challenges
     }
 
-    fn get_big_challenges(&mut self, n: usize) -> Vec<R> {
+    fn get_big_challenges(&mut self, n: usize) -> Vec<R::BaseRing> {
         let mut challenges = Vec::with_capacity(n);
         challenges.extend((0..n).map(|_| self.get_big_challenge()));
         challenges

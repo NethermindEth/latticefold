@@ -1,8 +1,7 @@
 use ark_std::{fmt::Display, marker::PhantomData};
 use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::OverField,
     polynomials::{ArithErrors, VPAuxInfo, VirtualPolynomial},
-    ring::Ring,
+    ring::{OverField, Ring},
 };
 use thiserror::Error;
 
@@ -62,10 +61,10 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         let mut prover_msgs = Vec::with_capacity(polynomial.aux_info.num_variables);
         for _ in 0..polynomial.aux_info.num_variables {
             let prover_msg = IPForMLSumcheck::<R, T>::prove_round(&mut prover_state, &verifier_msg);
-            transcript.absorb_ring_vec(&prover_msg.evaluations);
+            transcript.absorb_slice(&prover_msg.evaluations);
             prover_msgs.push(prover_msg);
             let next_verifier_msg = IPForMLSumcheck::<R, T>::sample_round(transcript);
-            transcript.absorb(&next_verifier_msg.randomness);
+            transcript.absorb(&next_verifier_msg.randomness.into());
 
             verifier_msg = Some(next_verifier_msg);
         }
@@ -90,13 +89,13 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(polynomial_info);
         for i in 0..polynomial_info.num_variables {
             let prover_msg = proof.get(i).expect("proof is incomplete");
-            transcript.absorb_ring_vec(&prover_msg.evaluations);
+            transcript.absorb_slice(&prover_msg.evaluations);
             let verifier_msg = IPForMLSumcheck::verify_round(
                 (*prover_msg).clone(),
                 &mut verifier_state,
                 transcript,
             );
-            transcript.absorb(&verifier_msg.randomness);
+            transcript.absorb(&verifier_msg.randomness.into());
         }
 
         IPForMLSumcheck::<R, T>::check_and_generate_subclaim(verifier_state, claimed_sum)

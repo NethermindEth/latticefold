@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ark-ff = { workspace = true }
+lattirust-arithmetic = { workspace = true }
 num-bigint = "0.4.5"
-lattirust-arithmetic = { git="ssh://git@github.com/NethermindEth/lattirust.git", branch = "main"}
 rand = "0.8.5"
-ark-ff = "0.4.2"

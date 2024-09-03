@@ -1,10 +1,9 @@
 //! Prover
 use ark_std::{cfg_iter_mut, vec::Vec};
 use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::OverField,
     mle::MultilinearExtension,
     polynomials::{DenseMultilinearExtension, VirtualPolynomial},
-    ring::Ring,
+    ring::{OverField, Ring},
 };
 
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
@@ -19,7 +18,7 @@ pub struct ProverMsg<R: Ring> {
 /// Prover State
 pub struct ProverState<R: OverField> {
     /// sampled randomness given by the verifier
-    pub randomness: Vec<R::F>,
+    pub randomness: Vec<R::BaseRing>,
     /// Stores the list of products that is meant to be added together. Each multiplicand is represented by
     /// the index in flattened_ml_extensions
     pub list_of_products: Vec<(R, Vec<usize>)>,
@@ -86,7 +85,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             let i = prover_state.round;
             let r = prover_state.randomness[i - 1];
             cfg_iter_mut!(prover_state.flattened_ml_extensions).for_each(|multiplicand| {
-                *multiplicand = multiplicand.fix_variables(&[R::field_to_base_ring(&r).into()]);
+                *multiplicand = multiplicand.fix_variables(&[r.into()]);
             });
         } else if prover_state.round > 0 {
             panic!("verifier message is empty");

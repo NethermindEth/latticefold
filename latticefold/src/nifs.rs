@@ -1,6 +1,7 @@
 use ark_std::marker::PhantomData;
 
-use lattirust_arithmetic::{challenge_set::latticefold_challenge_set::OverField, ring::PolyRing};
+use cyclotomic_rings::SuitableRing;
+use lattirust_arithmetic::ring::OverField;
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
@@ -35,12 +36,10 @@ pub struct LFProof<const C: usize, NTT: OverField> {
 
 /// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
-/// `CR` is the type parameter for the coefficient representation of the ring.
-/// `NTT` is the NTT representation of the same ring.
+/// `NTT` is a suitable cyclotomic ring.
 /// `P` is the decomposition parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSProver<const C: usize, const W: usize, CR, NTT, P, T> {
-    _cr: PhantomData<CR>,
+pub struct NIFSProver<const C: usize, const W: usize, NTT, P, T> {
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
@@ -49,11 +48,10 @@ pub struct NIFSProver<const C: usize, const W: usize, CR, NTT, P, T> {
 impl<
         const C: usize,
         const W: usize,
-        CR: PolyRing<BaseRing = NTT::BaseRing> + Into<NTT> + From<NTT>,
-        NTT: OverField,
+        NTT: SuitableRing,
         P: DecompositionParams,
         T: Transcript<NTT>,
-    > NIFSProver<C, W, CR, NTT, P, T>
+    > NIFSProver<C, W, NTT, P, T>
 {
     pub fn prove(
         acc: &LCCCS<C, NTT>,
@@ -67,11 +65,9 @@ impl<
         let (linearized_cm_i, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            LFDecompositionProver::<_, T>::prove::<W, C, CR, P>(
-                acc, w_acc, transcript, ccs, scheme,
-            )?;
+            LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
-            LFDecompositionProver::<_, T>::prove::<W, C, CR, P>(
+            LFDecompositionProver::<_, T>::prove::<W, C, P>(
                 &linearized_cm_i,
                 w_i,
                 transcript,
@@ -92,7 +88,7 @@ impl<
         };
 
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<C, CR, P>(&lcccs, &wit_s, transcript, ccs)?;
+            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs)?;
 
         Ok((
             folded_lcccs,
@@ -109,19 +105,17 @@ impl<
 
 /// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
-/// `CR` is the type parameter for the coefficient representation of the ring.
-/// `NTT` is the NTT representation of the same ring.
+/// `NTT` is a suitable cyclotomic ring.
 /// `P` is the decomposition parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSVerifier<const C: usize, CR, NTT, P, T> {
-    _cr: PhantomData<CR>,
+pub struct NIFSVerifier<const C: usize, NTT, P, T> {
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
-impl<const C: usize, CR: PolyRing, NTT: OverField, P: DecompositionParams, T: Transcript<NTT>>
-    NIFSVerifier<C, CR, NTT, P, T>
+impl<const C: usize, NTT: OverField, P: DecompositionParams, T: Transcript<NTT>>
+    NIFSVerifier<C, NTT, P, T>
 {
     pub fn verify(
         acc: &LCCCS<C, NTT>,

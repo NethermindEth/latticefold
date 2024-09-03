@@ -22,7 +22,7 @@ impl<const N: usize> LatticefoldChallengeSet<CyclotomicPolyRingSplittedNTT<Q, RO
     fn small_challenge_coefficient_from_random_bytes(
         _i: usize,
         bs: &[u8],
-    ) -> <PBBCyclotomicRing<N> as lattirust_arithmetic::ring::PolyRing>::BaseRing {
+    ) -> <PBBCyclotomicRing<N> as lattirust_arithmetic::ring::PolynomialRing>::BaseRing {
         if bs[0] == 0 {
             <Zq<Q> as Field>::ZERO
         } else {
