@@ -1,9 +1,8 @@
 use ark_ff::Field;
 // PM31 = 2^31 -1
-use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::LatticefoldChallengeSet,
-    ring::{CyclotomicPolyRingSplittedNTT, PolynomialRing, Zq},
-};
+use lattirust_ring::{CyclotomicPolyRingSplittedNTT, PolyRing, Zq};
+
+use crate::challenge_set::LatticefoldChallengeSet;
 
 const Q: u64 = (1 << 31) - 1;
 const D: usize = 84;
@@ -22,7 +21,7 @@ impl<const N: usize> LatticefoldChallengeSet<CyclotomicPolyRingSplittedNTT<Q, RO
     fn small_challenge_coefficient_from_random_bytes(
         _i: usize,
         bs: &[u8],
-    ) -> <PM31CyclotomicRing<N> as PolynomialRing>::BaseRing {
+    ) -> <PM31CyclotomicRing<N> as PolyRing>::BaseRing {
         if bs[0] == 0 {
             <Zq<Q> as Field>::ZERO
         } else {

@@ -1,11 +1,11 @@
 #![allow(non_snake_case)]
 use ark_ff::PrimeField;
 use ark_std::{marker::PhantomData, sync::Arc};
-use lattirust_arithmetic::{
+use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
-    ring::OverField,
 };
+use lattirust_ring::OverField;
 
 use super::error::LinearizationError;
 use crate::{
@@ -241,11 +241,8 @@ fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
 #[cfg(test)]
 mod tests {
     use ark_ff::UniformRand;
-    use lattirust_arithmetic::{
-        challenge_set::latticefold_challenge_set::BinarySmallSet,
-        mle::DenseMultilinearExtension,
-        ring::{Pow2CyclotomicPolyRingNTT, Zq},
-    };
+    use lattirust_poly::mle::DenseMultilinearExtension;
+    use lattirust_ring::{Pow2CyclotomicPolyRingNTT, Zq};
     use rand::thread_rng;
 
     use crate::{
@@ -257,6 +254,7 @@ mod tests {
         parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
+    use cyclotomic_rings::challenge_set::BinarySmallSet;
 
     use super::{compute_u, LinearizationProver};
 

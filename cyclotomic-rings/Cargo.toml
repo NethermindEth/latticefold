@@ -5,6 +5,11 @@ edition = "2021"
 
 [dependencies]
 ark-ff = { workspace = true }
-lattirust-arithmetic = { workspace = true }
+ark-crypto-primitives = { version = "0.4.0", default-features = false, features = [
+    "sponge",
+] }
 num-bigint = "0.4.5"
 rand = "0.8.5"
+lattirust-linear-algebra = { workspace = true }
+lattirust-poly = { workspace = true }
+lattirust-ring = { workspace = true }

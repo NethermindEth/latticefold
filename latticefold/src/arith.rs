@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 use ark_std::log2;
 use cyclotomic_rings::SuitableRing;
-use lattirust_arithmetic::{
+use lattirust_linear_algebra::SparseMatrix;
+use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    linear_algebra::SparseMatrix,
-    ring::{PolynomialRing, Ring},
+    PolyRing, Ring,
 };
 
 use crate::{
@@ -243,7 +243,7 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 pub mod tests {
     use super::*;
     use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use lattirust_arithmetic::ring::Pow2CyclotomicPolyRingNTT;
+    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
 
     pub fn get_test_ccs<R: Ring>() -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();

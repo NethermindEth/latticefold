@@ -1,10 +1,10 @@
 //! Prover
 use ark_std::{cfg_iter_mut, vec::Vec};
-use lattirust_arithmetic::{
+use lattirust_poly::{
     mle::MultilinearExtension,
     polynomials::{DenseMultilinearExtension, VirtualPolynomial},
-    ring::{OverField, Ring},
 };
+use lattirust_ring::{OverField, Ring};
 
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
 

@@ -1,8 +1,6 @@
 use ark_std::{fmt::Display, marker::PhantomData};
-use lattirust_arithmetic::{
-    polynomials::{ArithErrors, VPAuxInfo, VirtualPolynomial},
-    ring::{OverField, Ring},
-};
+use lattirust_poly::polynomials::{ArithErrors, VPAuxInfo, VirtualPolynomial};
+use lattirust_ring::{OverField, Ring};
 use thiserror::Error;
 
 use crate::transcript::Transcript;
@@ -106,10 +104,10 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
     use ark_ff::Zero;
-    use lattirust_arithmetic::{
-        challenge_set::latticefold_challenge_set::BinarySmallSet, polynomials::VirtualPolynomial,
-        ring::Pow2CyclotomicPolyRingNTT,
-    };
+    use lattirust_poly::polynomials::VirtualPolynomial;
+    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
+
+    use cyclotomic_rings::challenge_set::BinarySmallSet;
     const Q: u64 = 17;
     const N: usize = 8;
     type R = Pow2CyclotomicPolyRingNTT<Q, N>;

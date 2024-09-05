@@ -1,7 +1,4 @@
-use lattirust_arithmetic::{
-    balanced_decomposition::decompose_balanced_vec,
-    ring::{OverField, Ring},
-};
+use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField, Ring};
 
 use super::homomorphic_commitment::Commitment;
 use crate::{commitment::CommitmentError, parameters::DecompositionParams};
@@ -117,7 +114,7 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
 #[cfg(test)]
 mod tests {
-    use lattirust_arithmetic::ring::OverField;
+    use lattirust_ring::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
     use crate::parameters::DilithiumNTT;

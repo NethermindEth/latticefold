@@ -1,6 +1,6 @@
 use ark_std::marker::PhantomData;
 
-use lattirust_arithmetic::ring::OverField;
+use lattirust_ring::OverField;
 
 use super::error::FoldingError;
 use crate::{

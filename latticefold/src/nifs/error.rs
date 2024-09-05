@@ -1,4 +1,5 @@
-use lattirust_arithmetic::{polynomials::ArithErrors, ring::Ring};
+use lattirust_poly::polynomials::ArithErrors;
+use lattirust_ring::Ring;
 use thiserror::Error;
 
 use crate::{arith::error::CSError, commitment::CommitmentError, utils::sumcheck::SumCheckError};

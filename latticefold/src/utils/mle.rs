@@ -1,10 +1,8 @@
 /// Some basic MLE utilities
 use ark_std::log2;
-use lattirust_arithmetic::{
-    linear_algebra::SparseMatrix,
-    mle::{DenseMultilinearExtension, SparseMultilinearExtension},
-    ring::Ring,
-};
+use lattirust_linear_algebra::SparseMatrix;
+use lattirust_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
+use lattirust_ring::Ring;
 
 /// Pad matrix so that its columns and rows are powers of two
 pub fn pad_matrix<R: Ring>(m: &SparseMatrix<R>) -> SparseMatrix<R> {
@@ -126,7 +124,8 @@ mod tests {
     use crate::arith::{r1cs::tests::to_F_matrix, tests::get_test_z};
 
     use ark_ff::Zero;
-    use lattirust_arithmetic::{mle::MultilinearExtension, ring::Z2_64};
+    use lattirust_poly::mle::MultilinearExtension;
+    use lattirust_ring::Z2_64;
 
     // Function to convert usize to a binary vector of Ring elements.
     fn usize_to_binary_vector<R: Ring>(n: usize, dimensions: usize) -> Vec<R> {

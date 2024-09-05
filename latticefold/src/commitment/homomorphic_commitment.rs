@@ -2,7 +2,7 @@ use ark_std::{
     ops::{Add, Mul, Sub},
     Zero,
 };
-use lattirust_arithmetic::ring::Ring;
+use lattirust_ring::Ring;
 
 use crate::{
     commitment::CommitmentError, impl_additive_ops_from_ref, impl_multiplicative_ops_from_ref,

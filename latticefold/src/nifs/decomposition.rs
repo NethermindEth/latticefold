@@ -1,9 +1,9 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
 use ark_std::marker::PhantomData;
-use lattirust_arithmetic::{
+use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    ring::{OverField, Ring},
+    OverField, Ring,
 };
 
 use crate::{
@@ -299,9 +299,7 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 
 #[cfg(test)]
 mod tests {
-    use lattirust_arithmetic::{
-        challenge_set::latticefold_challenge_set::BinarySmallSet, ring::Pow2CyclotomicPolyRingNTT,
-    };
+    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
     use rand::thread_rng;
 
     use crate::{
@@ -319,6 +317,7 @@ mod tests {
         },
         transcript::poseidon::PoseidonTranscript,
     };
+    use cyclotomic_rings::challenge_set::BinarySmallSet;
 
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus

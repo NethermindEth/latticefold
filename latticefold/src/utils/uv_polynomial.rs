@@ -1,9 +1,9 @@
 use ark_std::ops::{AddAssign, Mul};
-use lattirust_arithmetic::{
+use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{ArithErrors, VirtualPolynomial},
-    ring::Ring,
 };
+use lattirust_ring::Ring;
 
 // Represents a univariate polynomial
 // Coefficients represented in ascending order
@@ -130,9 +130,8 @@ mod tests {
     use ark_std::sync::Arc;
 
     use super::*;
-    use lattirust_arithmetic::mle::DenseMultilinearExtension;
-    use lattirust_arithmetic::polynomials::VirtualPolynomial;
-    use lattirust_arithmetic::ring::Z2_128;
+    use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::VirtualPolynomial};
+    use lattirust_ring::Z2_128;
 
     // Define some sample DenseMultilinearExtension for testing
     fn sample_mle() -> DenseMultilinearExtension<Z2_128> {

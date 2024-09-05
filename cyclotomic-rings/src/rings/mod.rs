@@ -1,6 +1,6 @@
-use lattirust_arithmetic::{
-    balanced_decomposition::Decompose,
-    ring::{OverField, PolynomialRing, Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
+use lattirust_ring::{
+    balanced_decomposition::Decompose, OverField, PolyRing, Pow2CyclotomicPolyRing,
+    Pow2CyclotomicPolyRingNTT, Zq,
 };
 
 pub mod pbb;
@@ -15,7 +15,7 @@ pub trait SuitableRing:
     OverField + From<Self::CoefficientRepresentation> + Into<Self::CoefficientRepresentation>
 {
     /// The coefficient basis version of the ring.
-    type CoefficientRepresentation: PolynomialRing<BaseRing = Self::BaseRing> + Decompose;
+    type CoefficientRepresentation: PolyRing<BaseRing = Self::BaseRing> + Decompose;
 }
 
 impl<const Q: u64, const N: usize> SuitableRing for Pow2CyclotomicPolyRingNTT<Q, N> {

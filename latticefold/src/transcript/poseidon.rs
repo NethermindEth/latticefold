@@ -4,11 +4,10 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_ff::{BigInteger, PrimeField, Zero};
 use ark_std::marker::PhantomData;
-use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::LatticefoldChallengeSet, ring::OverField,
-};
+use lattirust_ring::OverField;
 
 use super::Transcript;
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>> {

@@ -1,7 +1,8 @@
 //! Verifier
 use ark_ff::{Field, One, Zero};
 use ark_std::vec::Vec;
-use lattirust_arithmetic::{polynomials::VPAuxInfo, ring::OverField};
+use lattirust_poly::polynomials::VPAuxInfo;
+use lattirust_ring::OverField;
 
 use super::{prover::ProverMsg, IPForMLSumcheck, SumCheckError};
 use crate::transcript::Transcript;

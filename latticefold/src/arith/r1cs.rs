@@ -1,4 +1,5 @@
-use lattirust_arithmetic::{linear_algebra::SparseMatrix, ring::Ring};
+use lattirust_linear_algebra::SparseMatrix;
+use lattirust_ring::Ring;
 
 use super::{
     error::CSError as Error,
@@ -77,7 +78,7 @@ impl<R: Ring> RelaxedR1CS<R> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRingNTT, Ring};
+    use lattirust_ring::{Pow2CyclotomicPolyRingNTT, Ring};
 
     pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
         to_F_dense_matrix::<R>(M).as_slice().into()

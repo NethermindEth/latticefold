@@ -1,7 +1,7 @@
 use ark_std::fmt::Debug;
-use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::LatticefoldChallengeSet, ring::OverField,
-};
+use lattirust_ring::OverField;
+
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 
 pub mod poseidon;
 
