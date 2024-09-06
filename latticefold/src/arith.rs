@@ -101,9 +101,43 @@ impl<R: Ring> Arith<R> for CCS<R> {
 }
 
 impl<R: Ring> CCS<R> {
-    pub fn from_r1cs(r1cs: R1CS<R>) -> Self {
+    pub fn from_r1cs(r1cs: R1CS<R>, B: u128, L: usize) -> Self {
         let m = r1cs.A.nrows();
-        let n = r1cs.A.ncols();
+        let mut n = r1cs.A.ncols();
+
+        let extend = |x: R| -> Vec<R> {
+            let mut v = vec![];
+            for i in 0..L {
+                v.push(x * R::from(B).pow([i as u64]));
+            }
+
+            v
+        };
+
+        let extend_matrix = |mat: SparseMatrix<R>| -> SparseMatrix<R> {
+            let mut rows = vec![];
+            for i in 0..mat.nrows() {
+                let mut new_row = vec![];
+                let row = &mat.values()[i * n..i * n + n];
+                // Taking the first value only works for the R1CS example with x length of 1:
+                let val = row[0];
+                let ext_val = extend(val);
+                new_row.extend(ext_val);
+                new_row.push(R::from(1 as u64));
+                let extended_second_part: Vec<R> = row[2..].iter().map(|x| extend(*x)).collect::<Vec<Vec<R>>>().into_iter().flatten().collect();
+                new_row.extend(extended_second_part);
+                rows.push(new_row);
+            }
+
+            SparseMatrix::from(rows.as_slice())
+        };
+
+        let A1 = extend_matrix(r1cs.A.clone());
+        let B1 = extend_matrix(r1cs.B.clone());
+        let C1 = extend_matrix(r1cs.C.clone());
+
+        n = r1cs.A.ncols() * L;
+
         CCS {
             m,
             n,
@@ -116,7 +150,7 @@ impl<R: Ring> CCS<R> {
 
             S: vec![vec![0, 1], vec![2]],
             c: vec![R::one(), R::one().neg()],
-            M: vec![r1cs.A, r1cs.B, r1cs.C],
+            M: vec![A1, B1, C1],
         }
     }
 
@@ -266,10 +300,11 @@ pub mod tests {
     use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
     use lattirust_arithmetic::ring::Pow2CyclotomicPolyRingNTT;
 
-    pub fn get_test_ccs<R: Ring>() -> CCS<R> {
+    pub fn get_test_ccs<R: Ring>(B: u128, L: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
-        CCS::<R>::from_r1cs(r1cs)
+        CCS::<R>::from_r1cs(r1cs, B, L)
     }
+
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_z(input)
     }
@@ -277,7 +312,7 @@ pub mod tests {
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>();
+        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>(1024, 1);
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();

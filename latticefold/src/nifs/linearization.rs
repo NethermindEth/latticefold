@@ -65,13 +65,14 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
+        let log_n = ccs.s_prime;
         // Step 1: Generate the beta challenges.
         transcript.absorb(&NTT::F::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_big_challenges(log_m);
         // Step 2: Sum check protocol
 
         // z_ccs vector, i.e. concatenation x || 1 || w.
-        let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
+        let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.f);
 
         // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
         let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
@@ -94,9 +95,9 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // Step 3: Compute v, u_vector
 
-        let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
+        let v = dense_vec_to_dense_mle(log_n, &wit.f_hat)
             .evaluate(&r)
-            .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
+            .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log n");
         let u = compute_u(&Mz_mles, &r)?;
 
         // Absorbing the prover's messages to the verifier.
@@ -238,9 +239,7 @@ fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
 mod tests {
     use ark_ff::UniformRand;
     use lattirust_arithmetic::{
-        challenge_set::latticefold_challenge_set::BinarySmallSet,
-        mle::DenseMultilinearExtension,
-        ring::{Pow2CyclotomicPolyRingNTT, Zq},
+        balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose}, challenge_set::latticefold_challenge_set::BinarySmallSet, mle::DenseMultilinearExtension, ring::{Pow2CyclotomicPolyRingNTT, Zq}
     };
     use rand::thread_rng;
 
@@ -307,22 +306,39 @@ mod tests {
         type CR = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
-        let ccs = get_test_ccs::<R>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
         #[derive(Clone)]
         struct PP;
 
+        // TODO: L needs to be m / n (see Definition 4.2), otherwise the challenge r_0 won't have the right dimension
+        // (note that u's are of dimension m and f_hat is of dimension n).
+
         impl DecompositionParams for PP {
             const B: u128 = 1_024;
-            const L: usize = 1;
+            const L: usize = 2;
             const B_SMALL: u128 = 2;
             const K: usize = 10;
         }
+        const W: usize = PP::L * 4; // 4 is the witness length in this particular (Vitalik's) example
+
+        let ccs = get_test_ccs::<R>(PP::B, PP::L);
+        let (_, mut x_ccs, w_ccs) = get_test_z_split::<R>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+        // decompose x_ccs using radix-B
+        let coef_repr: Vec<CR> = x_ccs.iter().map(|&x| x.into()).collect();
+        x_ccs = pad_and_transpose(decompose_balanced_slice_polyring(
+            &coef_repr,
+            PP::B,
+            Some(PP::L),
+        ))
+        .into_iter()
+        .flatten()
+        .collect();
 
         let wit: Witness<R> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, W, CR, PP>(&scheme).unwrap(),
             x_ccs,
         };
         let mut transcript = PoseidonTranscript::<R, CS>::default();

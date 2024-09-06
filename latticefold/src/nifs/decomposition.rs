@@ -365,7 +365,7 @@ mod tests {
     // Actual Tests
     #[test]
     fn test_decomposition() {
-        let ccs = get_test_ccs::<NTT>();
+        let ccs = get_test_ccs::<NTT>(1024, 1);
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_failing_decomposition() {
-        let ccs = get_test_ccs::<NTT>();
+        let ccs = get_test_ccs::<NTT>(1024, 1);
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
