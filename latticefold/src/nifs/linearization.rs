@@ -139,7 +139,11 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb_field_element(&NTT::BaseRing::from_be_bytes_mod_order(b"beta_s"));
-        let beta_s = transcript.get_small_challenges(log_m);
+        let beta_s: Vec<NTT> = transcript
+            .get_big_challenges(log_m)
+            .into_iter()
+            .map(|x| x.into())
+            .collect();
 
         //Step 2: The sumcheck.
         // The polynomial has degree <= ccs.d + 1 and log_m vars.
