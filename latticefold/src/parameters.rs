@@ -33,6 +33,19 @@ impl DecompositionParams for DilithiumTestParams {
     const K: usize = 13;
 }
 
+pub const BABYBEAR_PRIME: u64 = 15 * (1 << 27) + 1;
+
+#[derive(Clone, Copy)]
+pub struct BabyBearTestParams;
+
+// Not actually used
+impl DecompositionParams for BabyBearTestParams {
+    const B: u128 = 1 << 13;
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 13;
+}
+
 // p = 27*2^59 + 1
 pub const POW2_59_PRIME: u64 = 0xd800000000000001;
 

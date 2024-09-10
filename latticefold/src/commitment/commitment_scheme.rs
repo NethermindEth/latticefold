@@ -10,7 +10,7 @@ use cyclotomic_rings::SuitableRing;
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
 /// `NTT` is a suitable cyclotomic ring.
 #[derive(Clone, Debug)]
-pub struct AjtaiCommitmentScheme<const C: usize, const W: usize, NTT: Ring> {
+pub struct AjtaiCommitmentScheme<const C: usize, const W: usize, NTT: OverField> {
     matrix: Vec<Vec<NTT>>,
 }
 
@@ -46,7 +46,7 @@ impl<const C: usize, const W: usize, NTT: OverField> TryFrom<Vec<Vec<NTT>>>
     }
 }
 
-impl<const C: usize, const W: usize, NTT: Ring> AjtaiCommitmentScheme<C, W, NTT> {
+impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W, NTT> {
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
         Self {
             matrix: vec![vec![NTT::rand(rng); W]; C],
