@@ -331,7 +331,7 @@ mod tests {
 
     impl DecompositionParams for PP {
         const B: u128 = 1_024;
-        const L: usize = 1;
+        const L: usize = 2;
         const B_SMALL: u128 = 2;
         const K: usize = 10;
     }
@@ -416,7 +416,7 @@ mod tests {
         let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
             &lcccs,
             &fake_witness,
             &mut prover_transcript,
