@@ -68,7 +68,10 @@ fn prover_decomposition_benchmark<
     .unwrap();
 
     c.bench_with_input(
-        BenchmarkId::new(format!("Decomposition Prover {}", prime_name), DecompositionParamData::from(p)),
+        BenchmarkId::new(
+            format!("Decomposition Prover {}", prime_name),
+            DecompositionParamData::from(p),
+        ),
         &(lcccs, wit, ccs),
         |b, (lcccs, wit, ccs)| {
             b.iter(|| {
@@ -140,7 +143,10 @@ fn verifier_decomposition_benchmark<
     )
     .unwrap();
     c.bench_with_input(
-        BenchmarkId::new(format!("Decomposition Verifier {}", prime_name), DecompositionParamData::from(p)),
+        BenchmarkId::new(
+            format!("Decomposition Verifier {}", prime_name),
+            DecompositionParamData::from(p),
+        ),
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {
             b.iter(|| {
@@ -160,15 +166,31 @@ fn decomposition_benchmarks(c: &mut Criterion) {
         DilithiumTestParams,
         "Dilithium prime",
     );
-    prover_decomposition_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams, "p = 27 * (1 << 59) + 1");
-    prover_decomposition_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams, "p = 71 * (1 << 57) + 1");
+    prover_decomposition_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(
+        c,
+        Pow2_59TestParams,
+        "p = 27 * (1 << 59) + 1",
+    );
+    prover_decomposition_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(
+        c,
+        Pow2_57TestParams,
+        "p = 71 * (1 << 57) + 1",
+    );
     verifier_decomposition_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(
         c,
         DilithiumTestParams,
         "Dilithium prime",
     );
-    verifier_decomposition_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams, "p = 27 * (1 << 59) + 1");
-    verifier_decomposition_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams, "p = 71 * (1 << 57) + 1");
+    verifier_decomposition_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(
+        c,
+        Pow2_59TestParams,
+        "p = 27 * (1 << 59) + 1",
+    );
+    verifier_decomposition_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(
+        c,
+        Pow2_57TestParams,
+        "p = 71 * (1 << 57) + 1",
+    );
 }
 
 fn benchmarks_main(c: &mut Criterion) {
@@ -182,7 +204,7 @@ pub fn get_test_z_split<R: Ring, const W: usize>() -> (R, Vec<R>, Vec<R>) {
         to_F_vec(vec![
             1, // io
         ]),
-        to_F_vec(vec![1; W/2]) // This should be the witness size but is failing
+        to_F_vec(vec![1; W / 2]), // This should be the witness size but is failing
     )
 }
 pub fn get_test_ccs<R: Ring, const W: usize>() -> CCS<R> {
@@ -209,13 +231,13 @@ pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
 }
 fn create_identity_matrix(size: usize) -> Vec<Vec<usize>> {
     let mut matrix = Vec::with_capacity(size);
-    
+
     for i in 0..size {
         let mut row = vec![0; size];
         row[i] = 1;
         matrix.push(row);
     }
-    
+
     matrix
 }
 

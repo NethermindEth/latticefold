@@ -51,14 +51,20 @@ fn prover_linearization_benchmark<
             .unwrap(),
         x_ccs,
     };
-    
+
     c.bench_with_input(
-        BenchmarkId::new(format!("Linearization Prover {}", prime_name), DecompositionParamData::from(p)),
+        BenchmarkId::new(
+            format!("Linearization Prover {}", prime_name),
+            DecompositionParamData::from(p),
+        ),
         &(cm_i, wit, ccs),
         |b, (cm_i, wit, ccs)| {
             b.iter(|| {
                 println!();
-                let mut transcript = PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
+                let mut transcript = PoseidonTranscript::<
+                    Pow2CyclotomicPolyRingNTT<Q, N>,
+                    BinarySmallSet<Q, N>,
+                >::default();
                 let _ = LFLinearizationProver::<
                     _,
                     PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
@@ -110,7 +116,10 @@ fn verifier_linearization_benchmark<
         PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
 
     c.bench_with_input(
-        BenchmarkId::new(format!("Linearization Verifier {}", prime_name), DecompositionParamData::from(p)),
+        BenchmarkId::new(
+            format!("Linearization Verifier {}", prime_name),
+            DecompositionParamData::from(p),
+        ),
         &(cm_i, res.unwrap().1, ccs),
         |b, (cm_i, proof, ccs)| {
             b.iter(|| {
@@ -134,7 +143,7 @@ fn linearization_benchmarks(c: &mut Criterion) {
     verifier_linearization_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(
         c,
         DilithiumTestParams,
-        "Dilithium prime"
+        "Dilithium prime",
     );
     // verifier_linearization_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_59TestParams);
     // verifier_linearization_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(c, Pow2_57TestParams);
@@ -151,7 +160,7 @@ pub fn get_test_z_split<R: Ring, const W: usize>() -> (R, Vec<R>, Vec<R>) {
         to_F_vec(vec![
             1, // io
         ]),
-        to_F_vec(vec![1; W/2]) // This should be the witness size but is failing
+        to_F_vec(vec![1; W / 2]), // This should be the witness size but is failing
     )
 }
 pub fn get_test_ccs<R: Ring, const W: usize>() -> CCS<R> {
@@ -179,13 +188,13 @@ pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
 
 fn create_identity_matrix(size: usize) -> Vec<Vec<usize>> {
     let mut matrix = Vec::with_capacity(size);
-    
+
     for i in 0..size {
         let mut row = vec![0; size];
         row[i] = 1;
         matrix.push(row);
     }
-    
+
     matrix
 }
 

@@ -33,6 +33,38 @@ impl DecompositionParams for DilithiumTestParams {
     const K: usize = 13;
 }
 
+pub const GOLDILOCKS_PRIME: u64 = (1 << 32) * ((1 << 32) - 1) + 1;
+
+pub type GoldilocksCR = Pow2CyclotomicPolyRing<Zq<GOLDILOCKS_PRIME>, 256>;
+pub type GoldilocksNTT = Pow2CyclotomicPolyRingNTT<GOLDILOCKS_PRIME, 256>;
+
+#[derive(Clone, Copy)]
+pub struct GoldilocksTestParams;
+
+// TODO: Revise this later
+impl DecompositionParams for GoldilocksTestParams {
+    const B: u128 = 1 << 63; // log2(GOLDILOCKS) ~ 64
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 13;
+}
+
+pub const BABYBEAR_PRIME: u64 = 15 * (1 << 27) + 1;
+
+pub type BabyBearCR = Pow2CyclotomicPolyRing<Zq<BABYBEAR_PRIME>, 256>;
+pub type BabyBearNTT = Pow2CyclotomicPolyRingNTT<BABYBEAR_PRIME, 256>;
+
+#[derive(Clone, Copy)]
+pub struct BabyBearTestParams;
+
+// TODO: Revise this later
+impl DecompositionParams for BabyBearTestParams {
+    const B: u128 = 1 << 30; // log2(BABYBEAR) ~ 31
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 13;
+}
+
 // p = 27*2^59 + 1
 pub const POW2_59_PRIME: u64 = 0xd800000000000001;
 
