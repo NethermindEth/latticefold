@@ -1,11 +1,10 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
-use lattirust_arithmetic::{
-    balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose, recompose},
-    challenge_set::latticefold_challenge_set::OverField,
-    ring::PolyRing,
+use ark_std::marker::PhantomData;
+use lattirust_ring::{
+    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    OverField, Ring,
 };
-use std::marker::PhantomData;
 
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
@@ -16,21 +15,17 @@ use crate::{
     transcript::Transcript,
     utils::mle::dense_vec_to_dense_mle,
 };
+use cyclotomic_rings::SuitableRing;
 
 #[derive(Clone)]
-pub struct DecompositionProof<const C: usize, NTT: OverField> {
+pub struct DecompositionProof<const C: usize, NTT: Ring> {
     pub u_s: Vec<Vec<NTT>>,
     pub v_s: Vec<NTT>,
     pub x_s: Vec<Vec<NTT>>,
     pub y_s: Vec<Commitment<C, NTT>>,
 }
-pub trait DecompositionProver<NTT: OverField, T: Transcript<NTT>> {
-    fn prove<
-        const W: usize,
-        const C: usize,
-        CR: PolyRing<BaseRing = NTT::BaseRing> + Into<NTT> + From<NTT>,
-        P: DecompositionParams,
-    >(
+pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
+    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
         cm_i: &LCCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
@@ -65,15 +60,10 @@ pub struct LFDecompositionVerifier<NTT, T> {
     _t: PhantomData<T>,
 }
 
-impl<NTT: OverField, T: Transcript<NTT>> DecompositionProver<NTT, T>
+impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {
-    fn prove<
-        const W: usize,
-        const C: usize,
-        CR: PolyRing<BaseRing = NTT::BaseRing> + Into<NTT> + From<NTT>,
-        P: DecompositionParams,
-    >(
+    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
         cm_i: &LCCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
@@ -88,19 +78,17 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionProver<NTT, T>
         DecompositionError,
     > {
         let wit_s: Vec<Witness<NTT>> = {
-            let f_s = decompose_B_vec_into_k_vec::<CR, NTT, P>(&wit.f);
-            f_s.into_iter()
-                .map(|f| Witness::<NTT>::from_f::<CR, P>(f))
-                .collect()
+            let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f);
+            f_s.into_iter().map(|f| Witness::from_f::<P>(f)).collect()
         };
 
         let mut cm_i_x_w = cm_i.x_w.clone();
         cm_i_x_w.push(cm_i.h);
-        let x_s = decompose_big_vec_into_k_vec_and_compose_back::<CR, NTT, P>(&cm_i_x_w);
+        let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(&cm_i_x_w);
 
         let y_s: Vec<Commitment<C, NTT>> = wit_s
             .iter()
-            .map(|wit| wit.commit::<C, W, CR, P>(scheme))
+            .map(|wit| wit.commit::<C, W, P>(scheme))
             .collect::<Result<Vec<_>, _>>()?;
 
         let v_s: Vec<NTT> = wit_s
@@ -139,10 +127,10 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let mut lcccs_s = Vec::with_capacity(P::K);
 
         for (((x, y), u), v) in x_s.iter().zip(&y_s).zip(&u_s).zip(&v_s) {
-            transcript.absorb_ring_vec(x);
-            transcript.absorb_ring_vec(y.as_ref());
-            transcript.absorb_ring_vec(u);
-            transcript.absorb_ring(v);
+            transcript.absorb_slice(x);
+            transcript.absorb_slice(y.as_ref());
+            transcript.absorb_slice(u);
+            transcript.absorb(v);
 
             let h = x
                 .last()
@@ -182,10 +170,10 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             .zip(&proof.u_s)
             .zip(&proof.v_s)
         {
-            transcript.absorb_ring_vec(x);
-            transcript.absorb_ring_vec(y.as_ref());
-            transcript.absorb_ring_vec(u);
-            transcript.absorb_ring(v);
+            transcript.absorb_slice(x);
+            transcript.absorb_slice(y.as_ref());
+            transcript.absorb_slice(u);
+            transcript.absorb(v);
 
             let h = x
                 .last()
@@ -275,46 +263,35 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 
 /// Decompose a vector of arbitrary norm in its NTT form into DP::K vectors
 /// and applies the gadget-B matrix again.
-fn decompose_big_vec_into_k_vec_and_compose_back<
-    CR: PolyRing + From<NTT> + Into<NTT>,
-    NTT: OverField,
-    DP: DecompositionParams,
->(
+fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT],
 ) -> Vec<Vec<NTT>> {
-    let coeff_repr: Vec<CR> = x.iter().map(|&x| x.into()).collect();
+    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
     // radix-B
-    let decomposed_in_B: Vec<CR> = pad_and_transpose(decompose_balanced_slice_polyring(
-        &coeff_repr,
-        DP::B,
-        Some(DP::L),
-    ))
-    .into_iter()
-    .flatten()
-    .collect();
+    let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =
+        pad_and_transpose(decompose_balanced_vec(&coeff_repr, DP::B, Some(DP::L)))
+            .into_iter()
+            .flatten()
+            .collect();
 
-    decompose_balanced_slice_polyring(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
-                .map(|chunk| recompose(chunk, CR::from(DP::B)).into())
+                .map(|chunk| recompose(chunk, NTT::BaseRing::from(DP::B)).into())
                 .collect()
         })
         .collect()
 }
 
 /// Decompose a vector of norm B in its NTT form into DP::K small vectors.
-fn decompose_B_vec_into_k_vec<
-    CR: PolyRing + From<NTT> + Into<NTT>,
-    NTT: OverField,
-    DP: DecompositionParams,
->(
+fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT],
 ) -> Vec<Vec<NTT>> {
-    let coeff_repr: Vec<CR> = x.iter().map(|&x| x.into()).collect();
+    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
-    decompose_balanced_slice_polyring(&coeff_repr, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&coeff_repr, DP::B_SMALL, Some(DP::K))
         .into_iter()
         .map(|vec| vec.into_iter().map(|x| x.into()).collect())
         .collect()
@@ -322,10 +299,7 @@ fn decompose_B_vec_into_k_vec<
 
 #[cfg(test)]
 mod tests {
-    use lattirust_arithmetic::{
-        challenge_set::latticefold_challenge_set::BinarySmallSet,
-        ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
-    };
+    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
     use rand::thread_rng;
 
     use crate::{
@@ -343,11 +317,11 @@ mod tests {
         },
         transcript::poseidon::PoseidonTranscript,
     };
+    use cyclotomic_rings::challenge_set::BinarySmallSet;
 
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
     const N: usize = 8;
-    type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
     type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
     type CS = BinarySmallSet<Q, N>;
     type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
@@ -367,9 +341,9 @@ mod tests {
         let ccs = get_test_ccs::<NTT>();
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -388,7 +362,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, CR, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -412,9 +386,9 @@ mod tests {
         let ccs = get_test_ccs::<NTT>();
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(&w_ccs);
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -434,9 +408,9 @@ mod tests {
         .unwrap();
 
         let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
-        let fake_witness = Witness::<NTT>::from_w_ccs::<CR, PP>(&w_ccs);
+        let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, CR, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
             &lcccs,
             &fake_witness,
             &mut prover_transcript,

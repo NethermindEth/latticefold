@@ -1,10 +1,13 @@
+use ark_std::{
+    ops::{Add, Mul, Sub},
+    Zero,
+};
+use lattirust_ring::Ring;
+
 use crate::{
     commitment::CommitmentError, impl_additive_ops_from_ref, impl_multiplicative_ops_from_ref,
     impl_subtractive_ops_from_ref,
 };
-use ark_std::Zero;
-use lattirust_arithmetic::ring::Ring;
-use std::ops::{Add, Mul, Sub};
 
 /// The Ajtai commitment type. Meant to contain the output of the
 /// matrix-vector multiplication `A \cdot x`.

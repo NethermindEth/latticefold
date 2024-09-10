@@ -1,17 +1,14 @@
-use lattirust_arithmetic::{
-    balanced_decomposition::decompose_balanced_slice_polyring,
-    challenge_set::latticefold_challenge_set::OverField,
-    ring::{PolyRing, Ring},
-};
+use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField, Ring};
 
 use super::homomorphic_commitment::Commitment;
 use crate::{commitment::CommitmentError, parameters::DecompositionParams};
+use cyclotomic_rings::SuitableRing;
 
 /// A concrete instantiation of the Ajtai commitment scheme.
 /// Contains a random Ajtai matrix for the corresponding Ajtai parameters
 /// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
-/// `NTT` is a cyclotomic ring, for better results it should be in the NTT form.
+/// `NTT` is a suitable cyclotomic ring.
 #[derive(Clone, Debug)]
 pub struct AjtaiCommitmentScheme<const C: usize, const W: usize, NTT: Ring> {
     matrix: Vec<Vec<NTT>>,
@@ -49,13 +46,15 @@ impl<const C: usize, const W: usize, NTT: OverField> TryFrom<Vec<Vec<NTT>>>
     }
 }
 
-impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W, NTT> {
+impl<const C: usize, const W: usize, NTT: Ring> AjtaiCommitmentScheme<C, W, NTT> {
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
         Self {
             matrix: vec![vec![NTT::rand(rng); W]; C],
         }
     }
+}
 
+impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C, W, NTT> {
     /// Commit to a witness in the NTT form.
     /// The most basic one just multiplies by the matrix.
     pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<C, NTT>, CommitmentError> {
@@ -75,9 +74,9 @@ impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W,
 
     /// Commit to a witness in the coefficient form.
     /// Performs NTT on each component of the witness and then does Ajtai commitment.
-    pub fn commit_coeff<CR: PolyRing + From<NTT> + Into<NTT>, P: DecompositionParams>(
+    pub fn commit_coeff<P: DecompositionParams>(
         &self,
-        f: &[CR],
+        f: &[NTT::CoefficientRepresentation],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
         if f.len() != W {
             return Err(CommitmentError::WrongWitnessLength(f.len(), W));
@@ -88,48 +87,34 @@ impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W,
 
     /// Takes a coefficient form witness, decomposes it vertically in radix-B,
     /// i.e. computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
-    pub fn decompose_and_commit_coeff<
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
+    pub fn decompose_and_commit_coeff<P: DecompositionParams>(
         &self,
-        f: &[CR],
+        f: &[NTT::CoefficientRepresentation],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let f = decompose_balanced_slice_polyring(f, P::B, Some(P::L))
+        let f = decompose_balanced_vec(f, P::B, Some(P::L))
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
 
-        self.commit_coeff::<_, P>(&f)
+        self.commit_coeff::<P>(&f)
     }
 
     /// Takes an NTT form witness, transforms it into the coefficient form,
     /// decomposes it vertically in radix-B, i.e.
     /// computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
-    pub fn decompose_and_commit_ntt<
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
+    pub fn decompose_and_commit_ntt<P: DecompositionParams>(
         &self,
         w: &[NTT],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let f: Vec<NTT> = decompose_balanced_slice_polyring(
-            &w.iter().map(|&x| x.into()).collect::<Vec<CR>>(),
-            P::B,
-            Some(P::L),
-        )
-        .iter()
-        .flatten()
-        .map(|&x| x.into())
-        .collect();
+        let coeff: Vec<NTT::CoefficientRepresentation> = w.iter().map(|&x| x.into()).collect();
 
-        self.commit_ntt(&f)
+        self.decompose_and_commit_coeff::<P>(&coeff)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use lattirust_arithmetic::challenge_set::latticefold_challenge_set::OverField;
+    use lattirust_ring::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
     use crate::parameters::DilithiumNTT;

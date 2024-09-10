@@ -1,7 +1,7 @@
-use lattirust_arithmetic::challenge_set::latticefold_challenge_set::{
-    LatticefoldChallengeSet, OverField,
-};
-use std::fmt::Debug;
+use ark_std::fmt::Debug;
+use lattirust_ring::OverField;
+
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 
 pub mod poseidon;
 
@@ -10,14 +10,12 @@ pub trait Transcript<R: OverField> {
     type TranscriptConfig: Debug;
 
     fn new(config: &Self::TranscriptConfig) -> Self;
-    fn absorb(&mut self, v: &R::F);
-    fn absorb_vec(&mut self, v: &[R::F]);
-    fn absorb_ring(&mut self, v: &R);
-    fn absorb_ring_vec(&mut self, v: &[R]);
-    fn get_big_field_challenge(&mut self) -> R::F;
-    fn get_big_challenge(&mut self) -> R::BaseRing {
-        R::field_to_base_ring(&self.get_big_field_challenge())
+    fn absorb(&mut self, v: &R);
+    fn absorb_field_element(&mut self, v: &R::BaseRing) {
+        self.absorb(&From::from(*v))
     }
+    fn absorb_slice(&mut self, v: &[R]);
+    fn get_big_challenge(&mut self) -> R::BaseRing;
     fn get_small_challenge(&mut self) -> R;
     fn get_small_challenges(&mut self, n: usize) -> Vec<R> {
         let mut challenges = Vec::with_capacity(n);
