@@ -241,23 +241,40 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 
 #[cfg(test)]
 pub mod tests {
+    use self::r1cs::tests::{get_test_dummy_r1cs, get_test_dummy_z};
+
     use super::*;
-    use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
+    use crate::arith::r1cs::tests::{
+        get_test_vitalik_r1cs, get_test_vitalik_z as r1cs_get_test_vitalik_z,
+    };
     use lattirust_ring::Pow2CyclotomicPolyRingNTT;
 
-    pub fn get_test_ccs<R: Ring>() -> CCS<R> {
-        let r1cs = get_test_r1cs::<R>();
+    pub fn get_test_vitalik_ccs<R: Ring>() -> CCS<R> {
+        let r1cs = get_test_vitalik_r1cs::<R>();
         CCS::<R>::from_r1cs(r1cs)
     }
-    pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
-        r1cs_get_test_z(input)
+    pub fn get_test_arith_vitalik_z<R: Ring>(input: usize) -> Vec<R> {
+        r1cs_get_test_vitalik_z(input)
+    }
+
+    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const W: usize>() -> CCS<R> {
+        let r1cs = get_test_dummy_r1cs::<R, IO, W>();
+        CCS::<R>::from_r1cs(r1cs)
     }
 
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>();
-        let z = get_test_z(3);
+        let ccs = get_test_vitalik_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>();
+        let z = get_test_arith_vitalik_z(3);
+
+        ccs.check_relation(&z).unwrap();
+    }
+
+    #[test]
+    fn test_ccs_dummy_relation() {
+        let ccs = get_test_dummy_ccs::<Pow2CyclotomicPolyRingNTT<101, 64>, 1, 10>();
+        let z = get_test_dummy_z::<_, 1, 10>();
 
         ccs.check_relation(&z).unwrap();
     }

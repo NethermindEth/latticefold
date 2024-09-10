@@ -303,7 +303,7 @@ mod tests {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{r1cs::tests::get_test_vitalik_z_split, tests::get_test_vitalik_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{
@@ -338,8 +338,8 @@ mod tests {
     // Actual Tests
     #[test]
     fn test_decomposition() {
-        let ccs = get_test_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let ccs = get_test_vitalik_ccs::<NTT>();
+        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
@@ -383,8 +383,8 @@ mod tests {
 
     #[test]
     fn test_failing_decomposition() {
-        let ccs = get_test_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let ccs = get_test_vitalik_ccs::<NTT>();
+        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
@@ -407,7 +407,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
+        let (_, _, w_ccs) = get_test_vitalik_z_split::<NTT>(100);
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
         let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(

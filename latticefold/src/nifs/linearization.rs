@@ -250,7 +250,11 @@ mod tests {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{
+            r1cs::tests::{get_test_dummy_z_split, get_test_vitalik_z_split},
+            tests::{get_test_dummy_ccs, get_test_vitalik_ccs},
+            Witness, CCCS,
+        },
         commitment::AjtaiCommitmentScheme,
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
@@ -312,8 +316,51 @@ mod tests {
         type R = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
-        let ccs = get_test_ccs::<R>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
+        let ccs = get_test_vitalik_ccs::<R>();
+        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<R>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        #[derive(Clone)]
+        struct PP;
+
+        impl DecompositionParams for PP {
+            const B: u128 = 1_024;
+            const L: usize = 1;
+            const B_SMALL: u128 = 2;
+            const K: usize = 10;
+        }
+
+        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i: CCCS<4, R> = CCCS {
+            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+            &cm_i,
+            &res.unwrap().1,
+            &mut transcript,
+            &ccs,
+        );
+
+        res.unwrap();
+    }
+
+    #[test]
+    fn test_dummy_linearization() {
+        const Q: u64 = 15 * (1 << 15) + 1;
+        const N: usize = 256;
+        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CS = BinarySmallSet<Q, N>;
+        type T = PoseidonTranscript<R, CS>;
+        const IO: usize = 1; // io length
+        const W: usize = 10; // witness length
+        let ccs = get_test_dummy_ccs::<R, IO, W>();
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, W>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         #[derive(Clone)]
         struct PP;
