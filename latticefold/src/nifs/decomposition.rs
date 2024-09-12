@@ -441,11 +441,11 @@ mod tests {
 
     #[test]
     fn test_dummy_decomposition() {
-        const C: usize = 4;
+        const C: usize = 10;
         const IO: usize = 1;
-        const WIT_LEN: usize = 4;
+        const WIT_LEN: usize = 1 << 30;
         const W: usize = WIT_LEN * PP::L;
-        let r1cs_rows = 5;
+        let r1cs_rows = WIT_LEN;
 
         let ccs = get_test_dummy_ccs::<NTT, IO, WIT_LEN>(r1cs_rows);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<NTT, IO, WIT_LEN>();
@@ -471,7 +471,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
             &lcccs,
             &wit,
             &mut prover_transcript,

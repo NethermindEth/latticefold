@@ -184,7 +184,7 @@ const C: usize = 10;
 const WIT_LEN: usize = 1 << 10;
 fn decomposition_benchmarks(c: &mut Criterion) {
     const W: usize = WIT_LEN * SomeFermatTestParams::L;
-    let r1cs_rows = 5;
+    let r1cs_rows = 4;
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<
         IO,
         C,
