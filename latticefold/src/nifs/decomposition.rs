@@ -304,7 +304,9 @@ mod tests {
 
     use crate::{
         arith::{
-            r1cs::tests::{get_test_dummy_z_split, get_test_vitalik_z_split}, tests::{get_test_dummy_ccs, get_test_vitalik_ccs}, Witness, CCCS,
+            r1cs::tests::{get_test_dummy_z_split, get_test_vitalik_z_split},
+            tests::{get_test_dummy_ccs, get_test_vitalik_ccs},
+            Witness, CCCS,
         },
         commitment::AjtaiCommitmentScheme,
         nifs::{
@@ -441,8 +443,8 @@ mod tests {
     fn test_dummy_decomposition() {
         const C: usize = 4;
         const IO: usize = 1;
-        const WIT_LEN: usize = 4; 
-        const W: usize = WIT_LEN * PP::L; 
+        const WIT_LEN: usize = 4;
+        const W: usize = WIT_LEN * PP::L;
         let r1cs_rows = 5;
 
         let ccs = get_test_dummy_ccs::<NTT, IO, WIT_LEN>(r1cs_rows);
@@ -486,6 +488,5 @@ mod tests {
         );
 
         assert!(res.is_ok());
-        
     }
 }

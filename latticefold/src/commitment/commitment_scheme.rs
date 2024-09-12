@@ -1,4 +1,4 @@
-use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField, Ring};
+use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField};
 
 use super::homomorphic_commitment::Commitment;
 use crate::{commitment::CommitmentError, parameters::DecompositionParams};

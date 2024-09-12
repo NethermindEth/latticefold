@@ -3,13 +3,14 @@ use cyclotomic_rings::{
     challenge_set::{BinarySmallSet, LatticefoldChallengeSet},
     SuitableRing,
 };
-use lattirust_linear_algebra::SparseMatrix;
-use lattirust_ring::{Pow2CyclotomicPolyRingNTT, Ring};
+use lattirust_ring::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
+mod utils;
 use std::time::Duration;
+use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
 
 use latticefold::{
-    arith::{r1cs::R1CS, Witness, CCCS, CCS},
+    arith::{Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     nifs::{
         decomposition::{
@@ -22,11 +23,46 @@ use latticefold::{
         },
     },
     parameters::{
-        DecompositionParamData, DecompositionParams, DilithiumTestParams, Pow2_57TestParams,
-        Pow2_59TestParams, DILITHIUM_PRIME, POW2_57_PRIME, POW2_59_PRIME,
+        DecompositionParamData, DecompositionParams, SomeFermatTestParams, SOME_FERMAT_PRIME,
     },
     transcript::poseidon::PoseidonTranscript,
 };
+
+fn wit_and_ccs_gen<
+    const IO: usize,
+    const C: usize,
+    const WIT_LEN: usize,
+    const W: usize,
+    P: DecompositionParams,
+    R: SuitableRing,
+>(
+    r1cs_rows: usize,
+) -> (
+    CCCS<C, R>,
+    Witness<R>,
+    CCS<R>,
+    AjtaiCommitmentScheme<C, W, R>,
+) {
+    let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN>(r1cs_rows);
+    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
+    let mut z = vec![one];
+    z.extend(&x_ccs);
+    z.extend(&w_ccs);
+    match ccs.check_relation(&z) {
+        Ok(_) => println!("R1CS valid!"),
+        Err(_) => println!("R1CS invalid"),
+    }
+
+    let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
+    let cm_i: CCCS<C, R> = CCCS {
+        cm: wit.commit::<C, W, P>(&scheme).unwrap(),
+        x_ccs,
+    };
+
+    (cm_i, wit, ccs, scheme)
+}
 
 fn prover_decomposition_benchmark<
     const C: usize,
@@ -38,16 +74,11 @@ fn prover_decomposition_benchmark<
     c: &mut Criterion,
     p: P,
     prime_name: &str,
+    cm_i: &CCCS<C, R>,
+    wit: &Witness<R>,
+    ccs: &CCS<R>,
+    scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
-    let ccs = get_test_ccs::<R, W>();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<R, W>();
-    let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
-    let cm_i: CCCS<C, R> = CCCS {
-        cm: wit.commit::<C, W, P>(&scheme).unwrap(),
-        x_ccs,
-    };
-
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
@@ -79,9 +110,7 @@ fn prover_decomposition_benchmark<
                     W,
                     C,
                     P,
-                >(
-                    lcccs, &wit, &mut prover_transcript, &ccs, &scheme
-                )
+                >(lcccs, &wit, &mut prover_transcript, &ccs, scheme)
                 .unwrap();
             })
         },
@@ -98,16 +127,11 @@ fn verifier_decomposition_benchmark<
     c: &mut Criterion,
     p: P,
     prime_name: &str,
+    cm_i: &CCCS<C, R>,
+    wit: &Witness<R>,
+    ccs: &CCS<R>,
+    scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
-    let ccs = get_test_ccs::<R, W>();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<R, W>();
-    let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
-    let cm_i: CCCS<C, R> = CCCS {
-        cm: wit.commit::<C, W, P>(&scheme).unwrap(),
-        x_ccs,
-    };
-
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
@@ -154,69 +178,57 @@ fn verifier_decomposition_benchmark<
         },
     );
 }
+
+const IO: usize = 1;
+const C: usize = 10;
+const WIT_LEN: usize = 1 << 10;
 fn decomposition_benchmarks(c: &mut Criterion) {
+    const W: usize = WIT_LEN * SomeFermatTestParams::L;
+    let r1cs_rows = 5;
+    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<
+        IO,
+        C,
+        WIT_LEN,
+        W,
+        SomeFermatTestParams,
+        Pow2CyclotomicPolyRingNTT<{ SOME_FERMAT_PRIME }, 16>,
+    >(r1cs_rows);
+
     prover_decomposition_benchmark::<
-        4,
-        4,
+        C,
+        W,
         _,
-        Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>,
-        BinarySmallSet<DILITHIUM_PRIME, 256>,
-    >(c, DilithiumTestParams, "Dilithium prime");
+        Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 16>,
+        BinarySmallSet<SOME_FERMAT_PRIME, 16>,
+    >(
+        c,
+        SomeFermatTestParams,
+        "Some fermat(2^16 + 1) prime",
+        &cm_i,
+        &wit,
+        &ccs,
+        &scheme,
+    );
+
     verifier_decomposition_benchmark::<
-        4,
-        4,
+        C,
+        W,
         _,
-        Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>,
-        BinarySmallSet<DILITHIUM_PRIME, 256>,
-    >(c, DilithiumTestParams, "Dilithium prime");
+        Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 16>,
+        BinarySmallSet<SOME_FERMAT_PRIME, 16>,
+    >(
+        c,
+        SomeFermatTestParams,
+        "Some fermat(2^16 + 1) prime",
+        &cm_i,
+        &wit,
+        &ccs,
+        &scheme,
+    );
 }
 
 fn benchmarks_main(c: &mut Criterion) {
     decomposition_benchmarks(c);
-}
-
-pub fn get_test_z_split<R: Ring, const W: usize>() -> (R, Vec<R>, Vec<R>) {
-    // z = (1, io, w)
-    (
-        R::one(),
-        to_F_vec(vec![
-            1, // io
-        ]),
-        to_F_vec(vec![1; W / 2]), // This should be the witness size but is failing
-    )
-}
-pub fn get_test_ccs<R: Ring, const W: usize>() -> CCS<R> {
-    let r1cs = get_test_r1cs::<R, W>();
-    CCS::<R>::from_r1cs(r1cs)
-}
-pub fn get_test_r1cs<R: Ring, const W: usize>() -> R1CS<R> {
-    let A = to_F_matrix::<R>(create_identity_matrix(W));
-    let B = A.clone();
-    let C = A.clone();
-
-    R1CS::<R> { l: 1, A, B, C }
-}
-pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-    to_F_dense_matrix::<R>(M).as_slice().into()
-}
-pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
-    M.iter()
-        .map(|m| m.iter().map(|r| R::from(*r as u64)).collect())
-        .collect()
-}
-pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
-    z.iter().map(|c| R::from(*c as u64)).collect()
-}
-fn create_identity_matrix(size: usize) -> Vec<Vec<usize>> {
-    let mut matrix = Vec::with_capacity(size);
-
-    for i in 0..size {
-        let mut row = vec![0; size];
-        row[i] = 1;
-        matrix.push(row);
-    }
-
-    matrix
 }
 
 criterion_group!(

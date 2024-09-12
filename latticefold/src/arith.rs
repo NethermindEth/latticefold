@@ -275,7 +275,9 @@ pub mod tests {
         r1cs_get_test_vitalik_z(input)
     }
 
-    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const W: usize>(r1cs_rows: usize) -> CCS<R> {
+    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const W: usize>(
+        r1cs_rows: usize,
+    ) -> CCS<R> {
         let r1cs = get_test_dummy_r1cs::<R, IO, W>(r1cs_rows);
         CCS::<R>::from_r1cs(r1cs, IO + W + 1)
     }

@@ -119,14 +119,14 @@ pub mod tests {
     }
 
     pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const W: usize>(rows: usize) -> R1CS<R> {
-        let A = to_F_matrix::<R>(create_identity_matrix(rows, IO + W + 1));
+        let A = to_F_matrix::<R>(create_dummy_matrix(rows, IO + W + 1));
         let B = A.clone();
         let C = A.clone();
 
         R1CS::<R> { l: 1, A, B, C }
     }
 
-    pub fn create_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
+    pub fn create_dummy_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
         let mut matrix = vec![vec![0; columns]; rows];
         for i in 0..rows {
             matrix[i][i] = 1;

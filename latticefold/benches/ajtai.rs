@@ -1,16 +1,14 @@
-use ark_ff::UniformRand;
 use ark_std::time::Duration;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use cyclotomic_rings::SuitableRing;
-use lattirust_ring::{CyclotomicPolyRingSplittedNTT, Pow2CyclotomicPolyRingNTT};
+use lattirust_ring::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 
 use latticefold::{
     commitment::AjtaiCommitmentScheme,
     parameters::{
-        BabyBearTestParams, DecompositionParamData, DecompositionParams, DilithiumTestParams,
-        Pow2_57TestParams, Pow2_59TestParams, BABYBEAR_PRIME, DILITHIUM_PRIME, POW2_57_PRIME,
-        POW2_59_PRIME,
+        DecompositionParamData, DecompositionParams, DilithiumTestParams, Pow2_57TestParams,
+        Pow2_59TestParams, POW2_57_PRIME, POW2_59_PRIME, SOME_FERMAT_PRIME,
     },
 };
 
@@ -29,7 +27,7 @@ fn ajtai_benchmark<const C: usize, const W: usize, P: DecompositionParams, R: Su
         W,
         prime_name,
         R::dimension(),
-        B,
+        P::B,
     );
     c.bench_with_input(
         BenchmarkId::new(bench_name, DecompositionParamData::from(p)),
@@ -39,10 +37,10 @@ fn ajtai_benchmark<const C: usize, const W: usize, P: DecompositionParams, R: Su
 }
 
 fn ajtai_benchmarks(c: &mut Criterion) {
-    ajtai_benchmark::<9, { 1 << 15 }, _, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>>(
+    ajtai_benchmark::<9, { 1 << 15 }, _, Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 256>>(
         c,
         DilithiumTestParams,
-        "Dilithium prime",
+        "Some fermat(2^16 + 1) prime",
     );
     ajtai_benchmark::<9, { 1 << 15 }, _, Pow2CyclotomicPolyRingNTT<POW2_59_PRIME, 256>>(
         c,

@@ -16,17 +16,29 @@ pub trait DecompositionParams: Clone {
 }
 
 // Some classic lattice parameter sets.
-
 pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001;
-
-pub type DilithiumCR = Pow2CyclotomicPolyRing<Zq<DILITHIUM_PRIME>, 256>;
-pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
 
 #[derive(Clone, Copy)]
 pub struct DilithiumTestParams;
+pub type DilithiumCR = Pow2CyclotomicPolyRing<Zq<DILITHIUM_PRIME>, 256>;
+pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
 
 // TODO: Revise this later
 impl DecompositionParams for DilithiumTestParams {
+    const B: u128 = 1 << 13;
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 13;
+}
+
+// pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001;
+pub const SOME_FERMAT_PRIME: u64 = (1 << 16) + 1;
+
+#[derive(Clone, Copy)]
+pub struct SomeFermatTestParams;
+
+// TODO: Revise this later
+impl DecompositionParams for SomeFermatTestParams {
     const B: u128 = 1 << 13;
     const L: usize = 2;
     const B_SMALL: u128 = 2;
