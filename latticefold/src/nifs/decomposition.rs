@@ -443,8 +443,9 @@ mod tests {
         const IO: usize = 1;
         const WIT_LEN: usize = 4; 
         const W: usize = WIT_LEN * PP::L; 
+        let r1cs_rows = 5;
 
-        let ccs = get_test_dummy_ccs::<NTT, IO, WIT_LEN>();
+        let ccs = get_test_dummy_ccs::<NTT, IO, WIT_LEN>(r1cs_rows);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<NTT, IO, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);

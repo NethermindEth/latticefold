@@ -118,17 +118,17 @@ pub mod tests {
         R1CS::<R> { l: 1, A, B, C }
     }
 
-    pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const W: usize>() -> R1CS<R> {
-        let A = to_F_matrix::<R>(create_identity_matrix(IO + W + 1));
+    pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const W: usize>(rows: usize) -> R1CS<R> {
+        let A = to_F_matrix::<R>(create_identity_matrix(rows, IO + W + 1));
         let B = A.clone();
         let C = A.clone();
 
         R1CS::<R> { l: 1, A, B, C }
     }
 
-    pub fn create_identity_matrix(size: usize) -> Vec<Vec<usize>> {
-        let mut matrix = vec![vec![0; size]; size];
-        for i in 0..size {
+    pub fn create_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
+        let mut matrix = vec![vec![0; columns]; rows];
+        for i in 0..rows {
             matrix[i][i] = 1;
         }
         matrix
@@ -183,7 +183,7 @@ pub mod tests {
 
     #[test]
     fn test_check_dummy_relation() {
-        let r1cs = get_test_dummy_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>, 1, 10>();
+        let r1cs = get_test_dummy_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>, 1, 10>(5);
         let z = get_test_dummy_z::<_, 1, 10>();
 
         r1cs.check_relation(&z).unwrap();

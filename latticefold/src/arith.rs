@@ -275,8 +275,8 @@ pub mod tests {
         r1cs_get_test_vitalik_z(input)
     }
 
-    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const W: usize>() -> CCS<R> {
-        let r1cs = get_test_dummy_r1cs::<R, IO, W>();
+    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const W: usize>(r1cs_rows: usize) -> CCS<R> {
+        let r1cs = get_test_dummy_r1cs::<R, IO, W>(r1cs_rows);
         CCS::<R>::from_r1cs(r1cs, IO + W + 1)
     }
 
@@ -291,7 +291,7 @@ pub mod tests {
 
     #[test]
     fn test_ccs_dummy_relation() {
-        let ccs = get_test_dummy_ccs::<Pow2CyclotomicPolyRingNTT<101, 64>, 1, 10>();
+        let ccs = get_test_dummy_ccs::<Pow2CyclotomicPolyRingNTT<101, 64>, 1, 10>(5);
         let z = get_test_dummy_z::<_, 1, 10>();
 
         ccs.check_relation(&z).unwrap();

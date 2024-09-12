@@ -357,7 +357,9 @@ mod tests {
         const IO: usize = 1; // io length
         const WIT_LEN: usize = 1 << 4; // witness lenght for ccs
         const W: usize = WIT_LEN * PP::L;
-        let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN>();
+        let r1cs_rows = 5;
+
+        let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN>(r1cs_rows);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
