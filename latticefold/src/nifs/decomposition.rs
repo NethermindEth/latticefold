@@ -331,19 +331,22 @@ mod tests {
 
     impl DecompositionParams for PP {
         const B: u128 = 1_024;
-        const L: usize = 1;
+        const L: usize = 2;
         const B_SMALL: u128 = 2;
         const K: usize = 10;
     }
     // Actual Tests
     #[test]
     fn test_decomposition() {
-        let ccs = get_test_vitalik_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -362,7 +365,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -383,12 +386,15 @@ mod tests {
 
     #[test]
     fn test_failing_decomposition() {
-        let ccs = get_test_vitalik_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -410,7 +416,7 @@ mod tests {
         let (_, _, w_ccs) = get_test_vitalik_z_split::<NTT>(100);
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
             &lcccs,
             &fake_witness,
             &mut prover_transcript,

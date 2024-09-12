@@ -316,22 +316,26 @@ mod tests {
         type R = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
-        let ccs = get_test_vitalik_ccs::<R>();
-        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
 
         impl DecompositionParams for PP {
             const B: u128 = 1_024;
-            const L: usize = 1;
+            const L: usize = 2;
             const B_SMALL: u128 = 2;
             const K: usize = 10;
         }
 
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<R>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        #[derive(Clone)]
+        struct PP;
+
         let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
             x_ccs,
         };
         let mut transcript = PoseidonTranscript::<R, CS>::default();
