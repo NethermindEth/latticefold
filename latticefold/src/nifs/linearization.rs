@@ -352,13 +352,14 @@ mod tests {
 
     #[test]
     fn test_dummy_linearization() {
-        const Q: u64 = 15 * (1 << 15) + 1;
-        const N: usize = 256;
+        const Q: u64 = (1 << 16) + 1;
+        const N: usize = 8;
         type R = Pow2CyclotomicPolyRingNTT<Q, N>;
         type CS = BinarySmallSet<Q, N>;
         type T = PoseidonTranscript<R, CS>;
+        const C: usize = 10;
         const IO: usize = 1; // io length
-        const W: usize = 10; // witness length
+        const W: usize = 1 << 10; // witness length
         let ccs = get_test_dummy_ccs::<R, IO, W>();
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, W>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
@@ -373,19 +374,21 @@ mod tests {
         }
 
         let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+        let cm = wit.commit::<C, W, PP>(&scheme).unwrap();
+        let cm_i: CCCS<C, R> = CCCS {
+            cm,
             x_ccs,
         };
+
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+        let proof = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
 
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
         let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
-            &res.unwrap().1,
+            &proof.unwrap().1,
             &mut transcript,
             &ccs,
         );
