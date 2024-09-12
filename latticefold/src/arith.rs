@@ -267,9 +267,9 @@ pub mod tests {
     };
     use lattirust_ring::Pow2CyclotomicPolyRingNTT;
 
-    pub fn get_test_vitalik_ccs<R: Ring>() -> CCS<R> {
+    pub fn get_test_vitalik_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_vitalik_r1cs::<R>();
-        CCS::<R>::from_r1cs(r1cs)
+        CCS::<R>::from_r1cs(r1cs, W)
     }
     pub fn get_test_arith_vitalik_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_vitalik_z(input)
@@ -277,13 +277,13 @@ pub mod tests {
 
     pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const W: usize>() -> CCS<R> {
         let r1cs = get_test_dummy_r1cs::<R, IO, W>();
-        CCS::<R>::from_r1cs(r1cs)
+        CCS::<R>::from_r1cs(r1cs, IO + W + 1)
     }
 
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_vitalik_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>();
+        let ccs = get_test_vitalik_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>(4);
         let z = get_test_arith_vitalik_z(3);
 
         ccs.check_relation(&z).unwrap();

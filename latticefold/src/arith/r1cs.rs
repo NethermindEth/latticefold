@@ -119,8 +119,6 @@ pub mod tests {
     }
 
     pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const W: usize>() -> R1CS<R> {
-        // R1CS for: x^3 + x + 5 = y (example from article
-        // https://www.vitalik.ca/general/2016/12/10/qap.html )
         let A = to_F_matrix::<R>(create_identity_matrix(IO + W + 1));
         let B = A.clone();
         let C = A.clone();

@@ -267,8 +267,20 @@ mod tests {
     use super::{compute_u, LinearizationProver};
 
     // Boilerplate code to generate values needed for testing
-    const Q: u64 = 17; // Replace with an appropriate modulus
+    const Q: u64 = (1 << 16) + 1;
     const N: usize = 8;
+    type R = Pow2CyclotomicPolyRingNTT<Q, N>;
+    type CS = BinarySmallSet<Q, N>;
+    type T = PoseidonTranscript<R, CS>;
+    #[derive(Clone)]
+    struct PP;
+
+    impl DecompositionParams for PP {
+        const B: u128 = 1_024;
+        const L: usize = 2;
+        const B_SMALL: u128 = 2;
+        const K: usize = 10;
+    }
 
     fn generate_coefficient_i(_i: usize) -> Zq<Q> {
         let mut rng = thread_rng();
@@ -311,27 +323,12 @@ mod tests {
     // Actual Tests
     #[test]
     fn test_linearization() {
-        const Q: u64 = 17;
-        const N: usize = 8;
-        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CS = BinarySmallSet<Q, N>;
-        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 2;
-            const B_SMALL: u128 = 2;
-            const K: usize = 10;
-        }
-
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
+        let ccs = get_test_vitalik_ccs::<R>(W);
+        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
 
         let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
@@ -356,43 +353,28 @@ mod tests {
 
     #[test]
     fn test_dummy_linearization() {
-        const Q: u64 = (1 << 16) + 1;
-        const N: usize = 8;
-        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CS = BinarySmallSet<Q, N>;
-        type T = PoseidonTranscript<R, CS>;
         const C: usize = 10;
         const IO: usize = 1; // io length
-        const W: usize = 1 << 10; // witness length
-        let ccs = get_test_dummy_ccs::<R, IO, W>();
-        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, W>();
+        const WIT_LEN: usize = 1 << 4; // witness lenght for ccs
+        const W: usize = WIT_LEN * PP::L;
+        let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN>();
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 1;
-            const B_SMALL: u128 = 2;
-            const K: usize = 10;
-        }
 
         let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm = wit.commit::<C, W, PP>(&scheme).unwrap();
-        let cm_i: CCCS<C, R> = CCCS {
-            cm,
-            x_ccs,
-        };
+        let cm_i: CCCS<C, R> = CCCS { cm, x_ccs };
 
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let proof = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+        let prover_res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+        let proof = prover_res.unwrap().1;
 
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
         let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
-            &proof.unwrap().1,
+            &proof,
             &mut transcript,
             &ccs,
         );
