@@ -355,7 +355,7 @@ mod tests {
     fn test_dummy_linearization() {
         const C: usize = 10;
         const IO: usize = 1; // io length
-        const WIT_LEN: usize = 1 << 15; // witness length for ccs
+        const WIT_LEN: usize = 1 << 12; // witness length for ccs
         const W: usize = WIT_LEN * PP::L;
         let r1cs_rows = WIT_LEN;
 

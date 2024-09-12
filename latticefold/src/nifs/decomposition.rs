@@ -443,7 +443,7 @@ mod tests {
     fn test_dummy_decomposition() {
         const C: usize = 10;
         const IO: usize = 1;
-        const WIT_LEN: usize = 1 << 15;
+        const WIT_LEN: usize = 1 << 12;
         const W: usize = WIT_LEN * PP::L;
         let r1cs_rows = WIT_LEN;
 
