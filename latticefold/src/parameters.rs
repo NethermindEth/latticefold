@@ -1,5 +1,5 @@
-use lattirust_arithmetic::ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq};
-use std::fmt::Display;
+use ark_std::fmt::Display;
+use lattirust_ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq};
 
 /// Decomposition parameters.
 /// Convenient to enforce them compile-time.
@@ -33,33 +33,14 @@ impl DecompositionParams for DilithiumTestParams {
     const K: usize = 13;
 }
 
-pub const GOLDILOCKS_PRIME: u64 = (1 << 32) * ((1 << 32) - 1) + 1;
-
-pub type GoldilocksCR = Pow2CyclotomicPolyRing<Zq<GOLDILOCKS_PRIME>, 256>;
-pub type GoldilocksNTT = Pow2CyclotomicPolyRingNTT<GOLDILOCKS_PRIME, 256>;
-
-#[derive(Clone, Copy)]
-pub struct GoldilocksTestParams;
-
-// TODO: Revise this later
-impl DecompositionParams for GoldilocksTestParams {
-    const B: u128 = 1 << 63; // log2(GOLDILOCKS) ~ 64
-    const L: usize = 2;
-    const B_SMALL: u128 = 2;
-    const K: usize = 13;
-}
-
 pub const BABYBEAR_PRIME: u64 = 15 * (1 << 27) + 1;
-
-pub type BabyBearCR = Pow2CyclotomicPolyRing<Zq<BABYBEAR_PRIME>, 256>;
-pub type BabyBearNTT = Pow2CyclotomicPolyRingNTT<BABYBEAR_PRIME, 256>;
 
 #[derive(Clone, Copy)]
 pub struct BabyBearTestParams;
 
-// TODO: Revise this later
+// Not actually used
 impl DecompositionParams for BabyBearTestParams {
-    const B: u128 = 1 << 30; // log2(BABYBEAR) ~ 31
+    const B: u128 = 1 << 13;
     const L: usize = 2;
     const B_SMALL: u128 = 2;
     const K: usize = 13;
@@ -115,7 +96,7 @@ pub struct DecompositionParamData {
 }
 
 impl Display for DecompositionParamData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ark_std::fmt::Formatter<'_>) -> ark_std::fmt::Result {
         write!(f, "B={}, l={}", self.b, self.l,)
     }
 }

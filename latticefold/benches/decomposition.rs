@@ -1,4 +1,10 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use cyclotomic_rings::{
+    challenge_set::{BinarySmallSet, LatticefoldChallengeSet},
+    SuitableRing,
+};
+use lattirust_linear_algebra::SparseMatrix;
+use lattirust_ring::{Pow2CyclotomicPolyRingNTT, Ring};
 use rand::thread_rng;
 use std::time::Duration;
 
@@ -21,50 +27,44 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::BinarySmallSet,
-    linear_algebra::SparseMatrix,
-    ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Ring, Zq},
-};
 
 fn prover_decomposition_benchmark<
-    const Q: u64,
-    const N: usize,
     const C: usize,
     const W: usize,
     P: DecompositionParams,
+    R: SuitableRing,
+    CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut Criterion,
     p: P,
     prime_name: &str,
 ) {
-    let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
+    let ccs = get_test_ccs::<R, W>();
+    let (_, x_ccs, w_ccs) = get_test_z_split::<R, W>();
     let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-    let wit: Witness<Pow2CyclotomicPolyRingNTT<Q, N>> =
-        Witness::from_w_ccs::<Pow2CyclotomicPolyRing<Zq<Q>, N>, P>(&w_ccs);
-    let cm_i: CCCS<C, Pow2CyclotomicPolyRingNTT<Q, N>> = CCCS {
-        cm: wit
-            .commit::<C, W, Pow2CyclotomicPolyRing<Zq<Q>, N>, P>(&scheme)
-            .unwrap(),
+    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
+    let cm_i: CCCS<C, R> = CCCS {
+        cm: wit.commit::<C, W, P>(&scheme).unwrap(),
         x_ccs,
     };
 
-    let mut prover_transcript =
-        PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
-    let mut verifier_transcript =
-        PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
+    let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+    let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let (_, linearization_proof) = LFLinearizationProver::<
-        _,
-        PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
-    >::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+    let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+        &cm_i,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+    )
     .unwrap();
 
-    let lcccs = LFLinearizationVerifier::<
-        _,
-        PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
-    >::verify(&cm_i, &linearization_proof, &mut verifier_transcript, &ccs)
+    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        &cm_i,
+        &linearization_proof,
+        &mut verifier_transcript,
+        &ccs,
+    )
     .unwrap();
 
     c.bench_with_input(
@@ -75,15 +75,12 @@ fn prover_decomposition_benchmark<
         &(lcccs, wit, ccs),
         |b, (lcccs, wit, ccs)| {
             b.iter(|| {
-                let (_, _, _) = LFDecompositionProver::<
-                    _,
-                    PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
-                >::prove::<W, C, Pow2CyclotomicPolyRing<Zq<Q>, N>, P>(
-                    lcccs,
-                    &wit,
-                    &mut prover_transcript,
-                    &ccs,
-                    &scheme,
+                let (_, _, _) = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<
+                    W,
+                    C,
+                    P,
+                >(
+                    lcccs, &wit, &mut prover_transcript, &ccs, &scheme
                 )
                 .unwrap();
             })
@@ -92,56 +89,53 @@ fn prover_decomposition_benchmark<
 }
 
 fn verifier_decomposition_benchmark<
-    const Q: u64,
-    const N: usize,
     const C: usize,
     const W: usize,
     P: DecompositionParams,
+    R: SuitableRing,
+    CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut Criterion,
     p: P,
     prime_name: &str,
 ) {
-    let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<Pow2CyclotomicPolyRingNTT<Q, N>, W>();
+    let ccs = get_test_ccs::<R, W>();
+    let (_, x_ccs, w_ccs) = get_test_z_split::<R, W>();
     let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-    let wit: Witness<Pow2CyclotomicPolyRingNTT<Q, N>> =
-        Witness::from_w_ccs::<Pow2CyclotomicPolyRing<Zq<Q>, N>, P>(&w_ccs);
-    let cm_i: CCCS<C, Pow2CyclotomicPolyRingNTT<Q, N>> = CCCS {
-        cm: wit
-            .commit::<C, W, Pow2CyclotomicPolyRing<Zq<Q>, N>, P>(&scheme)
-            .unwrap(),
+    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
+    let cm_i: CCCS<C, R> = CCCS {
+        cm: wit.commit::<C, W, P>(&scheme).unwrap(),
         x_ccs,
     };
 
-    let mut prover_transcript =
-        PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
-    let mut verifier_transcript =
-        PoseidonTranscript::<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>::default();
+    let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+    let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let (_, linearization_proof) = LFLinearizationProver::<
-        _,
-        PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
-    >::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-    .unwrap();
-
-    let lcccs = LFLinearizationVerifier::<
-        _,
-        PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
-    >::verify(&cm_i, &linearization_proof, &mut verifier_transcript, &ccs)
-    .unwrap();
-
-    let (_, _, decomposition_proof) = LFDecompositionProver::<
-        _,
-        PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
-    >::prove::<W, C, Pow2CyclotomicPolyRing<Zq<Q>, N>, P>(
-        &lcccs,
+    let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+        &cm_i,
         &wit,
         &mut prover_transcript,
         &ccs,
-        &scheme,
     )
     .unwrap();
+
+    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        &cm_i,
+        &linearization_proof,
+        &mut verifier_transcript,
+        &ccs,
+    )
+    .unwrap();
+
+    let (_, _, decomposition_proof) =
+        LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
     c.bench_with_input(
         BenchmarkId::new(
             format!("Decomposition Verifier {}", prime_name),
@@ -150,47 +144,31 @@ fn verifier_decomposition_benchmark<
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {
             b.iter(|| {
-                let _ = LFDecompositionVerifier::<
-                    _,
-                    PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, BinarySmallSet<Q, N>>,
-                >::verify::<C, P>(
-                    lcccs, proof, &mut verifier_transcript, &ccs
+                let _ = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
+                    lcccs,
+                    proof,
+                    &mut verifier_transcript,
+                    &ccs,
                 );
             })
         },
     );
 }
 fn decomposition_benchmarks(c: &mut Criterion) {
-    prover_decomposition_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(
-        c,
-        DilithiumTestParams,
-        "Dilithium prime",
-    );
-    prover_decomposition_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(
-        c,
-        Pow2_59TestParams,
-        "p = 27 * (1 << 59) + 1",
-    );
-    prover_decomposition_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(
-        c,
-        Pow2_57TestParams,
-        "p = 71 * (1 << 57) + 1",
-    );
-    verifier_decomposition_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(
-        c,
-        DilithiumTestParams,
-        "Dilithium prime",
-    );
-    verifier_decomposition_benchmark::<POW2_59_PRIME, 256, 9, { 1 << 15 }, _>(
-        c,
-        Pow2_59TestParams,
-        "p = 27 * (1 << 59) + 1",
-    );
-    verifier_decomposition_benchmark::<POW2_57_PRIME, 256, 9, { 1 << 15 }, _>(
-        c,
-        Pow2_57TestParams,
-        "p = 71 * (1 << 57) + 1",
-    );
+    prover_decomposition_benchmark::<
+        4,
+        4,
+        _,
+        Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>,
+        BinarySmallSet<DILITHIUM_PRIME, 256>,
+    >(c, DilithiumTestParams, "Dilithium prime");
+    verifier_decomposition_benchmark::<
+        4,
+        4,
+        _,
+        Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>,
+        BinarySmallSet<DILITHIUM_PRIME, 256>,
+    >(c, DilithiumTestParams, "Dilithium prime");
 }
 
 fn benchmarks_main(c: &mut Criterion) {

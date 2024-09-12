@@ -1,4 +1,5 @@
-use lattirust_arithmetic::{linear_algebra::SparseMatrix, ring::Ring};
+use lattirust_linear_algebra::SparseMatrix;
+use lattirust_ring::Ring;
 
 use super::error::CSError as Error;
 
@@ -63,8 +64,8 @@ pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Erro
 mod tests {
     use super::*;
     use ark_ff::Zero;
-    use lattirust_arithmetic::linear_algebra::SparseMatrix;
-    use lattirust_arithmetic::ring::Z2_64;
+    use lattirust_linear_algebra::SparseMatrix;
+    use lattirust_ring::Z2_64;
 
     #[test]
     fn test_hadamard_vec() {
