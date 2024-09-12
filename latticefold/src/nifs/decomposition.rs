@@ -303,7 +303,9 @@ mod tests {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{
+            r1cs::tests::{get_test_dummy_z_split, get_test_vitalik_z_split}, tests::{get_test_dummy_ccs, get_test_vitalik_ccs}, Witness, CCCS,
+        },
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{
@@ -331,19 +333,22 @@ mod tests {
 
     impl DecompositionParams for PP {
         const B: u128 = 1_024;
-        const L: usize = 1;
+        const L: usize = 2;
         const B_SMALL: u128 = 2;
         const K: usize = 10;
     }
     // Actual Tests
     #[test]
     fn test_decomposition() {
-        let ccs = get_test_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_vitalik_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -362,7 +367,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -383,12 +388,15 @@ mod tests {
 
     #[test]
     fn test_failing_decomposition() {
-        let ccs = get_test_ccs::<NTT>();
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_vitalik_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -407,10 +415,10 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
+        let (_, _, w_ccs) = get_test_vitalik_z_split::<NTT>(100);
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
             &lcccs,
             &fake_witness,
             &mut prover_transcript,
@@ -427,5 +435,57 @@ mod tests {
         );
 
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_dummy_decomposition() {
+        const C: usize = 4;
+        const IO: usize = 1;
+        const WIT_LEN: usize = 4; 
+        const W: usize = WIT_LEN * PP::L; 
+        let r1cs_rows = 5;
+
+        let ccs = get_test_dummy_ccs::<NTT, IO, WIT_LEN>(r1cs_rows);
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<NTT, IO, WIT_LEN>();
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i: CCCS<C, NTT> = CCCS {
+            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let (_, linearization_proof) =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+                .unwrap();
+
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
+            &cm_i,
+            &linearization_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
+
+        let res = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
+            &lcccs,
+            &decomposition_proof,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        assert!(res.is_ok());
+        
     }
 }
