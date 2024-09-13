@@ -351,11 +351,18 @@ mod tests {
         res.unwrap();
     }
 
+    #[cfg(feature = "dhat-heap")]
+    #[global_allocator]
+    static ALLOC: dhat::Alloc = dhat::Alloc;
+
     #[test]
     fn test_dummy_linearization() {
+        #[cfg(feature = "dhat-heap")]
+        let _profiler = dhat::Profiler::new_heap();
+
         const C: usize = 10;
         const IO: usize = 1; // io length
-        const WIT_LEN: usize = 1 << 12; // witness length for ccs
+        const WIT_LEN: usize = 1 << 13; // witness length for ccs
         const W: usize = WIT_LEN * PP::L;
         let r1cs_rows = WIT_LEN;
 

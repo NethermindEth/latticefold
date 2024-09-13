@@ -8,6 +8,7 @@ ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
 ark-std = { workspace = true }
 cyclotomic-rings = { path = "../cyclotomic-rings"}
+dhat = "0.3.3"
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
@@ -18,6 +19,10 @@ thiserror = { version = "1.0.63", default-features = false }
 [features]
 default = [ "std" ]
 std = [ "ark-std/std" ]
+dhat-heap = []
+
+[profile.release]
+debug = 1
 
 
 [lints.clippy]

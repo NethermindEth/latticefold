@@ -119,7 +119,8 @@ pub mod tests {
     }
 
     pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const W: usize>(rows: usize) -> R1CS<R> {
-        let A = to_F_matrix::<R>(create_dummy_matrix(rows, IO + W + 1));
+        let dummy = create_dummy_matrix(rows, IO + W + 1);
+        let A = to_F_matrix::<R>(dummy);
         let B = A.clone();
         let C = A.clone();
 
@@ -127,7 +128,7 @@ pub mod tests {
     }
 
     pub fn create_dummy_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
-        let mut matrix = vec![vec![0; columns]; rows];
+        let mut matrix = vec![vec![0; columns]; columns];
         for i in 0..rows {
             matrix[i][i] = 1;
         }
