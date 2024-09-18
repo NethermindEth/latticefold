@@ -101,10 +101,31 @@ impl<R: Ring> Arith<R> for CCS<R> {
 }
 
 impl<R: Ring> CCS<R> {
-    pub fn from_r1cs(r1cs: R1CS<R>, W: usize) -> Self {
+    pub fn from_r1cs(r1cs: R1CS<R>) -> Self {
+        let m = r1cs.A.nrows();
+        let n = r1cs.A.ncols();
+
+        CCS {
+            m,
+            n,
+            l: r1cs.l,
+            s: log2(m) as usize,
+            s_prime: log2(n) as usize,
+            t: 3,
+            q: 2,
+            d: 2,
+
+            S: vec![vec![0, 1], vec![2]],
+            c: vec![R::one(), R::one().neg()],
+            M: vec![r1cs.A, r1cs.B, r1cs.C],
+        }
+    }
+
+    pub fn from_r1cs_with_padding(r1cs: R1CS<R>, W: usize) -> Self {
         let mut m = r1cs.A.nrows();
         let n = r1cs.A.ncols();
 
+        // TODO: too much cloning happens here. Avoid it in the future.
         let extend = |mat: SparseMatrix<R>| -> SparseMatrix<R> {
             let mut values: Vec<R> = mat.transpose().values().to_vec();
             values.extend(vec![R::ZERO; (W - m) * n]);
@@ -265,7 +286,7 @@ pub mod tests {
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
-        CCS::<R>::from_r1cs(r1cs, W)
+        CCS::<R>::from_r1cs_with_padding(r1cs, W)
     }
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_z(input)
