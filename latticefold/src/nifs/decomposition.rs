@@ -1,8 +1,7 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
-use ark_std::marker::PhantomData;
-use ark_std::ops::Mul;
-use lattirust_ring::{balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose}, OverField, PolyRing, Ring};
+use std::u128;
+
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -12,7 +11,13 @@ use crate::{
     transcript::Transcript,
     utils::mle::dense_vec_to_dense_mle,
 };
+use ark_std::marker::PhantomData;
+use ark_std::ops::Mul;
 use cyclotomic_rings::SuitableRing;
+use lattirust_ring::{
+    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    OverField, PolyRing, Ring,
+};
 
 #[derive(Clone)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
@@ -262,9 +267,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 /// and applies the gadget-B matrix again.
 fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT],
-) -> Vec<Vec<NTT>> where <NTT as SuitableRing>::CoefficientRepresentation: Mul<<NTT as PolyRing>::BaseRing>
-
-{
+) -> Vec<Vec<NTT>> {
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
     // radix-B
@@ -274,14 +277,29 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
             .flatten()
             .collect();
 
-    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
+    let decomp_balanced_vec = decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K));
+    let step_1: Vec<Vec<NTT>> = decomp_balanced_vec
         .into_iter()
-        .map(|vec| {
-            vec.chunks(DP::L)
-                .map(|chunk| recompose(chunk, NTT::BaseRing::from(DP::B)).into())
-                .collect()
+        .map(|vec: Vec<NTT::CoefficientRepresentation>| {
+            let inner_1 = vec.chunks(DP::L);
+            let inner_2 = inner_1
+                .map(|chunk| {
+                    todo!()
+                    // recompose(unimplemented!(), unimplemented!()).into()}
+                })
+                .collect::<Vec<NTT>>();
+            inner_2
         })
-        .collect()
+        .collect();
+    // decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
+    //     .into_iter()
+    //     .map(|vec| {
+    //         vec.chunks(DP::L)
+    //             .map(|chunk| recompose(chunk, NTT::BaseRing::from(DP::B)).into())
+    //             .collect()
+    //     })
+    //     .collect()
+    todo!()
 }
 
 /// Decompose a vector of norm B in its NTT form into DP::K small vectors.

@@ -5,7 +5,7 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
-use lattirust_ring::{OverField, PolyRing, cyclotomic_ring::CyclotomicConfig};
+use lattirust_ring::{cyclotomic_ring::CyclotomicConfig, OverField, PolyRing};
 
 use super::error::LinearizationError;
 use crate::{
@@ -66,8 +66,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        // &NTT::BaseRing::from_be_bytes_mod_order(b"beta_s"));
-        transcript.absorb_field_element(&NTT::BaseRing::batch_to_sponge_bytes(b"beta_s"));
+        transcript.absorb_field_element(&NTT::BasePrimeField::from_be_bytes_mod_order(b"beta_s"));
         let beta_s: Vec<NTT> = transcript
             .get_big_challenges(log_m)
             .into_iter()
@@ -139,7 +138,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb_field_element(CyclotomicPolyRingNTTGeneral);
+        transcript.absorb_field_element(&NTT::BasePrimeField::from_be_bytes_mod_order(b"beta_s"));
         let beta_s = transcript.get_small_challenges(log_m);
 
         //Step 2: The sumcheck.
@@ -243,7 +242,9 @@ fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
 mod tests {
     use ark_ff::UniformRand;
     use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::{Pow2CyclotomicPolyRingNTT, Zq};
+    use lattirust_ring::{
+        cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT, zn::z_q::Zq, PolyRing,
+    };
     use rand::thread_rng;
 
     use crate::{
@@ -269,7 +270,8 @@ mod tests {
     }
 
     fn generate_a_ring_elem() -> Pow2CyclotomicPolyRingNTT<Q, N> {
-        Pow2CyclotomicPolyRingNTT::<Q, N>::from_fn(generate_coefficient_i)
+        // 1 is placeholder
+        Pow2CyclotomicPolyRingNTT::<Q, N>::from_scalar(generate_coefficient_i(1))
     }
 
     #[test]

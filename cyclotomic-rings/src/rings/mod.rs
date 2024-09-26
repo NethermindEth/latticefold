@@ -1,8 +1,7 @@
 use lattirust_ring::{
-    balanced_decomposition::Decompose, OverField, PolyRing,
-    cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing}
+    balanced_decomposition::Decompose, cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRing,
+    OverField, PolyRing,
 };
-
 
 pub mod pgold;
 
