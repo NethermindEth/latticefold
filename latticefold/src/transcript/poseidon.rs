@@ -4,18 +4,22 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_ff::{BigInteger, PrimeField, Zero};
 use ark_std::marker::PhantomData;
-use lattirust_ring::OverField;
+use lattirust_ring::{OverField, PolyRing};
 
 use super::Transcript;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
-pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>> {
+pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>>
+where <R as PolyRing>::BaseRing: PrimeField
+{
     _marker: PhantomData<CS>,
     sponge: PoseidonSponge<R::BaseRing>,
 }
 
-impl<R: OverField, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscript<R, CS> {
+impl<R: OverField, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscript<R, CS>
+where <R as PolyRing>::BaseRing: PrimeField 
+{
     fn default() -> Self {
         let config = PoseidonConfig {
             full_rounds: 8, // Example values, adjust according to your needs
@@ -31,7 +35,9 @@ impl<R: OverField, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscrip
     }
 }
 
-impl<R: OverField, CS: LatticefoldChallengeSet<R>> Transcript<R> for PoseidonTranscript<R, CS> {
+impl<R: OverField, CS: LatticefoldChallengeSet<R>> Transcript<R> for PoseidonTranscript<R, CS>
+where <R as PolyRing>::BaseRing: PrimeField 
+{
     type TranscriptConfig = PoseidonConfig<R::BaseRing>;
 
     type ChallengeSet = CS;

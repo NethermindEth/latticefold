@@ -1,11 +1,10 @@
 use lattirust_ring::{
-    balanced_decomposition::Decompose, OverField, PolyRing, Pow2CyclotomicPolyRing,
-    Pow2CyclotomicPolyRingNTT, Zq,
+    balanced_decomposition::Decompose, OverField, PolyRing,
+    cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing}
 };
 
-pub mod pbb;
+
 pub mod pgold;
-pub mod pm31;
 
 /// This trait should be used for rings in Latticefold.
 /// It contains all the data needed in the protocol.
@@ -18,6 +17,6 @@ pub trait SuitableRing:
     type CoefficientRepresentation: PolyRing<BaseRing = Self::BaseRing> + Decompose;
 }
 
-impl<const Q: u64, const N: usize> SuitableRing for Pow2CyclotomicPolyRingNTT<Q, N> {
-    type CoefficientRepresentation = Pow2CyclotomicPolyRing<Zq<Q>, N>;
+impl<const Q: u64, const N: usize> SuitableRing for Pow2CyclotomicPolyRing<Q, N> {
+    type CoefficientRepresentation = Pow2CyclotomicPolyRing<Q, N>;
 }

@@ -1,11 +1,8 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
 use ark_std::marker::PhantomData;
-use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    OverField, Ring,
-};
-
+use ark_std::ops::Mul;
+use lattirust_ring::{balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose}, OverField, PolyRing, Ring};
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -265,7 +262,9 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 /// and applies the gadget-B matrix again.
 fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT],
-) -> Vec<Vec<NTT>> {
+) -> Vec<Vec<NTT>> where <NTT as SuitableRing>::CoefficientRepresentation: Mul<<NTT as PolyRing>::BaseRing>
+
+{
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
     // radix-B
@@ -299,7 +298,8 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 
 #[cfg(test)]
 mod tests {
-    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+    use lattirust_ring::cyclotomic_ring::{CyclotomicConfig, CyclotomicPolyRingNTTGeneral};
     use rand::thread_rng;
 
     use crate::{

@@ -5,7 +5,7 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
-use lattirust_ring::OverField;
+use lattirust_ring::{OverField, PolyRing, cyclotomic_ring::CyclotomicConfig};
 
 use super::error::LinearizationError;
 use crate::{
@@ -66,7 +66,8 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb_field_element(&NTT::BaseRing::from_be_bytes_mod_order(b"beta_s"));
+        // &NTT::BaseRing::from_be_bytes_mod_order(b"beta_s"));
+        transcript.absorb_field_element(&NTT::BaseRing::batch_to_sponge_bytes(b"beta_s"));
         let beta_s: Vec<NTT> = transcript
             .get_big_challenges(log_m)
             .into_iter()
@@ -138,7 +139,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb_field_element(&NTT::BaseRing::from_be_bytes_mod_order(b"beta_s"));
+        transcript.absorb_field_element(CyclotomicPolyRingNTTGeneral);
         let beta_s = transcript.get_small_challenges(log_m);
 
         //Step 2: The sumcheck.
