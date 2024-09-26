@@ -1,5 +1,6 @@
 use lattirust_ring::{
-    balanced_decomposition::Decompose, cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRing,
+    balanced_decomposition::Decompose,
+    cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
     OverField, PolyRing,
 };
 
@@ -16,6 +17,6 @@ pub trait SuitableRing:
     type CoefficientRepresentation: PolyRing<BaseRing = Self::BaseRing> + Decompose;
 }
 
-impl<const Q: u64, const N: usize> SuitableRing for Pow2CyclotomicPolyRing<Q, N> {
+impl<const Q: u64, const N: usize> SuitableRing for Pow2CyclotomicPolyRingNTT<Q, N> {
     type CoefficientRepresentation = Pow2CyclotomicPolyRing<Q, N>;
 }

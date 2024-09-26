@@ -277,29 +277,14 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
             .flatten()
             .collect();
 
-    let decomp_balanced_vec = decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K));
-    let step_1: Vec<Vec<NTT>> = decomp_balanced_vec
+    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
         .into_iter()
-        .map(|vec: Vec<NTT::CoefficientRepresentation>| {
-            let inner_1 = vec.chunks(DP::L);
-            let inner_2 = inner_1
-                .map(|chunk| {
-                    todo!()
-                    // recompose(unimplemented!(), unimplemented!()).into()}
-                })
-                .collect::<Vec<NTT>>();
-            inner_2
+        .map(|vec| {
+            vec.chunks(DP::L)
+                .map(|chunk| recompose(chunk, NTT::BaseRing::from(DP::B)).into())
+                .collect()
         })
-        .collect();
-    // decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
-    //     .into_iter()
-    //     .map(|vec| {
-    //         vec.chunks(DP::L)
-    //             .map(|chunk| recompose(chunk, NTT::BaseRing::from(DP::B)).into())
-    //             .collect()
-    //     })
-    //     .collect()
-    todo!()
+        .collect()
 }
 
 /// Decompose a vector of norm B in its NTT form into DP::K small vectors.
