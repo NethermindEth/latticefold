@@ -12,8 +12,8 @@ pub trait Transcript<R: OverField> {
 
     fn new(config: &Self::TranscriptConfig) -> Self;
     fn absorb(&mut self, v: &R);
-    fn absorb_field_element(&mut self, e: &R::BasePrimeField) {
-        self.absorb(&From::from(R::from_field_element(*e)))
+    fn absorb_field_element(&mut self, e: &R) {
+        self.absorb(&From::from(e.from_field_element(*e)))
     }
     fn absorb_slice(&mut self, v: &[R]);
     fn get_big_challenge(&mut self) -> R::BaseRing;
