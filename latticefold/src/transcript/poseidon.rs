@@ -11,14 +11,16 @@ use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>>
-where <R as PolyRing>::BaseRing: PrimeField
+where
+    <R as PolyRing>::BaseRing: PrimeField,
 {
     _marker: PhantomData<CS>,
     sponge: PoseidonSponge<R::BaseRing>,
 }
 
 impl<R: OverField, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscript<R, CS>
-where <R as PolyRing>::BaseRing: PrimeField 
+where
+    <R as PolyRing>::BaseRing: PrimeField,
 {
     fn default() -> Self {
         let config = PoseidonConfig {
@@ -36,7 +38,8 @@ where <R as PolyRing>::BaseRing: PrimeField
 }
 
 impl<R: OverField, CS: LatticefoldChallengeSet<R>> Transcript<R> for PoseidonTranscript<R, CS>
-where <R as PolyRing>::BaseRing: PrimeField 
+where
+    <R as PolyRing>::BaseRing: PrimeField,
 {
     type TranscriptConfig = PoseidonConfig<R::BaseRing>;
 

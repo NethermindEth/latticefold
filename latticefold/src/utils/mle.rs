@@ -125,7 +125,7 @@ mod tests {
 
     use ark_ff::Zero;
     use lattirust_poly::mle::MultilinearExtension;
-    use lattirust_ring::Z2_64;
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
 
     // Function to convert usize to a binary vector of Ring elements.
     fn usize_to_binary_vector<R: Ring>(n: usize, dimensions: usize) -> Vec<R> {
@@ -152,7 +152,7 @@ mod tests {
     }
     #[test]
     fn test_matrix_to_mle() {
-        type R = Z2_64;
+        type R = Fq;
         let A = to_F_matrix::<R>(vec![
             vec![2, 3, 4, 4],
             vec![4, 11, 14, 14],
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn test_vec_to_mle() {
-        type R = Z2_64;
+        type R = Fq;
         let z = get_test_z::<R>(3);
         let n_vars = 3;
         let z_mle = dense_vec_to_mle(n_vars, &z);

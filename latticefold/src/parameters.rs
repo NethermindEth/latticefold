@@ -1,5 +1,7 @@
 use ark_std::fmt::Display;
-use lattirust_ring::{cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRingNTT, Pow2CyclotomicPolyRing}};
+use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
+    Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
+};
 
 /// Decomposition parameters.
 /// Convenient to enforce them compile-time.

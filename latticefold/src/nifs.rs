@@ -114,7 +114,7 @@ pub struct NIFSVerifier<const C: usize, NTT, P, T> {
     _t: PhantomData<T>,
 }
 
-impl<const C: usize, NTT: OverField, P: DecompositionParams, T: Transcript<NTT>>
+impl<const C: usize, NTT: SuitableRing, P: DecompositionParams, T: Transcript<NTT>>
     NIFSVerifier<C, NTT, P, T>
 {
     pub fn verify(

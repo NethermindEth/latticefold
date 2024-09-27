@@ -105,7 +105,7 @@ mod tests {
     use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
     use ark_ff::Zero;
     use lattirust_poly::polynomials::VirtualPolynomial;
-    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
     use cyclotomic_rings::challenge_set::BinarySmallSet;
     const Q: u64 = 17;

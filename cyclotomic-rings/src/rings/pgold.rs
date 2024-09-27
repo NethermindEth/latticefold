@@ -1,16 +1,17 @@
 // PGold = 2^64 − 2^32 + 1
-use ark_ff::Field;
-use lattirust_ring::{PolyRing, cyclotomic_ring::models::goldilocks::{RqNTT, Fq3}};
 use crate::challenge_set::LatticefoldChallengeSet;
+use ark_ff::Field;
+use lattirust_ring::{
+    cyclotomic_ring::models::goldilocks::{Fq3, RqNTT},
+    PolyRing,
+};
 
 pub type PGoldCyclotomicRing<const N: usize> = RqNTT;
 
 #[allow(dead_code)]
 pub struct PGoldChallengeSet<const N: usize>;
 
-impl<const N: usize> LatticefoldChallengeSet<PGoldCyclotomicRing<N>>
-    for PGoldChallengeSet<N>
-{
+impl<const N: usize> LatticefoldChallengeSet<PGoldCyclotomicRing<N>> for PGoldChallengeSet<N> {
     fn small_challenge_coefficient_from_random_bytes(
         _i: usize,
         bs: &[u8],

@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
-use ark_ff::PrimeField;
+use ark_ff::{Field, PrimeField};
 use ark_std::{marker::PhantomData, sync::Arc};
+use cyclotomic_rings::SuitableRing;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
@@ -55,7 +56,7 @@ pub struct LFLinearizationVerifier<NTT, T> {
     _t: PhantomData<T>,
 }
 
-impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
+impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
     for LFLinearizationProver<NTT, T>
 {
     fn prove<const C: usize>(
@@ -66,7 +67,12 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb_field_element(&NTT::BasePrimeField::from_be_bytes_mod_order(b"beta_s"));
+        transcript.absorb_field_element(
+            &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
+                <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+            ])
+            .unwrap(),
+        );
         let beta_s: Vec<NTT> = transcript
             .get_big_challenges(log_m)
             .into_iter()
@@ -127,7 +133,7 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationProver<NTT, T>
     }
 }
 
-impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
+impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
     for LFLinearizationVerifier<NTT, T>
 {
     fn verify<const C: usize>(
@@ -138,7 +144,12 @@ impl<NTT: OverField, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb_field_element(&NTT::BasePrimeField::from_be_bytes_mod_order(b"beta_s"));
+        transcript.absorb_field_element(
+            &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
+                <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+            ])
+            .unwrap(),
+        );
         let beta_s = transcript.get_small_challenges(log_m);
 
         //Step 2: The sumcheck.

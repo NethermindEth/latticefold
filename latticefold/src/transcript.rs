@@ -1,5 +1,4 @@
 use ark_std::fmt::Debug;
-use ark_std::One;
 use lattirust_ring::OverField;
 
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
@@ -12,8 +11,8 @@ pub trait Transcript<R: OverField> {
 
     fn new(config: &Self::TranscriptConfig) -> Self;
     fn absorb(&mut self, v: &R);
-    fn absorb_field_element(&mut self, e: &R) {
-        self.absorb(&From::from(e.from_field_element(*e)))
+    fn absorb_field_element(&mut self, v: &R::BaseRing) {
+        self.absorb(&From::from(*v))
     }
     fn absorb_slice(&mut self, v: &[R]);
     fn get_big_challenge(&mut self) -> R::BaseRing;

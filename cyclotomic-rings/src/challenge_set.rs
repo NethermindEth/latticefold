@@ -1,6 +1,9 @@
 use ark_ff::Field;
 
-use lattirust_ring::{OverField, cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRingNTT, Fp64Pow2}};
+use lattirust_ring::{
+    cyclotomic_ring::models::pow2_debug::{Fp64Pow2, Pow2CyclotomicPolyRingNTT},
+    OverField,
+};
 
 pub trait LatticefoldChallengeSet<R: OverField> {
     fn small_challenge_coefficient_from_random_bytes(i: usize, bs: &[u8]) -> R::BaseRing;
