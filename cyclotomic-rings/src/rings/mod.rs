@@ -30,9 +30,8 @@ where
     type CoefficientRepresentation = Pow2CyclotomicPolyRing<Q, N>;
 }
 
-mod test {
-    use lattirust_ring::Ring;
-
+#[cfg(test)]
+mod tests {
     use super::*;
 
     #[test]
