@@ -32,6 +32,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use lattirust_ring::Ring;
+
     use super::*;
 
     #[test]
@@ -41,7 +43,5 @@ mod tests {
         let x: Pow2CyclotomicPolyRingNTT<17, 4> = Pow2CyclotomicPolyRingNTT::ZERO;
 
         takes_suitable_ring(x);
-
-        assert!(true)
     }
 }

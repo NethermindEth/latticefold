@@ -1,6 +1,9 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-use ark_ff::Field;
-use std::u128;
+use ark_std::marker::PhantomData;
+use lattirust_ring::{
+    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    OverField, Ring,
+};
 
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
@@ -11,13 +14,7 @@ use crate::{
     transcript::Transcript,
     utils::mle::dense_vec_to_dense_mle,
 };
-use ark_std::marker::PhantomData;
-use ark_std::ops::Mul;
 use cyclotomic_rings::SuitableRing;
-use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    OverField, PolyRing, Ring,
-};
 
 #[derive(Clone)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
@@ -308,7 +305,7 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 #[cfg(test)]
 mod tests {
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
-    use lattirust_ring::cyclotomic_ring::{CyclotomicConfig, CyclotomicPolyRingNTTGeneral};
+
     use rand::thread_rng;
 
     use crate::{

@@ -4,7 +4,7 @@ use cyclotomic_rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    PolyRing, Ring,
+    Ring,
 };
 
 use crate::{

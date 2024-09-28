@@ -6,7 +6,7 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
 };
-use lattirust_ring::{cyclotomic_ring::CyclotomicConfig, OverField, PolyRing};
+use lattirust_ring::OverField;
 
 use super::error::LinearizationError;
 use crate::{
