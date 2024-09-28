@@ -451,7 +451,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -462,7 +462,7 @@ checksum = "d336a2a514f6ccccaa3e09b02d41d35330c07ddf03a62165fcec10bb561c7806"
 dependencies = [
  "darling_core",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -473,7 +473,7 @@ checksum = "4e018fccbeeb50ff26562ece792ed06659b9c2dae79ece77c4456bb10d9bf79b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -507,7 +507,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustc_version",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -529,7 +529,7 @@ checksum = "97369cbbc041bc366949bc74d34658d6cda5621039731c6310521892a3a20ae0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -708,7 +708,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#ff2b91b67cd250819658904c14cfbf9f154f4380"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#8bff64a62f53293ad77f450337dc36f2cb2017ea"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -725,7 +725,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#ff2b91b67cd250819658904c14cfbf9f154f4380"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#8bff64a62f53293ad77f450337dc36f2cb2017ea"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -740,7 +740,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#ff2b91b67cd250819658904c14cfbf9f154f4380"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#8bff64a62f53293ad77f450337dc36f2cb2017ea"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
@@ -821,7 +821,7 @@ checksum = "254a5372af8fc138e36684761d3c0cdb758a4410e938babcff1c860ce14ddbfc"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1130,7 +1130,7 @@ checksum = "243902eda00fad750862fc144cea25caca5e20d615af0a81bee94ca738f1df1f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1172,7 +1172,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1230,9 +1230,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.77"
+version = "2.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f35bcdf61fd8e7be6caf75f429fdca8beb3ed76584befb503b1569faee373ed"
+checksum = "89132cd0bf050864e1d38dc3bbc07a0eb8e7530af26344d3d2bbbef83499f590"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1265,7 +1265,7 @@ checksum = "08904e7672f5eb876eaaf87e0ce17857500934f4981c4a0ab2b4aa98baac7fc3"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1387,7 +1387,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
  "wasm-bindgen-shared",
 ]
 
@@ -1409,7 +1409,7 @@ checksum = "afc340c74d9005395cf9dd098506f7f44e38f2b4a21c6aaacf9a105ea5e1e836"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -1571,7 +1571,7 @@ checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
 
 [[package]]
@@ -1591,5 +1591,5 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.77",
+ "syn 2.0.79",
 ]
