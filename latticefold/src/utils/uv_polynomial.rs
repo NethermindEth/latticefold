@@ -156,10 +156,7 @@ mod tests {
     fn test_univ_poly_from_mle() {
         let mle = sample_mle();
         let poly = UVPolynomial::try_from(&mle);
-        assert_eq!(
-            poly.unwrap().coeffs,
-            vec![Fq::from(2u128), Fq::from(1u128)]
-        );
+        assert_eq!(poly.unwrap().coeffs, vec![Fq::from(2u128), Fq::from(1u128)]);
     }
 
     #[test]
@@ -171,11 +168,7 @@ mod tests {
         let result = poly * &mle;
         assert_eq!(
             result.coeffs,
-            vec![
-                Fq::from(2u128),
-                Fq::from(3u128),
-                Fq::from(1u128)
-            ]
+            vec![Fq::from(2u128), Fq::from(3u128), Fq::from(1u128)]
         );
     }
 
@@ -186,10 +179,7 @@ mod tests {
         };
         let scalar = Fq::from(3u128);
         let result = poly * &scalar;
-        assert_eq!(
-            result.coeffs,
-            vec![Fq::from(3u128), Fq::from(6u128)]
-        );
+        assert_eq!(result.coeffs, vec![Fq::from(3u128), Fq::from(6u128)]);
     }
 
     #[test]
@@ -210,11 +200,7 @@ mod tests {
         let result = UVPolynomial::try_from(virtual_poly);
         assert_eq!(
             result.unwrap().coeffs,
-            vec![
-                Fq::from(4u128),
-                Fq::from(4u128),
-                Fq::from(1u128)
-            ]
+            vec![Fq::from(4u128), Fq::from(4u128), Fq::from(1u128)]
         );
     }
 
@@ -222,10 +208,7 @@ mod tests {
     fn test_univ_poly_evaluation() {
         let virtual_poly = sample_virtual_polynomial();
         let unipoly = UVPolynomial::try_from(virtual_poly);
-        assert_eq!(
-            unipoly.unwrap().evaluate(Fq::from(2u128)),
-            Fq::from(16u128)
-        );
+        assert_eq!(unipoly.unwrap().evaluate(Fq::from(2u128)), Fq::from(16u128));
     }
 
     #[test]
