@@ -1,11 +1,7 @@
 // PGold = 2^64 − 2^32 + 1
-use crate::challenge_set::LatticefoldChallengeSet;
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
-use ark_ff::{Field, MontFp};
-use lattirust_ring::{
-    cyclotomic_ring::models::stark_prime::{Fq, RqNTT, RqPoly},
-    PolyRing,
-};
+use ark_ff::MontFp;
+use lattirust_ring::cyclotomic_ring::models::stark_prime::{Fq, RqNTT, RqPoly};
 
 use super::{GetPoseidonParams, SuitableRing};
 

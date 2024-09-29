@@ -1,14 +1,9 @@
 // PGold = 2^64 − 2^32 + 1
-use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
-use ark_ff::Field;
+use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 
-use lattirust_ring::{
-    cyclotomic_ring::models::goldilocks::{Fq, Fq3, RqNTT, RqPoly},
-    PolyRing,
-};
+use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly};
 
 use super::{GetPoseidonParams, SuitableRing};
-use crate::challenge_set::LatticefoldChallengeSet;
 
 pub type GoldilocksRingNTT = RqNTT;
 pub type GoldilocksRingPoly = RqPoly;

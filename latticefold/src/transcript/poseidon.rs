@@ -2,7 +2,7 @@ use ark_crypto_primitives::sponge::{
     poseidon::{PoseidonConfig, PoseidonSponge},
     CryptographicSponge,
 };
-use ark_ff::{BigInteger, PrimeField, Zero};
+use ark_ff::{BigInteger, PrimeField};
 use ark_std::marker::PhantomData;
 use lattirust_ring::{OverField, PolyRing};
 
