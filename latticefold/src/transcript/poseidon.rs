@@ -7,7 +7,7 @@ use ark_std::marker::PhantomData;
 use lattirust_ring::{OverField, PolyRing};
 
 use super::Transcript;
-use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
+use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, GetPoseidonParams, SuitableRing};
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS: LatticefoldChallengeSet<R>>
@@ -18,22 +18,12 @@ where
     sponge: PoseidonSponge<R::BaseRing>,
 }
 
-impl<R: OverField, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscript<R, CS>
+impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscript<R, CS>
 where
     <R as PolyRing>::BaseRing: PrimeField,
 {
     fn default() -> Self {
-        let config = PoseidonConfig {
-            full_rounds: 8, // Example values, adjust according to your needs
-            partial_rounds: 57,
-            alpha: 5,
-            ark: vec![vec![R::BaseRing::zero(); 3]; 8 + 57], // Adjust to actual ark parameters
-            mds: vec![vec![R::BaseRing::zero(); 3]; 3], // Adjust to actual MDS matrix parameters
-            rate: 2,
-            capacity: 1,
-        };
-
-        Self::new(&config)
+        Self::new(&R::PoseidonParams::get_poseidon_config())
     }
 }
 
