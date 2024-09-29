@@ -1,16 +1,17 @@
 use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
-use lattirust_ring::zn::z_q::Zq;
 use lattirust_ring::{
     balanced_decomposition::Decompose,
     cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
     OverField, PolyRing,
+    zn::z_q::Zq
 };
 
 mod frog;
 mod goldilocks;
 mod stark;
+mod poseidon;
 
 pub use frog::*;
 pub use goldilocks::*;
