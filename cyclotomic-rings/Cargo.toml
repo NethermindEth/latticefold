@@ -13,3 +13,4 @@ rand = "0.8.5"
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
+thiserror = { workspace = true }

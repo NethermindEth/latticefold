@@ -2,7 +2,7 @@ use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_ff::MontFp;
 use lattirust_ring::cyclotomic_ring::models::stark_prime::Fq;
 
-use crate::{StarkPoseidonConfig, GetPoseidonParams};
+use crate::{GetPoseidonParams, StarkPoseidonConfig};
 
 impl GetPoseidonParams<Fq> for StarkPoseidonConfig {
     fn get_poseidon_config() -> PoseidonConfig<Fq> {
