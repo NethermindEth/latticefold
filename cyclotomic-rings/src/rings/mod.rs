@@ -6,7 +6,13 @@ use lattirust_ring::{
     OverField, PolyRing,
 };
 
-pub mod pgold;
+mod frog;
+mod goldilocks;
+mod stark;
+
+pub use frog::*;
+pub use goldilocks::*;
+pub use stark::*;
 
 /// This trait should be used for rings in Latticefold.
 /// It contains all the data needed in the protocol.
