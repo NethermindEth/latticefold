@@ -114,8 +114,12 @@ pub struct NIFSVerifier<const C: usize, NTT, P, T> {
     _t: PhantomData<T>,
 }
 
-impl<const C: usize, NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithSmallChallenges<NTT>>
-    NIFSVerifier<C, NTT, P, T>
+impl<
+        const C: usize,
+        NTT: SuitableRing,
+        P: DecompositionParams,
+        T: TranscriptWithSmallChallenges<NTT>,
+    > NIFSVerifier<C, NTT, P, T>
 {
     pub fn verify(
         acc: &LCCCS<C, NTT>,

@@ -16,8 +16,11 @@ use crate::{
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 
-use lattirust_ring::{PolyRing};
-use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial}};
+use lattirust_poly::{
+    mle::DenseMultilinearExtension,
+    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+};
+use lattirust_ring::PolyRing;
 use utils::*;
 
 mod utils;
@@ -73,15 +76,14 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
         // TODO: Get challenges from big set but as NTT
-        let (alpha_s, beta_s, zeta_s, mu_s) = get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
+        let (alpha_s, beta_s, zeta_s, mu_s) =
+            get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
 
         // Step 2: Compute g polynomial and sumcheck on it
         // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = w_s
             .iter()
-            .map(|w| {
-                DenseMultilinearExtension::from_evaluations_slice(log_m, &w.f_hat)
-            })
+            .map(|w| DenseMultilinearExtension::from_evaluations_slice(log_m, &w.f_hat))
             .collect::<Vec<DenseMultilinearExtension<NTT>>>();
 
         let zis = cm_i_s
@@ -227,7 +229,9 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<NTT, T> for LFFoldingVerifier<NTT, T> {
+impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<NTT, T>
+    for LFFoldingVerifier<NTT, T>
+{
     fn verify<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         proof: &FoldingProof<NTT>,

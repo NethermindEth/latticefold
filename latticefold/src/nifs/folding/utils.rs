@@ -1,3 +1,5 @@
+use std::iter::successors;
+
 use ark_std::iterable::Iterable;
 use ark_std::log2;
 use ark_std::marker::PhantomData;
@@ -15,11 +17,15 @@ use crate::{
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 
+use lattirust_poly::{
+    mle::DenseMultilinearExtension,
+    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+};
 use lattirust_ring::{OverField, PolyRing};
-use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial}};
 
 pub(super) fn get_alphas_betas_zetas_mus<R: OverField, T: Transcript<R>, P: DecompositionParams>(
-    log_m: usize, transcript: &mut T,
+    log_m: usize,
+    transcript: &mut T,
 ) -> (Vec<R>, Vec<R>, Vec<R>, Vec<R>) {
     let alpha_s = transcript
         .get_challenges(2 * P::K)
@@ -90,17 +96,17 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
 fn prepare_g1_i_mle<NTT: OverField>(
     log_m: usize,
     fi_mle: &DenseMultilinearExtension<NTT>,
-    r_i_eq: Arc<DenseMultilinearExtension<NTT>>
+    r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
     let mut mle = fi_mle.clone(); // remove clone
 
     let mut g1 = VirtualPolynomial::new(log_m);
-    
+
     g1.add_mle_list(vec![Arc::from(fi_mle.clone())], NTT::ONE)?;
 
     g1.mul_by_mle(r_i_eq, alpha_i)?;
- 
+
     Ok(g1)
 }
 
@@ -110,10 +116,10 @@ fn prepare_g2_i_mle<NTT: OverField>(
     b: u128,
     beta_s: &Vec<NTT>,
     mu_i: NTT,
-    beta_eq_r: Arc<DenseMultilinearExtension<NTT>>
+    beta_eq_r: Arc<DenseMultilinearExtension<NTT>>,
 ) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
     let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
-    
+
     mle_list.push(Arc::from(fi_mle.clone()));
 
     for i in 0..b {
@@ -131,21 +137,17 @@ fn prepare_g2_i_mle<NTT: OverField>(
 }
 
 fn prepare_g3_i_mle<NTT: OverField>(
-    matrix_mle: &Vec<DenseMultilinearExtension<NTT>>,
+    Mz_mles: &Vec<DenseMultilinearExtension<NTT>>,
     zeta_i: NTT,
-) -> DenseMultilinearExtension<NTT> {
-    let (first_mle, mles) = matrix_mle.split_first().unwrap();
-    let first_mle = first_mle.clone();
-    let mut mle = mles
-        .into_iter()
-        .fold(first_mle, |acc, mle_i_t| acc + mle_i_t.clone())
-        .to_owned();
-    let mut zeta = NTT::one();
-    mle.evaluations.iter_mut().for_each(|e| {
-        zeta = zeta * zeta_i;
-        *e = *e * zeta_i
-    });
-    mle
+    r_i_eq: Arc<DenseMultilinearExtension<NTT>>
+) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
+    let mut gi_3 = VirtualPolynomial::new(log_m);
+
+    for (zeta, M) in successors(Some(NTT::ONE), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
+        gi_3.add_mle_list(vec![Arc::from(M.clone()), r_i_eq], zeta)?;
+    }
+
+    Ok(gi_3)
 }
 
 pub(super) fn mle_val_from_vector<NTT: OverField>(vector: &Vec<NTT>, values: &Vec<NTT>) -> NTT {
