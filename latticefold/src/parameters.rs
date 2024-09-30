@@ -34,6 +34,35 @@ impl DecompositionParams for DilithiumTestParams {
     const B_SMALL: u128 = 2;
     const K: usize = 13;
 }
+#[derive(Clone, Copy)]
+pub struct StarkPrimeParams;
+
+impl DecompositionParams for StarkPrimeParams {
+    const B: u128 = 1 << 54;
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 54;
+}
+
+#[derive(Clone, Copy)]
+pub struct GoldilocksParams;
+
+impl DecompositionParams for GoldilocksParams {
+    const B: u128 = 1 << 24;
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 24;
+}
+
+#[derive(Clone, Copy)]
+pub struct FrogParams;
+
+impl DecompositionParams for crate::parameters::FrogParams {
+    const B: u128 = 1 << 16;
+    const L: usize = 2;
+    const B_SMALL: u128 = 2;
+    const K: usize = 16;
+}
 
 impl<P: DecompositionParams> From<P> for DecompositionParamData {
     fn from(_: P) -> Self {
