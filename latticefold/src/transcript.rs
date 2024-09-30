@@ -22,11 +22,11 @@ pub trait Transcript<R: OverField> {
         }
     }
 
-    fn get_big_challenge(&mut self) -> R::BaseRing;
+    fn get_challenge(&mut self) -> R::BaseRing;
 
-    fn get_big_challenges(&mut self, n: usize) -> Vec<R::BaseRing> {
+    fn get_challenges(&mut self, n: usize) -> Vec<R::BaseRing> {
         let mut challenges = Vec::with_capacity(n);
-        challenges.extend((0..n).map(|_| self.get_big_challenge()));
+        challenges.extend((0..n).map(|_| self.get_challenge()));
         challenges
     }
 }

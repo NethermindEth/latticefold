@@ -4,7 +4,7 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_ff::Field;
 use ark_std::marker::PhantomData;
-use lattirust_ring::{OverField, PolyRing};
+use lattirust_ring::OverField;
 
 use super::{Transcript, TranscriptWithSmallChallenges};
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, GetPoseidonParams, SuitableRing};
@@ -41,7 +41,7 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
         );
     }
 
-    fn get_big_challenge(&mut self) -> R::BaseRing {
+    fn get_challenge(&mut self) -> R::BaseRing {
         let extension_degree = R::BaseRing::extension_degree();
         let c = self
             .sponge
@@ -88,7 +88,7 @@ mod tests {
             Fq::new(BigInt([6163269596856181508])),
         );
 
-        assert_eq!(expected, transcript.get_big_challenge())
+        assert_eq!(expected, transcript.get_challenge())
     }
 
     #[test]

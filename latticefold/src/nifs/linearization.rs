@@ -74,7 +74,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .unwrap(),
         );
         let beta_s: Vec<NTT> = transcript
-            .get_big_challenges(log_m)
+            .get_challenges(log_m)
             .into_iter()
             .map(|x| x.into())
             .collect();
@@ -151,7 +151,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
             .unwrap(),
         );
         let beta_s: Vec<NTT> = transcript
-            .get_big_challenges(log_m)
+            .get_challenges(log_m)
             .into_iter()
             .map(|x| x.into())
             .collect();
