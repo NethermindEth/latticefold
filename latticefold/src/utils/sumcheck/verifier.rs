@@ -128,7 +128,7 @@ impl<R: OverField, T: Transcript<R>> IPForMLSumcheck<R, T> {
     #[inline]
     pub fn sample_round(transcript: &mut T) -> VerifierMsg<R> {
         VerifierMsg {
-            randomness: transcript.get_big_challenge(),
+            randomness: transcript.get_challenge(),
         }
     }
 }

@@ -428,6 +428,7 @@ dependencies = [
  "lattirust-ring",
  "num-bigint",
  "rand",
+ "thiserror",
 ]
 
 [[package]]
