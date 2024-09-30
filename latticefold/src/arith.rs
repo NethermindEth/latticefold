@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 use ark_std::log2;
-use lattirust_arithmetic::{
-    balanced_decomposition::{decompose_balanced_slice_polyring, pad_and_transpose, recompose},
-    challenge_set::latticefold_challenge_set::OverField,
-    linear_algebra::SparseMatrix,
-    ring::{PolyRing, Ring},
+use cyclotomic_rings::SuitableRing;
+use lattirust_linear_algebra::SparseMatrix;
+use lattirust_ring::{
+    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    Ring,
 };
 
 use crate::{
@@ -104,6 +104,7 @@ impl<R: Ring> CCS<R> {
     pub fn from_r1cs(r1cs: R1CS<R>) -> Self {
         let m = r1cs.A.nrows();
         let n = r1cs.A.ncols();
+
         CCS {
             m,
             n,
@@ -117,6 +118,44 @@ impl<R: Ring> CCS<R> {
             S: vec![vec![0, 1], vec![2]],
             c: vec![R::one(), R::one().neg()],
             M: vec![r1cs.A, r1cs.B, r1cs.C],
+        }
+    }
+
+    pub fn from_r1cs_with_padding(r1cs: R1CS<R>, W: usize) -> Self {
+        let mut m = r1cs.A.nrows();
+        let n = r1cs.A.ncols();
+
+        // TODO: too much cloning happens here. Avoid it in the future.
+        let extend = |mat: SparseMatrix<R>| -> SparseMatrix<R> {
+            let mut values: Vec<R> = mat.transpose().values().to_vec();
+            values.extend(vec![R::ZERO; (W - m) * n]);
+            let rows: Vec<Vec<R>> = values.chunks(n).map(|c| c.to_vec()).collect();
+
+            SparseMatrix::from(rows.as_slice())
+        };
+
+        // Pad with dummy constraints to have the number of constraints the same as W - the number of columns
+        // of the Ajtai matrix or, equivalently, the number of columns of the G gadget matrix
+        // (see Definition 4.3 in the paper).
+        let A = extend(r1cs.A);
+        let B = extend(r1cs.B);
+        let C = extend(r1cs.C);
+
+        m = W;
+
+        CCS {
+            m,
+            n,
+            l: r1cs.l,
+            s: log2(m) as usize,
+            s_prime: log2(n) as usize,
+            t: 3,
+            q: 2,
+            d: 2,
+
+            S: vec![vec![0, 1], vec![2]],
+            c: vec![R::one(), R::one().neg()],
+            M: vec![A, B, C],
         }
     }
 
@@ -155,33 +194,23 @@ pub struct Witness<NTT: Ring> {
     pub w_ccs: Vec<NTT>,
 }
 
-impl<NTT: OverField> Witness<NTT> {
-    pub fn from_w_ccs<
-        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
-        w_ccs: Vec<NTT>,
-    ) -> Self {
+impl<NTT: SuitableRing> Witness<NTT> {
+    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: &[NTT]) -> Self {
         // iNTT
-        let coef_repr: Vec<CR> = w_ccs.iter().map(|&x| x.into()).collect();
+        let coef_repr: Vec<NTT::CoefficientRepresentation> =
+            w_ccs.iter().map(|&x| x.into()).collect();
 
         // decompose radix-B
-        let coef_repr_decomposed: Vec<CR> = pad_and_transpose(decompose_balanced_slice_polyring(
-            &coef_repr,
-            P::B,
-            Some(P::L),
-        ))
-        .into_iter()
-        .flatten()
-        .collect();
+        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
+            pad_and_transpose(decompose_balanced_vec(&coef_repr, P::B, Some(P::L)))
+                .into_iter()
+                .flatten()
+                .collect();
 
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
-        let f_hat: Vec<NTT> = coef_repr_decomposed
-            .into_iter()
-            .map(|x| NTT::from(x.coeffs()))
-            .collect();
+        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
 
         Self {
             f,
@@ -190,17 +219,10 @@ impl<NTT: OverField> Witness<NTT> {
         }
     }
 
-    pub fn from_f<
-        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
-        f: Vec<NTT>,
-    ) -> Self {
-        let coef_repr_decomposed: Vec<CR> = f.iter().map(|&x| x.into()).collect();
-        let f_hat: Vec<NTT> = coef_repr_decomposed
-            .into_iter()
-            .map(|x| NTT::from(x.coeffs()))
-            .collect();
+    pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
+        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
+            f.iter().map(|&x| x.into()).collect();
+        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
 
         let w_ccs = f
             .chunks(P::L)
@@ -210,21 +232,11 @@ impl<NTT: OverField> Witness<NTT> {
         Self { f, f_hat, w_ccs }
     }
 
-    pub fn from_f_slice<
-        CR: PolyRing<BaseRing = NTT::BaseRing> + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
-        f: &[NTT],
-    ) -> Self {
-        Self::from_f::<CR, P>(f.into())
+    pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
+        Self::from_f::<P>(f.into())
     }
 
-    pub fn commit<
-        const C: usize,
-        const W: usize,
-        CR: PolyRing + From<NTT> + Into<NTT>,
-        P: DecompositionParams,
-    >(
+    pub fn commit<const C: usize, const W: usize, P: DecompositionParams>(
         &self,
         ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
@@ -264,11 +276,11 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 pub mod tests {
     use super::*;
     use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use lattirust_arithmetic::ring::Pow2CyclotomicPolyRingNTT;
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
-    pub fn get_test_ccs<R: Ring>() -> CCS<R> {
+    pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
-        CCS::<R>::from_r1cs(r1cs)
+        CCS::<R>::from_r1cs_with_padding(r1cs, W)
     }
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_z(input)
@@ -277,7 +289,7 @@ pub mod tests {
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>();
+        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>(4);
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();

@@ -1,4 +1,5 @@
-use lattirust_arithmetic::{linear_algebra::SparseMatrix, ring::Ring};
+use lattirust_linear_algebra::SparseMatrix;
+use lattirust_ring::Ring;
 
 use super::error::CSError as Error;
 
@@ -63,15 +64,15 @@ pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Erro
 mod tests {
     use super::*;
     use ark_ff::Zero;
-    use lattirust_arithmetic::linear_algebra::SparseMatrix;
-    use lattirust_arithmetic::ring::Z2_64;
+    use lattirust_linear_algebra::SparseMatrix;
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
 
     #[test]
     fn test_hadamard_vec() {
-        let a = [Z2_64::from(2u64), Z2_64::from(3u64), Z2_64::from(4u64)];
-        let b = [Z2_64::from(5u64), Z2_64::from(6u64), Z2_64::from(7u64)];
+        let a = [Fq::from(2u64), Fq::from(3u64), Fq::from(4u64)];
+        let b = [Fq::from(5u64), Fq::from(6u64), Fq::from(7u64)];
         let result = hadamard_vec(&a, &b);
-        let expected = vec![Z2_64::from(10u64), Z2_64::from(18u64), Z2_64::from(28u64)];
+        let expected = vec![Fq::from(10u64), Fq::from(18u64), Fq::from(28u64)];
         assert_eq!(result, expected);
     }
 
@@ -79,48 +80,48 @@ mod tests {
 
     #[test]
     fn test_vec_value_mul() {
-        let a = [Z2_64::from(2u64), Z2_64::from(3u64), Z2_64::from(4u64)];
-        let scalar = Z2_64::from(2u64);
+        let a = [Fq::from(2u64), Fq::from(3u64), Fq::from(4u64)];
+        let scalar = Fq::from(2u64);
         let result = vec_value_mul(&a, &scalar);
-        let expected = vec![Z2_64::from(4u64), Z2_64::from(6u64), Z2_64::from(8u64)];
+        let expected = vec![Fq::from(4u64), Fq::from(6u64), Fq::from(8u64)];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_vec_add() {
-        let a = [Z2_64::from(1u64), Z2_64::from(2u64), Z2_64::from(3u64)];
-        let b = [Z2_64::from(4u64), Z2_64::from(5u64), Z2_64::from(6u64)];
+        let a = [Fq::from(1u64), Fq::from(2u64), Fq::from(3u64)];
+        let b = [Fq::from(4u64), Fq::from(5u64), Fq::from(6u64)];
         let result = vec_add(&a, &b);
-        let expected = vec![Z2_64::from(5u64), Z2_64::from(7u64), Z2_64::from(9u64)];
+        let expected = vec![Fq::from(5u64), Fq::from(7u64), Fq::from(9u64)];
         assert_eq!(result.unwrap(), expected);
 
         // Test error case
-        let a = [Z2_64::from(1u64), Z2_64::from(2u64)];
-        let b = [Z2_64::from(3u64), Z2_64::from(4u64), Z2_64::from(5u64)];
+        let a = [Fq::from(1u64), Fq::from(2u64)];
+        let b = [Fq::from(3u64), Fq::from(4u64), Fq::from(5u64)];
         let result = vec_add(&a, &b);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_vec_scalar_mul() {
-        let vec = [Z2_64::from(1u64), Z2_64::from(2u64), Z2_64::from(3u64)];
-        let c = Z2_64::from(3u64);
+        let vec = [Fq::from(1u64), Fq::from(2u64), Fq::from(3u64)];
+        let c = Fq::from(3u64);
         let result = vec_scalar_mul(&vec, &c);
-        let expected = vec![Z2_64::from(3u64), Z2_64::from(6u64), Z2_64::from(9u64)];
+        let expected = vec![Fq::from(3u64), Fq::from(6u64), Fq::from(9u64)];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_hadamard() {
-        let a = [Z2_64::from(2u64), Z2_64::from(3u64), Z2_64::from(4u64)];
-        let b = [Z2_64::from(5u64), Z2_64::from(6u64), Z2_64::from(7u64)];
+        let a = [Fq::from(2u64), Fq::from(3u64), Fq::from(4u64)];
+        let b = [Fq::from(5u64), Fq::from(6u64), Fq::from(7u64)];
         let result = hadamard(&a, &b);
-        let expected = vec![Z2_64::from(10u64), Z2_64::from(18u64), Z2_64::from(28u64)];
+        let expected = vec![Fq::from(10u64), Fq::from(18u64), Fq::from(28u64)];
         assert_eq!(result.unwrap(), expected);
 
         // Test error case
-        let a = [Z2_64::from(2u64), Z2_64::from(3u64)];
-        let b = [Z2_64::from(5u64), Z2_64::from(6u64), Z2_64::from(7u64)];
+        let a = [Fq::from(2u64), Fq::from(3u64)];
+        let b = [Fq::from(5u64), Fq::from(6u64), Fq::from(7u64)];
         let result = hadamard(&a, &b);
         assert!(result.is_err());
     }
@@ -129,20 +130,20 @@ mod tests {
     fn test_mat_vec_mul() {
         // Construct a sparse matrix M
         let dense_matrix = vec![
-            vec![Z2_64::from(1u64), Z2_64::zero(), Z2_64::zero()], // Row 0
-            vec![Z2_64::zero(), Z2_64::from(2u64), Z2_64::from(1u64)], // Row 1
-            vec![Z2_64::zero(), Z2_64::zero(), Z2_64::from(3u64)], // Row 2
+            vec![Fq::from(1u64), Fq::zero(), Fq::zero()], // Row 0
+            vec![Fq::zero(), Fq::from(2u64), Fq::from(1u64)], // Row 1
+            vec![Fq::zero(), Fq::zero(), Fq::from(3u64)], // Row 2
         ];
 
         let M = SparseMatrix::from(dense_matrix.as_slice());
 
-        let z = [Z2_64::from(1u64), Z2_64::from(1u64), Z2_64::from(1u64)];
+        let z = [Fq::from(1u64), Fq::from(1u64), Fq::from(1u64)];
         let result = mat_vec_mul(&M, &z);
-        let expected = vec![Z2_64::from(1u64), Z2_64::from(3u64), Z2_64::from(3u64)];
+        let expected = vec![Fq::from(1u64), Fq::from(3u64), Fq::from(3u64)];
         assert_eq!(result.unwrap(), expected);
 
         // Test error case
-        let z = [Z2_64::from(1u64), Z2_64::from(1u64)]; // Wrong size vector
+        let z = [Fq::from(1u64), Fq::from(1u64)]; // Wrong size vector
         let result = mat_vec_mul(&M, &z);
         assert!(result.is_err());
     }

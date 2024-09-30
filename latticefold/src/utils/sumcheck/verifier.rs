@@ -1,9 +1,8 @@
 //! Verifier
 use ark_ff::{Field, One, Zero};
 use ark_std::vec::Vec;
-use lattirust_arithmetic::{
-    challenge_set::latticefold_challenge_set::OverField, polynomials::VPAuxInfo,
-};
+use lattirust_poly::polynomials::VPAuxInfo;
+use lattirust_ring::OverField;
 
 use super::{prover::ProverMsg, IPForMLSumcheck, SumCheckError};
 use crate::transcript::Transcript;
@@ -14,7 +13,7 @@ pub const SQUEEZE_NATIVE_ELEMENTS_NUM: usize = 1;
 #[derive(Clone)]
 pub struct VerifierMsg<R: OverField> {
     /// randomness sampled by verifier
-    pub randomness: R::F,
+    pub randomness: R::BaseRing,
 }
 
 /// Verifier State
@@ -26,13 +25,13 @@ pub struct VerifierState<R: OverField> {
     /// a list storing the univariate polynomial in evaluation form sent by the prover at each round
     polynomials_received: Vec<Vec<R>>,
     /// a list storing the randomness sampled by the verifier at each round
-    randomness: Vec<R::F>,
+    randomness: Vec<R::BaseRing>,
 }
 
 /// Subclaim when verifier is convinced
 pub struct SubClaim<R: OverField> {
     /// the multi-dimensional point that this multilinear extension is evaluated to
-    pub point: Vec<R::F>,
+    pub point: Vec<R::BaseRing>,
     /// the expected evaluation
     pub expected_evaluation: R,
 }
@@ -129,7 +128,7 @@ impl<R: OverField, T: Transcript<R>> IPForMLSumcheck<R, T> {
     #[inline]
     pub fn sample_round(transcript: &mut T) -> VerifierMsg<R> {
         VerifierMsg {
-            randomness: transcript.get_big_field_challenge(),
+            randomness: transcript.get_challenge(),
         }
     }
 }
@@ -138,7 +137,7 @@ impl<R: OverField, T: Transcript<R>> IPForMLSumcheck<R, T> {
 /// p_i.len()-1 passing through the y-values in p_i at x = 0,..., p_i.len()-1
 /// and evaluate this  polynomial at `eval_at`. In other words, efficiently compute
 ///  \sum_{i=0}^{len p_i - 1} p_i[i] * (\prod_{j!=i} (eval_at - j)/(i-j))
-pub(crate) fn interpolate_uni_poly<R: OverField>(p_i: &[R], eval_at: R::F) -> R {
+pub(crate) fn interpolate_uni_poly<R: OverField>(p_i: &[R], eval_at: R::BaseRing) -> R {
     let len = p_i.len();
 
     let mut evals = vec![];
@@ -148,12 +147,12 @@ pub(crate) fn interpolate_uni_poly<R: OverField>(p_i: &[R], eval_at: R::F) -> R 
 
     //`prod = \prod_{j} (eval_at - j)`
     // we return early if 0 <= eval_at <  len, i.e. if the desired value has been passed
-    let mut check = R::F::zero();
+    let mut check = R::BaseRing::zero();
     for i in 1..len {
         if eval_at == check {
             return p_i[i - 1];
         }
-        check += R::F::one();
+        check += R::BaseRing::one();
 
         let tmp = eval_at - check;
         evals.push(tmp);
@@ -191,22 +190,20 @@ pub(crate) fn interpolate_uni_poly<R: OverField>(p_i: &[R], eval_at: R::F) -> R 
     //  - for len <= 33 with i128
     //  - for len >  33 with BigInt
     if p_i.len() <= 20 {
-        let last_denom = R::F::from(u64_factorial(len - 1));
+        let last_denom = R::BaseRing::from(u64_factorial(len - 1));
         let mut ratio_numerator = 1i64;
         let mut ratio_enumerator = 1u64;
 
         for i in (0..len).rev() {
             let ratio_numerator_f = if ratio_numerator < 0 {
-                -R::F::from((-ratio_numerator) as u64)
+                -R::BaseRing::from((-ratio_numerator) as u64)
             } else {
-                R::F::from(ratio_numerator as u64)
+                R::BaseRing::from(ratio_numerator as u64)
             };
 
-            let x: R = R::field_to_base_ring(
-                &(prod * R::F::from(ratio_enumerator)
-                    / (last_denom * ratio_numerator_f * evals[i])),
-            )
-            .into();
+            let x: R = (prod * R::BaseRing::from(ratio_enumerator)
+                / (last_denom * ratio_numerator_f * evals[i]))
+                .into();
 
             res += p_i[i] * x;
 
@@ -217,22 +214,20 @@ pub(crate) fn interpolate_uni_poly<R: OverField>(p_i: &[R], eval_at: R::F) -> R 
             }
         }
     } else if p_i.len() <= 33 {
-        let last_denom = R::F::from(u128_factorial(len - 1));
+        let last_denom = R::BaseRing::from(u128_factorial(len - 1));
         let mut ratio_numerator = 1i128;
         let mut ratio_enumerator = 1u128;
 
         for i in (0..len).rev() {
             let ratio_numerator_f = if ratio_numerator < 0 {
-                -R::F::from((-ratio_numerator) as u128)
+                -R::BaseRing::from((-ratio_numerator) as u128)
             } else {
-                R::F::from(ratio_numerator as u128)
+                R::BaseRing::from(ratio_numerator as u128)
             };
 
-            let x: R = R::field_to_base_ring(
-                &(prod * R::F::from(ratio_enumerator)
-                    / (last_denom * ratio_numerator_f * evals[i])),
-            )
-            .into();
+            let x: R = (prod * R::BaseRing::from(ratio_enumerator)
+                / (last_denom * ratio_numerator_f * evals[i]))
+                .into();
             res += p_i[i] * x;
 
             // compute ratio for the next step which is current_ratio * -(len-i)/i
@@ -244,17 +239,17 @@ pub(crate) fn interpolate_uni_poly<R: OverField>(p_i: &[R], eval_at: R::F) -> R 
     } else {
         // since we are using field operations, we can merge
         // `last_denom` and `ratio_numerator` into a single field element.
-        let mut denom_up = field_factorial::<R::F>(len - 1);
-        let mut denom_down = R::F::one();
+        let mut denom_up = field_factorial::<R::BaseRing>(len - 1);
+        let mut denom_down = R::BaseRing::one();
 
         for i in (0..len).rev() {
-            let x: R = R::field_to_base_ring(&(prod * denom_down / (denom_up * evals[i]))).into();
+            let x: R = (prod * denom_down / (denom_up * evals[i])).into();
             res += p_i[i] * x;
 
             // compute denom for the next step is -current_denom * (len-i)/i
             if i != 0 {
-                denom_up *= -R::F::from((len - i) as u64);
-                denom_down *= R::F::from(i as u64);
+                denom_up *= -R::BaseRing::from((len - i) as u64);
+                denom_down *= R::BaseRing::from(i as u64);
             }
         }
     }

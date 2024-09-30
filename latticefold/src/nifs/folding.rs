@@ -1,8 +1,12 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
+use ark_std::iterable::Iterable;
+use ark_std::log2;
+use ark_std::marker::PhantomData;
+use ark_std::marker::PhantomData;
+use ark_std::sync::Arc;
+use lattirust_ring::OverField;
 
-use crate::utils::sumcheck::MLSumcheck;
-use crate::utils::sumcheck::SumCheckError::SumCheckFailed;
+use super::error::FoldingError;
+use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
     parameters::DecompositionParams,
@@ -10,17 +14,13 @@ use crate::{
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 
+use super::error::FoldingError;
 use lattirust_arithmetic::{
     challenge_set::latticefold_challenge_set::OverField,
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
     ring::PolyRing,
 };
-
-use super::error::FoldingError;
-
-use ark_std::iterable::Iterable;
-use ark_std::log2;
 
 #[derive(Clone)]
 pub struct FoldingProof<NTT: OverField> {
@@ -32,7 +32,7 @@ pub struct FoldingProof<NTT: OverField> {
 }
 
 pub trait FoldingProver<NTT: OverField, T: Transcript<NTT>> {
-    fn prove<const C: usize, CR: PolyRing, P: DecompositionParams>(
+    fn prove<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
         transcript: &mut impl Transcript<NTT>,
@@ -60,7 +60,7 @@ pub struct LFFoldingVerifier<NTT, T> {
 }
 
 impl<NTT: OverField, T: Transcript<NTT>> FoldingProver<NTT, T> for LFFoldingProver<NTT, T> {
-    fn prove<const C: usize, CR: PolyRing, P: DecompositionParams>(
+    fn prove<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
         transcript: &mut impl Transcript<NTT>,

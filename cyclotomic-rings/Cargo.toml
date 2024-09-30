@@ -4,7 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ark-ff = { workspace = true }
+ark-crypto-primitives = { version = "0.4.0", default-features = false, features = [
+    "sponge",
+] }
 num-bigint = "0.4.5"
-lattirust-arithmetic = { git="ssh://git@github.com/NethermindEth/lattirust.git", branch = "main"}
 rand = "0.8.5"
-ark-ff = "0.4.2"
+lattirust-linear-algebra = { workspace = true }
+lattirust-poly = { workspace = true }
+lattirust-ring = { workspace = true }
+thiserror = { workspace = true }

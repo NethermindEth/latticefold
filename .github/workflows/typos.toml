@@ -1,2 +1,4 @@
-[default.extend-words]
-splitted = "splitted"
+[default]
+extend-ignore-re = [
+    "0x.*_i128",
+]

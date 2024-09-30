@@ -1,8 +1,11 @@
-use ark_ff::UniformRand;
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
+use ark_std::{time::Duration, UniformRand};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use lattirust_arithmetic::ring::Pow2CyclotomicPolyRingNTT;
+use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
+    Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
+};
 use rand::thread_rng;
-use std::time::Duration;
 
 use latticefold::{
     commitment::AjtaiCommitmentScheme,
@@ -20,7 +23,10 @@ fn ajtai_benchmark<
 >(
     c: &mut Criterion,
     p: P,
-) {
+) where
+    Pow2CyclotomicPolyRingNTT<Q, N>: From<Pow2CyclotomicPolyRing<Q, N>>,
+    Pow2CyclotomicPolyRing<Q, N>: From<Pow2CyclotomicPolyRingNTT<Q, N>>,
+{
     let ajtai_data: AjtaiCommitmentScheme<C, W, Pow2CyclotomicPolyRingNTT<Q, N>> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
 
@@ -36,7 +42,7 @@ fn ajtai_benchmark<
 }
 
 fn ajtai_benchmarks(c: &mut Criterion) {
-    ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, { 1 << 15 }, _>(c, DilithiumTestParams);
+    ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, 32768, _>(c, DilithiumTestParams);
 
     // TODO: more benchmarks with different params.
 }
