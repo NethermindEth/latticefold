@@ -9,11 +9,19 @@ pub trait Transcript<R: OverField> {
     type TranscriptConfig: Debug;
 
     fn new(config: &Self::TranscriptConfig) -> Self;
+
     fn absorb(&mut self, v: &R);
+
     fn absorb_field_element(&mut self, v: &R::BaseRing) {
         self.absorb(&From::from(*v))
     }
-    fn absorb_slice(&mut self, v: &[R]);
+
+    fn absorb_slice(&mut self, v: &[R]) {
+        for ring in v {
+            self.absorb(ring);
+        }
+    }
+
     fn get_big_challenge(&mut self) -> R::BaseRing;
 
     fn get_big_challenges(&mut self, n: usize) -> Vec<R::BaseRing> {
@@ -27,6 +35,7 @@ pub trait TranscriptWithSmallChallenges<R: SuitableRing>: Transcript<R> {
     type ChallengeSet: LatticefoldChallengeSet<R>;
 
     fn get_small_challenge(&mut self) -> R::CoefficientRepresentation;
+
     fn get_small_challenges(&mut self, n: usize) -> Vec<R::CoefficientRepresentation> {
         let mut challenges = Vec::with_capacity(n);
         challenges.extend((0..n).map(|_| self.get_small_challenge()));

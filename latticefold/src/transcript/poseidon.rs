@@ -41,12 +41,6 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
         );
     }
 
-    fn absorb_slice(&mut self, v: &[R]) {
-        for ring in v {
-            self.absorb(ring);
-        }
-    }
-
     fn get_big_challenge(&mut self) -> R::BaseRing {
         let extension_degree = R::BaseRing::extension_degree();
         let c = self
@@ -64,9 +58,77 @@ impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithSmallChallen
     type ChallengeSet = CS;
 
     fn get_small_challenge(&mut self) -> R::CoefficientRepresentation {
-        todo!()
-        // let c: Vec<R::BaseRing> = self.sponge.squeeze_field_elements(1);
-        // self.sponge.absorb(&c);
-        // Self::ChallengeSet::small_challenge_from_random_bytes(&c[0].into_bigint().to_bytes_be())
+        let random_bytes = self.sponge.squeeze_bytes(Self::ChallengeSet::BYTES_NEEDED);
+
+        Self::ChallengeSet::small_challenge_from_random_bytes(&random_bytes)
+            .expect("not enough bytes to get a small challenge")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ark_ff::BigInt;
+    use cyclotomic_rings::{GoldilocksChallengeSet, GoldilocksRingNTT, GoldilocksRingPoly};
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
+
+    use super::*;
+
+    #[test]
+    fn test_get_big_challenge() {
+        let mut transcript =
+            PoseidonTranscript::<GoldilocksRingNTT, GoldilocksChallengeSet>::default();
+
+        transcript
+            .sponge
+            .absorb(&Fq::from(BigInt::<1>::from(0xFFu32)));
+
+        let expected: Fq3 = Fq3::new(
+            Fq::new(BigInt([10462816198028961279])),
+            Fq::new(BigInt([17217694161994925895])),
+            Fq::new(BigInt([6163269596856181508])),
+        );
+
+        assert_eq!(expected, transcript.get_big_challenge())
+    }
+
+    #[test]
+    fn test_get_small_challenge() {
+        let mut transcript =
+            PoseidonTranscript::<GoldilocksRingNTT, GoldilocksChallengeSet>::default();
+
+        transcript
+            .sponge
+            .absorb(&Fq::from(BigInt::<1>::from(0xFFu32)));
+
+        let expected_coeffs: Vec<Fq> = vec![
+            Fq::new(BigInt([31])),
+            Fq::new(BigInt([18446744069414584312])),
+            Fq::new(BigInt([18446744069414584291])),
+            Fq::new(BigInt([14])),
+            Fq::new(BigInt([18446744069414584306])),
+            Fq::new(BigInt([18446744069414584312])),
+            Fq::new(BigInt([30])),
+            Fq::new(BigInt([18446744069414584313])),
+            Fq::new(BigInt([19])),
+            Fq::new(BigInt([18446744069414584317])),
+            Fq::new(BigInt([20])),
+            Fq::new(BigInt([18446744069414584306])),
+            Fq::new(BigInt([18446744069414584295])),
+            Fq::new(BigInt([4])),
+            Fq::new(BigInt([18446744069414584320])),
+            Fq::new(BigInt([7])),
+            Fq::new(BigInt([18446744069414584298])),
+            Fq::new(BigInt([18446744069414584295])),
+            Fq::new(BigInt([18446744069414584304])),
+            Fq::new(BigInt([18446744069414584290])),
+            Fq::new(BigInt([3])),
+            Fq::new(BigInt([18446744069414584304])),
+            Fq::new(BigInt([25])),
+            Fq::new(BigInt([18446744069414584304])),
+        ];
+
+        let expected = GoldilocksRingPoly::from(expected_coeffs);
+
+        assert_eq!(expected, transcript.get_small_challenge())
     }
 }
