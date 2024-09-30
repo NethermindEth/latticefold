@@ -48,4 +48,6 @@ pub enum FoldingError<R: Ring> {
     SumCheckError(#[from] SumCheckError<R>),
     #[error("constraint system related error: {0}")]
     ConstraintSystemError(#[from] CSError),
+    #[error("virtual polynomial error: {0}")]
+    ArithError(#[from] ArithErrors),
 }
