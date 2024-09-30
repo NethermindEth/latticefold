@@ -1,5 +1,3 @@
-use lattirust_poly::polynomials::ArithErrors;
-use lattirust_ring::Ring;
 use thiserror::Error;
 
 #[derive(Debug, Error)]

@@ -1,9 +1,6 @@
 // PGold = 2^64 − 2^32 + 1
 
-use lattirust_ring::{
-    cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly},
-    Ring,
-};
+use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly};
 
 use super::SuitableRing;
 use crate::challenge_set::error;

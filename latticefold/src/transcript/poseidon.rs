@@ -2,7 +2,7 @@ use ark_crypto_primitives::sponge::{
     poseidon::{PoseidonConfig, PoseidonSponge},
     CryptographicSponge,
 };
-use ark_ff::{BigInteger, Field, PrimeField};
+use ark_ff::Field;
 use ark_std::marker::PhantomData;
 use lattirust_ring::{OverField, PolyRing};
 
@@ -36,7 +36,8 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
         self.sponge.absorb(
             &v.coeffs()
                 .into_iter()
-                .map(|x| x.to_base_prime_field_elements()).flatten().collect::<Vec<_>>(),
+                .flat_map(|x| x.to_base_prime_field_elements())
+                .collect::<Vec<_>>(),
         );
     }
 
@@ -52,7 +53,8 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
             .sponge
             .squeeze_field_elements(extension_degree as usize);
         self.sponge.absorb(&c);
-        <R::BaseRing as Field>::from_base_prime_field_elems(&c).expect("something went wrong: c does not contain extension_degree elements")
+        <R::BaseRing as Field>::from_base_prime_field_elems(&c)
+            .expect("something went wrong: c does not contain extension_degree elements")
     }
 }
 

@@ -42,7 +42,6 @@ impl LatticefoldChallengeSet<StarkRingNTT> for StarkChallengeSet {
 #[cfg(test)]
 mod tests {
     use ark_ff::BigInt;
-    use lattirust_ring::PolyRing;
 
     use super::*;
 

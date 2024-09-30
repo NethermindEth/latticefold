@@ -1,12 +1,7 @@
-use ark_ff::Field;
-
 use error::ChallengeSetError;
 use lattirust_ring::{
-    cyclotomic_ring::models::pow2_debug::{
-        Fp64Pow2, Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
-    },
+    cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
     zn::z_q::Zq,
-    OverField,
 };
 
 use crate::SuitableRing;
