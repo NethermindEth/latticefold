@@ -3,7 +3,6 @@
 
 use ark_std::{time::Duration, UniformRand};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use cyclotomic_rings::{FrogRingNTT, GoldilocksRingNTT, StarkRingNTT};
 use latticefold::parameters::{FrogParams, GoldilocksParams, StarkPrimeParams};
 use latticefold::{
     commitment::AjtaiCommitmentScheme,
@@ -11,13 +10,11 @@ use latticefold::{
         DecompositionParamData, DecompositionParams, DilithiumTestParams, DILITHIUM_PRIME,
     },
 };
-use lattirust_ring::cyclotomic_ring::models::frog_ring::FrogRingConfig;
-use lattirust_ring::cyclotomic_ring::models::goldilocks::GoldilocksRingConfig;
+
+use cyclotomic_rings::{FrogRingNTT, GoldilocksRingNTT, StarkRingNTT};
 use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
     Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
 };
-use lattirust_ring::cyclotomic_ring::models::stark_prime::StarkRingConfig;
-use lattirust_ring::cyclotomic_ring::CyclotomicPolyRingNTTGeneral;
 use rand::thread_rng;
 
 fn ajtai_benchmark<
@@ -57,8 +54,8 @@ fn ajtai_starkprime_benchmark<const C: usize, const W: usize, P: DecompositionPa
     let ajtai_data: AjtaiCommitmentScheme<C, W, StarkRingNTT> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let witness: Vec<CyclotomicPolyRingNTTGeneral<StarkRingConfig, 4, 16>> = (0..W)
-        .map(|_| CyclotomicPolyRingNTTGeneral::rand(&mut thread_rng()))
+    let witness: Vec<StarkRingNTT> = (0..W)
+        .map(|_| StarkRingNTT::rand(&mut thread_rng()))
         .collect();
 
     c.bench_with_input(
@@ -77,11 +74,11 @@ fn ajtai_goldilocks_benchmark<const C: usize, const W: usize, P: DecompositionPa
 ) {
     let ajtai_data: AjtaiCommitmentScheme<C, W, GoldilocksRingNTT> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
-
-    let witness: Vec<CyclotomicPolyRingNTTGeneral<GoldilocksRingConfig, 1, 8>> = (0..W)
-        .map(|_| CyclotomicPolyRingNTTGeneral::rand(&mut thread_rng()))
+    println!("AJTAI DATA");
+    let witness: Vec<GoldilocksRingNTT> = (0..W)
+        .map(|_| GoldilocksRingNTT::rand(&mut thread_rng()))
         .collect();
-
+    println!("WITNESS DATA");
     c.bench_with_input(
         BenchmarkId::new(
             format!("Ajtai Godlilocks C={} W={}", C, W),
@@ -99,8 +96,8 @@ fn ajtai_frog_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
     let ajtai_data: AjtaiCommitmentScheme<C, W, FrogRingNTT> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let witness: Vec<CyclotomicPolyRingNTTGeneral<FrogRingConfig, 1, 4>> = (0..W)
-        .map(|_| CyclotomicPolyRingNTTGeneral::rand(&mut thread_rng()))
+    let witness: Vec<FrogRingNTT> = (0..W)
+        .map(|_| FrogRingNTT::rand(&mut thread_rng()))
         .collect();
 
     c.bench_with_input(
@@ -116,11 +113,10 @@ fn ajtai_frog_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
 macro_rules! run_ajtai_benchmarks {
     ($c:expr, $($w:expr),+) => {
         $(
-            ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, $w, _>($c, DilithiumTestParams);
             ajtai_starkprime_benchmark::<9, $w, _>($c, StarkPrimeParams);
-            // TODO: These 2 are failing at assert!(coefficients.len() == D) in serial_X_crt_in_place
-            //ajtai_frog_benchmark::<9, $w, _>($c, FrogParams);
-            //ajtai_goldilocks_benchmark::<9, $w, _>($c, GoldilocksParams);
+            ajtai_goldilocks_benchmark::<9, $w, _>($c, GoldilocksParams);
+            ajtai_frog_benchmark::<9, $w, _>($c, FrogParams);
+            ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, $w, _>($c, DilithiumTestParams);
         )+
     };
 }
