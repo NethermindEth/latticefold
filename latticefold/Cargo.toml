@@ -36,7 +36,7 @@ match_bool = "warn"
 needless_bool = "warn"
 implicit_clone = "warn"
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.5.1"
 
 [[bench]]
 name = "ajtai"

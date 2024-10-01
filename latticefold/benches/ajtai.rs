@@ -37,13 +37,26 @@ fn ajtai_benchmark<
         .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
         .collect();
 
+    let ajtai_data_2 = ajtai_data.clone();
+    let witness_2 = witness.clone();
+    let p_2 = p.clone();
+
     c.bench_with_input(
         BenchmarkId::new(
-            format!("Ajtai Dilithium C={} W={}", C, W),
+            format!("Ajtai - CommitNTT - Dilithium C={} W={}", C, W),
             DecompositionParamData::from(p),
         ),
         &(ajtai_data, witness),
         |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
+    );
+
+    c.bench_with_input(
+        BenchmarkId::new(
+            format!("Ajtai - DecomposeCommitNTT - Dilithium C={} W={}", C, W),
+            DecompositionParamData::from(p_2),
+        ),
+        &(ajtai_data_2, witness_2),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
     );
 }
 
@@ -58,13 +71,26 @@ fn ajtai_starkprime_benchmark<const C: usize, const W: usize, P: DecompositionPa
         .map(|_| StarkRingNTT::rand(&mut thread_rng()))
         .collect();
 
+    let ajtai_data_2 = ajtai_data.clone();
+    let witness_2 = witness.clone();
+    let p_2 = p.clone();
+
     c.bench_with_input(
         BenchmarkId::new(
-            format!("Ajtai Starkprime C={} W={}", C, W),
+            format!("Ajtai - CommitNTT - Starkprime C={} W={}", C, W),
             DecompositionParamData::from(p),
         ),
         &(ajtai_data, witness),
         |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
+    );
+
+    c.bench_with_input(
+        BenchmarkId::new(
+            format!("Ajtai - DecomposeCommitNTT - Starkprime C={} W={}", C, W),
+            DecompositionParamData::from(p_2),
+        ),
+        &(ajtai_data_2, witness_2),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
     );
 }
 
@@ -74,18 +100,31 @@ fn ajtai_goldilocks_benchmark<const C: usize, const W: usize, P: DecompositionPa
 ) {
     let ajtai_data: AjtaiCommitmentScheme<C, W, GoldilocksRingNTT> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
-    println!("AJTAI DATA");
-    let witness: Vec<GoldilocksRingNTT> = (0..W)
+
+    let witness: Vec<GoldilocksRingNTT> = (0..24)
         .map(|_| GoldilocksRingNTT::rand(&mut thread_rng()))
         .collect();
-    println!("WITNESS DATA");
+
+    let ajtai_data_2 = ajtai_data.clone();
+    let witness_2 = witness.clone();
+    let p_2 = p.clone();
+
     c.bench_with_input(
         BenchmarkId::new(
-            format!("Ajtai Godlilocks C={} W={}", C, W),
+            format!("Ajtai - CommitNTT - Goldilocks C={} W={}", C, W),
             DecompositionParamData::from(p),
         ),
         &(ajtai_data, witness),
         |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
+    );
+
+    c.bench_with_input(
+        BenchmarkId::new(
+            format!("Ajtai - DecomposeCommitNTT - Goldilocks C={} W={}", C, W),
+            DecompositionParamData::from(p_2),
+        ),
+        &(ajtai_data_2, witness_2),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
     );
 }
 
@@ -100,13 +139,26 @@ fn ajtai_frog_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
         .map(|_| FrogRingNTT::rand(&mut thread_rng()))
         .collect();
 
+    let ajtai_data_2 = ajtai_data.clone();
+    let witness_2 = witness.clone();
+    let p_2 = p.clone();
+
     c.bench_with_input(
         BenchmarkId::new(
-            format!("Ajtai Frog C={} W={}", C, W),
+            format!("Ajtai - CommitNTT - Frog C={} W={}", C, W),
             DecompositionParamData::from(p),
         ),
         &(ajtai_data, witness),
         |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
+    );
+
+    c.bench_with_input(
+        BenchmarkId::new(
+            format!("Ajtai - DecomposeCommitNTT - Frog C={} W={}", C, W),
+            DecompositionParamData::from(p_2),
+        ),
+        &(ajtai_data_2, witness_2),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
     );
 }
 
@@ -121,7 +173,7 @@ macro_rules! run_ajtai_benchmarks {
     };
 }
 
-fn ajtai_benchmarks(c: &mut Criterion) {
+fn ajtai_commit_benchmarks(c: &mut Criterion) {
     run_ajtai_benchmarks!(
         c,
         { 1 << 10 },
@@ -139,7 +191,7 @@ fn ajtai_benchmarks(c: &mut Criterion) {
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {
-    ajtai_benchmarks(c);
+    ajtai_commit_benchmarks(c);
 }
 
 criterion_group!(
