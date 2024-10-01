@@ -139,7 +139,7 @@ fn prepare_g2_i_mle<NTT: OverField>(
 fn prepare_g3_i_mle<NTT: OverField>(
     Mz_mles: &Vec<DenseMultilinearExtension<NTT>>,
     zeta_i: NTT,
-    r_i_eq: Arc<DenseMultilinearExtension<NTT>>
+    r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
 ) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
     let mut gi_3 = VirtualPolynomial::new(log_m);
 
