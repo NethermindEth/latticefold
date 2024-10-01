@@ -41,3 +41,4 @@ criterion = "0.5.1"
 [[bench]]
 name = "ajtai"
 harness = false
+
