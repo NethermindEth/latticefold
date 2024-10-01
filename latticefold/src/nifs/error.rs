@@ -50,4 +50,6 @@ pub enum FoldingError<R: Ring> {
     ConstraintSystemError(#[from] CSError),
     #[error("virtual polynomial error: {0}")]
     ArithError(#[from] ArithErrors),
+    #[error("mle evaluation failed: {0}")]
+    EvaluationError(String),
 }

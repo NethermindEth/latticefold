@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use ark_std::iterable::Iterable;
 use ark_std::log2;
 use ark_std::marker::PhantomData;
@@ -109,22 +110,22 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             })
             .collect::<Result<_, FoldingError<_>>>()?;
 
-        todo!()
-        // let g = create_sumcheck_polynomial::<NTT, P>(
-        //     log_m,
-        //     &f_hat_mles,
-        //     &alpha_s,
-        //     &Mz_mles_vec,
-        //     &zeta_s,
-        //     ris,
-        //     &beta_s,
-        //     &mu_s,
-        // );
+        let g = create_sumcheck_polynomial::<_, P>(
+            log_m,
+            &f_hat_mles,
+            &alpha_s,
+            &Mz_mles_vec,
+            &zeta_s,
+            &ris,
+            &beta_s,
+            &mu_s,
+        )?;
 
-        // let claim_g1 = alpha_s
+        // let claim_g1: NTT = alpha_s
         //     .iter()
         //     .zip(vs.iter())
-        //     .fold(NTT::zero(), |acc, (&alpha, &vi)| acc + (alpha * vi));
+        //     .map(|(&alpha_i, &v_i)| alpha_i * v_i)
+        //     .sum();
         // let claim_g2 = zeta_s
         //     .iter()
         //     .zip(us.iter())
@@ -136,36 +137,47 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         //         });
         //         acc + ui_sum
         //     });
-        // let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
-        // let r_0 = prover_state
-        //     .randomness
-        //     .into_iter()
-        //     .map(|x| NTT::field_to_base_ring(&x).into())
-        //     .collect::<Vec<NTT>>();
 
-        // // Step 3: Evaluate thetas and etas
-        // let thetas = f_hat_mles
-        //     .iter()
-        //     .map(|f_hat_mle| f_hat_mle.evaluate(r_0.as_slice()).unwrap())
-        //     .collect::<Vec<_>>();
-        // drop(f_hat_mles);
-        // let etas: Vec<Vec<NTT>> = Mz_mles_vec
-        //     .iter()
-        //     .map(|Mz_mles| {
-        //         Mz_mles
-        //             .iter()
-        //             .map(|mle| mle.evaluate(r_0.as_slice()).unwrap())
-        //             .collect::<Vec<_>>()
-        //     })
-        //     .collect::<Vec<_>>();
-        // drop(Mz_mles_vec);
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
+        let r_0 = prover_state
+            .randomness
+            .into_iter()
+            .map(|x| x.into())
+            .collect::<Vec<NTT>>();
 
-        // transcript.absorb_ring_vec(&thetas);
-        // etas.iter()
-        //     .for_each(|etas| transcript.absorb_ring_vec(&etas));
+        // Step 3: Evaluate thetas and etas
+        let thetas: Vec<NTT> = f_hat_mles
+            .iter()
+            .map(|f_hat_mle| {
+                f_hat_mle
+                    .evaluate(&r_0)
+                    .ok_or(FoldingError::<NTT>::EvaluationError("f_hat".to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-        // // Step 5 get rho challenges
-        // let rhos = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
+        let etas: Vec<Vec<NTT>> = Mz_mles_vec
+            .iter()
+            .map(|Mz_mles| {
+                Mz_mles
+                    .iter()
+                    .map(|mle| {
+                        mle.evaluate(r_0.as_slice())
+                            .ok_or(FoldingError::<NTT>::EvaluationError("Mz".to_string()))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        transcript.absorb_slice(&thetas);
+        etas.iter()
+            .for_each(|etas| transcript.absorb_slice(&etas));
+
+        // Step 5 get rho challenges
+        let rho_s = get_rhos::<_, _, P>(transcript);
+
+        let f_0: Vec<NTT> = rho_s.iter().zip(w_s).map(|(&rho_i, w_s)| )
+
+        todo!()
 
         // // Step 6 compute v0, u0, y0, x_w0
         // let v_0: NTT =
@@ -403,33 +415,33 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         // })
     }
 }
-fn create_matrix_mle<NTT: OverField>(
-    log_m: usize,
-    Mi: &Vec<Vec<NTT>>,
-    zi: &Vec<NTT>,
-) -> DenseMultilinearExtension<NTT> {
-    let zero_vector = usize_to_binary_vector::<NTT>(0, log2(Mi.len()) as usize);
-    let mle_z_ccs_b = mle_val_from_vector(&zi, &zero_vector);
-    let evaluations: Vec<NTT> = mle_matrix_to_val_eval_second(&Mi, &zero_vector)
-        .iter()
-        .map(|val| *val * mle_z_ccs_b)
-        .collect();
-    let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+// fn create_matrix_mle<NTT: OverField>(
+//     log_m: usize,
+//     Mi: &Vec<Vec<NTT>>,
+//     zi: &Vec<NTT>,
+// ) -> DenseMultilinearExtension<NTT> {
+//     let zero_vector = usize_to_binary_vector::<NTT>(0, log2(Mi.len()) as usize);
+//     let mle_z_ccs_b = mle_val_from_vector(&zi, &zero_vector);
+//     let evaluations: Vec<NTT> = mle_matrix_to_val_eval_second(&Mi, &zero_vector)
+//         .iter()
+//         .map(|val| *val * mle_z_ccs_b)
+//         .collect();
+//     let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
 
-    let matrix_mle = (1..Mi.len())
-        .into_iter()
-        .map(|i| usize_to_binary_vector::<NTT>(i, log2(Mi.len()) as usize))
-        .fold(mle, |acc, b| {
-            let mle_z_ccs_b = mle_val_from_vector(&zi, &b);
-            let evaluations: Vec<NTT> = utils::mle_matrix_to_val_eval_second(&Mi, &b)
-                .iter()
-                .map(|val| *val * mle_z_ccs_b)
-                .collect();
-            let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
-            acc + mle
-        });
-    matrix_mle
-}
+//     let matrix_mle = (1..Mi.len())
+//         .into_iter()
+//         .map(|i| usize_to_binary_vector::<NTT>(i, log2(Mi.len()) as usize))
+//         .fold(mle, |acc, b| {
+//             let mle_z_ccs_b = mle_val_from_vector(&zi, &b);
+//             let evaluations: Vec<NTT> = utils::mle_matrix_to_val_eval_second(&Mi, &b)
+//                 .iter()
+//                 .map(|val| *val * mle_z_ccs_b)
+//                 .collect();
+//             let mle = DenseMultilinearExtension::from_evaluations_vec(log_m, evaluations);
+//             acc + mle
+//         });
+//     matrix_mle
+// }
 
 #[cfg(test)]
 mod tests {
