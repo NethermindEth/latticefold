@@ -153,7 +153,7 @@ mod tests_pow2 {
 #[cfg(test)]
 mod tests_stark {
     use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
-    use ark_ff::{One, Zero};
+    use ark_ff::Zero;
     use cyclotomic_rings::StarkChallengeSet;
     use lattirust_poly::polynomials::VirtualPolynomial;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
@@ -203,7 +203,7 @@ mod tests_stark {
 #[cfg(test)]
 mod tests_frog {
     use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
-    use ark_ff::{One, Zero};
+    use ark_ff::Zero;
     use cyclotomic_rings::FrogChallengeSet;
     use lattirust_poly::polynomials::VirtualPolynomial;
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
