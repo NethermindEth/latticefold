@@ -3,7 +3,7 @@
 
 use ark_std::{time::Duration, UniformRand};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use latticefold::parameters::{FrogParams, GoldilocksParams, StarkPrimeParams};
+use latticefold::parameters::{BabyBearParams, FrogParams, GoldilocksParams, StarkPrimeParams};
 use latticefold::{
     commitment::AjtaiCommitmentScheme,
     parameters::{
@@ -11,7 +11,7 @@ use latticefold::{
     },
 };
 
-use cyclotomic_rings::{FrogRingNTT, GoldilocksRingNTT, StarkRingNTT};
+use cyclotomic_rings::{FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, BabyBearRingNTT};
 use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
     Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
 };
@@ -101,7 +101,7 @@ fn ajtai_goldilocks_benchmark<const C: usize, const W: usize, P: DecompositionPa
     let ajtai_data: AjtaiCommitmentScheme<C, W, GoldilocksRingNTT> =
         AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let witness: Vec<GoldilocksRingNTT> = (0..24)
+    let witness: Vec<GoldilocksRingNTT> = (0..W)
         .map(|_| GoldilocksRingNTT::rand(&mut thread_rng()))
         .collect();
 
@@ -121,6 +121,40 @@ fn ajtai_goldilocks_benchmark<const C: usize, const W: usize, P: DecompositionPa
     c.bench_with_input(
         BenchmarkId::new(
             format!("Ajtai - DecomposeCommitNTT - Goldilocks C={} W={}", C, W),
+            DecompositionParamData::from(p_2),
+        ),
+        &(ajtai_data_2, witness_2),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
+    );
+}
+
+fn ajtai_babybear_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
+    c: &mut Criterion,
+    p: P,
+) {
+    let ajtai_data: AjtaiCommitmentScheme<C, W, BabyBearRingNTT> =
+        AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+    let witness: Vec<BabyBearRingNTT> = (0..W)
+        .map(|_| BabyBearRingNTT::rand(&mut thread_rng()))
+        .collect();
+
+    let ajtai_data_2 = ajtai_data.clone();
+    let witness_2 = witness.clone();
+    let p_2 = p.clone();
+
+    c.bench_with_input(
+        BenchmarkId::new(
+            format!("Ajtai - CommitNTT - BabyBear C={} W={}", C, W),
+            DecompositionParamData::from(p),
+        ),
+        &(ajtai_data, witness),
+        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
+    );
+
+    c.bench_with_input(
+        BenchmarkId::new(
+            format!("Ajtai - DecomposeCommitNTT - BabyBear C={} W={}", C, W),
             DecompositionParamData::from(p_2),
         ),
         &(ajtai_data_2, witness_2),
@@ -167,8 +201,9 @@ macro_rules! run_ajtai_benchmarks {
         $(
             ajtai_starkprime_benchmark::<$cw, $w, _>($c, StarkPrimeParams);
             ajtai_goldilocks_benchmark::<$cw, $w, _>($c, GoldilocksParams);
+            ajtai_babybear_benchmark::<$cw, $w, _>($c, BabyBearParams);
             ajtai_frog_benchmark::<$cw, $w, _>($c, FrogParams);
-            //ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, $w, _>($c, DilithiumTestParams);
+            ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, $w, _>($c, DilithiumTestParams);
         )+
     };
 }
@@ -177,7 +212,7 @@ macro_rules! run_ajtai_benchmarks {
 fn ajtai_commit_benchmarks(c: &mut Criterion) {
     run_ajtai_benchmarks!(
          c,
-         9, 
+         9,
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },
@@ -192,7 +227,7 @@ fn ajtai_commit_benchmarks(c: &mut Criterion) {
     );
     run_ajtai_benchmarks!(
          c,
-         10, 
+         10,
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },
@@ -207,7 +242,7 @@ fn ajtai_commit_benchmarks(c: &mut Criterion) {
     );
     run_ajtai_benchmarks!(
          c,
-         11, 
+         11,
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },
@@ -222,7 +257,7 @@ fn ajtai_commit_benchmarks(c: &mut Criterion) {
     );
     run_ajtai_benchmarks!(
          c,
-         12, 
+         12,
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },
@@ -237,7 +272,7 @@ fn ajtai_commit_benchmarks(c: &mut Criterion) {
     );
     run_ajtai_benchmarks!(
          c,
-         13, 
+         13,
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },
@@ -252,7 +287,7 @@ fn ajtai_commit_benchmarks(c: &mut Criterion) {
     );
     run_ajtai_benchmarks!(
          c,
-         14, 
+         14,
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },
@@ -267,7 +302,7 @@ fn ajtai_commit_benchmarks(c: &mut Criterion) {
     );
     run_ajtai_benchmarks!(
          c,
-         15, 
+         15,
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },

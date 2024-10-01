@@ -55,6 +55,16 @@ impl DecompositionParams for GoldilocksParams {
 }
 
 #[derive(Clone, Copy)]
+pub struct BabyBearParams;
+
+impl DecompositionParams for BabyBearParams {
+    const B: u128 = 1 << 27;
+    const L: usize = 10;
+    const B_SMALL: u128 = 2;
+    const K: usize = 27;
+}
+
+#[derive(Clone, Copy)]
 pub struct FrogParams;
 
 impl DecompositionParams for FrogParams {

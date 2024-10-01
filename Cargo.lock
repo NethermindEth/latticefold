@@ -742,7 +742,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#7ad6be4dbc1d886edc5bebd73def78887e670786"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#a7857e048c2b2093d22b0406e502c3922fd5d45f"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -759,7 +759,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#7ad6be4dbc1d886edc5bebd73def78887e670786"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#a7857e048c2b2093d22b0406e502c3922fd5d45f"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -774,7 +774,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#7ad6be4dbc1d886edc5bebd73def78887e670786"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#a7857e048c2b2093d22b0406e502c3922fd5d45f"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
