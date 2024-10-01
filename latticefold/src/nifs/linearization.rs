@@ -67,11 +67,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb_field_element(
-            &<NTT::BaseRing as Field>::from_base_prime_field(
-                <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
-            ),
-        );
+        transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+        ));
         let beta_s: Vec<NTT> = transcript
             .get_challenges(log_m)
             .into_iter()
@@ -143,11 +141,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
-        transcript.absorb_field_element(
-            &<NTT::BaseRing as Field>::from_base_prime_field(
-                <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
-            ),
-        );
+        transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+        ));
         let beta_s: Vec<NTT> = transcript
             .get_challenges(log_m)
             .into_iter()
