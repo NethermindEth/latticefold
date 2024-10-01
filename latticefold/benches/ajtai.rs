@@ -163,19 +163,111 @@ fn ajtai_frog_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
 }
 
 macro_rules! run_ajtai_benchmarks {
-    ($c:expr, $($w:expr),+) => {
+    ($c:expr, $cw: expr, $($w:expr),+) => {
         $(
-            ajtai_starkprime_benchmark::<9, $w, _>($c, StarkPrimeParams);
-            ajtai_goldilocks_benchmark::<9, $w, _>($c, GoldilocksParams);
-            ajtai_frog_benchmark::<9, $w, _>($c, FrogParams);
-            ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, $w, _>($c, DilithiumTestParams);
+            ajtai_starkprime_benchmark::<$cw, $w, _>($c, StarkPrimeParams);
+            ajtai_goldilocks_benchmark::<$cw, $w, _>($c, GoldilocksParams);
+            ajtai_frog_benchmark::<$cw, $w, _>($c, FrogParams);
+            //ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, $w, _>($c, DilithiumTestParams);
         )+
     };
 }
 
+
 fn ajtai_commit_benchmarks(c: &mut Criterion) {
     run_ajtai_benchmarks!(
-        c,
+         c,
+         9, 
+        { 1 << 10 },
+        { 1 << 11 },
+        { 1 << 12 },
+        { 1 << 13 },
+        { 1 << 14 },
+        { 1 << 15 },
+        { 1 << 16 },
+        { 1 << 17 },
+        { 1 << 18 },
+        { 1 << 19 },
+        { 1 << 20 }
+    );
+    run_ajtai_benchmarks!(
+         c,
+         10, 
+        { 1 << 10 },
+        { 1 << 11 },
+        { 1 << 12 },
+        { 1 << 13 },
+        { 1 << 14 },
+        { 1 << 15 },
+        { 1 << 16 },
+        { 1 << 17 },
+        { 1 << 18 },
+        { 1 << 19 },
+        { 1 << 20 }
+    );
+    run_ajtai_benchmarks!(
+         c,
+         11, 
+        { 1 << 10 },
+        { 1 << 11 },
+        { 1 << 12 },
+        { 1 << 13 },
+        { 1 << 14 },
+        { 1 << 15 },
+        { 1 << 16 },
+        { 1 << 17 },
+        { 1 << 18 },
+        { 1 << 19 },
+        { 1 << 20 }
+    );
+    run_ajtai_benchmarks!(
+         c,
+         12, 
+        { 1 << 10 },
+        { 1 << 11 },
+        { 1 << 12 },
+        { 1 << 13 },
+        { 1 << 14 },
+        { 1 << 15 },
+        { 1 << 16 },
+        { 1 << 17 },
+        { 1 << 18 },
+        { 1 << 19 },
+        { 1 << 20 }
+    );
+    run_ajtai_benchmarks!(
+         c,
+         13, 
+        { 1 << 10 },
+        { 1 << 11 },
+        { 1 << 12 },
+        { 1 << 13 },
+        { 1 << 14 },
+        { 1 << 15 },
+        { 1 << 16 },
+        { 1 << 17 },
+        { 1 << 18 },
+        { 1 << 19 },
+        { 1 << 20 }
+    );
+    run_ajtai_benchmarks!(
+         c,
+         14, 
+        { 1 << 10 },
+        { 1 << 11 },
+        { 1 << 12 },
+        { 1 << 13 },
+        { 1 << 14 },
+        { 1 << 15 },
+        { 1 << 16 },
+        { 1 << 17 },
+        { 1 << 18 },
+        { 1 << 19 },
+        { 1 << 20 }
+    );
+    run_ajtai_benchmarks!(
+         c,
+         15, 
         { 1 << 10 },
         { 1 << 11 },
         { 1 << 12 },
