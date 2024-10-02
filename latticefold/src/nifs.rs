@@ -7,7 +7,7 @@ use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     parameters::DecompositionParams,
-    transcript::{Transcript, TranscriptWithSmallChallenges},
+    transcript::TranscriptWithSmallChallenges,
 };
 use decomposition::{
     DecompositionProof, DecompositionProver, DecompositionVerifier, LFDecompositionProver,

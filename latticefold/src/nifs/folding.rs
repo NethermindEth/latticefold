@@ -1,14 +1,11 @@
 #![allow(non_snake_case)]
 use ark_std::iterable::Iterable;
-use ark_std::log2;
 use ark_std::marker::PhantomData;
-use ark_std::sync::Arc;
-use cyclotomic_rings::{rot_sum, SuitableRing};
+use cyclotomic_rings::SuitableRing;
 use lattirust_ring::OverField;
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
-use crate::commitment::Commitment;
 use crate::transcript::TranscriptWithSmallChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
@@ -20,9 +17,8 @@ use crate::{
 
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+    polynomials::{eq_eval, VPAuxInfo},
 };
-use lattirust_ring::PolyRing;
 use utils::*;
 
 mod utils;
@@ -104,7 +100,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
                 let Mz_mle = ccs
                     .M
                     .iter()
-                    .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(&M, &zi)?)))
+                    .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, zi)?)))
                     .collect::<Result<_, FoldingError<_>>>()?;
                 Ok(Mz_mle)
             })
@@ -152,7 +148,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .collect::<Result<Vec<_>, _>>()?;
 
         transcript.absorb_slice(&theta_s);
-        eta_s.iter().for_each(|etas| transcript.absorb_slice(&etas));
+        eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
         // Step 5 get rho challenges
         let rho_s = get_rhos::<_, _, P>(transcript);
@@ -174,7 +170,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
 
         let f_0: Vec<NTT> = rho_s.iter().zip(w_s).fold(
             vec![NTT::ZERO; w_s[0].f.len()],
-            |mut acc, (&rho_i, w_i)| {
+            |acc, (&rho_i, w_i)| {
                 let rho_i: NTT = rho_i.into();
 
                 acc.into_iter()
@@ -236,7 +232,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
             .fold(NTT::zero(), |acc, (zeta, ui)| {
                 let mut zeta_i = NTT::one();
                 let ui_sum = ui.iter().fold(NTT::zero(), |acc, &u_i_t| {
-                    zeta_i = zeta_i * zeta;
+                    zeta_i *= zeta;
                     acc + (u_i_t * zeta_i)
                 });
                 acc + ui_sum
@@ -305,10 +301,8 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
 
 #[cfg(test)]
 mod tests {
-    use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::{
-        cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT, zn::z_q::Zq, PolyRing,
-    };
+    
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRing;
     use rand::thread_rng;
 

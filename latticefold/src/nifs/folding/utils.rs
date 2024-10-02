@@ -3,28 +3,23 @@ use std::iter::successors;
 
 use ark_ff::{Field, PrimeField};
 use ark_std::iterable::Iterable;
-use ark_std::log2;
-use ark_std::marker::PhantomData;
 use ark_std::sync::Arc;
 use cyclotomic_rings::SuitableRing;
-use lattirust_poly::mle::SparseMultilinearExtension;
 use lattirust_poly::polynomials::ArithErrors;
 use lattirust_ring::Ring;
 
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithSmallChallenges;
-use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
-    arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
+    arith::{CCS, LCCCS},
     parameters::DecompositionParams,
     transcript::Transcript,
-    utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 use cyclotomic_rings::rot_sum;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+    polynomials::{build_eq_x_r, VirtualPolynomial},
 };
 use lattirust_ring::{OverField, PolyRing};
 

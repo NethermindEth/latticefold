@@ -1,6 +1,5 @@
-use ark_ff::{Field, PrimeField, Zero};
-use ark_std::iter::successors;
-use lattirust_ring::{Cyclotomic, PolyRing, Ring};
+use ark_ff::{Field, Zero};
+use lattirust_ring::{Cyclotomic, PolyRing};
 
 use crate::SuitableRing;
 
@@ -58,7 +57,7 @@ mod tests {
             (a * b)
                 .into_coeffs()
                 .into_iter()
-                .map(|x| Fq3::from_base_prime_field(x))
+                .map(Fq3::from_base_prime_field)
                 .collect::<Vec<Fq3>>()
         );
     }
