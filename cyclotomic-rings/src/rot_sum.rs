@@ -11,13 +11,7 @@ pub fn rot_sum<R: SuitableRing>(
     assert_eq!(b.len(), R::CoefficientRepresentation::dimension());
 
     b.iter()
-        .zip(successors(Some(a), |&a| {
-            let mut a = a;
-
-            a.rot();
-
-            Some(a)
-        }))
+        .zip(a.into_rot_iter())
         .map(|(b_i, x_i_a)| {
             x_i_a
                 .into_coeffs()
