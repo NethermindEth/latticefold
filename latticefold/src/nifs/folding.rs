@@ -305,10 +305,11 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
 
 #[cfg(test)]
 mod tests {
-    use lattirust_arithmetic::{
-        challenge_set::latticefold_challenge_set::BinarySmallSet,
-        ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq},
+    use lattirust_poly::mle::DenseMultilinearExtension;
+    use lattirust_ring::{
+        cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT, zn::z_q::Zq, PolyRing,
     };
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRing;
     use rand::thread_rng;
 
     use crate::{
@@ -328,11 +329,12 @@ mod tests {
         parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
+    use cyclotomic_rings::challenge_set::BinarySmallSet;
 
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
     const N: usize = 8;
-    type CR = Pow2CyclotomicPolyRing<Zq<Q>, N>;
+    type CR = Pow2CyclotomicPolyRing<Q, N>;
     type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
     type CS = BinarySmallSet<Q, N>;
     type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
@@ -349,12 +351,15 @@ mod tests {
 
     #[test]
     fn test_folding() {
-        let ccs = get_test_ccs::<NTT>();
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<NTT>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(w_ccs);
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -374,7 +379,7 @@ mod tests {
         .unwrap();
 
         let (_, vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, CR, PP>(
+            LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
                 &lcccs,
                 &wit,
                 &mut prover_transcript,
@@ -401,7 +406,7 @@ mod tests {
 
             (lcccs, wit_s)
         };
-        let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, CR, PP>(
+        let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, PP>(
             &lcccs,
             &wit_s,
             &mut prover_transcript,
@@ -421,12 +426,15 @@ mod tests {
 
     #[test]
     fn test_failing_folding() {
-        let ccs = get_test_ccs::<NTT>();
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<NTT>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<NTT> = Witness::from_w_ccs::<CR, PP>(w_ccs.clone());
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
-            cm: wit.commit::<4, 4, CR, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -446,7 +454,7 @@ mod tests {
         .unwrap();
 
         let (_, mut vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, CR, PP>(
+            LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
                 &lcccs,
                 &wit,
                 &mut prover_transcript,
@@ -463,9 +471,9 @@ mod tests {
         )
         .unwrap();
 
-        vec_wit[0] = Witness::<NTT>::from_w_ccs::<CR, PP>(w_ccs);
+        vec_wit[0] = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
-        let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, CR, PP>(
+        let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, PP>(
             &vec_lcccs,
             &vec_wit,
             &mut prover_transcript,
