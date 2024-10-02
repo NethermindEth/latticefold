@@ -104,6 +104,7 @@ pub(super) fn get_rhos<
     rhos
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     log_m: usize,
     f_hat_mles: &[DenseMultilinearExtension<NTT>],
