@@ -169,15 +169,25 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .collect::<Result<Vec<_>, _>>()?;
 
         transcript.absorb_slice(&thetas);
-        etas.iter()
-            .for_each(|etas| transcript.absorb_slice(&etas));
+        etas.iter().for_each(|etas| transcript.absorb_slice(&etas));
 
         // Step 5 get rho challenges
         let rho_s = get_rhos::<_, _, P>(transcript);
 
-        let f_0: Vec<NTT> = rho_s.iter().zip(w_s).map(|(&rho_i, w_s)| )
+        let f_0: Vec<NTT> = rho_s.iter().zip(w_s).fold(
+            vec![NTT::ZERO; w_s[0].f.len()],
+            |mut acc, (&rho_i, w_i)| {
+                let rho_i: NTT = rho_i.into();
+
+                acc.into_iter()
+                    .zip(w_i.f.iter())
+                    .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
+                    .collect()
+            },
+        );
 
         todo!()
+        // let w_0 =
 
         // // Step 6 compute v0, u0, y0, x_w0
         // let v_0: NTT =

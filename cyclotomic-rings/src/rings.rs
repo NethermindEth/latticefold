@@ -5,7 +5,7 @@ use lattirust_ring::{
     balanced_decomposition::Decompose,
     cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
     zn::z_q::Zq,
-    OverField, PolyRing,
+    Cyclotomic, OverField, PolyRing,
 };
 
 mod frog;
@@ -28,7 +28,8 @@ where
 {
     /// The coefficient basis version of the ring.
     type CoefficientRepresentation: OverField<BaseRing = <<Self as PolyRing>::BaseRing as Field>::BasePrimeField>
-        + Decompose;
+        + Decompose
+        + Cyclotomic;
     type PoseidonParams: GetPoseidonParams<<<Self as PolyRing>::BaseRing as Field>::BasePrimeField>;
 }
 
