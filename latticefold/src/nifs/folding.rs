@@ -411,7 +411,7 @@ mod tests {
     }
 
     #[test]
-    fn test_failing_folding() {
+    fn test_failing_folding_prover() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
 
@@ -459,18 +459,10 @@ mod tests {
 
         vec_wit[0] = Witness::<R>::from_w_ccs::<PP>(&w_ccs);
 
-        let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, PP>(
+        let res = LFFoldingProver::<_, T>::prove::<4, PP>(
             &vec_lcccs,
             &vec_wit,
             &mut prover_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let res = LFFoldingVerifier::<_, T>::verify::<4, PP>(
-            &vec_lcccs,
-            &folding_proof,
-            &mut verifier_transcript,
             &ccs,
         );
 
