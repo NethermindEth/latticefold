@@ -324,7 +324,7 @@ mod tests_pow2 {
         impl DecompositionParams for PP {
             const B: u128 = 1_024;
             const L: usize = 2;
-            const B_SMALL: u128 = 2;
+            const B_SMALL: usize = 2;
             const K: usize = 10;
         }
 
@@ -430,7 +430,7 @@ mod tests_stark {
         impl DecompositionParams for PP {
             const B: u128 = 1_024;
             const L: usize = 2;
-            const B_SMALL: u128 = 2;
+            const B_SMALL: usize = 2;
             const K: usize = 10;
         }
 
@@ -523,7 +523,7 @@ mod tests_goldilocks {
         impl DecompositionParams for PP {
             const B: u128 = 1_024;
             const L: usize = 2;
-            const B_SMALL: u128 = 2;
+            const B_SMALL: usize = 2;
             const K: usize = 10;
         }
 
@@ -616,7 +616,7 @@ mod tests_frog {
         impl DecompositionParams for PP {
             const B: u128 = 1_024;
             const L: usize = 2;
-            const B_SMALL: u128 = 2;
+            const B_SMALL: usize = 2;
             const K: usize = 10;
         }
 

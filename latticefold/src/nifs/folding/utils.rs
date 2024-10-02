@@ -171,16 +171,11 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
                     .product::<NTT>();
 
             // linearisation claims contribuition
-            s_summand += zeta_s
-                .iter()
-                .zip(eta_s.iter())
-                .map(|(&zeta_i, eta_i_s)| {
-                    successors(Some(zeta_i), |&zeta| Some(zeta * zeta_i))
-                        .zip(eta_i_s.iter())
-                        .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
-                        .sum::<NTT>()
-                })
-                .sum::<NTT>();
+            s_summand += e_s[i]
+                * successors(Some(zeta_s[i]), |&zeta| Some(zeta * zeta_s[i]))
+                    .zip(eta_s[i].iter())
+                    .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
+                    .sum::<NTT>();
 
             s_summand
         })

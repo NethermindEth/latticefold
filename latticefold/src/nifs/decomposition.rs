@@ -188,7 +188,9 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             });
         }
 
-        let b_s: Vec<_> = (0..P::K).map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32))).collect();
+        let b_s: Vec<_> = (0..P::K)
+            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
+            .collect();
 
         let should_equal_y0 = proof
             .y_s
@@ -337,7 +339,7 @@ mod tests {
     impl DecompositionParams for PP {
         const B: u128 = 1_024;
         const L: usize = 2;
-        const B_SMALL: u128 = 2;
+        const B_SMALL: usize = 2;
         const K: usize = 10;
     }
     // Actual Tests

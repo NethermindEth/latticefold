@@ -298,7 +298,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
 
 #[cfg(test)]
 mod tests {
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
     use rand::thread_rng;
 
     use crate::{
@@ -331,7 +330,7 @@ mod tests {
     impl DecompositionParams for PP {
         const B: u128 = 1_024;
         const L: usize = 1;
-        const B_SMALL: u128 = 2;
+        const B_SMALL: usize = 2;
         const K: usize = 10;
     }
 
