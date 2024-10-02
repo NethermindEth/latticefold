@@ -157,6 +157,47 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     Ok(g)
 }
 
+/// The grand sum from point 4 of the Latticefold folding protocol.
+pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
+    alpha_s: &[NTT],
+    mu_s: &[NTT],
+    theta_s: &[NTT],
+    e_asterisk: NTT,
+    e_s: &[NTT],
+    zeta_s: &[NTT],
+    eta_s: &[Vec<NTT>],
+) -> NTT {
+    (0..(2 * P::K))
+        .map(|i| {
+            // Evaluation claims about f hats.
+            let mut s_summand = alpha_s[i] * e_s[i] * theta_s[i];
+
+            // norm range check contribution
+            s_summand += e_asterisk
+                * mu_s[i]
+                * theta_s[i]
+                * (1..P::B_SMALL)
+                    .map(NTT::from)
+                    .map(|j_hat| (theta_s[i] - j_hat) * (theta_s[i] + j_hat))
+                    .product::<NTT>();
+
+            // linearisation claims contribuition
+            s_summand += zeta_s
+                .iter()
+                .zip(eta_s.iter())
+                .map(|(&zeta_i, eta_i_s)| {
+                    successors(Some(zeta_i), |&zeta| Some(zeta * zeta_i))
+                        .zip(eta_i_s.iter())
+                        .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
+                        .sum::<NTT>()
+                })
+                .sum::<NTT>();
+
+            s_summand
+        })
+        .sum()
+}
+
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     log_m: usize,
