@@ -120,7 +120,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         || Mz_mles.len() != 2 * DP::K
         || zeta_s.len() != 2 * DP::K
         || r_s.len() != 2 * DP::K
-        || beta_s.len() != 2 * DP::K
+        || beta_s.len() != log_m
         || mu_s.len() != 2 * DP::K
     {
         return Err(FoldingError::IncorrectLength);
