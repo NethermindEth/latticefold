@@ -88,7 +88,10 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         let zis = cm_i_s
             .iter()
             .zip(w_s.iter())
-            .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
+            .map(|(cm_i, w_i)| {
+                println!("{}", w_i.w_ccs.len());
+                cm_i.get_z_vector(&w_i.w_ccs)
+            })
             .collect::<Vec<_>>();
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
 
