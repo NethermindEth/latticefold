@@ -11,6 +11,7 @@ use lattirust_poly::mle::SparseMultilinearExtension;
 use lattirust_poly::polynomials::ArithErrors;
 use lattirust_ring::Ring;
 
+use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithSmallChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
@@ -20,7 +21,7 @@ use crate::{
     transcript::Transcript,
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
-
+use cyclotomic_rings::rot_sum;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
@@ -196,6 +197,66 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
             s_summand
         })
         .sum()
+}
+
+pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
+    rho_s: &[NTT::CoefficientRepresentation],
+    theta_s: &[NTT],
+    cm_i_s: &[LCCCS<C, NTT>],
+    eta_s: &[Vec<NTT>],
+    ccs: &CCS<NTT>,
+) -> (NTT, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
+    let v_0: NTT = rho_s
+        .iter()
+        .zip(theta_s.iter())
+        .map(|(&rho_i, theta_i)| NTT::from(rot_sum::<NTT>(rho_i, theta_i.coeffs())))
+        .sum();
+
+    let cm_0: Commitment<C, NTT> = rho_s
+        .iter()
+        .zip(cm_i_s.iter())
+        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * NTT::from(rho_i))
+        .sum();
+
+    let u_0: Vec<NTT> = rho_s
+        .iter()
+        .zip(eta_s.iter())
+        .map(|(&rho_i, etas_i)| {
+            etas_i
+                .iter()
+                .map(|etas_i_j| NTT::from(rho_i) * etas_i_j)
+                .collect::<Vec<NTT>>()
+        })
+        .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
+            acc.iter_mut()
+                .zip(rho_i_times_etas_i)
+                .for_each(|(acc_j, rho_i_times_etas_i_j)| {
+                    *acc_j += rho_i_times_etas_i_j;
+                });
+
+            acc
+        });
+
+    let x_0: Vec<NTT> = rho_s
+        .iter()
+        .zip(cm_i_s.iter())
+        .map(|(&rho_i, cm_i)| {
+            cm_i.x_w
+                .iter()
+                .map(|x_w_i| NTT::from(rho_i) * x_w_i)
+                .collect::<Vec<NTT>>()
+        })
+        .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {
+            acc.iter_mut()
+                .zip(rho_i_times_x_w_i)
+                .for_each(|(acc_j, rho_i_times_x_w_i)| {
+                    *acc_j += rho_i_times_x_w_i;
+                });
+
+            acc
+        });
+
+    (v_0, cm_0, u_0, x_0)
 }
 
 fn prepare_g1_i_mle_list<NTT: OverField>(

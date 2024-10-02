@@ -158,55 +158,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         let rho_s = get_rhos::<_, _, P>(transcript);
 
         // Step 6 compute v0, u0, y0, x_w0
-        let v_0: NTT = rho_s
-            .iter()
-            .zip(theta_s.iter())
-            .map(|(&rho_i, theta_i)| NTT::from(rot_sum::<NTT>(rho_i, theta_i.coeffs())))
-            .sum();
-
-        let cm_0: Commitment<C, NTT> = rho_s
-            .iter()
-            .zip(cm_i_s.iter())
-            .map(|(&rho_i, cm_i)| cm_i.cm.clone() * NTT::from(rho_i))
-            .sum();
-
-        let u_0: Vec<NTT> = rho_s
-            .iter()
-            .zip(eta_s.iter())
-            .map(|(&rho_i, etas_i)| {
-                etas_i
-                    .iter()
-                    .map(|etas_i_j| NTT::from(rho_i) * etas_i_j)
-                    .collect::<Vec<NTT>>()
-            })
-            .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
-                acc.iter_mut()
-                    .zip(rho_i_times_etas_i)
-                    .for_each(|(acc_j, rho_i_times_etas_i_j)| {
-                        *acc_j += rho_i_times_etas_i_j;
-                    });
-
-                acc
-            });
-
-        let x_0: Vec<NTT> = rho_s
-            .iter()
-            .zip(cm_i_s.iter())
-            .map(|(&rho_i, cm_i)| {
-                cm_i.x_w
-                    .iter()
-                    .map(|x_w_i| NTT::from(rho_i) * x_w_i)
-                    .collect::<Vec<NTT>>()
-            })
-            .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {
-                acc.iter_mut()
-                    .zip(rho_i_times_x_w_i)
-                    .for_each(|(acc_j, rho_i_times_x_w_i)| {
-                        *acc_j += rho_i_times_x_w_i;
-                    });
-
-                acc
-            });
+        let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(&rho_s, &theta_s, cm_i_s, &eta_s, ccs);
 
         // Step 7: Compute f0 and Witness_0
 
@@ -253,7 +205,10 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
-        assert_eq!(cm_i_s.len(), 2 * P::K);
+        if cm_i_s.len() != 2 * P::K {
+            return Err(FoldingError::IncorrectLength);
+        }
+
         let log_m = ccs.s;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
@@ -326,57 +281,12 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
             )));
         }
 
+        // Step 5
         let rho_s = get_rhos::<_, _, P>(transcript);
 
-        let v_0: NTT = rho_s
-            .iter()
-            .zip(proof.theta_s.iter())
-            .map(|(&rho_i, theta_i)| NTT::from(rot_sum::<NTT>(rho_i, theta_i.coeffs())))
-            .sum();
-
-        let cm_0: Commitment<C, NTT> = rho_s
-            .iter()
-            .zip(cm_i_s.iter())
-            .map(|(&rho_i, cm_i)| cm_i.cm.clone() * NTT::from(rho_i))
-            .sum();
-
-        let u_0: Vec<NTT> = rho_s
-            .iter()
-            .zip(proof.eta_s.iter())
-            .map(|(&rho_i, etas_i)| {
-                etas_i
-                    .iter()
-                    .map(|etas_i_j| NTT::from(rho_i) * etas_i_j)
-                    .collect::<Vec<NTT>>()
-            })
-            .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
-                acc.iter_mut()
-                    .zip(rho_i_times_etas_i)
-                    .for_each(|(acc_j, rho_i_times_etas_i_j)| {
-                        *acc_j += rho_i_times_etas_i_j;
-                    });
-
-                acc
-            });
-
-        let x_0: Vec<NTT> = rho_s
-            .iter()
-            .zip(cm_i_s.iter())
-            .map(|(&rho_i, cm_i)| {
-                cm_i.x_w
-                    .iter()
-                    .map(|x_w_i| NTT::from(rho_i) * x_w_i)
-                    .collect::<Vec<NTT>>()
-            })
-            .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {
-                acc.iter_mut()
-                    .zip(rho_i_times_x_w_i)
-                    .for_each(|(acc_j, rho_i_times_x_w_i)| {
-                        *acc_j += rho_i_times_x_w_i;
-                    });
-
-                acc
-            });
+        // Step 6
+        let (v_0, cm_0, u_0, x_0) =
+            compute_v0_u0_x0_cm_0(&rho_s, &proof.theta_s, cm_i_s, &proof.eta_s, ccs);
 
         // Step 7: Compute f0 and Witness_0
 
