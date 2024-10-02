@@ -11,7 +11,6 @@ use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
     parameters::DecompositionParams,
-    transcript::Transcript,
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 
@@ -69,8 +68,11 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
-        assert_eq!(cm_i_s.len(), 2 * P::K);
-        let (m, log_m) = (ccs.m, ccs.s);
+        if cm_i_s.len() != 2 * P::K {
+            return Err(FoldingError::IncorrectLength);
+        }
+
+        let log_m = ccs.s;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
         let (alpha_s, beta_s, zeta_s, mu_s) =
@@ -89,8 +91,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
             .collect::<Vec<_>>();
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
-        let vs = cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<NTT>>();
-        let us = cm_i_s.iter().map(|cm_i| cm_i.u.clone()).collect::<Vec<_>>();
 
         // Setup matrix_mles for later evaluation of etas
         // Review creation of this Mi*z mles
@@ -168,17 +168,18 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             h,
         };
 
-        let f_0: Vec<NTT> = rho_s.iter().zip(w_s).fold(
-            vec![NTT::ZERO; w_s[0].f.len()],
-            |acc, (&rho_i, w_i)| {
-                let rho_i: NTT = rho_i.into();
+        let f_0: Vec<NTT> =
+            rho_s
+                .iter()
+                .zip(w_s)
+                .fold(vec![NTT::ZERO; w_s[0].f.len()], |acc, (&rho_i, w_i)| {
+                    let rho_i: NTT = rho_i.into();
 
-                acc.into_iter()
-                    .zip(w_i.f.iter())
-                    .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
-                    .collect()
-            },
-        );
+                    acc.into_iter()
+                        .zip(w_i.f.iter())
+                        .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
+                        .collect()
+                });
 
         let w_0 = Witness::from_f::<P>(f_0);
 
@@ -301,9 +302,9 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
 
 #[cfg(test)]
 mod tests {
-    
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRing;
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
     use rand::thread_rng;
 
     use crate::{
@@ -328,8 +329,7 @@ mod tests {
     // Boilerplate code to generate values needed for testing
     const Q: u64 = 17; // Replace with an appropriate modulus
     const N: usize = 8;
-    type CR = Pow2CyclotomicPolyRing<Q, N>;
-    type NTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+    type R = Pow2CyclotomicPolyRingNTT<Q, N>;
     type CS = BinarySmallSet<Q, N>;
     type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
 
@@ -348,23 +348,23 @@ mod tests {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<NTT>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let ccs = get_test_ccs::<R>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<4, NTT> = CCCS {
+        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
-        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
         let (_, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -372,15 +372,14 @@ mod tests {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
-                &lcccs,
-                &wit,
-                &mut prover_transcript,
-                &ccs,
-                &scheme,
-            )
-            .unwrap();
+        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
 
         let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
             &lcccs,
@@ -400,13 +399,9 @@ mod tests {
 
             (lcccs, wit_s)
         };
-        let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, PP>(
-            &lcccs,
-            &wit_s,
-            &mut prover_transcript,
-            &ccs,
-        )
-        .unwrap();
+        let (_, _, folding_proof) =
+            LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
+                .unwrap();
 
         let res = LFFoldingVerifier::<_, T>::verify::<4, PP>(
             &lcccs,
@@ -423,23 +418,23 @@ mod tests {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<NTT>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let ccs = get_test_ccs::<R>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<4, NTT> = CCCS {
+        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
             x_ccs,
         };
 
-        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
         let (_, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -465,7 +460,7 @@ mod tests {
         )
         .unwrap();
 
-        vec_wit[0] = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
+        vec_wit[0] = Witness::<R>::from_w_ccs::<PP>(&w_ccs);
 
         let (_, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, PP>(
             &vec_lcccs,

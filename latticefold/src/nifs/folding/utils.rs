@@ -21,7 +21,7 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VirtualPolynomial},
 };
-use lattirust_ring::{OverField, PolyRing};
+use lattirust_ring::OverField;
 
 pub(super) fn get_alphas_betas_zetas_mus<
     NTT: OverField,
@@ -132,16 +132,9 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     for i in 0..2 * DP::K {
         let r_i_eq = build_eq_x_r(&r_s[i])?;
 
-        prepare_g1_i_mle_list(
-            &mut g,
-            log_m,
-            f_hat_mles[i].clone(),
-            r_i_eq.clone(),
-            alpha_s[i],
-        )?;
+        prepare_g1_i_mle_list(&mut g, f_hat_mles[i].clone(), r_i_eq.clone(), alpha_s[i])?;
         prepare_g2_i_mle_list(
             &mut g,
-            log_m,
             f_hat_mles[i].clone(),
             DP::B_SMALL,
             mu_s[i],
@@ -256,7 +249,6 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    log_m: usize,
     fi_mle: DenseMultilinearExtension<NTT>,
     r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
@@ -266,7 +258,6 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    log_m: usize,
     fi_mle: DenseMultilinearExtension<NTT>,
     b: u128,
     mu_i: NTT,
@@ -282,6 +273,8 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     }
 
     mle_list.push(Arc::from(fi_mle));
+
+    mle_list.push(beta_eq_x);
 
     g.add_mle_list(mle_list, mu_i)
 }
