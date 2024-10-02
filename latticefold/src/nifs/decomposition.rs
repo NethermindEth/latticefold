@@ -158,7 +158,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
         cm_i: &LCCCS<C, NTT>,
         proof: &DecompositionProof<C, NTT>,
         transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
+        _ccs: &CCS<NTT>,
     ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError> {
         let mut lcccs_s = Vec::<LCCCS<C, NTT>>::with_capacity(P::K);
 
