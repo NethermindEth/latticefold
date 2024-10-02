@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::SuitableRing;
@@ -212,11 +213,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         let (alpha_s, beta_s, zeta_s, mu_s) =
             get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
 
-        let poly_info = VPAuxInfo {
-            max_degree: ccs.d + 1,
-            num_variables: log_m,
-            phantom: ark_std::marker::PhantomData,
-        };
+        let poly_info = VPAuxInfo::new(ccs.d + 1, log_m);
 
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
         let vs = cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<NTT>>();
@@ -227,17 +224,16 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
             .zip(vs.iter())
             .map(|(&alpha_i, &v_i)| alpha_i * v_i)
             .sum();
-        let claim_g3 = zeta_s
+        let claim_g3: NTT = zeta_s
             .iter()
             .zip(us.iter())
-            .fold(NTT::zero(), |acc, (zeta, ui)| {
-                let mut zeta_i = NTT::one();
-                let ui_sum = ui.iter().fold(NTT::zero(), |acc, &u_i_t| {
-                    zeta_i *= zeta;
-                    acc + (u_i_t * zeta_i)
-                });
-                acc + ui_sum
-            });
+            .map(|(&zeta_i, ui)| {
+                successors(Some(zeta_i), |&zeta| Some(zeta * zeta_i))
+                    .zip(ui.iter())
+                    .map(|(pow_of_zeta, u_i_j)| pow_of_zeta * u_i_j)
+                    .sum::<NTT>()
+            })
+            .sum();
 
         //Step 2: The sumcheck.
 
@@ -322,14 +318,12 @@ mod tests {
         parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
-    use cyclotomic_rings::challenge_set::BinarySmallSet;
+    use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 
     // Boilerplate code to generate values needed for testing
-    const Q: u64 = 17; // Replace with an appropriate modulus
-    const N: usize = 8;
-    type R = Pow2CyclotomicPolyRingNTT<Q, N>;
-    type CS = BinarySmallSet<Q, N>;
-    type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
+    type R = StarkRingNTT;
+    type CS = StarkChallengeSet;
+    type T = PoseidonTranscript<StarkRingNTT, CS>;
 
     #[derive(Clone)]
     struct PP;

@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
-use std::iter::successors;
-
 use ark_ff::{Field, PrimeField};
+use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::sync::Arc;
 use cyclotomic_rings::SuitableRing;
