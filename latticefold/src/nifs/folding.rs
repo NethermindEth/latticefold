@@ -275,6 +275,11 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         }
 
         // Step 5
+        transcript.absorb_slice(&proof.theta_s);
+        proof
+            .eta_s
+            .iter()
+            .for_each(|etas| transcript.absorb_slice(etas));
         let rho_s = get_rhos::<_, _, P>(transcript);
 
         // Step 6
