@@ -3,11 +3,12 @@ use ark_std::iterable::Iterable;
 use ark_std::log2;
 use ark_std::marker::PhantomData;
 use ark_std::sync::Arc;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::{rot_sum, SuitableRing};
 use lattirust_ring::OverField;
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
+use crate::commitment::Commitment;
 use crate::transcript::TranscriptWithSmallChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
@@ -174,6 +175,69 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         // Step 5 get rho challenges
         let rho_s = get_rhos::<_, _, P>(transcript);
 
+        // Step 6 compute v0, u0, y0, x_w0
+        let v_0: NTT = rho_s
+            .iter()
+            .zip(thetas.iter())
+            .map(|(&rho_i, theta_i)| NTT::from(rot_sum::<NTT>(rho_i, theta_i.coeffs())))
+            .sum();
+
+        let cm_0: Commitment<C, NTT> = rho_s
+            .iter()
+            .zip(cm_i_s.iter())
+            .map(|(&rho_i, cm_i)| cm_i.cm.clone() * NTT::from(rho_i))
+            .sum();
+
+        let u_0: Vec<NTT> = rho_s
+            .iter()
+            .zip(etas.iter())
+            .map(|(&rho_i, etas_i)| {
+                etas_i
+                    .iter()
+                    .map(|etas_i_j| NTT::from(rho_i) * etas_i_j)
+                    .collect::<Vec<NTT>>()
+            })
+            .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
+                acc.iter_mut()
+                    .zip(rho_i_times_etas_i)
+                    .for_each(|(acc_j, rho_i_times_etas_i_j)| {
+                        *acc_j += rho_i_times_etas_i_j;
+                    });
+
+                acc
+            });
+
+        let x_0: Vec<NTT> = rho_s
+            .iter()
+            .zip(cm_i_s.iter())
+            .map(|(&rho_i, cm_i)| {
+                cm_i.x_w
+                    .iter()
+                    .map(|x_w_i| NTT::from(rho_i) * x_w_i)
+                    .collect::<Vec<NTT>>()
+            })
+            .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {
+                acc.iter_mut()
+                    .zip(rho_i_times_x_w_i)
+                    .for_each(|(acc_j, rho_i_times_x_w_i)| {
+                        *acc_j += rho_i_times_x_w_i;
+                    });
+
+                acc
+            });
+
+        // Step 7: Compute f0 and Witness_0
+
+        let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
+        let lcccs = LCCCS {
+            r: r_0,
+            v: v_0,
+            cm: cm_0,
+            u: u_0,
+            x_w: x_0,
+            h,
+        };
+
         let f_0: Vec<NTT> = rho_s.iter().zip(w_s).fold(
             vec![NTT::ZERO; w_s[0].f.len()],
             |mut acc, (&rho_i, w_i)| {
@@ -186,68 +250,15 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             },
         );
 
-        todo!()
-        // let w_0 =
+        let w_0 = Witness::from_f::<P>(f_0);
 
-        // // Step 6 compute v0, u0, y0, x_w0
-        // let v_0: NTT =
-        //     rhos.iter()
-        //         .zip(thetas.iter().skip(1))
-        //         .fold(thetas[0], |acc, (rho_i, theta_i)| {
-        //             // acc + rho_i.rot_sum(theta_i) // Note that theta_i is already in NTT form
-        //             todo!() // Add WithRot to OverField in lattirust
-        //         }); // Do INTT here
+        let folding_proof = FoldingProof {
+            pointshift_sumcheck_proof: sum_check_proof,
+            theta_s: thetas,
+            eta_s: etas,
+        };
 
-        // let (y_0, u_0, x_0) = rhos
-        //     .iter()
-        //     .zip(cm_i_s.iter().zip(etas.iter()).skip(1))
-        //     .fold(
-        //         (cm_i_s[0].cm.clone(), etas[0].clone(), cm_i_s[0].x_w.clone()),
-        //         |(acc_y, acc_u, acc_x), (rho_i, (cm_i, eta))| {
-        //             let y = acc_y + (cm_i.cm.clone() * rho_i);
-        //             let u = acc_u
-        //                 .iter()
-        //                 .zip(eta.iter())
-        //                 .map(|(&a, &e)| a + (e * rho_i))
-        //                 .collect();
-        //             let x = acc_x
-        //                 .iter()
-        //                 .zip(cm_i.x_w.iter())
-        //                 .map(|(&a, &x)| a + (x * rho_i))
-        //                 .collect();
-        //             (y, u, x)
-        //         },
-        //     );
-
-        // // Step 7: Compute f0 and Witness_0
-
-        // let h = x_0.last().cloned().ok_or(FoldingError::IncorrectLength)?;
-        // let lcccs = LCCCS {
-        //     r: r_0,
-        //     v: v_0,
-        //     cm: y_0,
-        //     u: u_0,
-        //     x_w: x_0,
-        //     h,
-        // };
-
-        // let f_0 =
-        //     rhos.iter()
-        //         .zip(w_s.iter().skip(1))
-        //         .fold(w_s[0].f.clone(), |acc, (rho, w_i_s)| {
-        //             let mut f_i = w_i_s.f.clone();
-        //             f_i.iter_mut().for_each(|c| *c = *c * rho);
-        //             acc.iter().zip(f_i.iter()).map(|(a, f)| *a + f).collect()
-        //         });
-
-        // let folding_proof = FoldingProof {
-        //     pointshift_sumcheck_proof: sum_check_proof,
-        //     theta_s: thetas,
-        //     eta_s: etas,
-        // };
-
-        // let wit_0 = Witness::<NTT>::from_f::<NTT, P>(f_0);
-        // Ok((lcccs, wit_0, folding_proof))
+        Ok((lcccs, w_0, folding_proof))
     }
 }
 
