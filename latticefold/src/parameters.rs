@@ -38,30 +38,30 @@ impl DecompositionParams for DilithiumTestParams {
 pub struct StarkPrimeParams;
 
 impl DecompositionParams for StarkPrimeParams {
-    const B: u128 = 1 << 54;
-    const L: usize = 12;
+    const B: u128 = 1 << 126;
+    const L: usize = 2;
     const B_SMALL: u128 = 2;
-    const K: usize = 54;
+    const K: usize = 126;
 }
 
 #[derive(Clone, Copy)]
 pub struct GoldilocksParams;
 
 impl DecompositionParams for GoldilocksParams {
-    const B: u128 = 1 << 24;
-    const L: usize = 10;
+    const B: u128 = 1 << 37;
+    const L: usize = 2;
     const B_SMALL: u128 = 2;
-    const K: usize = 24;
+    const K: usize = 37;
 }
 
 #[derive(Clone, Copy)]
 pub struct BabyBearParams;
 
 impl DecompositionParams for BabyBearParams {
-    const B: u128 = 1 << 27;
-    const L: usize = 10;
+    const B: u128 = 1 << 28;
+    const L: usize = 2;
     const B_SMALL: u128 = 2;
-    const K: usize = 27;
+    const K: usize = 28;
 }
 
 #[derive(Clone, Copy)]
