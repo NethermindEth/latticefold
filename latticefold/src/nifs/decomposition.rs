@@ -188,8 +188,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             });
         }
 
-        let b = P::B_SMALL;
-        let b_s: Vec<_> = (0..P::K).map(|i| NTT::from(b.pow(i as u32))).collect();
+        let b_s: Vec<_> = (0..P::K).map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32))).collect();
 
         let should_equal_y0 = proof
             .y_s
@@ -274,7 +273,7 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
             .flatten()
             .collect();
 
-    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, Some(DP::K))
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
@@ -296,7 +295,7 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 ) -> Vec<Vec<NTT>> {
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
-    decompose_balanced_vec(&coeff_repr, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K))
         .into_iter()
         .map(|vec| vec.into_iter().map(|x| x.into()).collect())
         .collect()

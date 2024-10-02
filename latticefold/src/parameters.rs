@@ -12,7 +12,7 @@ pub trait DecompositionParams: Clone {
     /// The ring modulus should be < B^L.
     const L: usize;
     /// The small b from the decomposition step of LF.
-    const B_SMALL: u128;
+    const B_SMALL: usize;
     /// K = log_b B.
     const K: usize;
 }
@@ -31,7 +31,7 @@ pub struct DilithiumTestParams;
 impl DecompositionParams for DilithiumTestParams {
     const B: u128 = 1 << 13;
     const L: usize = 2;
-    const B_SMALL: u128 = 2;
+    const B_SMALL: usize = 2;
     const K: usize = 13;
 }
 

@@ -213,7 +213,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         let (alpha_s, beta_s, zeta_s, mu_s) =
             get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
 
-        let poly_info = VPAuxInfo::new(ccs.d + 1, log_m);
+        let poly_info = VPAuxInfo::new(log_m, 2 * P::B_SMALL);
 
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
         let vs = cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<NTT>>();

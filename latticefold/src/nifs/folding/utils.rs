@@ -166,7 +166,7 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
                 * mu_s[i]
                 * theta_s[i]
                 * (1..P::B_SMALL)
-                    .map(NTT::from)
+                    .map(|x| NTT::from(x as u128))
                     .map(|j_hat| (theta_s[i] - j_hat) * (theta_s[i] + j_hat))
                     .product::<NTT>();
 
@@ -259,14 +259,14 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_mle: DenseMultilinearExtension<NTT>,
-    b: u128,
+    b: usize,
     mu_i: NTT,
     beta_eq_x: Arc<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
 
     for i in 1..b {
-        let i_hat = NTT::from(i);
+        let i_hat = NTT::from(i as u128);
 
         mle_list.push(Arc::from(fi_mle.clone() - i_hat));
         mle_list.push(Arc::from(fi_mle.clone() + i_hat));
