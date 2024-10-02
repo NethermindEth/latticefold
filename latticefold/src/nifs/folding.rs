@@ -165,7 +165,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             v: v_0,
             cm: cm_0,
             u: u_0,
-            x_w: x_0,
+            x_w: x_0[0..x_0.len() - 1].to_vec(),
             h,
         };
 
@@ -290,7 +290,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
             v: v_0,
             cm: cm_0,
             u: u_0,
-            x_w: x_0,
+            x_w: x_0[0..x_0.len() - 1].to_vec(),
             h,
         })
     }
@@ -390,18 +390,19 @@ mod tests {
 
             (lcccs, wit_s)
         };
-        let (_, _, folding_proof) =
+        let (lcccs_prover, _, folding_proof) =
             LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let res = LFFoldingVerifier::<_, T>::verify::<4, PP>(
+        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, PP>(
             &lcccs,
             &folding_proof,
             &mut verifier_transcript,
             &ccs,
-        );
+        )
+        .unwrap();
 
-        assert!(res.is_ok())
+        assert_eq!(lcccs_prover, lcccs_verifier);
     }
 
     #[test]
