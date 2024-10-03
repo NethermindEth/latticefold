@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
+use ark_ff::{Field, PrimeField};
 use ark_std::log2;
 use cyclotomic_rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    Ring,
+    PolyRing, Ring,
 };
 
 use crate::{
@@ -178,7 +179,7 @@ pub struct CCCS<const C: usize, R: Ring> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LCCCS<const C: usize, R: Ring> {
     pub r: Vec<R>,
-    pub v: R,
+    pub v: Vec<R>,
     pub cm: Commitment<C, R>,
     pub u: Vec<R>,
     pub x_w: Vec<R>,
@@ -189,8 +190,8 @@ pub struct LCCCS<const C: usize, R: Ring> {
 pub struct Witness<NTT: Ring> {
     // F is B-decomposed ccs witness
     pub f: Vec<NTT>,
-    // f_hat = vec(CR repr of f)
-    pub f_hat: Vec<NTT>,
+    // NTT(f_hat) = Coeff(coefficient representation of f)
+    pub f_hat: Vec<Vec<NTT>>,
     pub w_ccs: Vec<NTT>,
 }
 
@@ -210,7 +211,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
-        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
+        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&coef_repr_decomposed);
 
         Self {
             f,
@@ -219,10 +220,27 @@ impl<NTT: SuitableRing> Witness<NTT> {
         }
     }
 
+    fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<Vec<NTT>> {
+        // TODO: Improve this, too much copying is happening here.
+        pad_and_transpose(
+            f.iter()
+                .map(|x| {
+                    x.into_coeffs()
+                        .into_iter()
+                        .map(|coeff| <NTT::BaseRing as Field>::from_base_prime_field(coeff))
+                        .collect::<Vec<NTT::BaseRing>>()
+                        .chunks(NTT::dimension())
+                        .map(|chunk| NTT::from(chunk.to_vec()))
+                        .collect()
+                })
+                .collect(),
+        )
+    }
+
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
         let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
             f.iter().map(|&x| x.into()).collect();
-        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
+        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&coef_repr_decomposed);
 
         let w_ccs = f
             .chunks(P::L)

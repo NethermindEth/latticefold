@@ -28,7 +28,7 @@ pub struct FoldingProof<NTT: OverField> {
     // Step 2.
     pub pointshift_sumcheck_proof: sumcheck::Proof<NTT>,
     // Step 3
-    pub theta_s: Vec<NTT>,
+    pub theta_s: Vec<Vec<NTT>>,
     pub eta_s: Vec<Vec<NTT>>,
 }
 
@@ -83,8 +83,15 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = w_s
             .iter()
-            .map(|w| DenseMultilinearExtension::from_evaluations_slice(log_m, &w.f_hat))
-            .collect::<Vec<DenseMultilinearExtension<NTT>>>();
+            .map(|w| {
+                w.f_hat
+                    .iter()
+                    .map(|f_hat_row| {
+                        DenseMultilinearExtension::from_evaluations_slice(log_m, f_hat_row)
+                    })
+                    .collect()
+            })
+            .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>();
 
         let zis = cm_i_s
             .iter()
@@ -126,12 +133,17 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .collect::<Vec<NTT>>();
 
         // Step 3: Evaluate thetas and etas
-        let theta_s: Vec<NTT> = f_hat_mles
+        let theta_s: Vec<Vec<NTT>> = f_hat_mles
             .iter()
-            .map(|f_hat_mle| {
-                f_hat_mle
-                    .evaluate(&r_0)
-                    .ok_or(FoldingError::<NTT>::EvaluationError("f_hat".to_string()))
+            .map(|f_hat_row| {
+                f_hat_row
+                    .iter()
+                    .map(|f_hat_mle| {
+                        f_hat_mle
+                            .evaluate(&r_0)
+                            .ok_or(FoldingError::<NTT>::EvaluationError("f_hat".to_string()))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -148,7 +160,9 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        transcript.absorb_slice(&theta_s);
+        theta_s
+            .iter()
+            .for_each(|thetas| transcript.absorb_slice(thetas));
         eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
         // Step 5 get rho challenges
@@ -216,7 +230,10 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         let poly_info = VPAuxInfo::new(log_m, 2 * P::B_SMALL);
 
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
-        let vs = cm_i_s.iter().map(|cm_i| cm_i.v).collect::<Vec<NTT>>();
+        let vs = cm_i_s
+            .iter()
+            .map(|cm_i| cm_i.v.clone())
+            .collect::<Vec<Vec<NTT>>>();
         let us = cm_i_s.iter().map(|cm_i| cm_i.u.clone()).collect::<Vec<_>>();
 
         let claim_g1: NTT = alpha_s
@@ -275,7 +292,10 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         }
 
         // Step 5
-        transcript.absorb_slice(&proof.theta_s);
+        proof
+            .theta_s
+            .iter()
+            .for_each(|thetas| transcript.absorb_slice(thetas));
         proof
             .eta_s
             .iter()

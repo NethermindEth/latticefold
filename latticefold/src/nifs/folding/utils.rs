@@ -106,7 +106,7 @@ pub(super) fn get_rhos<
 #[allow(clippy::too_many_arguments)]
 pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     log_m: usize,
-    f_hat_mles: &[DenseMultilinearExtension<NTT>],
+    f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     alpha_s: &[NTT],
     Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     zeta_s: &[NTT],
@@ -150,7 +150,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
 pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
     alpha_s: &[NTT],
     mu_s: &[NTT],
-    theta_s: &[NTT],
+    theta_s: &[Vec<NTT>],
     e_asterisk: NTT,
     e_s: &[NTT],
     zeta_s: &[NTT],
@@ -184,11 +184,11 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 
 pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     rho_s: &[NTT::CoefficientRepresentation],
-    theta_s: &[NTT],
+    theta_s: &[Vec<NTT>],
     cm_i_s: &[LCCCS<C, NTT>],
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
-) -> (NTT, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
+) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
     let v_0: NTT = rho_s
         .iter()
         .zip(theta_s.iter())
@@ -244,11 +244,17 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_mle: DenseMultilinearExtension<NTT>,
+    fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
     r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
-    g.add_mle_list(vec![r_i_eq, Arc::from(fi_mle)], alpha_i)
+    for (alpha, fi_hat_mle) in
+        successors(Some(alpha_i), |x| Some(alpha_i * x)).zip(fi_hat_mle_s.iter())
+    {
+        g.add_mle_list(vec![r_i_eq.clone(), Arc::from(fi_hat_mle.clone())], alpha)?;
+    }
+
+    Ok(())
 }
 
 fn prepare_g2_i_mle_list<NTT: OverField>(

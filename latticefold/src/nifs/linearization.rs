@@ -24,7 +24,7 @@ pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
     pub linearization_sumcheck: sumcheck::Proof<NTT>,
     // Sent in the step 3.
-    pub v: NTT,
+    pub v: Vec<NTT>,
     pub u: Vec<NTT>,
 }
 
@@ -101,19 +101,18 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // Step 3: Compute v, u_vector
 
-        let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
-            .evaluate(&r)
-            .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
+        let v: Vec<NTT> = wit.f_hat.iter().map(|f_hat_row| dense_vec_to_dense_mle(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
+
         let u = compute_u(&Mz_mles, &r)?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb(&v);
+        transcript.absorb_slice(&v);
         transcript.absorb_slice(&u);
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
             linearization_sumcheck: sum_check_proof,
-            v,
+            v: v.clone(),
             u: u.clone(),
         };
 
@@ -163,7 +162,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         )?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb(&proof.v);
+        transcript.absorb_slice(&proof.v);
         transcript.absorb_slice(&proof.u);
 
         // The final evaluation claim from the sumcheck.
@@ -194,7 +193,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
 
         Ok(LCCCS::<C, NTT> {
             r: point_r,
-            v: proof.v,
+            v: proof.v.clone(),
             cm: cm_i.cm.clone(),
             u: proof.u.clone(),
             x_w: cm_i.x_ccs.clone(),
