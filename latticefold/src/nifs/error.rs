@@ -42,6 +42,14 @@ pub enum DecompositionError {
 
 #[derive(Debug, Error)]
 pub enum FoldingError<R: Ring> {
-    #[error("phantom folding error")]
-    PhantomRRemoveThisLater(R),
+    #[error("input vectors have incorrect length")]
+    IncorrectLength,
+    #[error("sum check failed at folding step: {0}")]
+    SumCheckError(#[from] SumCheckError<R>),
+    #[error("constraint system related error: {0}")]
+    ConstraintSystemError(#[from] CSError),
+    #[error("virtual polynomial error: {0}")]
+    ArithError(#[from] ArithErrors),
+    #[error("mle evaluation failed: {0}")]
+    EvaluationError(String),
 }

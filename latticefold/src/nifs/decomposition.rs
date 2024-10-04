@@ -5,6 +5,7 @@ use lattirust_ring::{
     OverField, Ring,
 };
 
+use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -12,7 +13,6 @@ use crate::{
     nifs::error::DecompositionError,
     parameters::DecompositionParams,
     transcript::Transcript,
-    utils::mle::dense_vec_to_dense_mle,
 };
 use cyclotomic_rings::SuitableRing;
 
@@ -140,7 +140,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 v: *v,
                 cm: y.clone(),
                 u: u.clone(),
-                x_w: x.clone(),
+                x_w: x[0..x.len() - 1].to_vec(),
                 h,
             })
         }
@@ -183,13 +183,14 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
                 v: *v,
                 cm: y.clone(),
                 u: u.clone(),
-                x_w: x.clone(),
+                x_w: x[0..x.len() - 1].to_vec(),
                 h,
             });
         }
 
-        let b = P::B_SMALL;
-        let b_s: Vec<_> = (0..P::K).map(|i| NTT::from(b.pow(i as u32))).collect();
+        let b_s: Vec<_> = (0..P::K)
+            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
+            .collect();
 
         let should_equal_y0 = proof
             .y_s
@@ -274,7 +275,7 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
             .flatten()
             .collect();
 
-    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, Some(DP::K))
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
@@ -296,7 +297,7 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 ) -> Vec<Vec<NTT>> {
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
-    decompose_balanced_vec(&coeff_repr, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K))
         .into_iter()
         .map(|vec| vec.into_iter().map(|x| x.into()).collect())
         .collect()
@@ -338,7 +339,7 @@ mod tests {
     impl DecompositionParams for PP {
         const B: u128 = 1_024;
         const L: usize = 2;
-        const B_SMALL: u128 = 2;
+        const B_SMALL: usize = 2;
         const K: usize = 10;
     }
     // Actual Tests

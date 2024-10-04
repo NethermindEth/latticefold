@@ -35,7 +35,7 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
     fn absorb(&mut self, v: &R) {
         self.sponge.absorb(
             &v.coeffs()
-                .into_iter()
+                .iter()
                 .flat_map(|x| x.to_base_prime_field_elements())
                 .collect::<Vec<_>>(),
         );

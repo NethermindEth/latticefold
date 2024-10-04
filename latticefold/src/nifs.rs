@@ -7,7 +7,7 @@ use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     parameters::DecompositionParams,
-    transcript::Transcript,
+    transcript::TranscriptWithSmallChallenges,
 };
 use decomposition::{
     DecompositionProof, DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -50,7 +50,7 @@ impl<
         const W: usize,
         NTT: SuitableRing,
         P: DecompositionParams,
-        T: Transcript<NTT>,
+        T: TranscriptWithSmallChallenges<NTT>,
     > NIFSProver<C, W, NTT, P, T>
 {
     pub fn prove(
@@ -58,7 +58,7 @@ impl<
         w_acc: &Witness<NTT>,
         cm_i: &CCCS<C, NTT>,
         w_i: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
@@ -114,14 +114,18 @@ pub struct NIFSVerifier<const C: usize, NTT, P, T> {
     _t: PhantomData<T>,
 }
 
-impl<const C: usize, NTT: SuitableRing, P: DecompositionParams, T: Transcript<NTT>>
-    NIFSVerifier<C, NTT, P, T>
+impl<
+        const C: usize,
+        NTT: SuitableRing,
+        P: DecompositionParams,
+        T: TranscriptWithSmallChallenges<NTT>,
+    > NIFSVerifier<C, NTT, P, T>
 {
     pub fn verify(
         acc: &LCCCS<C, NTT>,
         cm_i: &CCCS<C, NTT>,
         proof: &LFProof<C, NTT>,
-        transcript: &mut impl Transcript<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LatticefoldError<NTT>> {
         let linearized_cm_i = LFLinearizationVerifier::<_, T>::verify(
