@@ -2,269 +2,91 @@
 #![feature(generic_const_exprs)]
 
 use ark_std::{time::Duration, UniformRand};
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use latticefold::parameters::{BabyBearParams, FrogParams, GoldilocksParams, StarkPrimeParams};
 use latticefold::{
     commitment::AjtaiCommitmentScheme,
-    parameters::{
-        DecompositionParamData, DecompositionParams, DilithiumTestParams, DILITHIUM_PRIME,
-    },
+    parameters::{DecompositionParams, DilithiumTestParams, DILITHIUM_PRIME},
 };
+use std::fmt::Debug;
 
-use cyclotomic_rings::{FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, BabyBearRingNTT};
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
-    Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
+use cyclotomic_rings::{
+    BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
+use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 
-fn ajtai_benchmark<
-    const Q: u64,
-    const N: usize,
+fn generalized_ajtai_benchmark<
     const C: usize,
     const W: usize,
-    P: DecompositionParams,
+    R: Clone + UniformRand + Debug + SuitableRing,
+    P: DecompositionParams + Clone,
 >(
     c: &mut Criterion,
-    p: P,
+    ring_name: &str,
 ) where
-    Pow2CyclotomicPolyRingNTT<Q, N>: From<Pow2CyclotomicPolyRing<Q, N>>,
-    Pow2CyclotomicPolyRing<Q, N>: From<Pow2CyclotomicPolyRingNTT<Q, N>>,
+    R: for<'a> std::ops::AddAssign<&'a R>,
 {
-    let ajtai_data: AjtaiCommitmentScheme<C, W, Pow2CyclotomicPolyRingNTT<Q, N>> =
-        AjtaiCommitmentScheme::rand(&mut thread_rng());
+    let mut rng = thread_rng();
 
-    let witness: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..W)
-        .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
-        .collect();
+    let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
+    let witness: Vec<R> = (0..W).map(|_| R::rand(&mut rng)).collect();
 
     let ajtai_data_2 = ajtai_data.clone();
     let witness_2 = witness.clone();
-    let p_2 = p.clone();
 
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - CommitNTT - Dilithium C={} W={}", C, W),
-            DecompositionParamData::from(p),
-        ),
+    let mut group = c.benchmark_group(format!("Ajtai {} C={} W={}", ring_name, C, W));
+
+    group.bench_with_input(
+        "CommitNTT",
         &(ajtai_data, witness),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
+        |b, (ajtai_data, witness)| {
+            b.iter(|| {
+                let _ = ajtai_data.commit_ntt(witness);
+            })
+        },
     );
 
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - DecomposeCommitNTT - Dilithium C={} W={}", C, W),
-            DecompositionParamData::from(p_2),
-        ),
+    group.bench_with_input(
+        "DecomposeCommitNTT",
         &(ajtai_data_2, witness_2),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
-    );
-}
-
-fn ajtai_starkprime_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
-    c: &mut Criterion,
-    p: P,
-) {
-    let ajtai_data: AjtaiCommitmentScheme<C, W, StarkRingNTT> =
-        AjtaiCommitmentScheme::rand(&mut thread_rng());
-
-    let witness: Vec<StarkRingNTT> = (0..W)
-        .map(|_| StarkRingNTT::rand(&mut thread_rng()))
-        .collect();
-
-    let ajtai_data_2 = ajtai_data.clone();
-    let witness_2 = witness.clone();
-    let p_2 = p.clone();
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - CommitNTT - Starkprime C={} W={}", C, W),
-            DecompositionParamData::from(p),
-        ),
-        &(ajtai_data, witness),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
-    );
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - DecomposeCommitNTT - Starkprime C={} W={}", C, W),
-            DecompositionParamData::from(p_2),
-        ),
-        &(ajtai_data_2, witness_2),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
-    );
-}
-
-fn ajtai_goldilocks_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
-    c: &mut Criterion,
-    p: P,
-) {
-    let ajtai_data: AjtaiCommitmentScheme<C, W, GoldilocksRingNTT> =
-        AjtaiCommitmentScheme::rand(&mut thread_rng());
-
-    let witness: Vec<GoldilocksRingNTT> = (0..W)
-        .map(|_| GoldilocksRingNTT::rand(&mut thread_rng()))
-        .collect();
-
-    let ajtai_data_2 = ajtai_data.clone();
-    let witness_2 = witness.clone();
-    let p_2 = p.clone();
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - CommitNTT - Goldilocks C={} W={}", C, W),
-            DecompositionParamData::from(p),
-        ),
-        &(ajtai_data, witness),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
-    );
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - DecomposeCommitNTT - Goldilocks C={} W={}", C, W),
-            DecompositionParamData::from(p_2),
-        ),
-        &(ajtai_data_2, witness_2),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
-    );
-}
-
-fn ajtai_babybear_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
-    c: &mut Criterion,
-    p: P,
-) {
-    let ajtai_data: AjtaiCommitmentScheme<C, W, BabyBearRingNTT> =
-        AjtaiCommitmentScheme::rand(&mut thread_rng());
-
-    let witness: Vec<BabyBearRingNTT> = (0..W)
-        .map(|_| BabyBearRingNTT::rand(&mut thread_rng()))
-        .collect();
-
-    let ajtai_data_2 = ajtai_data.clone();
-    let witness_2 = witness.clone();
-    let p_2 = p.clone();
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - CommitNTT - BabyBear C={} W={}", C, W),
-            DecompositionParamData::from(p),
-        ),
-        &(ajtai_data, witness),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
-    );
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - DecomposeCommitNTT - BabyBear C={} W={}", C, W),
-            DecompositionParamData::from(p_2),
-        ),
-        &(ajtai_data_2, witness_2),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
-    );
-}
-
-fn ajtai_frog_benchmark<const C: usize, const W: usize, P: DecompositionParams>(
-    c: &mut Criterion,
-    p: P,
-) {
-    let ajtai_data: AjtaiCommitmentScheme<C, W, FrogRingNTT> =
-        AjtaiCommitmentScheme::rand(&mut thread_rng());
-
-    let witness: Vec<FrogRingNTT> = (0..W)
-        .map(|_| FrogRingNTT::rand(&mut thread_rng()))
-        .collect();
-
-    let ajtai_data_2 = ajtai_data.clone();
-    let witness_2 = witness.clone();
-    let p_2 = p.clone();
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - CommitNTT - Frog C={} W={}", C, W),
-            DecompositionParamData::from(p),
-        ),
-        &(ajtai_data, witness),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
-    );
-
-    c.bench_with_input(
-        BenchmarkId::new(
-            format!("Ajtai - DecomposeCommitNTT - Frog C={} W={}", C, W),
-            DecompositionParamData::from(p_2),
-        ),
-        &(ajtai_data_2, witness_2),
-        |b, (ajtai_data, witness)| b.iter(|| ajtai_data.decompose_and_commit_ntt::<P>(witness)),
+        |b, (ajtai_data, witness)| {
+            b.iter(|| {
+                let _ = ajtai_data.decompose_and_commit_ntt::<P>(witness);
+            })
+        },
     );
 }
 
 macro_rules! run_ajtai_benchmarks {
     ($c:expr, $cw: expr, $($w:expr),+) => {
         $(
-            ajtai_starkprime_benchmark::<$cw, $w, _>($c, StarkPrimeParams);
-            ajtai_goldilocks_benchmark::<$cw, $w, _>($c, GoldilocksParams);
-            ajtai_babybear_benchmark::<$cw, $w, _>($c, BabyBearParams);
-            ajtai_frog_benchmark::<$cw, $w, _>($c, FrogParams);
-            ajtai_benchmark::<DILITHIUM_PRIME, 256, $cw, $w, _>($c, DilithiumTestParams);
+            // StarkPrime
+            generalized_ajtai_benchmark::<$cw, $w, StarkRingNTT, StarkPrimeParams>($c, "StarkPrime");
+            // Goldilocks
+            generalized_ajtai_benchmark::<$cw, $w, GoldilocksRingNTT, GoldilocksParams>($c, "Goldilocks");
+            // BabyBear
+            generalized_ajtai_benchmark::<$cw, $w, BabyBearRingNTT, BabyBearParams>($c, "BabyBear");
+            // Frog
+            generalized_ajtai_benchmark::<$cw, $w, FrogRingNTT, FrogParams>($c, "Frog");
+            // Dilithium
+            generalized_ajtai_benchmark::<$cw, $w, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>, DilithiumTestParams>($c, "Dilithium");
         )+
     };
 }
 
-
 fn ajtai_commit_benchmarks(c: &mut Criterion) {
-    run_ajtai_benchmarks!(
-         c,
-         5,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         6,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         7,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         8,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         9,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         10,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         11,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         12,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         13,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         14,
-        { 1 << 16 }
-    );
-    run_ajtai_benchmarks!(
-         c,
-         15,
-        { 1 << 16 }
-    );
+    run_ajtai_benchmarks!(c, 5, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 6, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 7, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 8, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 9, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 10, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 11, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 12, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 13, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 14, { 1 << 16 });
+    run_ajtai_benchmarks!(c, 15, { 1 << 16 });
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {

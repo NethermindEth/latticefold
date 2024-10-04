@@ -40,7 +40,7 @@ pub struct StarkPrimeParams;
 impl DecompositionParams for StarkPrimeParams {
     const B: u128 = 1 << 126;
     const L: usize = 2;
-    const B_SMALL: u128 = 2;
+    const B_SMALL: usize = 2;
     const K: usize = 126;
 }
 
@@ -50,7 +50,7 @@ pub struct GoldilocksParams;
 impl DecompositionParams for GoldilocksParams {
     const B: u128 = 1 << 37;
     const L: usize = 2;
-    const B_SMALL: u128 = 2;
+    const B_SMALL: usize = 2;
     const K: usize = 37;
 }
 
@@ -60,7 +60,7 @@ pub struct BabyBearParams;
 impl DecompositionParams for BabyBearParams {
     const B: u128 = 1 << 28;
     const L: usize = 2;
-    const B_SMALL: u128 = 2;
+    const B_SMALL: usize = 2;
     const K: usize = 28;
 }
 
@@ -70,7 +70,7 @@ pub struct FrogParams;
 impl DecompositionParams for FrogParams {
     const B: u128 = 1 << 16;
     const L: usize = 16;
-    const B_SMALL: u128 = 2;
+    const B_SMALL: usize = 2;
     const K: usize = 16;
 }
 

@@ -1,7 +1,7 @@
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use lattirust_ring::cyclotomic_ring::models::babybear::Fq;
 
-use crate::{GetPoseidonParams, BabyBearPoseidonConfig};
+use crate::{BabyBearPoseidonConfig, GetPoseidonParams};
 
 impl GetPoseidonParams<Fq> for BabyBearPoseidonConfig {
     fn get_poseidon_config() -> PoseidonConfig<Fq> {
