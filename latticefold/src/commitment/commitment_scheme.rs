@@ -91,10 +91,12 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
         &self,
         f: &[NTT::CoefficientRepresentation],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
+        println!("Pre decomposed:\n{:?}", f);
         let f = decompose_balanced_vec(f, P::B, Some(P::L))
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
+        println!("Post decomposed:\n{:?}", f);
 
         self.commit_coeff::<P>(&f)
     }
