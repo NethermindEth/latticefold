@@ -8,16 +8,16 @@ use lattirust_ring::{
     Cyclotomic, OverField, PolyRing,
 };
 
+mod babybear;
 mod frog;
 mod goldilocks;
 mod poseidon;
 mod stark;
-mod babybear;
 
+pub use babybear::*;
 pub use frog::*;
 pub use goldilocks::*;
 pub use stark::*;
-pub use babybear::*;
 
 /// This trait should be used for rings in Latticefold.
 /// It contains all the data needed in the protocol.
