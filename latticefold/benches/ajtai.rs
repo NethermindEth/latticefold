@@ -60,17 +60,20 @@ fn ajtai_benchmark<
     let ajtai_data_2 = ajtai_data.clone();
     let witness_2 = witness.clone();
 
-    group.bench_with_input(
-        BenchmarkId::new("CommitNTT", format!("C={}, W={}, B={}", C, W, B)),
-        &(ajtai_data, witness),
-        |b, (ajtai_data, witness)| {
-            b.iter(|| {
-                let _ = ajtai_data.commit_ntt(witness);
-            })
-        },
-    );
+    // group.bench_with_input(
+    //     BenchmarkId::new("CommitNTT", format!("C={}, W={}, B={}", C, W, B)),
+    //     &(ajtai_data, witness),
+    //     |b, (ajtai_data, witness)| {
+    //         b.iter(|| {
+    //             let _ = ajtai_data.commit_ntt(witness);
+    //         })
+    //     },
+    // );
 
-    let _ = ajtai_data_2.decompose_and_commit_ntt::<P>(&witness_2);
+    match ajtai_data_2.decompose_and_commit_ntt::<P>(&witness_2) {
+        Ok(value) => println!("Success: {:?}", value),
+        Err(e) => println!("Error: {:?}", e),
+    }
     // group.bench_with_input(
     //     BenchmarkId::new("DecomposeCommitNTT", format!("C={},W={},B={}", C, W, B)),
     //     &(ajtai_data_2, witness_2),
@@ -210,25 +213,25 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         group.finish();
     }
 
-    // StarkPrime
-    // TODO: Update with more configurations
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Ajtai StarkPrime");
-        group.plot_config(plot_config.clone());
-
-        run_stark_prime_ajtai_benchmarks!(&mut group, 1, ({ 1 << 15 }, 2), ({ 1 << 16 }, 2));
-    }
-
-    // Goldilocks
-    // TODO: Update with more configurations
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Ajtai Goldilocks");
-        group.plot_config(plot_config.clone());
-
-        run_goldilocks_ajtai_benchmarks!(&mut group, 1, ({ 1 << 15 }, 2), ({ 1 << 16 }, 2));
-    }
+    // // StarkPrime
+    // // TODO: Update with more configurations
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Ajtai StarkPrime");
+    //     group.plot_config(plot_config.clone());
+    //
+    //     run_stark_prime_ajtai_benchmarks!(&mut group, 1, ({ 1 << 15 }, 2), ({ 1 << 16 }, 2));
+    // }
+    //
+    // // Goldilocks
+    // // TODO: Update with more configurations
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Ajtai Goldilocks");
+    //     group.plot_config(plot_config.clone());
+    //
+    //     run_goldilocks_ajtai_benchmarks!(&mut group, 1, ({ 1 << 15 }, 2), ({ 1 << 16 }, 2));
+    // }
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {
