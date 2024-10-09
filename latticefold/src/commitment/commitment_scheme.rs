@@ -91,26 +91,12 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
         &self,
         f: &[NTT::CoefficientRepresentation],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let f = decompose_balanced_vec(f, P::B, Some(P::L));
-        // .into_iter()
-        // .flatten()
-        // .collect::<Vec<_>>();
-
-        let commitments: Result<Vec<Commitment<C, NTT>>, CommitmentError> = f
-            .iter()
-            .map(|f_i| {
-                let commit = self.commit_coeff::<P>(f_i).map_err(|e| e)?;
-                Ok(commit)
-            })
+        let f = decompose_balanced_vec(f, P::B, Some(P::L))
             .into_iter()
-            .collect();
-        // self.commit_coeff::<P>(&f)
-        let s = commitments.unwrap().first().cloned().unwrap();
-        
-        // This should return a vectorof commits ready to be used in decomposition
-        // Since we only need tp benchmark it we just return one to return something
+            .flatten()
+            .collect::<Vec<_>>();
 
-        Ok(s)
+        self.commit_coeff::<P>(&f)
     }
 
     /// Takes an NTT form witness, transforms it into the coefficient form,
