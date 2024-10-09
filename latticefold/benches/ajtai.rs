@@ -8,12 +8,10 @@ use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
 use cyclotomic_rings::{BabyBearRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing};
-use latticefold::arith::Witness;
-use latticefold::parameters::{BabyBearParams, GoldilocksParams, StarkPrimeParams};
+
 use latticefold::{commitment::AjtaiCommitmentScheme, parameters::DecompositionParams};
 use lattirust_ring::PolyRing;
 use rand::{thread_rng, RngCore};
-use std::clone;
 use std::fmt::Debug;
 
 fn draw_bellow_bound<R: SuitableRing, Rng>(rng: &mut Rng, bound: u128, degree: usize) -> R
@@ -100,7 +98,10 @@ fn ajtai_benchmark<
     );
 
     group.bench_with_input(
-        BenchmarkId::new("DecomposeCommitNTT", format!("C={},W={},B={}", C, WIT_LEN, P::B)),
+        BenchmarkId::new(
+            "DecomposeCommitNTT",
+            format!("C={}, W={}, B={}", C, WIT_LEN, P::B),
+        ),
         &(ajtai_data, w_css_2),
         |b, (ajtai_data, witness)| {
             b.iter(|| {
@@ -162,7 +163,6 @@ macro_rules! run_single_goldilocks_benchmark {
     };
 }
 
-use paste;
 macro_rules! define_babybear_params {
     ($w:expr, $b:expr, $l:expr) => {
         paste::paste! {
@@ -190,8 +190,6 @@ macro_rules! run_single_babybear_benchmark {
 }
 
 fn ajtai_benchmarks(c: &mut Criterion) {
-    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    let mut group = c.benchmark_group("Ajtai BabyBear");
     // Parameters are describe in the order C, W, B, L
     // Where:
     //  p: prime modulus
@@ -200,6 +198,8 @@ fn ajtai_benchmarks(c: &mut Criterion) {
     //  B: biggest even number less than B_infty from 128 bits of security ` 2^{ 2 * sqrt{ log(1.01) * D * C * log(p) } }/sqrt{ D * W }`
     //  D: Ring degree
     //  L: smallest int such that B^L > p This must be even as well?
+    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    let mut group = c.benchmark_group("Ajtai BabyBear");
     group.plot_config(plot_config.clone());
     {
         run_single_babybear_benchmark!(&mut group, 1, 32768, 2, 31);
@@ -248,7 +248,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
     }
 
     // Goldilocks
-    // TODO: Update with more configurations
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Ajtai Goldilocks");
@@ -304,7 +303,47 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("Ajtai StarkPrime");
         group.plot_config(plot_config.clone());
 
-        run_single_starkprime_benchmark!(&mut group, 1, 32768, 9096, 20);
+        run_single_starkprime_benchmark!(&mut group, 1, 32768, 52, 45);
+        run_single_starkprime_benchmark!(&mut group, 2, 32768, 4028, 21);
+        run_single_starkprime_benchmark!(&mut group, 3, 32768, 114286, 15);
+        run_single_starkprime_benchmark!(&mut group, 4, 32768, 1918124, 13);
+        run_single_starkprime_benchmark!(&mut group, 5, 32768, 23015556, 11);
+        run_single_starkprime_benchmark!(&mut group, 6, 32768, 217592018, 10);
+
+        run_single_starkprime_benchmark!(&mut group, 1, 65536, 36, 49);
+        run_single_starkprime_benchmark!(&mut group, 2, 65536, 2848, 22);
+        run_single_starkprime_benchmark!(&mut group, 3, 65536, 80812, 16);
+        run_single_starkprime_benchmark!(&mut group, 4, 65536, 1356318, 13);
+        run_single_starkprime_benchmark!(&mut group, 5, 65536, 16274456, 11);
+        run_single_starkprime_benchmark!(&mut group, 6, 65536, 153860792, 10);
+
+        run_single_starkprime_benchmark!(&mut group, 1, 131072, 26, 54);
+        run_single_starkprime_benchmark!(&mut group, 2, 131072, 2014, 23);
+        run_single_starkprime_benchmark!(&mut group, 3, 131072, 57142, 16);
+        run_single_starkprime_benchmark!(&mut group, 4, 131072, 959062, 13);
+        run_single_starkprime_benchmark!(&mut group, 5, 131072, 11507778, 11);
+        run_single_starkprime_benchmark!(&mut group, 6, 131072, 108796010, 10);
+
+        run_single_starkprime_benchmark!(&mut group, 1, 262144, 18, 61);
+        run_single_starkprime_benchmark!(&mut group, 2, 262144, 1424, 24);
+        run_single_starkprime_benchmark!(&mut group, 3, 262144, 40406, 17);
+        run_single_starkprime_benchmark!(&mut group, 4, 262144, 678160, 13);
+        run_single_starkprime_benchmark!(&mut group, 5, 262144, 8137228, 11);
+        run_single_starkprime_benchmark!(&mut group, 6, 262144, 76930396, 10);
+
+        run_single_starkprime_benchmark!(&mut group, 1, 524288, 12, 71);
+        run_single_starkprime_benchmark!(&mut group, 2, 524288, 1006, 26);
+        run_single_starkprime_benchmark!(&mut group, 3, 524288, 28572, 17);
+        run_single_starkprime_benchmark!(&mut group, 4, 524288, 479530, 14);
+        run_single_starkprime_benchmark!(&mut group, 5, 524288, 5753890, 12);
+        run_single_starkprime_benchmark!(&mut group, 6, 524288, 54398004, 10);
+
+        run_single_starkprime_benchmark!(&mut group, 1, 1048576, 10, 76);
+        run_single_starkprime_benchmark!(&mut group, 2, 1048576, 712, 27);
+        run_single_starkprime_benchmark!(&mut group, 3, 1048576, 20204, 18);
+        run_single_starkprime_benchmark!(&mut group, 4, 1048576, 339080, 14);
+        run_single_starkprime_benchmark!(&mut group, 5, 1048576, 4068614, 12);
+        run_single_starkprime_benchmark!(&mut group, 6, 1048576, 38465198, 10);
     }
 }
 
