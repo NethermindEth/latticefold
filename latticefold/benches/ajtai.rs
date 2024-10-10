@@ -54,7 +54,8 @@ fn ajtai_benchmark<
     let witness = (0..W)
         .map(|_| draw_bellow_bound::<R, dyn RngCore>(&mut rng, P::B, R::dimension()))
         .collect::<Vec<_>>();
-    let w_css2 = witness.clone();
+    let witness_2 = witness.clone();
+    let witness_3 = witness.clone();
     let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
 
     group.bench_with_input(
@@ -68,30 +69,30 @@ fn ajtai_benchmark<
     );
 
     // NTT -> INTT (coefficients)
-    let mut coeff: Vec<R::CoefficientRepresentation> = Vec::new();
     group.bench_with_input(
-        BenchmarkId::new(
-            "NTT->INTT",
-            format!("C={}, W={}, B={}", C, W, P::B),
-        ),
-        &(w_css2.clone()),
-        |b,  witness| {
+        BenchmarkId::new("NTT->INTT", format!("C={}, W={}, B={}", C, W, P::B)),
+        &(witness_2),
+        |b, witness| {
             b.iter(|| {
-                coeff = witness.iter().map(|&x| x.into()).collect();
+                let _ = witness
+                    .iter()
+                    .map(|&x| x.into())
+                    .collect::<Vec<R::CoefficientRepresentation>>();
             })
         },
     );
 
     // INTT -> NTT
+    let coeff = witness_3
+        .iter()
+        .map(|&x| x.into())
+        .collect::<Vec<R::CoefficientRepresentation>>();
     group.bench_with_input(
-        BenchmarkId::new(
-            "INTT->NTT",
-            format!("C={}, W={}, B={}", C, W, P::B),
-        ),
+        BenchmarkId::new("INTT->NTT", format!("C={}, W={}, B={}", C, W, P::B)),
         &(coeff),
-        |b,  coeff| {
+        |b, coeff| {
             b.iter(|| {
-                let _ : Vec<R> = coeff.iter().map(|&x| R::from(x)).collect();
+                let _: Vec<R> = coeff.iter().map(|&x| R::from(x)).collect();
             })
         },
     );
