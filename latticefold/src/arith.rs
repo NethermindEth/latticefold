@@ -1,5 +1,5 @@
 #![allow(non_snake_case)]
-use ark_ff::{Field, PrimeField};
+use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
