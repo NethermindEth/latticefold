@@ -42,9 +42,8 @@ fn all_elements_bellow_bound<R: SuitableRing>(
 }
 
 fn ajtai_benchmark<
-    const C: usize,
-    const WIT_LEN: usize,
-    const W: usize,
+    const C: usize, // rows
+    const W: usize, // columns
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
     P: DecompositionParams + Clone,
 >(
@@ -52,44 +51,15 @@ fn ajtai_benchmark<
 ) {
     let mut rng = thread_rng();
 
-    let w_css = (0..W)
+    let witness = (0..W)
         .map(|_| draw_bellow_bound::<R, dyn RngCore>(&mut rng, P::B, R::dimension()))
         .collect::<Vec<_>>();
-    let w_css_2 = (0..WIT_LEN)
-        .map(|_| draw_bellow_bound::<R, dyn RngCore>(&mut rng, P::B, R::dimension()))
-        .collect::<Vec<_>>();
+    let w_css2 = witness.clone();
     let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
 
-    // Note that from w_css creates a witness by decomposing it, that is why we use only w_css of
-    // length WIT_LEN  in the decompose and commit function
-    //
-    // pub fn from_w_ccs<P: DecompositionParams>(w_ccs: &[NTT]) -> Self {
-    //     // iNTT
-    //     let coef_repr: Vec<NTT::CoefficientRepresentation> =
-    //         w_ccs.iter().map(|&x| x.into()).collect();
-    //
-    //     // decompose radix-B
-    //     let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-    //         pad_and_transpose(decompose_balanced_vec(&coef_repr, P::B, Some(P::L)))
-    //             .into_iter()
-    //             .flatten()
-    //             .collect();
-    //
-    //     // NTT(coef_repr_decomposed)
-    //     let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
-    //     // coef_repr_decomposed -> coefs -> NTT = coeffs.
-    //     let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
-    //
-    //     Self {
-    //         f,
-    //         f_hat,
-    //         w_ccs: w_ccs.to_vec(),
-    //     }
-    // }
-
     group.bench_with_input(
-        BenchmarkId::new("CommitNTT", format!("C={}, W={}, B={}", C, WIT_LEN, P::B)),
-        &(ajtai_data.clone(), w_css),
+        BenchmarkId::new("CommitNTT", format!("C={}, W={}, B={}", C, W, P::B)),
+        &(ajtai_data.clone(), witness),
         |b, (ajtai_data, witness)| {
             b.iter(|| {
                 let _ = ajtai_data.commit_ntt(witness);
@@ -97,15 +67,31 @@ fn ajtai_benchmark<
         },
     );
 
+    // NTT -> INTT (coefficients)
+    let mut coeff: Vec<R::CoefficientRepresentation> = Vec::new();
     group.bench_with_input(
         BenchmarkId::new(
-            "DecomposeCommitNTT",
-            format!("C={}, W={}, B={}", C, WIT_LEN, P::B),
+            "NTT->INTT",
+            format!("C={}, W={}, B={}", C, W, P::B),
         ),
-        &(ajtai_data, w_css_2),
-        |b, (ajtai_data, witness)| {
+        &(w_css2.clone()),
+        |b,  witness| {
             b.iter(|| {
-                let _ = ajtai_data.decompose_and_commit_ntt::<P>(witness);
+                coeff = witness.iter().map(|&x| x.into()).collect();
+            })
+        },
+    );
+
+    // INTT -> NTT
+    group.bench_with_input(
+        BenchmarkId::new(
+            "INTT->NTT",
+            format!("C={}, W={}, B={}", C, W, P::B),
+        ),
+        &(coeff),
+        |b,  coeff| {
+            b.iter(|| {
+                let _ : Vec<R> = coeff.iter().map(|&x| R::from(x)).collect();
             })
         },
     );
@@ -131,8 +117,8 @@ macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_starkprime_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<StarkPrimeParamsWithB $b W $w>]::L; // Define the padded witness
-            ajtai_benchmark::<$cw, $w, [<W $w B $b L $l>], StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit);
+            //const [<W $w B $b L $l>]: usize = $w * [<StarkPrimeParamsWithB $b W $w>]::L; // Define the padded witness
+            ajtai_benchmark::<$cw, $w, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit);
         }
     };
 }
@@ -157,8 +143,8 @@ macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_goldilocks_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<GoldilocksParamsWithB $b W $w>]::L; // Define the padded witness
-            ajtai_benchmark::<$cw, $w,[<W $w B $b L $l>], GoldilocksRingNTT, [<GoldilocksParamsWithB $b W $w>]>($crit);
+            //const [<W $w B $b L $l>]: usize = $w * [<GoldilocksParamsWithB $b W $w>]::L; // Define the padded witness
+            ajtai_benchmark::<$cw, $w, GoldilocksRingNTT, [<GoldilocksParamsWithB $b W $w>]>($crit);
         }
     };
 }
@@ -183,8 +169,8 @@ macro_rules! run_single_babybear_benchmark {
     ($crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_babybear_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<BabyBearParamsWithB $b W $w>]::L; // Define the padded witness
-            ajtai_benchmark::<$cw, $w, [<W $w B $b L $l>], BabyBearRingNTT, [<BabyBearParamsWithB $b W $w>]>($crit);
+            //const [<W $w B $b L $l>]: usize = $w * [<BabyBearParamsWithB $b W $w>]::L; // Define the padded witness
+            ajtai_benchmark::<$cw, $w, BabyBearRingNTT, [<BabyBearParamsWithB $b W $w>]>($crit);
         }
     };
 }
