@@ -394,7 +394,7 @@ fn ajtai_benchmarks(c: &mut Criterion) {
     // Frog
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Ajtai BabyBear");
+        let mut group = c.benchmark_group("Ajtai Frog");
         group.plot_config(plot_config.clone());
 
         run_single_frog_benchmark!(&mut group, 1, 32768, 0, 1);
