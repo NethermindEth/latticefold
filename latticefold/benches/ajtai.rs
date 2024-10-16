@@ -112,6 +112,36 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_babybear_benchmark!(&mut group, 4, 32768);
         run_single_babybear_benchmark!(&mut group, 5, 32768);
         run_single_babybear_benchmark!(&mut group, 6, 32768);
+        run_single_babybear_benchmark!(&mut group, 1, 65536);
+        run_single_babybear_benchmark!(&mut group, 2, 65536);
+        run_single_babybear_benchmark!(&mut group, 3, 65536);
+        run_single_babybear_benchmark!(&mut group, 4, 65536);
+        run_single_babybear_benchmark!(&mut group, 5, 65536);
+        run_single_babybear_benchmark!(&mut group, 6, 65536);
+        run_single_babybear_benchmark!(&mut group, 1, 131072);
+        run_single_babybear_benchmark!(&mut group, 2, 131072);
+        run_single_babybear_benchmark!(&mut group, 3, 131072);
+        run_single_babybear_benchmark!(&mut group, 4, 131072);
+        run_single_babybear_benchmark!(&mut group, 5, 131072);
+        run_single_babybear_benchmark!(&mut group, 6, 131072);
+        run_single_babybear_benchmark!(&mut group, 1, 262144);
+        run_single_babybear_benchmark!(&mut group, 2, 262144);
+        run_single_babybear_benchmark!(&mut group, 3, 262144);
+        run_single_babybear_benchmark!(&mut group, 4, 262144);
+        run_single_babybear_benchmark!(&mut group, 5, 262144);
+        run_single_babybear_benchmark!(&mut group, 6, 262144);
+        run_single_babybear_benchmark!(&mut group, 1, 524288);
+        run_single_babybear_benchmark!(&mut group, 2, 524288);
+        run_single_babybear_benchmark!(&mut group, 3, 524288);
+        run_single_babybear_benchmark!(&mut group, 4, 524288);
+        run_single_babybear_benchmark!(&mut group, 5, 524288);
+        run_single_babybear_benchmark!(&mut group, 6, 524288);
+        run_single_babybear_benchmark!(&mut group, 1, 1048576);
+        run_single_babybear_benchmark!(&mut group, 2, 1048576);
+        run_single_babybear_benchmark!(&mut group, 3, 1048576);
+        run_single_babybear_benchmark!(&mut group, 4, 1048576);
+        run_single_babybear_benchmark!(&mut group, 5, 1048576);
+        run_single_babybear_benchmark!(&mut group, 6, 1048576);
 
         // ... (keep all existing benchmarks)
 
@@ -139,6 +169,36 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 4, 32768);
         run_single_goldilocks_benchmark!(&mut group, 5, 32768);
         run_single_goldilocks_benchmark!(&mut group, 6, 32768);
+        run_single_goldilocks_benchmark!(&mut group, 1, 65536);
+        run_single_goldilocks_benchmark!(&mut group, 2, 65536);
+        run_single_goldilocks_benchmark!(&mut group, 3, 65536);
+        run_single_goldilocks_benchmark!(&mut group, 4, 65536);
+        run_single_goldilocks_benchmark!(&mut group, 5, 65536);
+        run_single_goldilocks_benchmark!(&mut group, 6, 65536);
+        run_single_goldilocks_benchmark!(&mut group, 1, 131072);
+        run_single_goldilocks_benchmark!(&mut group, 2, 131072);
+        run_single_goldilocks_benchmark!(&mut group, 3, 131072);
+        run_single_goldilocks_benchmark!(&mut group, 4, 131072);
+        run_single_goldilocks_benchmark!(&mut group, 5, 131072);
+        run_single_goldilocks_benchmark!(&mut group, 6, 131072);
+        run_single_goldilocks_benchmark!(&mut group, 1, 262144);
+        run_single_goldilocks_benchmark!(&mut group, 2, 262144);
+        run_single_goldilocks_benchmark!(&mut group, 3, 262144);
+        run_single_goldilocks_benchmark!(&mut group, 4, 262144);
+        run_single_goldilocks_benchmark!(&mut group, 5, 262144);
+        run_single_goldilocks_benchmark!(&mut group, 6, 262144);
+        run_single_goldilocks_benchmark!(&mut group, 1, 524288);
+        run_single_goldilocks_benchmark!(&mut group, 2, 524288);
+        run_single_goldilocks_benchmark!(&mut group, 3, 524288);
+        run_single_goldilocks_benchmark!(&mut group, 4, 524288);
+        run_single_goldilocks_benchmark!(&mut group, 5, 524288);
+        run_single_goldilocks_benchmark!(&mut group, 6, 524288);
+        run_single_goldilocks_benchmark!(&mut group, 1, 1048576);
+        run_single_goldilocks_benchmark!(&mut group, 2, 1048576);
+        run_single_goldilocks_benchmark!(&mut group, 3, 1048576);
+        run_single_goldilocks_benchmark!(&mut group, 4, 1048576);
+        run_single_goldilocks_benchmark!(&mut group, 5, 1048576);
+        run_single_goldilocks_benchmark!(&mut group, 6, 1048576);
 
         // ... (keep all existing benchmarks)
 
@@ -166,12 +226,40 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_starkprime_benchmark!(&mut group, 4, 32768);
         run_single_starkprime_benchmark!(&mut group, 5, 32768);
         run_single_starkprime_benchmark!(&mut group, 6, 32768);
+        run_single_starkprime_benchmark!(&mut group, 1, 65536);
+        run_single_starkprime_benchmark!(&mut group, 2, 65536);
+        run_single_starkprime_benchmark!(&mut group, 3, 65536);
+        run_single_starkprime_benchmark!(&mut group, 4, 65536);
+        run_single_starkprime_benchmark!(&mut group, 5, 65536);
+        run_single_starkprime_benchmark!(&mut group, 6, 65536);
+        run_single_starkprime_benchmark!(&mut group, 1, 131072);
+        run_single_starkprime_benchmark!(&mut group, 2, 131072);
+        run_single_starkprime_benchmark!(&mut group, 3, 131072);
+        run_single_starkprime_benchmark!(&mut group, 4, 131072);
+        run_single_starkprime_benchmark!(&mut group, 5, 131072);
+        run_single_starkprime_benchmark!(&mut group, 6, 131072);
+        run_single_starkprime_benchmark!(&mut group, 1, 262144);
+        run_single_starkprime_benchmark!(&mut group, 2, 262144);
+        run_single_starkprime_benchmark!(&mut group, 3, 262144);
+        run_single_starkprime_benchmark!(&mut group, 4, 262144);
+        run_single_starkprime_benchmark!(&mut group, 5, 262144);
+        run_single_starkprime_benchmark!(&mut group, 6, 262144);
+        run_single_starkprime_benchmark!(&mut group, 1, 524288);
+        run_single_starkprime_benchmark!(&mut group, 2, 524288);
+        run_single_starkprime_benchmark!(&mut group, 3, 524288);
+        run_single_starkprime_benchmark!(&mut group, 4, 524288);
+        run_single_starkprime_benchmark!(&mut group, 5, 524288);
+        run_single_starkprime_benchmark!(&mut group, 6, 524288);
+        run_single_starkprime_benchmark!(&mut group, 1, 1048576);
+        run_single_starkprime_benchmark!(&mut group, 2, 1048576);
+        run_single_starkprime_benchmark!(&mut group, 3, 1048576);
+        run_single_starkprime_benchmark!(&mut group, 4, 1048576);
+        run_single_starkprime_benchmark!(&mut group, 5, 1048576);
+        run_single_starkprime_benchmark!(&mut group, 6, 1048576);
 
         // ... (keep all existing benchmarks)
 
         // New benchmarks
-        run_single_starkprime_benchmark!(&mut group, 6, 32768);
-        run_single_starkprime_benchmark!(&mut group, 6, 65536);
         run_single_starkprime_benchmark!(&mut group, 7, 131072);
         run_single_starkprime_benchmark!(&mut group, 7, 262144);
         run_single_starkprime_benchmark!(&mut group, 7, 524288);
@@ -193,6 +281,36 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_frog_benchmark!(&mut group, 4, 32768);
         run_single_frog_benchmark!(&mut group, 5, 32768);
         run_single_frog_benchmark!(&mut group, 6, 32768);
+        run_single_frog_benchmark!(&mut group, 1, 65536);
+        run_single_frog_benchmark!(&mut group, 2, 65536);
+        run_single_frog_benchmark!(&mut group, 3, 65536);
+        run_single_frog_benchmark!(&mut group, 4, 65536);
+        run_single_frog_benchmark!(&mut group, 5, 65536);
+        run_single_frog_benchmark!(&mut group, 6, 65536);
+        run_single_frog_benchmark!(&mut group, 1, 131072);
+        run_single_frog_benchmark!(&mut group, 2, 131072);
+        run_single_frog_benchmark!(&mut group, 3, 131072);
+        run_single_frog_benchmark!(&mut group, 4, 131072);
+        run_single_frog_benchmark!(&mut group, 5, 131072);
+        run_single_frog_benchmark!(&mut group, 6, 131072);
+        run_single_frog_benchmark!(&mut group, 1, 262144);
+        run_single_frog_benchmark!(&mut group, 2, 262144);
+        run_single_frog_benchmark!(&mut group, 3, 262144);
+        run_single_frog_benchmark!(&mut group, 4, 262144);
+        run_single_frog_benchmark!(&mut group, 5, 262144);
+        run_single_frog_benchmark!(&mut group, 6, 262144);        
+        run_single_frog_benchmark!(&mut group, 1, 524288);
+        run_single_frog_benchmark!(&mut group, 2, 524288);
+        run_single_frog_benchmark!(&mut group, 3, 524288);
+        run_single_frog_benchmark!(&mut group, 4, 524288);
+        run_single_frog_benchmark!(&mut group, 5, 524288);
+        run_single_frog_benchmark!(&mut group, 6, 524288);
+        run_single_frog_benchmark!(&mut group, 1, 1048576);
+        run_single_frog_benchmark!(&mut group, 2, 1048576);
+        run_single_frog_benchmark!(&mut group, 3, 1048576);
+        run_single_frog_benchmark!(&mut group, 4, 1048576);
+        run_single_frog_benchmark!(&mut group, 5, 1048576);
+        run_single_frog_benchmark!(&mut group, 6, 1048576);
 
         // ... (keep all existing benchmarks)
 
@@ -217,18 +335,20 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_dilithium_benchmark!(&mut group, 1, 32768);
         run_single_dilithium_benchmark!(&mut group, 2, 32768);
         run_single_dilithium_benchmark!(&mut group, 3, 32768);
-        run_single_dilithium_benchmark!(&mut group, 4, 32768);
-        run_single_dilithium_benchmark!(&mut group, 5, 32768);
-        run_single_dilithium_benchmark!(&mut group, 6, 32768);
-
-        // ... (keep all existing benchmarks)
-
-        // New benchmarks
-        run_single_dilithium_benchmark!(&mut group, 3, 32768);
+        run_single_dilithium_benchmark!(&mut group, 1, 65536);
+        run_single_dilithium_benchmark!(&mut group, 2, 65536);
         run_single_dilithium_benchmark!(&mut group, 3, 65536);
+        run_single_dilithium_benchmark!(&mut group, 1, 131072);
+        run_single_dilithium_benchmark!(&mut group, 2, 131072);
         run_single_dilithium_benchmark!(&mut group, 3, 131072);
+        run_single_dilithium_benchmark!(&mut group, 1, 262144);
+        run_single_dilithium_benchmark!(&mut group, 2, 262144);
         run_single_dilithium_benchmark!(&mut group, 3, 262144);
+        run_single_dilithium_benchmark!(&mut group, 1, 524288);
+        run_single_dilithium_benchmark!(&mut group, 2, 524288);
         run_single_dilithium_benchmark!(&mut group, 3, 524288);
+        run_single_dilithium_benchmark!(&mut group, 1, 1048576);
+        run_single_dilithium_benchmark!(&mut group, 2, 1048576);
         run_single_dilithium_benchmark!(&mut group, 3, 1048576);
 
         group.finish();
