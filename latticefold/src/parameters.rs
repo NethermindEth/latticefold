@@ -18,8 +18,7 @@ pub trait DecompositionParams: Clone {
 }
 
 // Some classic lattice parameter sets.
-
-pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001;
+pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001; // = 8380417
 
 pub type DilithiumCR = Pow2CyclotomicPolyRing<DILITHIUM_PRIME, 256>;
 pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
