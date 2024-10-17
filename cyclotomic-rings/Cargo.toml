@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 ark-ff = { workspace = true }
+ark-std = { workspace = true } 
 ark-crypto-primitives = { version = "0.4.0", default-features = false, features = [
     "sponge",
 ] }
@@ -13,3 +14,4 @@ rand = "0.8.5"
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
+thiserror = { workspace = true }

@@ -1,5 +1,7 @@
 use ark_std::fmt::Display;
-use lattirust_ring::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT, Zq};
+use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
+    Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
+};
 
 /// Decomposition parameters.
 /// Convenient to enforce them compile-time.
@@ -10,83 +12,26 @@ pub trait DecompositionParams: Clone {
     /// The ring modulus should be < B^L.
     const L: usize;
     /// The small b from the decomposition step of LF.
-    const B_SMALL: u128;
+    const B_SMALL: usize;
     /// K = log_b B.
     const K: usize;
 }
 
 // Some classic lattice parameter sets.
+
 pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001;
+
+pub type DilithiumCR = Pow2CyclotomicPolyRing<DILITHIUM_PRIME, 256>;
+pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
 
 #[derive(Clone, Copy)]
 pub struct DilithiumTestParams;
-pub type DilithiumCR = Pow2CyclotomicPolyRing<Zq<DILITHIUM_PRIME>, 256>;
-pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
 
 // TODO: Revise this later
 impl DecompositionParams for DilithiumTestParams {
     const B: u128 = 1 << 13;
     const L: usize = 2;
-    const B_SMALL: u128 = 2;
-    const K: usize = 13;
-}
-
-// pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001;
-pub const SOME_FERMAT_PRIME: u64 = (1 << 16) + 1;
-
-#[derive(Clone, Copy)]
-pub struct SomeFermatTestParams;
-
-// TODO: Revise this later
-impl DecompositionParams for SomeFermatTestParams {
-    const B: u128 = 1 << 13;
-    const L: usize = 2;
-    const B_SMALL: u128 = 2;
-    const K: usize = 13;
-}
-
-pub const BABYBEAR_PRIME: u64 = 15 * (1 << 27) + 1;
-
-#[derive(Clone, Copy)]
-pub struct BabyBearTestParams;
-
-// Not actually used
-impl DecompositionParams for BabyBearTestParams {
-    const B: u128 = 1 << 13;
-    const L: usize = 2;
-    const B_SMALL: u128 = 2;
-    const K: usize = 13;
-}
-
-// p = 27*2^59 + 1
-pub const POW2_59_PRIME: u64 = 0xd800000000000001;
-
-pub type POW2_59CR = Pow2CyclotomicPolyRing<Zq<POW2_59_PRIME>, 256>;
-pub type POW2_59NTT = Pow2CyclotomicPolyRingNTT<POW2_59_PRIME, 256>;
-#[derive(Clone, Copy)]
-pub struct Pow2_59TestParams;
-
-// TODO: Revise this later
-impl DecompositionParams for Pow2_59TestParams {
-    const B: u128 = 1 << 13;
-    const L: usize = 2;
-    const B_SMALL: u128 = 2;
-    const K: usize = 13;
-}
-
-pub const POW2_57_PRIME: u64 = 0xf600000000000001;
-
-pub type POW2_57CR = Pow2CyclotomicPolyRing<Zq<POW2_57_PRIME>, 256>;
-pub type POW2_57NTT = Pow2CyclotomicPolyRingNTT<POW2_57_PRIME, 256>;
-
-#[derive(Clone, Copy)]
-pub struct Pow2_57TestParams;
-
-// TODO: Revise this later
-impl DecompositionParams for Pow2_57TestParams {
-    const B: u128 = 1 << 13;
-    const L: usize = 2;
-    const B_SMALL: u128 = 2;
+    const B_SMALL: usize = 2;
     const K: usize = 13;
 }
 

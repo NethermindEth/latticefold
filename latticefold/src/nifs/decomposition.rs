@@ -1,11 +1,11 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-
 use ark_std::marker::PhantomData;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
     OverField, Ring,
 };
 
+use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -13,7 +13,6 @@ use crate::{
     nifs::error::DecompositionError,
     parameters::DecompositionParams,
     transcript::Transcript,
-    utils::mle::dense_vec_to_dense_mle,
 };
 use cyclotomic_rings::SuitableRing;
 
@@ -141,7 +140,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 v: *v,
                 cm: y.clone(),
                 u: u.clone(),
-                x_w: x.clone(),
+                x_w: x[0..x.len() - 1].to_vec(),
                 h,
             })
         }
@@ -184,13 +183,14 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
                 v: *v,
                 cm: y.clone(),
                 u: u.clone(),
-                x_w: x.clone(),
+                x_w: x[0..x.len() - 1].to_vec(),
                 h,
             });
         }
 
-        let b = P::B_SMALL;
-        let b_s: Vec<_> = (0..P::K).map(|i| NTT::from(b.pow(i as u32))).collect();
+        let b_s: Vec<_> = (0..P::K)
+            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
+            .collect();
 
         let should_equal_y0 = proof
             .y_s
@@ -275,11 +275,17 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
             .flatten()
             .collect();
 
-    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, Some(DP::K))
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
-                .map(|chunk| recompose(chunk, NTT::BaseRing::from(DP::B)).into())
+                .map(|chunk| {
+                    recompose(
+                        chunk,
+                        <NTT as SuitableRing>::CoefficientRepresentation::from(DP::B),
+                    )
+                    .into()
+                })
                 .collect()
         })
         .collect()
@@ -291,7 +297,7 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 ) -> Vec<Vec<NTT>> {
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
-    decompose_balanced_vec(&coeff_repr, DP::B_SMALL, Some(DP::K))
+    decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K))
         .into_iter()
         .map(|vec| vec.into_iter().map(|x| x.into()).collect())
         .collect()
@@ -299,15 +305,12 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 
 #[cfg(test)]
 mod tests {
-    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+
     use rand::thread_rng;
 
     use crate::{
-        arith::{
-            r1cs::tests::{get_test_dummy_z_split, get_test_vitalik_z_split},
-            tests::{get_test_dummy_ccs, get_test_vitalik_ccs},
-            Witness, CCCS,
-        },
+        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{
@@ -336,7 +339,7 @@ mod tests {
     impl DecompositionParams for PP {
         const B: u128 = 1_024;
         const L: usize = 2;
-        const B_SMALL: u128 = 2;
+        const B_SMALL: usize = 2;
         const K: usize = 10;
     }
     // Actual Tests
@@ -345,8 +348,8 @@ mod tests {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_vitalik_ccs::<NTT>(W);
-        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
+        let ccs = get_test_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
@@ -393,8 +396,8 @@ mod tests {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_vitalik_ccs::<NTT>(W);
-        let (_, x_ccs, w_ccs) = get_test_vitalik_z_split::<NTT>(3);
+        let ccs = get_test_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
         let cm_i: CCCS<4, NTT> = CCCS {
@@ -417,7 +420,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, w_ccs) = get_test_vitalik_z_split::<NTT>(100);
+        let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
         let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
@@ -437,56 +440,5 @@ mod tests {
         );
 
         assert!(res.is_err());
-    }
-
-    #[test]
-    fn test_dummy_decomposition() {
-        const C: usize = 4;
-        const IO: usize = 1;
-        const WIT_LEN: usize = 4;
-        const W: usize = WIT_LEN * PP::L;
-        let r1cs_rows = 5;
-
-        let ccs = get_test_dummy_ccs::<NTT, IO, WIT_LEN>(r1cs_rows);
-        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<NTT, IO, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<C, NTT> = CCCS {
-            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
-
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
-            &cm_i,
-            &linearization_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
-
-        let res = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        );
-
-        assert!(res.is_ok());
     }
 }

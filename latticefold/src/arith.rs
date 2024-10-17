@@ -4,7 +4,7 @@ use cyclotomic_rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    PolyRing, Ring,
+    Ring,
 };
 
 use crate::{
@@ -102,25 +102,8 @@ impl<R: Ring> Arith<R> for CCS<R> {
 
 impl<R: Ring> CCS<R> {
     pub fn from_r1cs(r1cs: R1CS<R>, W: usize) -> Self {
-        let mut m = r1cs.A.nrows();
+        let m = W;
         let n = r1cs.A.ncols();
-
-        let extend = |mat: SparseMatrix<R>| -> SparseMatrix<R> {
-            let mut values: Vec<R> = mat.transpose().values().to_vec();
-            values.extend(vec![R::ZERO; (W - m) * n]);
-            let rows: Vec<Vec<R>> = values.chunks(n).map(|c| c.to_vec()).collect();
-
-            SparseMatrix::from(rows.as_slice())
-        };
-
-        // Pad with dummy constraints to have the number of constraints the same as W - the number of columns
-        // of the Ajtai matrix or, equivalently, the number of columns of the G gadget matrix
-        // (see Definition 4.3 in the paper).
-        let A = extend(r1cs.A);
-        let B = extend(r1cs.B);
-        let C = extend(r1cs.C);
-
-        m = W;
 
         CCS {
             m,
@@ -134,7 +117,7 @@ impl<R: Ring> CCS<R> {
 
             S: vec![vec![0, 1], vec![2]],
             c: vec![R::one(), R::one().neg()],
-            M: vec![A, B, C],
+            M: vec![r1cs.A, r1cs.B, r1cs.C],
         }
     }
 
@@ -189,10 +172,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
-        let f_hat: Vec<NTT> = coef_repr_decomposed
-            .into_iter()
-            .map(|x| x.coeffs().into())
-            .collect();
+        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
 
         Self {
             f,
@@ -204,10 +184,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
         let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
             f.iter().map(|&x| x.into()).collect();
-        let f_hat: Vec<NTT> = coef_repr_decomposed
-            .into_iter()
-            .map(|x| x.coeffs().into())
-            .collect();
+        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
 
         let w_ccs = f
             .chunks(P::L)
@@ -259,42 +236,23 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 
 #[cfg(test)]
 pub mod tests {
-    use self::r1cs::tests::{get_test_dummy_r1cs, get_test_dummy_z};
-
     use super::*;
-    use crate::arith::r1cs::tests::{
-        get_test_vitalik_r1cs, get_test_vitalik_z as r1cs_get_test_vitalik_z,
-    };
-    use lattirust_ring::Pow2CyclotomicPolyRingNTT;
+    use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
-    pub fn get_test_vitalik_ccs<R: Ring>(W: usize) -> CCS<R> {
-        let r1cs = get_test_vitalik_r1cs::<R>();
+    pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
+        let r1cs = get_test_r1cs::<R>();
         CCS::<R>::from_r1cs(r1cs, W)
     }
-    pub fn get_test_arith_vitalik_z<R: Ring>(input: usize) -> Vec<R> {
-        r1cs_get_test_vitalik_z(input)
-    }
-
-    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const W: usize>(
-        r1cs_rows: usize,
-    ) -> CCS<R> {
-        let r1cs = get_test_dummy_r1cs::<R, IO, W>(r1cs_rows);
-        CCS::<R>::from_r1cs(r1cs, IO + W + 1)
+    pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
+        r1cs_get_test_z(input)
     }
 
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_vitalik_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>(4);
-        let z = get_test_arith_vitalik_z(3);
-
-        ccs.check_relation(&z).unwrap();
-    }
-
-    #[test]
-    fn test_ccs_dummy_relation() {
-        let ccs = get_test_dummy_ccs::<Pow2CyclotomicPolyRingNTT<101, 64>, 1, 10>(5);
-        let z = get_test_dummy_z::<_, 1, 10>();
+        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>(4);
+        let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();
     }

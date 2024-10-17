@@ -1,65 +1,50 @@
-use ark_std::time::Duration;
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
+use ark_std::{time::Duration, UniformRand};
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use cyclotomic_rings::SuitableRing;
-use lattirust_ring::Pow2CyclotomicPolyRingNTT;
+use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
+    Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
+};
 use rand::thread_rng;
 
 use latticefold::{
     commitment::AjtaiCommitmentScheme,
     parameters::{
-        DecompositionParamData, DecompositionParams, DilithiumTestParams, Pow2_57TestParams,
-        Pow2_59TestParams, POW2_57_PRIME, POW2_59_PRIME, SOME_FERMAT_PRIME,
+        DecompositionParamData, DecompositionParams, DilithiumTestParams, DILITHIUM_PRIME,
     },
 };
 
-fn ajtai_benchmark<const C: usize, const W: usize, P: DecompositionParams, R: SuitableRing>(
+fn ajtai_benchmark<
+    const Q: u64,
+    const N: usize,
+    const C: usize,
+    const W: usize,
+    P: DecompositionParams,
+>(
     c: &mut Criterion,
     p: P,
-    prime_name: &str,
-) {
-    let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut thread_rng());
+) where
+    Pow2CyclotomicPolyRingNTT<Q, N>: From<Pow2CyclotomicPolyRing<Q, N>>,
+    Pow2CyclotomicPolyRing<Q, N>: From<Pow2CyclotomicPolyRingNTT<Q, N>>,
+{
+    let ajtai_data: AjtaiCommitmentScheme<C, W, Pow2CyclotomicPolyRingNTT<Q, N>> =
+        AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let witness: Vec<R> = (0..W).map(|_| R::rand(&mut thread_rng())).collect();
+    let witness: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = (0..W)
+        .map(|_| Pow2CyclotomicPolyRingNTT::rand(&mut thread_rng()))
+        .collect();
 
-    let bench_name = format!(
-        "Ajtai {}x{} for {} with degree {} and bound {}",
-        C,
-        W,
-        prime_name,
-        R::dimension(),
-        P::B,
-    );
     c.bench_with_input(
-        BenchmarkId::new(bench_name, DecompositionParamData::from(p)),
+        BenchmarkId::new("Ajtai", DecompositionParamData::from(p)),
         &(ajtai_data, witness),
         |b, (ajtai_data, witness)| b.iter(|| ajtai_data.commit_ntt(witness)),
     );
 }
 
 fn ajtai_benchmarks(c: &mut Criterion) {
-    ajtai_benchmark::<9, { 1 << 15 }, _, Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 256>>(
-        c,
-        DilithiumTestParams,
-        "Some fermat(2^16 + 1) prime",
-    );
-    ajtai_benchmark::<9, { 1 << 15 }, _, Pow2CyclotomicPolyRingNTT<POW2_59_PRIME, 256>>(
-        c,
-        Pow2_59TestParams,
-        "p = 27*(1<<59) + 1",
-    );
-    ajtai_benchmark::<9, { 1 << 15 }, _, Pow2CyclotomicPolyRingNTT<POW2_57_PRIME, 256>>(
-        c,
-        Pow2_57TestParams,
-        "p = 71*(1<<57) + 1",
-    );
+    ajtai_benchmark::<DILITHIUM_PRIME, 256, 9, 32768, _>(c, DilithiumTestParams);
 
     // TODO: more benchmarks with different params.
-    // ajtai_benchmark::<
-    //     6,
-    //     { 1 << 15 },
-    //     _,
-    //     CyclotomicPolyRingSplittedNTT<BABYBEAR_PRIME, 420899707, 72, 9, 24, 8>,
-    // >(c, BabyBearTestParams, "BabyBear");
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {
