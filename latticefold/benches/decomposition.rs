@@ -1,14 +1,16 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use cyclotomic_rings::{
-    challenge_set::{BinarySmallSet, LatticefoldChallengeSet},
+    challenge_set::{LatticefoldChallengeSet},
     SuitableRing,
 };
-use lattirust_ring::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
+use std::fmt::Debug;
 mod utils;
+use ark_std::UniformRand;
 use std::time::Duration;
 use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
 
+use cyclotomic_rings::{StarkRingNTT, GoldilocksRingNTT, FrogRingNTT, StarkChallengeSet, GoldilocksChallengeSet, FrogChallengeSet};
 use latticefold::{
     arith::{Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -23,16 +25,17 @@ use latticefold::{
         },
     },
     parameters::{
-        DecompositionParamData, DecompositionParams, SomeFermatTestParams, SOME_FERMAT_PRIME,
+        DecompositionParamData, DecompositionParams
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use paste;
 
 fn wit_and_ccs_gen<
     const IO: usize,
-    const C: usize,
+    const C: usize, // rows
     const WIT_LEN: usize,
-    const W: usize,
+    const W: usize, // columns
     P: DecompositionParams,
     R: SuitableRing,
 >(
@@ -160,6 +163,7 @@ fn verifier_decomposition_benchmark<
             &scheme,
         )
         .unwrap();
+
     c.bench_with_input(
         BenchmarkId::new(
             format!("Decomposition Verifier {}", prime_name),
@@ -179,47 +183,36 @@ fn verifier_decomposition_benchmark<
     );
 }
 
-const IO: usize = 1;
-const C: usize = 10;
-const WIT_LEN: usize = 1 << 10;
-fn decomposition_benchmarks(c: &mut Criterion) {
-    const W: usize = WIT_LEN * SomeFermatTestParams::L;
+fn decomposition_benchmarks<
+    const IO: usize,
+    const C: usize,
+    const WIT_LEN: usize,
+    const W: usize,
+    CS: LatticefoldChallengeSet<R>,
+    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    P: DecompositionParams + Clone,
+>(
+    c: &mut Criterion,
+    ring_name: &str,
+    decomp: P,
+) {
     let r1cs_rows = 5;
-    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<
-        IO,
-        C,
-        WIT_LEN,
-        W,
-        SomeFermatTestParams,
-        Pow2CyclotomicPolyRingNTT<{ SOME_FERMAT_PRIME }, 16>,
-    >(r1cs_rows);
-
-    prover_decomposition_benchmark::<
-        C,
-        W,
-        _,
-        Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 16>,
-        BinarySmallSet<SOME_FERMAT_PRIME, 16>,
-    >(
+    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<IO, C, WIT_LEN, W, P, R>(r1cs_rows);
+    // N/Q = prime / degree
+    prover_decomposition_benchmark::<C, W, _, R, CS>(
         c,
-        SomeFermatTestParams,
-        "Some fermat(2^16 + 1) prime",
+        decomp.clone(),
+        ring_name,
         &cm_i,
         &wit,
         &ccs,
         &scheme,
     );
 
-    verifier_decomposition_benchmark::<
-        C,
-        W,
-        _,
-        Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 16>,
-        BinarySmallSet<SOME_FERMAT_PRIME, 16>,
-    >(
+    verifier_decomposition_benchmark::<C, W, _, R, CS>(
         c,
-        SomeFermatTestParams,
-        "Some fermat(2^16 + 1) prime",
+        decomp,
+        ring_name,
         &cm_i,
         &wit,
         &ccs,
@@ -227,8 +220,143 @@ fn decomposition_benchmarks(c: &mut Criterion) {
     );
 }
 
+// Macros
+macro_rules! define_starkprime_params {
+    ($w:expr, $b:expr, $l:expr) => {
+        paste::paste! {
+            #[derive(Clone)]
+            struct [<StarkPrimeParamsWithB $b W $w>];
+
+            impl DecompositionParams for [<StarkPrimeParamsWithB $b W $w>] {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = 2; // This is not use in decompose or linearization
+                const K: usize = 28;// This is not use in decompose or linearization
+            }
+        }
+    };
+}
+
+macro_rules! run_single_starkprime_benchmark {
+    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
+        define_starkprime_params!($w, $b, $l);
+        paste::paste! {
+            const [<W $w B $b L $l>]: usize = $w * [<StarkPrimeParamsWithB $b W $w>]::L;
+            decomposition_benchmarks::<$io, $cw, $w, $w * $l, StarkChallengeSet, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit, "StarkPrime", [<StarkPrimeParamsWithB $b W $w>]);
+        }
+    };
+}
+
+macro_rules! define_goldilocks_params {
+    ($w:expr, $b:expr, $l:expr) => {
+        paste::paste! {
+            #[derive(Clone)]
+            struct [<GoldilocksParamsWithB $b W $w>];
+
+            impl DecompositionParams for [<GoldilocksParamsWithB $b W $w>] {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = 2; // This is not use in decompose or linearization
+                const K: usize = 28;// This is not use in decompose or linearization
+            }
+        }
+    };
+}
+
+macro_rules! run_single_goldilocks_benchmark {
+    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
+        define_goldilocks_params!($w, $b, $l);
+        paste::paste! {
+            const [<W $w B $b L $l>]: usize = $w * [<GoldilocksParamsWithB $b W $w>]::L;
+            decomposition_benchmarks::<$io, $cw, $w, $w * $l, GoldilocksChallengeSet, GoldilocksRingNTT, [<GoldilocksParamsWithB $b W $w>]>($crit, "Goldilocks",  [<GoldilocksParamsWithB $b W $w>]);
+
+        }
+    };
+}
+/*
+macro_rules! define_babybear_params {
+    ($w:expr, $b:expr, $l:expr) => {
+        paste::paste! {
+            #[derive(Clone)]
+            struct [<BabyBearParamsWithB $b W $w>];
+
+            impl DecompositionParams for [<BabyBearParamsWithB $b W $w>] {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = 2; // This is not use in decompose or linearization
+                const K: usize = 28;// This is not use in decompose or linearization
+            }
+        }
+    };
+}
+
+macro_rules! run_single_babybear_benchmark {
+    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
+        define_babybear_params!($w, $b, $l);
+        paste::paste! {
+            const [<W $w B $b L $l>]: usize = $w * [<BabyBearParamsWithB $b W $w>]::L;
+            decomposition_benchmarks::<$io, $cw, $w, $w * $l, BabyBearChallengeSet, BabyBearRingNTT, [<BabyBearParamsWithB $b W $w>]>($crit);
+
+        }
+    };
+}
+*/
+macro_rules! define_frog_params {
+    ($w:expr, $b:expr, $l:expr) => {
+        paste::paste! {
+            #[derive(Clone)]
+            struct [<FrogParamsWithB $b W $w>];
+
+            impl DecompositionParams for [<FrogParamsWithB $b W $w>] {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = 2; // This is not use in decompose or commit
+                const K: usize = 28;// This is not use in decompose or commit
+            }
+        }
+    };
+}
+
+macro_rules! run_single_frog_benchmark {
+    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
+        define_frog_params!($w, $b, $l);
+        paste::paste! {
+            const [<W $w B $b L $l>]: usize = $w * [<FrogParamsWithB $b W $w>]::L;
+            decomposition_benchmarks::<$io, $cw, $w, $w * $l, FrogChallengeSet, FrogRingNTT, [<FrogParamsWithB $b W $w>]>($crit, "Frog", [<FrogParamsWithB $b W $w>]);
+
+        }
+    };
+}
+
+macro_rules! define_dilithium_params {
+    ($w:expr, $b:expr, $l:expr) => {
+        paste::paste! {
+            #[derive(Clone)]
+            struct [<DilithiumParamsWithB $b W $w>];
+
+            impl DecompositionParams for [<DilithiumParamsWithB $b W $w>] {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = 2; // This is not use in decompose or commit
+                const K: usize = 28;// This is not use in decompose or commit
+            }
+        }
+    };
+}
+
+macro_rules! run_single_dilithium_benchmark {
+    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
+        define_dilithium_params!($w, $b, $l);
+        paste::paste! {
+            const [<W $w B $b L $l>]: usize = $w * [<DilithiumParamsWithB $b W $w>]::L;
+            decomposition_benchmarks::<$io, $cw, $w, $w * $l, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>>, [<DilithiumParamsWithB $b W $w>]>($crit, "Dilithium", [<DilithiumParamsWithB $b W $w>]);
+        }
+    };
+}
+
 fn benchmarks_main(c: &mut Criterion) {
-    decomposition_benchmarks(c);
+    run_single_starkprime_benchmark!(1, c, 6, 1024, 10, 2);
+    
 }
 
 criterion_group!(

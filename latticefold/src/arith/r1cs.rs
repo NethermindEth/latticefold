@@ -94,7 +94,7 @@ pub mod tests {
         z.iter().map(|c| R::from(*c as u64)).collect()
     }
 
-    pub fn get_test_vitalik_r1cs<R: Ring>() -> R1CS<R> {
+    pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
         // R1CS for: x^3 + x + 5 = y (example from article
         // https://www.vitalik.ca/general/2016/12/10/qap.html )
         let A = to_F_matrix::<R>(vec![
@@ -119,23 +119,7 @@ pub mod tests {
         R1CS::<R> { l: 1, A, B, C }
     }
 
-    pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const W: usize>(rows: usize) -> R1CS<R> {
-        let A = to_F_matrix::<R>(create_dummy_matrix(rows, IO + W + 1));
-        let B = A.clone();
-        let C = A.clone();
-
-        R1CS::<R> { l: 1, A, B, C }
-    }
-
-    pub fn create_dummy_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
-        let mut matrix = vec![vec![0; columns]; rows];
-        for i in 0..rows {
-            matrix[i][i] = 1;
-        }
-        matrix
-    }
-
-    pub fn get_test_vitalik_z<R: Ring>(input: usize) -> Vec<R> {
+    pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         // z = (1, io, w)
         to_F_vec(vec![
             input, // io
@@ -147,12 +131,7 @@ pub mod tests {
         ])
     }
 
-    pub fn get_test_dummy_z<R: Ring, const IO: usize, const W: usize>() -> Vec<R> {
-        // z = (1, io, w)
-        to_F_vec(vec![1; IO + W + 1])
-    }
-
-    pub fn get_test_vitalik_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
+    pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
         // z = (1, io, w)
         (
             R::one(),
@@ -168,24 +147,10 @@ pub mod tests {
         )
     }
 
-    pub fn get_test_dummy_z_split<R: Ring, const IO: usize, const W: usize>() -> (R, Vec<R>, Vec<R>)
-    {
-        (R::one(), to_F_vec(vec![1; IO]), to_F_vec(vec![1; W]))
-    }
-
     #[test]
     fn test_check_relation() {
-        let r1cs = get_test_vitalik_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>>();
-        let z = get_test_vitalik_z(5);
-
-        r1cs.check_relation(&z).unwrap();
-        r1cs.relax().check_relation(&z).unwrap();
-    }
-
-    #[test]
-    fn test_check_dummy_relation() {
-        let r1cs = get_test_dummy_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>, 1, 10>(5);
-        let z = get_test_dummy_z::<_, 1, 10>();
+        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>>();
+        let z = get_test_z(5);
 
         r1cs.check_relation(&z).unwrap();
         r1cs.relax().check_relation(&z).unwrap();

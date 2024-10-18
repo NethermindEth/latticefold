@@ -703,6 +703,7 @@ dependencies = [
  "lattirust-poly",
  "lattirust-ring",
  "num-traits",
+ "paste",
  "rand",
  "thiserror",
 ]

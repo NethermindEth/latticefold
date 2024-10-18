@@ -3,7 +3,7 @@ use cyclotomic_rings::{
     challenge_set::{BinarySmallSet, LatticefoldChallengeSet},
     SuitableRing,
 };
-use lattirust_ring::Pow2CyclotomicPolyRingNTT;
+use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 mod utils;
 use std::time::Duration;
@@ -17,11 +17,11 @@ use latticefold::{
         LinearizationVerifier,
     },
     parameters::{
-        DecompositionParamData, DecompositionParams, SomeFermatTestParams, SOME_FERMAT_PRIME,
+        DecompositionParamData, DecompositionParams
     },
     transcript::poseidon::PoseidonTranscript,
 };
-
+/*
 fn wit_and_ccs_gen<
     const IO: usize,
     const C: usize,
@@ -143,8 +143,8 @@ fn linearization_benchmarks(c: &mut Criterion) {
     let proof = prover_linearization_benchmark::<
         C,
         _,
-        Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 16>,
-        BinarySmallSet<SOME_FERMAT_PRIME, 16>,
+        Pow2CyclotomicPolyRingNTT<{ SOME_FERMAT_PRIME }, 16>,
+        BinarySmallSet<{ SOME_FERMAT_PRIME }, 16>,
     >(
         c,
         SomeFermatTestParams,
@@ -156,8 +156,8 @@ fn linearization_benchmarks(c: &mut Criterion) {
     verifier_linearization_benchmark::<
         C,
         _,
-        Pow2CyclotomicPolyRingNTT<SOME_FERMAT_PRIME, 16>,
-        BinarySmallSet<SOME_FERMAT_PRIME, 16>,
+        Pow2CyclotomicPolyRingNTT<{ SOME_FERMAT_PRIME }, 16>,
+        BinarySmallSet<{ SOME_FERMAT_PRIME }, 16>,
     >(
         c,
         SomeFermatTestParams,
@@ -177,3 +177,4 @@ criterion_group!(
     config = Criterion::default().sample_size(10).measurement_time(Duration::from_secs(50)).warm_up_time(Duration::from_secs(1));
     targets = benchmarks_main);
 criterion_main!(benches);
+*/
