@@ -18,8 +18,7 @@ pub trait DecompositionParams: Clone {
 }
 
 // Some classic lattice parameter sets.
-
-pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001;
+pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001; // = 8380417
 
 pub type DilithiumCR = Pow2CyclotomicPolyRing<DILITHIUM_PRIME, 256>;
 pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
@@ -33,6 +32,45 @@ impl DecompositionParams for DilithiumTestParams {
     const L: usize = 2;
     const B_SMALL: usize = 2;
     const K: usize = 13;
+}
+#[derive(Clone, Copy)]
+pub struct StarkPrimeParams;
+
+impl DecompositionParams for StarkPrimeParams {
+    const B: u128 = 1 << 126;
+    const L: usize = 2;
+    const B_SMALL: usize = 2;
+    const K: usize = 126;
+}
+
+#[derive(Clone, Copy)]
+pub struct GoldilocksParams;
+
+impl DecompositionParams for GoldilocksParams {
+    const B: u128 = 1 << 37;
+    const L: usize = 2;
+    const B_SMALL: usize = 2;
+    const K: usize = 37;
+}
+
+#[derive(Clone, Copy)]
+pub struct BabyBearParams;
+
+impl DecompositionParams for BabyBearParams {
+    const B: u128 = 1 << 28;
+    const L: usize = 2;
+    const B_SMALL: usize = 2;
+    const K: usize = 28;
+}
+
+#[derive(Clone, Copy)]
+pub struct FrogParams;
+
+impl DecompositionParams for FrogParams {
+    const B: u128 = 1 << 16;
+    const L: usize = 16;
+    const B_SMALL: usize = 2;
+    const K: usize = 16;
 }
 
 impl<P: DecompositionParams> From<P> for DecompositionParamData {
