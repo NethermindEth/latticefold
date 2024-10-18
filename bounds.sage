@@ -15,12 +15,18 @@ def adjusted_B(bound_inf_value):
         B -= 1  # Decrease by 1 if odd
     return B
 
+# Function to find the smallest L such that B^L > p/2 using logarithms
+def find_smallest_L_log(B, p):
+    if B <= 0:
+        return "unpractical"
+    return ceil(log(p / 2) / log(B))
+
 # Primes with their corresponding d values
 params = {
     "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
     "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
     "Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
-    "Frog": {"p": 159120925213255836417 * 2^24 + 1, "d": 16},
+    "Frog": {"p": 159120925213255836417, "d": 16},
     "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
 }
 
@@ -52,16 +58,20 @@ for prime_name, param in params.items():
     for kappa, b2, log_b2 in bound_2_values:
         print(f"kappa = {kappa}, bound_2 = {b2}, log_2(bound_2) = {log_b2}")
 
-    # Compute values of bound_inf, log_2(bound_inf), and B for kappa from 1 to max_kappa and num_cols values
+    # Compute values of bound_inf, log_2(bound_inf), B, and L for kappa from 1 to max_kappa and num_cols values
     bound_inf_values = [
         (kappa, num_cols, bound_inf(d, kappa, p, num_cols), log(bound_inf(d, kappa, p, num_cols), 2), adjusted_B(bound_inf(d, kappa, p, num_cols)))
         for kappa in kappa_values for num_cols in num_cols_values
     ]
     
-    # Display bound_inf results with B
-    print("\nValues of bound_inf, log_2(bound_inf), and B:")
+    # Display bound_inf results with B and L
+    print("\nValues of bound_inf, log_2(bound_inf), B, and L:")
     for kappa, num_cols, b_inf, log_b_inf, B in bound_inf_values:
-        print(f"kappa = {kappa}, num_cols = {num_cols}, bound_inf = {b_inf}, log_2(bound_inf) = {log_b_inf}, B = {B}")
+        if B == 0:
+            print(f"kappa = {kappa}, num_cols = {num_cols}, B = {B}, L = unpractical")
+        else:
+            L = find_smallest_L_log(B, p)
+            print(f"kappa = {kappa}, num_cols = {num_cols}, bound_inf = {b_inf}, log_2(bound_inf) = {log_b_inf}, B = {B}, L = {L}")
 
     # Find kappa for B = 2^16
     target_B = 2^16
@@ -82,6 +92,54 @@ for prime_name, param in params.items():
                 smallest_difference = difference
         
         if closest_kappa is not None:
-            print(f"num_cols = {num_cols}: kappa = {closest_kappa}, B = {closest_B} = 2^{log(closest_B, 2).n()}")
+            L = find_smallest_L_log(closest_B, p)
+            print(f"num_cols = {num_cols}: kappa = {closest_kappa}, B = {closest_B} = 2^{log(closest_B, 2).n()}, L = {L}")
         else:
             print(f"num_cols = {num_cols}: No suitable kappa found")
+        
+    # Calculate the largest B for max_kappa where L is an integer for all num_cols
+    print("\nCalculating largest B for max_kappa where L is an integer for all num_cols:")
+    for num_cols in num_cols_values:
+        largest_B_with_integer_L = None
+        B = adjusted_B(bound_inf(d, max_kappa, p, num_cols))
+        L = find_smallest_L_log(B, p)
+        
+        largest_B_with_integer_L = B
+
+        if largest_B_with_integer_L is not None:
+            print(f"num_cols = {num_cols}: Largest B with integer L,  B = {largest_B_with_integer_L}, L = {L}")
+        else:
+            print(f"num_cols = {num_cols}: No B found with integer L")
+
+    # Calculate the range of B for which L = 2, 3, 4, 5
+    for L_target in range(2, 6):
+        print(f"\nCalculating range of B for which L = {L_target} for all num_cols:")
+        for num_cols in num_cols_values:
+            min_B = None
+            max_B = None
+            min_kappa = None
+            // Check max_kappa 
+            p_div_L = p / (2**L_target)
+            
+            # Start with B = 1 and increment to find the minimum B
+            for kappa in range(1, max_kappa + 1):
+                B = adjusted_B(bound_inf(d, kappa, p, num_cols))
+                if B**L_target > p_div_L:
+                    min_B = B
+                    min_kappa = kappa
+                    break
+            
+            # Use the largest B logic to find the maximum B for which L = L_target
+            for kappa in range(max_kappa, 0, -1):
+                B = adjusted_B(bound_inf(d, kappa, p, num_cols))
+                if B**L_target > p_div_L:
+                    max_B = B
+                    max_kappa = kappa
+                    break
+            
+            if min_B is not None and max_B is not None:
+                print(f"num_cols = {num_cols}: Range of B for L = {L_target} is [{min_B} (kappa = {min_kappa}), {max_B} (kappa = {max_kappa})]")
+            else:
+                print(f"num_cols = {num_cols}: No range of B found for L = {L_target}")
+
+    
