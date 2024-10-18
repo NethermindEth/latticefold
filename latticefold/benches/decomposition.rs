@@ -1,16 +1,18 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use cyclotomic_rings::{
-    challenge_set::{LatticefoldChallengeSet},
-    SuitableRing,
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
+use criterion::{
+    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
+use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
 use rand::thread_rng;
 use std::fmt::Debug;
 mod utils;
 use ark_std::UniformRand;
-use std::time::Duration;
-use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
-
-use cyclotomic_rings::{StarkRingNTT, GoldilocksRingNTT, FrogRingNTT, StarkChallengeSet, GoldilocksChallengeSet, FrogChallengeSet};
+use cyclotomic_rings::challenge_set::BinarySmallSet;
+use cyclotomic_rings::{
+    BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
+    GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT,
+};
 use latticefold::{
     arith::{Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -24,12 +26,13 @@ use latticefold::{
             LinearizationVerifier,
         },
     },
-    parameters::{
-        DecompositionParamData, DecompositionParams
-    },
+    parameters::{DecompositionParams, DILITHIUM_PRIME},
     transcript::poseidon::PoseidonTranscript,
 };
+use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use paste;
+use std::time::Duration;
+use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
 
 fn wit_and_ccs_gen<
     const IO: usize,
@@ -37,7 +40,7 @@ fn wit_and_ccs_gen<
     const WIT_LEN: usize,
     const W: usize, // columns
     P: DecompositionParams,
-    R: SuitableRing,
+    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
 >(
     r1cs_rows: usize,
 ) -> (
@@ -46,6 +49,7 @@ fn wit_and_ccs_gen<
     CCS<R>,
     AjtaiCommitmentScheme<C, W, R>,
 ) {
+    //TODO: Ensure we draw elements below bound
     let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN>(r1cs_rows);
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
     let mut z = vec![one];
@@ -56,7 +60,7 @@ fn wit_and_ccs_gen<
         Err(_) => println!("R1CS invalid"),
     }
 
-    let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+    let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
     let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
     let cm_i: CCCS<C, R> = CCCS {
@@ -71,12 +75,10 @@ fn prover_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: SuitableRing,
+    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
     CS: LatticefoldChallengeSet<R>,
 >(
-    c: &mut Criterion,
-    p: P,
-    prime_name: &str,
+    c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
     wit: &Witness<R>,
     ccs: &CCS<R>,
@@ -86,25 +88,25 @@ fn prover_decomposition_benchmark<
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-        &cm_i,
-        &wit,
+        cm_i,
+        wit,
         &mut prover_transcript,
-        &ccs,
+        ccs,
     )
     .unwrap();
 
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-        &cm_i,
+        cm_i,
         &linearization_proof,
         &mut verifier_transcript,
-        &ccs,
+        ccs,
     )
     .unwrap();
 
     c.bench_with_input(
         BenchmarkId::new(
-            format!("Decomposition Prover {}", prime_name),
-            DecompositionParamData::from(p),
+            "Decomposition Prover",
+            format!("Param. B={}, L={}", P::B, P::L),
         ),
         &(lcccs, wit, ccs),
         |b, (lcccs, wit, ccs)| {
@@ -113,7 +115,7 @@ fn prover_decomposition_benchmark<
                     W,
                     C,
                     P,
-                >(lcccs, &wit, &mut prover_transcript, &ccs, scheme)
+                >(lcccs, wit, &mut prover_transcript, ccs, scheme)
                 .unwrap();
             })
         },
@@ -124,12 +126,10 @@ fn verifier_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: SuitableRing,
+    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
     CS: LatticefoldChallengeSet<R>,
 >(
-    c: &mut Criterion,
-    p: P,
-    prime_name: &str,
+    c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
     wit: &Witness<R>,
     ccs: &CCS<R>,
@@ -139,35 +139,35 @@ fn verifier_decomposition_benchmark<
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-        &cm_i,
-        &wit,
+        cm_i,
+        wit,
         &mut prover_transcript,
-        &ccs,
+        ccs,
     )
     .unwrap();
 
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-        &cm_i,
+        cm_i,
         &linearization_proof,
         &mut verifier_transcript,
-        &ccs,
+        ccs,
     )
     .unwrap();
 
     let (_, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
             &lcccs,
-            &wit,
+            wit,
             &mut prover_transcript,
-            &ccs,
-            &scheme,
+            ccs,
+            scheme,
         )
         .unwrap();
 
     c.bench_with_input(
         BenchmarkId::new(
-            format!("Decomposition Verifier {}", prime_name),
-            DecompositionParamData::from(p),
+            "Decomposition Verifier",
+            format!("Param. B={}, L={}", P::B, P::L),
         ),
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {
@@ -176,7 +176,7 @@ fn verifier_decomposition_benchmark<
                     lcccs,
                     proof,
                     &mut verifier_transcript,
-                    &ccs,
+                    ccs,
                 );
             })
         },
@@ -192,32 +192,15 @@ fn decomposition_benchmarks<
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
     P: DecompositionParams + Clone,
 >(
-    c: &mut Criterion,
-    ring_name: &str,
-    decomp: P,
+    group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     let r1cs_rows = 5;
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<IO, C, WIT_LEN, W, P, R>(r1cs_rows);
     // N/Q = prime / degree
-    prover_decomposition_benchmark::<C, W, _, R, CS>(
-        c,
-        decomp.clone(),
-        ring_name,
-        &cm_i,
-        &wit,
-        &ccs,
-        &scheme,
-    );
 
-    verifier_decomposition_benchmark::<C, W, _, R, CS>(
-        c,
-        decomp,
-        ring_name,
-        &cm_i,
-        &wit,
-        &ccs,
-        &scheme,
-    );
+    prover_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
+
+    verifier_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 }
 
 // Macros
@@ -241,8 +224,7 @@ macro_rules! run_single_starkprime_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_starkprime_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<StarkPrimeParamsWithB $b W $w>]::L;
-            decomposition_benchmarks::<$io, $cw, $w, $w * $l, StarkChallengeSet, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit, "StarkPrime", [<StarkPrimeParamsWithB $b W $w>]);
+            decomposition_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit);
         }
     };
 }
@@ -267,13 +249,12 @@ macro_rules! run_single_goldilocks_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_goldilocks_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<GoldilocksParamsWithB $b W $w>]::L;
-            decomposition_benchmarks::<$io, $cw, $w, $w * $l, GoldilocksChallengeSet, GoldilocksRingNTT, [<GoldilocksParamsWithB $b W $w>]>($crit, "Goldilocks",  [<GoldilocksParamsWithB $b W $w>]);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<GoldilocksParamsWithB $b W $w>]>($crit);
 
         }
     };
 }
-/*
+
 macro_rules! define_babybear_params {
     ($w:expr, $b:expr, $l:expr) => {
         paste::paste! {
@@ -294,13 +275,12 @@ macro_rules! run_single_babybear_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_babybear_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<BabyBearParamsWithB $b W $w>]::L;
-            decomposition_benchmarks::<$io, $cw, $w, $w * $l, BabyBearChallengeSet, BabyBearRingNTT, [<BabyBearParamsWithB $b W $w>]>($crit);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<BabyBearParamsWithB $b W $w>]>($crit);
 
         }
     };
 }
-*/
+
 macro_rules! define_frog_params {
     ($w:expr, $b:expr, $l:expr) => {
         paste::paste! {
@@ -321,8 +301,7 @@ macro_rules! run_single_frog_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_frog_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<FrogParamsWithB $b W $w>]::L;
-            decomposition_benchmarks::<$io, $cw, $w, $w * $l, FrogChallengeSet, FrogRingNTT, [<FrogParamsWithB $b W $w>]>($crit, "Frog", [<FrogParamsWithB $b W $w>]);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<FrogParamsWithB $b W $w>]>($crit);
 
         }
     };
@@ -348,15 +327,61 @@ macro_rules! run_single_dilithium_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_dilithium_params!($w, $b, $l);
         paste::paste! {
-            const [<W $w B $b L $l>]: usize = $w * [<DilithiumParamsWithB $b W $w>]::L;
-            decomposition_benchmarks::<$io, $cw, $w, $w * $l, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>>, [<DilithiumParamsWithB $b W $w>]>($crit, "Dilithium", [<DilithiumParamsWithB $b W $w>]);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>, [<DilithiumParamsWithB $b W $w>]>($crit);
         }
     };
 }
 
 fn benchmarks_main(c: &mut Criterion) {
-    run_single_starkprime_benchmark!(1, c, 6, 1024, 10, 2);
-    
+    // Babybear
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Decomposition BabyBear");
+        group.plot_config(plot_config.clone());
+
+        // TODO: Update configurations
+        run_single_babybear_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    }
+
+    // Godlilocks
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Decomposition Godlilocks");
+        group.plot_config(plot_config.clone());
+
+        // TODO: Update configurations
+        run_single_goldilocks_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    }
+
+    // StarkPrime
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Decomposition StarkPrime");
+        group.plot_config(plot_config.clone());
+
+        // TODO: Update configurations
+        run_single_starkprime_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    }
+
+    // Frog
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Decomposition Frog");
+        group.plot_config(plot_config.clone());
+
+        // TODO: Update configurations
+        run_single_frog_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    }
+
+    // Dilithium
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Decomposition Dilithium");
+        group.plot_config(plot_config.clone());
+
+        // TODO: Update configurations
+        run_single_dilithium_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    }
 }
 
 criterion_group!(
