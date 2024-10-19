@@ -159,16 +159,25 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
     (0..(2 * P::K))
         .map(|i| {
             // Evaluation claims about f hats.
-            let mut s_summand = alpha_s[i] * e_s[i] * theta_s[i];
+            let mut s_summand: NTT = successors(Some(alpha_s[i]), |alpha_power| {
+                Some(alpha_s[i] * alpha_power)
+            })
+            .zip(theta_s[i].iter())
+            .map(|(pow_of_alpha_i, theta)| pow_of_alpha_i * e_s[i] * theta) // Might need to change e_s[i] double check
+            .sum();
 
             // norm range check contribution
             s_summand += e_asterisk
-                * mu_s[i]
-                * theta_s[i]
-                * (1..P::B_SMALL)
-                    .map(|x| NTT::from(x as u128))
-                    .map(|j_hat| (theta_s[i] - j_hat) * (theta_s[i] + j_hat))
-                    .product::<NTT>();
+                * successors(Some(mu_s[i]), |mu_power| Some(mu_s[i] * mu_power))
+                    .zip(theta_s[i].iter())
+                    .map(|(mu_power, &theta)| {
+                        mu_power
+                            * (1..P::B_SMALL)
+                                .map(|x| NTT::from(x as u128))
+                                .map(|j_hat| (theta - j_hat) * (theta + j_hat))
+                                .product::<NTT>()
+                    })
+                    .sum::<NTT>();
 
             // linearisation claims contribuition
             s_summand += e_s[i]
@@ -248,8 +257,8 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
     r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
-    for (alpha, fi_hat_mle) in
-        successors(Some(alpha_i), |x| Some(alpha_i * x)).zip(fi_hat_mle_s.iter())
+    for (alpha, fi_hat_mle) in successors(Some(alpha_i), |alpha_power| Some(alpha_i * alpha_power))
+        .zip(fi_hat_mle_s.iter())
     {
         g.add_mle_list(vec![r_i_eq.clone(), Arc::from(fi_hat_mle.clone())], alpha)?;
     }
@@ -264,7 +273,9 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     mu_i: NTT,
     beta_eq_x: Arc<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
-    for (mu, fi_hat_mle) in successors(Some(mu_i), |x| Some(mu_i * x)).zip(fi_hat_mle_s.iter()) {
+    for (mu, fi_hat_mle) in
+        successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.iter())
+    {
         let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
 
         for i in 1..b {
