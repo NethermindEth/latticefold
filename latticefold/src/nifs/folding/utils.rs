@@ -198,11 +198,20 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
 ) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
-    let v_0: NTT = rho_s
+    let transposed_theta_s = (0..theta_s[0].len())
+        .map(|i| theta_s.iter().map(|row| row[i]).collect::<Vec<NTT>>())
+        .collect::<Vec<Vec<NTT>>>();
+
+    let v_0: Vec<NTT> = rho_s
         .iter()
-        .zip(theta_s.iter())
-        .map(|(&rho_i, theta_i)| NTT::from(rot_sum::<NTT>(rho_i, theta_i.coeffs())))
-        .sum();
+        .zip(transposed_theta_s.iter())
+        .map(|(&rho_i, theta_j)| {
+            theta_j
+                .iter()
+                .map(|theta_j_i| NTT::from(rot_sum::<NTT>(rho_i, theta_j_i.coeffs()))) // TODO: Double check
+                .sum()
+        })
+        .collect();
 
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()
@@ -289,7 +298,7 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
 
         mle_list.push(beta_eq_x.clone());
 
-        g.add_mle_list(mle_list, mu);
+        let _ = g.add_mle_list(mle_list, mu);
     }
     Ok(())
 }

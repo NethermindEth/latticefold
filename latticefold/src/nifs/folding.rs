@@ -239,7 +239,12 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         let claim_g1: NTT = alpha_s
             .iter()
             .zip(vs.iter())
-            .map(|(&alpha_i, &v_i)| alpha_i * v_i)
+            .map(|(&alpha_i, v_i)| {
+                successors(Some(alpha_i), |&alpha| Some(alpha * alpha_i))
+                    .zip(v_i.iter())
+                    .map(|(pow_of_alpha, v_i_j)| pow_of_alpha * v_i_j)
+                    .sum::<NTT>()
+            })
             .sum();
         let claim_g3: NTT = zeta_s
             .iter()
