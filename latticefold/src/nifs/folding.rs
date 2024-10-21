@@ -11,7 +11,7 @@ use crate::transcript::TranscriptWithSmallChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
-    parameters::DecompositionParams,
+    decomposition_parameters::DecompositionParams,
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 
@@ -308,6 +308,7 @@ mod tests {
     use crate::{
         arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::{
             decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -319,7 +320,6 @@ mod tests {
                 LinearizationVerifier,
             },
         },
-        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};

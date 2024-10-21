@@ -1,7 +1,4 @@
 use ark_std::fmt::Display;
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
-    Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
-};
 
 /// Decomposition parameters.
 /// Convenient to enforce them compile-time.
@@ -16,12 +13,6 @@ pub trait DecompositionParams: Clone {
     /// K = log_b B.
     const K: usize;
 }
-
-// Some classic lattice parameter sets.
-pub const DILITHIUM_PRIME: u64 = 0x00000000_007FE001; // = 8380417
-
-pub type DilithiumCR = Pow2CyclotomicPolyRing<DILITHIUM_PRIME, 256>;
-pub type DilithiumNTT = Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>;
 
 #[derive(Clone, Copy)]
 pub struct DilithiumTestParams;

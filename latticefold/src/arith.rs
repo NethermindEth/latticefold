@@ -9,7 +9,7 @@ use lattirust_ring::{
 
 use crate::{
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
-    parameters::DecompositionParams,
+    decomposition_parameters::DecompositionParams,
 };
 use error::CSError as Error;
 use r1cs::R1CS;

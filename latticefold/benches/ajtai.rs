@@ -6,10 +6,9 @@ use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
 use cyclotomic_rings::{
-    BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
+    BabyBearRingNTT, DilithiumNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
-use latticefold::{commitment::AjtaiCommitmentScheme, parameters::DILITHIUM_PRIME};
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+use latticefold::commitment::AjtaiCommitmentScheme;
 use rand::thread_rng;
 use std::fmt::Debug;
 
@@ -93,7 +92,7 @@ macro_rules! run_single_frog_benchmark {
 
 macro_rules! run_single_dilithium_benchmark {
     ($crit:expr, $cw:expr, $w:expr) => {
-        ajtai_benchmark::<$cw, $w, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>>($crit);
+        ajtai_benchmark::<$cw, $w, DilithiumNTT>($crit);
     };
 }
 

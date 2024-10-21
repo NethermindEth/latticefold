@@ -10,8 +10,8 @@ use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
+    decomposition_parameters::DecompositionParams,
     nifs::error::DecompositionError,
-    parameters::DecompositionParams,
     transcript::Transcript,
 };
 use cyclotomic_rings::SuitableRing;
