@@ -118,7 +118,7 @@ for prime_name, param in params.items():
             min_B = None
             max_B = None
             min_kappa = None
-            // Check max_kappa 
+            # Check max_kappa
             p_div_L = p / (2**L_target)
             
             # Start with B = 1 and increment to find the minimum B
