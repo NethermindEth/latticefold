@@ -196,21 +196,22 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // TODO: Update configurations
+        // Needs to update odd numbers of B
         // Kappa values for B ≈ 2^16 (within a margin of 65536):
-        run_single_starkprime_benchmark!(1, &mut group, 6, 32768, 45914, 17, 214, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 6, 65536, 32466, 17, 180, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 131072, 91958, 16, 303, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 262144, 65024, 16, 254, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 524288, 45978, 17, 214, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 1048576, 32512, 17, 180, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 6, 32768, 45796, 17, 214, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 6, 65536, 32400, 17, 180, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 131072, 91809, 16, 303, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 262144, 64516, 16, 254, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 524288, 45796, 17, 214, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 1048576, 32400, 17, 180, 2);
 
         // Calculating largest B for max_kappa where L is an integer for all num_cols:
-        run_single_starkprime_benchmark!(1, &mut group, 11, 32768, 7091446, 11, 2662, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 12, 65536, 5014410, 12, 2239, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 12, 131072, 3545724, 12, 1883, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 12, 262144, 2507206, 12, 1583, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 13, 524288, 1772862, 13, 11, 6);
-        run_single_starkprime_benchmark!(1, &mut group, 13, 1048576, 1253602, 13, 1119, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 11, 32768, 7086244, 11, 2662, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 12, 65536, 5013121, 12, 2239, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 12, 131072, 3545689, 12, 1883, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 12, 262144, 2505889, 12, 1583, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 13, 524288, 1771561, 13, 11, 6);
+        run_single_starkprime_benchmark!(1, &mut group, 13, 1048576, 1252161, 13, 1119, 2);
     }
 }
 
