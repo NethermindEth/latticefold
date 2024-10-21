@@ -84,9 +84,12 @@ fn prover_decomposition_benchmark<
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
+    println!("Proving decomposition");
+    println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
+    println!("prove linearization");
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
@@ -95,6 +98,7 @@ fn prover_decomposition_benchmark<
     )
     .unwrap();
 
+    println!("verify linearization");
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
@@ -135,9 +139,12 @@ fn verifier_decomposition_benchmark<
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
+    println!("verify decomposition");
+    println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
+    println!("prove linearization");
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
@@ -146,6 +153,7 @@ fn verifier_decomposition_benchmark<
     )
     .unwrap();
 
+    println!("verify linearization");
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
@@ -154,6 +162,7 @@ fn verifier_decomposition_benchmark<
     )
     .unwrap();
 
+    println!("prove decomposition");
     let (_, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
             &lcccs,
@@ -164,6 +173,7 @@ fn verifier_decomposition_benchmark<
         )
         .unwrap();
 
+    println!("verify decomposition");
     c.bench_with_input(
         BenchmarkId::new(
             "Decomposition Verifier",
@@ -194,7 +204,8 @@ fn decomposition_benchmarks<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let r1cs_rows = 5;
+    let r1cs_rows = WIT_LEN + IO + 1; // This makes a square matrix but is too much memory
+    println!("Witness generation");
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<IO, C, WIT_LEN, W, P, R>(r1cs_rows);
     // N/Q = prime / degree
 
@@ -205,7 +216,7 @@ fn decomposition_benchmarks<
 
 // Macros
 macro_rules! define_starkprime_params {
-    ($w:expr, $b:expr, $l:expr) => {
+    ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         paste::paste! {
             #[derive(Clone)]
             struct [<StarkPrimeParamsWithB $b W $w>];
@@ -213,16 +224,16 @@ macro_rules! define_starkprime_params {
             impl DecompositionParams for [<StarkPrimeParamsWithB $b W $w>] {
                 const B: u128 = $b;
                 const L: usize = $l;
-                const B_SMALL: usize = 2; // This is not use in decompose or linearization
-                const K: usize = 28;// This is not use in decompose or linearization
+                const B_SMALL: usize = $b_small;
+                const K: usize = $k;
             }
         }
     };
 }
 
 macro_rules! run_single_starkprime_benchmark {
-    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_starkprime_params!($w, $b, $l);
+    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_starkprime_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             decomposition_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit);
         }
@@ -333,25 +344,25 @@ macro_rules! run_single_dilithium_benchmark {
 }
 
 fn benchmarks_main(c: &mut Criterion) {
-    // Babybear
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition BabyBear");
-        group.plot_config(plot_config.clone());
+    // // Babybear
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Decomposition BabyBear");
+    //     group.plot_config(plot_config.clone());
 
-        // TODO: Update configurations
-        run_single_babybear_benchmark!(1, &mut group, 6, 1024, 10, 2);
-    }
+    //     // TODO: Update configurations
+    //     run_single_babybear_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    // }
 
-    // Godlilocks
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Godlilocks");
-        group.plot_config(plot_config.clone());
+    // // Godlilocks
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Decomposition Godlilocks");
+    //     group.plot_config(plot_config.clone());
 
-        // TODO: Update configurations
-        run_single_goldilocks_benchmark!(1, &mut group, 6, 1024, 10, 2);
-    }
+    //     // TODO: Update configurations
+    //     run_single_goldilocks_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    // }
 
     // StarkPrime
     {
@@ -360,28 +371,42 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // TODO: Update configurations
-        run_single_starkprime_benchmark!(1, &mut group, 6, 1024, 10, 2);
+        // Kappa values for B ≈ 2^16 (within a margin of 65536):
+        run_single_starkprime_benchmark!(1, &mut group, 6, 32768, 45914, 17, 214, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 6, 65536, 32466, 17, 180, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 131072, 91958, 16, 303, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 262144, 65024, 16, 254, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 524288, 45978, 17, 214, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 7, 1048576, 32512, 17, 180, 2);
+
+        // Calculating largest B for max_kappa where L is an integer for all num_cols:
+        run_single_starkprime_benchmark!(1, &mut group, 11, 32768, 7091446, 11, 2662, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 12, 65536, 5014410, 12, 2239, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 12, 131072, 3545724, 12, 1883, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 12, 262144, 2507206, 12, 1583, 2);
+        run_single_starkprime_benchmark!(1, &mut group, 13, 524288, 1772862, 13, 11, 6);
+        run_single_starkprime_benchmark!(1, &mut group, 13, 1048576, 1253602, 13, 1119, 2);
     }
 
-    // Frog
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Frog");
-        group.plot_config(plot_config.clone());
+    // // Frog
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Decomposition Frog");
+    //     group.plot_config(plot_config.clone());
 
-        // TODO: Update configurations
-        run_single_frog_benchmark!(1, &mut group, 6, 1024, 10, 2);
-    }
+    //     // TODO: Update configurations
+    //     run_single_frog_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    // }
 
-    // Dilithium
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Dilithium");
-        group.plot_config(plot_config.clone());
+    // // Dilithium
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Decomposition Dilithium");
+    //     group.plot_config(plot_config.clone());
 
-        // TODO: Update configurations
-        run_single_dilithium_benchmark!(1, &mut group, 6, 1024, 10, 2);
-    }
+    //     // TODO: Update configurations
+    //     run_single_dilithium_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    // }
 }
 
 criterion_group!(
