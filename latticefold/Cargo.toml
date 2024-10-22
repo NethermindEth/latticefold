@@ -50,3 +50,7 @@ harness = false
 [[bench]]
 name = "decomposition"
 harness = false
+
+[[bench]]
+name = "folding"
+harness = false

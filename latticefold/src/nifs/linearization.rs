@@ -566,7 +566,11 @@ mod tests_frog {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::{get_test_z, get_test_z_split}, tests::get_test_ccs, Arith, Witness, CCCS},
+        arith::{
+            r1cs::tests::{get_test_z, get_test_z_split},
+            tests::get_test_ccs,
+            Arith, Witness, CCCS,
+        },
         commitment::AjtaiCommitmentScheme,
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,

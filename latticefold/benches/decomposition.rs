@@ -110,7 +110,7 @@ fn prover_decomposition_benchmark<
     c.bench_with_input(
         BenchmarkId::new(
             "Decomposition Prover",
-            format!("Param. B={}, L={}", P::B, P::L),
+            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
         ),
         &(lcccs, wit, ccs),
         |b, (lcccs, wit, ccs)| {
@@ -177,7 +177,7 @@ fn verifier_decomposition_benchmark<
     c.bench_with_input(
         BenchmarkId::new(
             "Decomposition Verifier",
-            format!("Param. B={}, L={}", P::B, P::L),
+            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
         ),
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {
@@ -232,7 +232,7 @@ macro_rules! define_starkprime_params {
 }
 
 macro_rules! run_single_starkprime_benchmark {
-    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_starkprime_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             decomposition_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit);
@@ -335,7 +335,7 @@ macro_rules! define_dilithium_params {
 }
 
 macro_rules! run_single_dilithium_benchmark {
-    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_dilithium_params!($w, $b, $l);
         paste::paste! {
             decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>, [<DilithiumParamsWithB $b W $w>]>($crit);
@@ -370,23 +370,8 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Decomposition StarkPrime");
         group.plot_config(plot_config.clone());
 
-        // TODO: Update configurations
-        // Needs to update odd numbers of B
-        // Kappa values for B ≈ 2^16 (within a margin of 65536):
-        run_single_starkprime_benchmark!(1, &mut group, 6, 32768, 45796, 17, 214, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 6, 65536, 32400, 17, 180, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 7, 131072, 91809, 16, 303, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 7, 262144, 64516, 16, 254, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 7, 524288, 45796, 17, 214, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 7, 1048576, 32400, 17, 180, 2);
-
-        // // Calculating largest B for max_kappa where L is an integer for all num_cols:
-        // run_single_starkprime_benchmark!(1, &mut group, 11, 32768, 7086244, 11, 2662, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 12, 65536, 5013121, 12, 2239, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 12, 131072, 3545689, 12, 1883, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 12, 262144, 2505889, 12, 1583, 2);
-        // run_single_starkprime_benchmark!(1, &mut group, 13, 524288, 1771561, 13, 11, 6);
-        // run_single_starkprime_benchmark!(1, &mut group, 13, 1048576, 1252161, 13, 1119, 2);
+        // Parameters Criterion, IO, C, W, B, L, B_small, K
+        run_single_starkprime_benchmark!(&mut group, 1, 7, 1048576, 31684, 1, 178, 2);
     }
 
     // // Frog
