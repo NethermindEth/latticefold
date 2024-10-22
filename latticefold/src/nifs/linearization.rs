@@ -562,11 +562,11 @@ mod tests_goldilocks {
 mod tests_frog {
     use ark_ff::UniformRand;
     use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
+    use lattirust_ring::{cyclotomic_ring::models::frog_ring::RqNTT, Ring};
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{r1cs::tests::{get_test_z, get_test_z_split}, tests::get_test_ccs, Arith, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
@@ -625,6 +625,8 @@ mod tests_frog {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
+        let z = get_test_z::<R>(3);
+        ccs.check_relation(&z).unwrap();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
         #[derive(Clone)]
         struct PP;

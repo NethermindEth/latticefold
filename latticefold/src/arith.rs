@@ -69,7 +69,9 @@ impl<R: Ring> Arith<R> for CCS<R> {
             // complete the hadamard chain
             let mut hadamard_result = vec![R::one(); self.m];
             for M_j in vec_M_j.into_iter() {
-                hadamard_result = hadamard(&hadamard_result, &mat_vec_mul(M_j, z)?)?;
+                let mut res = mat_vec_mul(M_j, z)?;
+                res.resize(self.m, R::ZERO);
+                hadamard_result = hadamard(&hadamard_result, &res)?;
             }
 
             // multiply by the coefficient of this step

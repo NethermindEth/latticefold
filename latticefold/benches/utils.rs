@@ -16,22 +16,22 @@ pub fn get_test_dummy_z_split<
 pub fn get_test_dummy_ccs<
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
     const IO: usize,
-    const W: usize,
+    const WIT_LEN: usize,
 >(
     r1cs_rows: usize,
 ) -> CCS<R> {
-    let r1cs = get_test_dummy_r1cs::<R, IO, W>(r1cs_rows);
-    CCS::<R>::from_r1cs(r1cs, IO + W + 1)
+    let r1cs = get_test_dummy_r1cs::<R, IO, WIT_LEN>(r1cs_rows);
+    CCS::<R>::from_r1cs(r1cs, IO + WIT_LEN + 1)
 }
 
 pub fn get_test_dummy_r1cs<
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
     const IO: usize,
-    const W: usize,
+    const WIT_LEN: usize,
 >(
     rows: usize,
 ) -> R1CS<R> {
-    let R1CS_A = to_f_matrix::<R>(create_dummy_matrix(rows, IO + W + 1));
+    let R1CS_A = to_f_matrix::<R>(create_dummy_matrix(rows, IO + WIT_LEN + 1));
     let R1CS_B = R1CS_A.clone();
     let R1CS_C = R1CS_A.clone();
 
@@ -45,9 +45,9 @@ pub fn get_test_dummy_r1cs<
 
 pub fn create_dummy_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
     let mut matrix = vec![vec![0; columns]; rows];
-    // for (i, item) in matrix.iter_mut().enumerate().take(rows) {
-    //     item[i] = 1;
-    // }
+    for (i, item) in matrix.iter_mut().enumerate().take(rows) {
+        item[i] = 1;
+    }
     matrix
 }
 
