@@ -92,8 +92,8 @@ for prime_name, param in params.items():
     max_kappa = kappa - 1  # The last kappa where bound_2 was less than p / 2
     print(f"\tMaximum kappa for which bound_2 < p/2: {max_kappa}")
     
-    # Define kappa_values from 1 to min(25, max_kappa)
-    kappa_values = range(1, min(25, max_kappa) + 1)
+    # Define kappa_values from 1 to min(50, max_kappa)
+    kappa_values = range(1, min(50, max_kappa) + 1)
 
     # Iterate over each kappa value
     for kappa in kappa_values:
