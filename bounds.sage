@@ -22,22 +22,46 @@ def find_smallest_L_log(B, p):
     return ceil(log(p / 2) / log(B))
 
 # Function to find all (b, k) pairs such that b^k = B
-def find_b_k_pairs(B):
+def find_b_k_pairs(B, target_pairs=5):
     pairs = []
     
-    for b in range(2, int(B**0.5) + 1):  # Start from 2 to avoid trivial (1, B) pair
-        k = 1
-        power = b
-        while power <= B:
-            pairs.append((b, k))
-            k += 1
-            power *= b
+    # Ensure B is even
+    if B % 2 == 1:
+        B -= 1
     
-    # Sort pairs by how close b^k is to B, in descending order
-    pairs.sort(key=lambda pair: abs(pair[0]**pair[1] - B))
+    # Start from the target B and decrement until finding the required number of pairs
+    while len(pairs) < target_pairs and B > 1:
+        # Iterate over even values of b only
+        for b in range(2, int(B**0.5) + 1, 2):  # Step by 2 to skip odd numbers
+            k = 1
+            power = b
+            while power <= B:
+                pairs.append((b, k, B))  # Add B to the pair
+                k += 1
+                power *= b
+        
+        # Sort pairs by how close b^k is to B, in descending order
+        pairs.sort(key=lambda pair: abs(pair[0]**pair[1] - B))
+        
+        # If we have enough pairs, break the loop
+        if len(pairs) >= target_pairs:
+            break
+        
+        # Otherwise, decrement B by 2 to ensure it remains even
+        B -= 2
     
-    # Return the 10 closest pairs
-    return pairs[:10]
+    # Use a dictionary to track the maximum B for each k
+    max_b_for_k = {}
+
+    for b, k, B in pairs:
+        if k not in max_b_for_k or B > max_b_for_k[k][2]:
+            max_b_for_k[k] = (b, k, B)
+
+    # Extract the pairs with the greatest B for each k
+    unique_pairs = list(max_b_for_k.values())
+
+    # Return the closest pairs found, limited to target_pairs
+    return unique_pairs[:target_pairs]
 
 # Primes with their corresponding d values
 params = {
@@ -52,7 +76,7 @@ params = {
 #}
 
 # Range of num_cols values
-num_cols_values = [2^15, 2^16, 2^17, 2^18, 2^19, 2^20]
+num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13, 2^14]
 
 # Iterate over each prime and calculate the maximum kappa and perform bound calculations
 for prime_name, param in params.items():
@@ -66,123 +90,29 @@ for prime_name, param in params.items():
     while bound_2(d, kappa, p) < p / 2:
         kappa += 1
     max_kappa = kappa - 1  # The last kappa where bound_2 was less than p / 2
-    max_kappa = 10
     print(f"\tMaximum kappa for which bound_2 < p/2: {max_kappa}")
     
-    # Define kappa_values up to max_kappa
-    kappa_values = range(1, max_kappa + 1)
-    
-    # Compute values of bound_2 and log_2(bound_2) for kappa from 1 to max_kappa
-    bound_2_values = [(kappa, bound_2(d, kappa, p), log(bound_2(d, kappa, p), 2)) for kappa in kappa_values]
-    
-    # Display bound_2 results
-    print("\tValues of bound_2 and log_2(bound_2):")
-    for kappa, b2, log_b2 in bound_2_values:
-        print(f"\t\tkappa = {kappa}, bound_2 = {b2}, log_2(bound_2) = {log_b2}")
+    # Define kappa_values from 1 to min(25, max_kappa)
+    kappa_values = range(1, min(25, max_kappa) + 1)
 
-    # Compute values of bound_inf, log_2(bound_inf), B, and L for kappa from 1 to max_kappa and num_cols values
-    bound_inf_values = [
-        (kappa, num_cols, bound_inf(d, kappa, p, num_cols), log(bound_inf(d, kappa, p, num_cols), 2), adjusted_B(bound_inf(d, kappa, p, num_cols)))
-        for kappa in kappa_values for num_cols in num_cols_values
-    ]
-    
-    # Display bound_inf results with B and L
-    print("\n\tValues of bound_inf, log_2(bound_inf), B, and L:")
-    for kappa, num_cols, b_inf, log_b_inf, B in bound_inf_values:
-        if B == 0:
-            print(f"\t\tkappa = {kappa}, num_cols = {num_cols}, B = {B}, L = unpractical")
-        else:
-            L = find_smallest_L_log(B, p)
-            print(f"\t\tkappa = {kappa}, num_cols = {num_cols}, bound_inf = {b_inf}, log_2(bound_inf) = {log_b_inf}, B = {B}, L = {L}")
-            b_k_pairs = find_b_k_pairs(B)  # Call with margin if needed
-            print(f"\t\tOrdered pairs (b, k) such that b^k = {B}: {b_k_pairs}")
-
-    # Find kappa for B = 2^16
-    target_B = 2^16
-    margin = 2^16
-    print(f"\n\tKappa values for B ≈ 2^16 (within a margin of {margin}):")
-    for num_cols in num_cols_values:
-        closest_kappa = None
-        closest_B = None
-        smallest_difference = float('inf')
-        
-        for kappa in range(1, max_kappa + 1):
-            B = adjusted_B(bound_inf(d, kappa, p, num_cols))
-            difference = abs(B - target_B)
+    # Iterate over each kappa value
+    for kappa in kappa_values:
+        for n in num_cols_values:
+            # Calculate bound_inf for the current kappa and n
+            current_bound_inf = bound_inf(d, kappa, p, n)
             
-            if difference <= margin and difference < smallest_difference:
-                closest_kappa = kappa
-                closest_B = B
-                smallest_difference = difference
-        
-        if closest_kappa is not None:
-            L = find_smallest_L_log(closest_B, p)
-            print(f"\t\tnum_cols = {num_cols}: kappa = {closest_kappa}, B = {closest_B} = 2^{log(closest_B, 2).n()}, L = {L}")
-            b_k_pairs = find_b_k_pairs(closest_B)  # Call with margin if needed
-            print(f"\t\tOrdered pairs (b, k) such that b^k = {closest_B}: {b_k_pairs}")
-        else:
-            print(f"\t\tnum_cols = {num_cols}: No suitable kappa found")
-        
-    # Calculate the largest B for max_kappa where L is an integer for all num_cols
-    print("\n\tCalculating largest B for max_kappa where L is an integer for all num_cols:")
-    for num_cols in num_cols_values:
-        largest_B_with_integer_L = None
-        B = adjusted_B(bound_inf(d, max_kappa, p, num_cols))
-        L = find_smallest_L_log(B, p)
-        
-        largest_B_with_integer_L = B
-
-        if largest_B_with_integer_L is not None:
-            print(f"\t\tnum_cols = {num_cols}: Largest B with integer L,  B = {largest_B_with_integer_L}, L = {L}")
-            b_k_pairs = find_b_k_pairs(largest_B_with_integer_L)  # Call with margin if needed
-            print(f"\t\tOrdered pairs (b, k) such that b^k = {largest_B_with_integer_L}: {b_k_pairs}")
-        else:
-            print(f"\t\tnum_cols = {num_cols}: No B found with integer L")
-
-    # Calculate the range of B for which L = 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
-    for L_target in range(1, 21):
-        print(f"\n\tCalculating range of B for which L = {L_target} for all num_cols:")
-        for num_cols in num_cols_values:
-            min_B = None
-            max_B = None
-            min_kappa = None
-            #Check max_kappa 
-            p_div_L = p / (2**L_target)
+            # Compute the adjusted B
+            B = adjusted_B(current_bound_inf)
             
-            # Start with B = 1 and increment to find the minimum B
-            for kappa in range(1, max_kappa + 1):
-                B = adjusted_B(bound_inf(d, kappa, p, num_cols))
-                if B**L_target > p_div_L:
-                    min_B = B
-                    min_kappa = kappa
-                    break
+            # Find the pairs (b, k) such that b^k = B
+            pairs = find_b_k_pairs(B)
             
-            # Use the largest B logic to find the maximum B for which L = L_target
-            for kappa in range(max_kappa, 0, -1):
-                B = adjusted_B(bound_inf(d, kappa, p, num_cols))
-                if B**L_target > p_div_L:
-                    max_B = B
-                    max_kappa = kappa
-                    break
-            
-            if min_B is not None and max_B is not None:
-                print(f"\t\tnum_cols = {num_cols}: Range of B for L = {L_target} is [{min_B} (kappa = {min_kappa}), {max_B} (kappa = {max_kappa})]")
-                unique_pairs = set()  # Initialize a set to store unique pairs
-                for B in range(min_B, max_B + 1):
-                    b_k_pairs = find_b_k_pairs(B)
-                    for pair in b_k_pairs:
-                        unique_pairs.add(pair)  # Add each pair to the set
-
-                # Print all unique pairs and recalculate B and L
-                print("\t\tUnique pairs:")
-                for pair in unique_pairs:
-                    b, k = pair
-                    recalculated_B = b**k
-                    recalculated_L = find_smallest_L_log(recalculated_B, p)
-                    print(f"\t\t\tOrdered pair (b, k): {pair}, recalculated B = {recalculated_B}, recalculated L = {recalculated_L}")
-            else:
-                print(f"\t\tnum_cols = {num_cols}: No range of B found for L = {L_target}")
-
-    
-
-
+            # Display the results
+            print(f"\tkappa = {kappa}, n = {n}: B = {B}")
+            for b, k, B in pairs:
+                # Recalculate L for each pair
+                L = find_smallest_L_log(b**k, p)
+                
+                # Discard any L equal to 1 or less and where L*n > 2^14
+                if L > 1 and L * n <= 2^14:
+                    print(f"\t\t(b, k) = ({b}, {k}), B = {b**k}, L = {L}")
