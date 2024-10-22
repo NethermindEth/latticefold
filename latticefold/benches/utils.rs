@@ -17,11 +17,12 @@ pub fn get_test_dummy_ccs<
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
     const IO: usize,
     const WIT_LEN: usize,
+    const W: usize,
 >(
     r1cs_rows: usize,
 ) -> CCS<R> {
     let r1cs = get_test_dummy_r1cs::<R, IO, WIT_LEN>(r1cs_rows);
-    CCS::<R>::from_r1cs(r1cs, IO + WIT_LEN + 1)
+    CCS::<R>::from_r1cs(r1cs, W)
 }
 
 pub fn get_test_dummy_r1cs<

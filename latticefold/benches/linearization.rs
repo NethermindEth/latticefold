@@ -44,7 +44,7 @@ fn wit_and_ccs_gen<
     AjtaiCommitmentScheme<C, W, R>,
 ) {
     //TODO: Ensure we draw elements below bound
-    let ccs: CCS<R> = get_test_dummy_ccs::<R, IO, WIT_LEN>(r1cs_rows);
+    let ccs: CCS<R> = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows);
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
@@ -77,8 +77,6 @@ fn prover_linearization_benchmark<
     wit: &Witness<R>,
     ccs: &CCS<R>,
 ) -> (LCCCS<C, R>, LinearizationProof<R>) {
-    println!("Proving linearization");
-    println!("transcript");
     let mut transcript = PoseidonTranscript::<R, CS>::default();
     let res = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         &cm_i,
@@ -154,7 +152,7 @@ fn linearization_benchmarks<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let r1cs_rows = WIT_LEN + IO + 1; // This makes a square matrix but is too much memory
+    let r1cs_rows = 5;
     println!("Witness generation");
     let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<IO, C, WIT_LEN, W, P, R>(r1cs_rows);
 

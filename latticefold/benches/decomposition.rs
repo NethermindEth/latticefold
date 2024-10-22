@@ -50,7 +50,7 @@ fn wit_and_ccs_gen<
     AjtaiCommitmentScheme<C, W, R>,
 ) {
     //TODO: Ensure we draw elements below bound
-    let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN>(r1cs_rows);
+    let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows);
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
@@ -204,7 +204,7 @@ fn decomposition_benchmarks<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let r1cs_rows = WIT_LEN + IO + 1; // This makes a square matrix but is too much memory
+    let r1cs_rows = 5;
     println!("Witness generation");
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<IO, C, WIT_LEN, W, P, R>(r1cs_rows);
     // N/Q = prime / degree
@@ -374,19 +374,19 @@ fn benchmarks_main(c: &mut Criterion) {
         // Needs to update odd numbers of B
         // Kappa values for B ≈ 2^16 (within a margin of 65536):
         run_single_starkprime_benchmark!(1, &mut group, 6, 32768, 45796, 17, 214, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 6, 65536, 32400, 17, 180, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 131072, 91809, 16, 303, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 262144, 64516, 16, 254, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 524288, 45796, 17, 214, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 7, 1048576, 32400, 17, 180, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 6, 65536, 32400, 17, 180, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 7, 131072, 91809, 16, 303, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 7, 262144, 64516, 16, 254, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 7, 524288, 45796, 17, 214, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 7, 1048576, 32400, 17, 180, 2);
 
-        // Calculating largest B for max_kappa where L is an integer for all num_cols:
-        run_single_starkprime_benchmark!(1, &mut group, 11, 32768, 7086244, 11, 2662, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 12, 65536, 5013121, 12, 2239, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 12, 131072, 3545689, 12, 1883, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 12, 262144, 2505889, 12, 1583, 2);
-        run_single_starkprime_benchmark!(1, &mut group, 13, 524288, 1771561, 13, 11, 6);
-        run_single_starkprime_benchmark!(1, &mut group, 13, 1048576, 1252161, 13, 1119, 2);
+        // // Calculating largest B for max_kappa where L is an integer for all num_cols:
+        // run_single_starkprime_benchmark!(1, &mut group, 11, 32768, 7086244, 11, 2662, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 12, 65536, 5013121, 12, 2239, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 12, 131072, 3545689, 12, 1883, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 12, 262144, 2505889, 12, 1583, 2);
+        // run_single_starkprime_benchmark!(1, &mut group, 13, 524288, 1771561, 13, 11, 6);
+        // run_single_starkprime_benchmark!(1, &mut group, 13, 1048576, 1252161, 13, 1119, 2);
     }
 
     // // Frog
