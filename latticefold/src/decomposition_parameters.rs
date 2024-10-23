@@ -1,5 +1,3 @@
-use ark_std::fmt::Display;
-
 /// Decomposition parameters.
 /// Convenient to enforce them compile-time.
 /// Contains both gadget matrix data and Latticefold decomposition step data.
@@ -12,77 +10,4 @@ pub trait DecompositionParams: Clone {
     const B_SMALL: usize;
     /// K = log_b B.
     const K: usize;
-}
-
-#[derive(Clone, Copy)]
-pub struct DilithiumTestParams;
-
-// TODO: Revise this later
-impl DecompositionParams for DilithiumTestParams {
-    const B: u128 = 1 << 13;
-    const L: usize = 2;
-    const B_SMALL: usize = 2;
-    const K: usize = 13;
-}
-#[derive(Clone, Copy)]
-pub struct StarkPrimeParams;
-
-impl DecompositionParams for StarkPrimeParams {
-    const B: u128 = 1 << 126;
-    const L: usize = 2;
-    const B_SMALL: usize = 2;
-    const K: usize = 126;
-}
-
-#[derive(Clone, Copy)]
-pub struct GoldilocksParams;
-
-impl DecompositionParams for GoldilocksParams {
-    const B: u128 = 1 << 37;
-    const L: usize = 2;
-    const B_SMALL: usize = 2;
-    const K: usize = 37;
-}
-
-#[derive(Clone, Copy)]
-pub struct BabyBearParams;
-
-impl DecompositionParams for BabyBearParams {
-    const B: u128 = 1 << 28;
-    const L: usize = 2;
-    const B_SMALL: usize = 2;
-    const K: usize = 28;
-}
-
-#[derive(Clone, Copy)]
-pub struct FrogParams;
-
-impl DecompositionParams for FrogParams {
-    const B: u128 = 1 << 16;
-    const L: usize = 16;
-    const B_SMALL: usize = 2;
-    const K: usize = 16;
-}
-
-impl<P: DecompositionParams> From<P> for DecompositionParamData {
-    fn from(_: P) -> Self {
-        {
-            Self { b: P::B, l: P::L }
-        }
-    }
-}
-
-// Nice representation of parameters for printing out in benchmarks.
-#[derive(Clone, Copy)]
-pub struct DecompositionParamData {
-    // The MSIS bound.
-    b: u128,
-    // The ring modulus should be < B^L.
-    l: usize,
-}
-
-impl Display for DecompositionParamData {
-    fn fmt(&self, f: &mut ark_std::fmt::Formatter<'_>) -> ark_std::fmt::Result {
-        write!(f, "B={}, l={}", self.b, self.l,)
-    }
 }
