@@ -1,4 +1,6 @@
 #![allow(non_snake_case)]
+use std::time::Instant;
+
 use ark_ff::{Field, PrimeField};
 use ark_std::{marker::PhantomData, sync::Arc};
 use cyclotomic_rings::SuitableRing;
@@ -18,6 +20,10 @@ use crate::{
         sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
     },
 };
+
+use num_bigint::BigUint;
+use num_traits::{One, ToPrimitive};
+use std::f64;
 
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {
@@ -65,8 +71,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
+        let prove_start = Instant::now();
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
+        let beta_s_start = Instant::now();
         transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
         ));
@@ -75,8 +83,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .into_iter()
             .map(|x| x.into())
             .collect();
+        let beta_s_end = beta_s_start.elapsed();
         // Step 2: Sum check protocol
 
+        let sumcheck_start = Instant::now();
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -92,31 +102,41 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
+        let sumcheck_end = sumcheck_start.elapsed();
         // Extract the evaluation point
+        let r_start = Instant::now();
         let r = prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
-
+        let r_end = r_start.elapsed();
         // Step 3: Compute v, u_vector
 
+        let v_start = Instant::now();
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
             .evaluate(&r)
             .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
+        let v_end = v_start.elapsed();
+        let u_start = Instant::now();
         let u = compute_u(&Mz_mles, &r)?;
+        let u_end = u_start.elapsed();
 
         // Absorbing the prover's messages to the verifier.
+        let absorb_start = Instant::now();
         transcript.absorb(&v);
         transcript.absorb_slice(&u);
+        let absorb_end = absorb_start.elapsed();
 
         // Step 5: Output linearization_proof and lcccs
+        let linearization_proof_start = Instant::now();
         let linearization_proof = LinearizationProof {
             linearization_sumcheck: sum_check_proof,
             v,
             u: u.clone(),
         };
-
+        let linearization_proof_end = linearization_proof_start.elapsed();
+        let lcccs_start = Instant::now();
         let lcccs = LCCCS {
             r,
             v,
@@ -125,7 +145,38 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         };
-
+        let lcccs_end = lcccs_start.elapsed();
+        let prove_end = prove_start.elapsed();
+        let total_time = prove_end.as_micros() as f64;
+        println!(
+            "Linearization Prover:\n\
+            beta_s: {:?} ({:.2}%)\n\
+            sumcheck: {:?} ({:.2}%)\n\
+            r: {:?} ({:.2}%)\n\
+            v: {:?} ({:.2}%)\n\
+            u: {:?} ({:.2}%)\n\
+            absorb: {:?} ({:.2}%)\n\
+            linearization_proof: {:?} ({:.2}%)\n\
+            lcccs: {:?} ({:.2}%)\n\
+            total: {:?}",
+            beta_s_end,
+            (beta_s_end.as_micros() as f64 / total_time) * 100.0,
+            sumcheck_end,
+            (sumcheck_end.as_micros() as f64 / total_time) * 100.0,
+            r_end,
+            (r_end.as_micros() as f64 / total_time) * 100.0,
+            v_end,
+            (v_end.as_micros() as f64 / total_time) * 100.0,
+            u_end,
+            (u_end.as_micros() as f64 / total_time) * 100.0,
+            absorb_end,
+            (absorb_end.as_micros() as f64 / total_time) * 100.0,
+            linearization_proof_end,
+            (linearization_proof_end.as_micros() as f64 / total_time) * 100.0,
+            lcccs_end,
+            (lcccs_end.as_micros() as f64 / total_time) * 100.0,
+            prove_end
+        );
         Ok((lcccs, linearization_proof))
     }
 }
@@ -245,6 +296,49 @@ fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     g.mul_by_mle(build_eq_x_r(beta_s)?, NTT::one())?;
 
     Ok(g)
+}
+
+fn check_ring_modulus_128_bits_security(
+    ring_modulus: &BigUint,
+    kappa: usize,
+    degree: usize,
+    num_cols: usize,
+    b: u128,
+    l: usize,
+) -> bool {
+    // Calculate the logarithm of stark_modulus
+    let ring_modulus_log2 = ring_modulus.bits() as f64;
+    println!("ring_modulus_log2 = {}", ring_modulus_log2);
+    let ring_modulus_half = ring_modulus / 2u32;
+
+    // Calculate the left side of the inequality
+    let bound_l2 = 2f64.powf(
+        2.0 * (1.0045f64.ln() / 2f64.ln()).sqrt()
+            * (degree as f64 * kappa as f64 * ring_modulus_log2).sqrt(),
+    );
+    println!("bound = {}", bound_l2);
+    let bound_l2_ceil = bound_l2.ceil() as u64; // Ceil and convert to u64
+    let bound_l2_bigint = BigUint::from(bound_l2_ceil); // Convert to BigUint
+    let bound_l2_check = bound_l2_bigint < ring_modulus_half;
+    println!("bound_l2_check = {}", bound_l2_check);
+    // Calculate bound_inf
+    let bound_inf = bound_l2 / ((degree as f64 * num_cols as f64).sqrt());
+    println!("bound_inf = {}", bound_inf);
+
+    let b_check = b.to_f64().unwrap() < bound_inf;
+    println!("b < bound_inf: {}", b_check);
+    // Calculate the right side of the inequality
+    // Check if b^l > stark_modulus/2
+    let b_bigint = BigUint::from(b);
+    let b_pow_l = b_bigint.pow(l as u32);
+    let b_pow_l_check = b_pow_l > ring_modulus_half;
+
+    println!("b^l = {}", b_pow_l);
+    println!("ring_modulus/2 = {}", ring_modulus_half);
+    println!("b^l > ring_modulus/2: {}", b_pow_l_check);
+
+    // Return the result of the condition
+    bound_l2_check && b_check && b_pow_l_check
 }
 
 #[cfg(test)]
@@ -367,13 +461,19 @@ mod tests_stark {
         cyclotomic_ring::models::stark_prime::{Fq, RqNTT},
         PolyRing,
     };
+    use num_bigint::BigUint;
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{
+            r1cs::tests::{get_test_dummy_z_split, get_test_z_split},
+            tests::{get_test_ccs, get_test_dummy_ccs},
+            Witness, CCCS,
+        },
         commitment::AjtaiCommitmentScheme,
         nifs::linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
+            check_ring_modulus_128_bits_security, LFLinearizationProver, LFLinearizationVerifier,
+            LinearizationVerifier,
         },
         parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
@@ -462,6 +562,72 @@ mod tests_stark {
         );
 
         res.unwrap();
+    }
+
+    #[test]
+    fn test_dummy_linearization() {
+        type R = RqNTT;
+        type CS = StarkChallengeSet;
+        type T = PoseidonTranscript<R, CS>;
+
+        let stark_modulus = BigUint::parse_bytes(
+            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+            10,
+        )
+        .expect("Failed to parse stark_modulus");
+
+        const C: usize = 15;
+
+        if check_ring_modulus_128_bits_security(&stark_modulus, C, 16, W, PP::B, PP::L) {
+            println!(" Bound condition satisfied");
+        } else {
+            println!("Bound condition not satisfied");
+        }
+
+        #[derive(Clone)]
+        struct PP;
+        impl DecompositionParams for PP {
+            const B: u128 = 8633754724;
+            const L: usize = 8;
+            const B_SMALL: usize = 2050;
+            const K: usize = 3;
+        }
+
+        const IO: usize = 1;
+        const WIT_LEN: usize = 512;
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        let r1cs_rows_size = IO + WIT_LEN + 1; // Let's have a square matrix
+
+        let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows_size);
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+        let wit = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i = CCCS {
+            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let res = match res {
+            Ok(res) => LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+                &cm_i,
+                &res.1,
+                &mut transcript,
+                &ccs,
+            ),
+            Err(e) => panic!("Linearization proof generation error: {:?}", e),
+        };
+
+        match res {
+            Ok(_) => println!("Linearization verified with success"),
+            Err(ref e) => println!("Linearization Verification error: {:?}", e),
+        }
     }
 }
 

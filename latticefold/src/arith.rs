@@ -241,6 +241,7 @@ pub mod tests {
     use super::*;
     use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+    use r1cs::tests::get_test_dummy_r1cs;
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
@@ -248,6 +249,13 @@ pub mod tests {
     }
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_z(input)
+    }
+
+    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const WIT_LEN: usize, const W: usize>(
+        rows_size: usize,
+    ) -> CCS<R> {
+        let r1cs = get_test_dummy_r1cs::<R, IO, WIT_LEN>(rows_size);
+        CCS::<R>::from_r1cs(r1cs, W)
     }
 
     /// Test that a basic CCS relation can be satisfied

@@ -110,7 +110,15 @@ fn prover_decomposition_benchmark<
     c.bench_with_input(
         BenchmarkId::new(
             "Decomposition Prover",
-            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
+            format!(
+                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                C,
+                { W / P::L },
+                P::B,
+                P::L,
+                P::B_SMALL,
+                P::K
+            ),
         ),
         &(lcccs, wit, ccs),
         |b, (lcccs, wit, ccs)| {
@@ -177,7 +185,15 @@ fn verifier_decomposition_benchmark<
     c.bench_with_input(
         BenchmarkId::new(
             "Decomposition Verifier",
-            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
+            format!(
+                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                C,
+                { W / P::L },
+                P::B,
+                P::L,
+                P::B_SMALL,
+                P::K
+            ),
         ),
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {

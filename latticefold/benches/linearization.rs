@@ -91,7 +91,15 @@ fn prover_linearization_benchmark<
     c.bench_with_input(
         BenchmarkId::new(
             "Linearization Prover",
-            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
+            format!(
+                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                C,
+                { W / P::L },
+                P::B,
+                P::L,
+                P::B_SMALL,
+                P::K
+            ),
         ),
         &(cm_i, wit, ccs),
         |b, (cm_i, wit, ccs)| {
@@ -124,7 +132,15 @@ fn verifier_linearization_benchmark<
     c.bench_with_input(
         BenchmarkId::new(
             "Linearization Verifier",
-            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
+            format!(
+                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                C,
+                { W / P::L },
+                P::B,
+                P::L,
+                P::B_SMALL,
+                P::K
+            ),
         ),
         &(cm_i, proof.1, ccs),
         |b, (cm_i, proof, ccs)| {

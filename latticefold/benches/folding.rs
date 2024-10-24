@@ -9,8 +9,12 @@ use cyclotomic_rings::{
     BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
     GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT,
 };
-use latticefold::nifs::decomposition::{DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier};
-use latticefold::nifs::folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier};
+use latticefold::nifs::decomposition::{
+    DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
+};
+use latticefold::nifs::folding::{
+    FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
+};
 use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 use std::fmt::Debug;
@@ -120,7 +124,8 @@ fn prover_folding_benchmark<
         &decomposition_proof,
         &mut verifier_transcript,
         ccs,
-    ).unwrap();
+    )
+    .unwrap();
     let (lcccs, wit_s) = {
         let mut lcccs = lcccs_vec.clone();
         let mut lcccs_r = lcccs_vec;
@@ -136,17 +141,26 @@ fn prover_folding_benchmark<
     c.bench_with_input(
         BenchmarkId::new(
             "Folding Prover",
-            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
+            format!(
+                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                C,
+                { W / P::L },
+                P::B,
+                P::L,
+                P::B_SMALL,
+                P::K
+            ),
         ),
         &(lcccs, wit_s, ccs),
         |b, (lcccs_vec, wit_vec, ccs)| {
             b.iter(|| {
-                    let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
-                        lcccs_vec,
-                        wit_vec,
-                        &mut prover_transcript,
-                        ccs,
-                    ).unwrap();
+                let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
+                    lcccs_vec,
+                    wit_vec,
+                    &mut prover_transcript,
+                    ccs,
+                )
+                .unwrap();
             })
         },
     );
@@ -205,18 +219,28 @@ fn verifier_folding_benchmark<
         &decomposition_proof,
         &mut verifier_transcript,
         ccs,
-    ).unwrap();
+    )
+    .unwrap();
     println!("prove folding");
     let (_, _, folding_proof) = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
         &lcccs_vec,
         &wit_vec,
         &mut prover_transcript,
         ccs,
-    ).unwrap();
+    )
+    .unwrap();
     c.bench_with_input(
         BenchmarkId::new(
             "Folding Verifier",
-            format!("Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}", C, {W / P::L}, P::B, P::L, P::B_SMALL, P::K ),
+            format!(
+                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                C,
+                { W / P::L },
+                P::B,
+                P::L,
+                P::B_SMALL,
+                P::K
+            ),
         ),
         &(lcccs_vec, folding_proof, ccs),
         |b, (lcccs_vec, proof, ccs)| {
@@ -392,4 +416,3 @@ criterion_group!(
     config = Criterion::default().sample_size(10).measurement_time(Duration::from_secs(50)).warm_up_time(Duration::from_secs(1));
     targets = benchmarks_main);
 criterion_main!(benches);
-

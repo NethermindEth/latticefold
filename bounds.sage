@@ -6,14 +6,25 @@ def bound_2(d, kappa, p):
 
 # Define bound_inf function
 def bound_inf(d, kappa, p, n):
-    return (bound_2(d, kappa, p) / sqrt(d * n)).n()
-
-# Define B function (bound_inf ceiling with adjustment for odd values)
-def adjusted_B(bound_inf_value):
-    B = ceil(bound_inf_value)
-    if B % 2 == 1:  # Check if B is odd
-        B -= 1  # Decrease by 1 if odd
-    return B
+    L = 1
+    bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
+    
+    # Adjust bound_value to be even
+    if bound_value % 2 == 1:
+        bound_value -= 1
+    
+    # Iterate until bound_value^L > p/2 or L exceeds 50
+    while bound_value^L <= p / 2:
+        if L > 50:
+            return "unpractical", "unpractical"
+        L += 1
+        bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
+        if bound_value % 2 == 1:
+            bound_value -= 1
+            if find_smallest_L_log(bound_value, p) != L:
+                continue
+    
+    return bound_value, L
 
 # Function to find the smallest L such that B^L > p/2 using logarithms
 def find_smallest_L_log(B, p):
@@ -22,8 +33,12 @@ def find_smallest_L_log(B, p):
     return ceil(log(p / 2) / log(B))
 
 # Function to find all (b, k) pairs such that b^k = B
-def find_b_k_pairs(B, target_pairs=5):
+def find_b_k_pairs(B, original_L, target_pairs=10):
     pairs = []
+    
+    # Check if B is "unpractical"
+    if B == "unpractical":
+        return [("unpractical", "unpractical", "unpractical")]
     
     # Ensure B is even
     if B % 2 == 1:
@@ -36,7 +51,9 @@ def find_b_k_pairs(B, target_pairs=5):
             k = 1
             power = b
             while power <= B:
-                pairs.append((b, k, B))  # Add B to the pair
+                L = find_smallest_L_log(b**k, p)
+                if L == original_L:
+                    pairs.append((b, k, B))  # Add B to the pair if L matches
                 k += 1
                 power *= b
         
@@ -64,16 +81,16 @@ def find_b_k_pairs(B, target_pairs=5):
     return unique_pairs[:target_pairs]
 
 # Primes with their corresponding d values
-params = {
-    "Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16}
-}
 #params = {
-#    "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
-#    "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
-#    "Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
-#    "Frog": {"p": 159120925213255836417, "d": 16},
-#    "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
+#    "Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16}
 #}
+params = {
+    "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
+    "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
+    "Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
+    "Frog": {"p": 159120925213255836417, "d": 16},
+    "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
+}
 
 # Range of num_cols values
 num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13, 2^14]
@@ -99,16 +116,17 @@ for prime_name, param in params.items():
     for kappa in kappa_values:
         for n in num_cols_values:
             # Calculate bound_inf for the current kappa and n
-            current_bound_inf = bound_inf(d, kappa, p, n)
+            current_bound_inf, L = bound_inf(d, kappa, p, n)
             
-            # Compute the adjusted B
-            B = adjusted_B(current_bound_inf)
+            # If the current bound is "unpractical", skip to the next kappa
+            if current_bound_inf == "unpractical":
+                continue
             
             # Find the pairs (b, k) such that b^k = B
-            pairs = find_b_k_pairs(B)
+            pairs = find_b_k_pairs(current_bound_inf, L)
             
             # Display the results
-            print(f"\tkappa = {kappa}, n = {n}: B = {B}")
+            print(f"\tkappa = {kappa}, n = {n}: B = {current_bound_inf}")
             for b, k, B in pairs:
                 # Recalculate L for each pair
                 L = find_smallest_L_log(b**k, p)

@@ -119,6 +119,28 @@ pub mod tests {
         R1CS::<R> { l: 1, A, B, C }
     }
 
+    pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const WIT_LEN: usize>(
+        rows: usize,
+    ) -> R1CS<R> {
+        let R1CS_A = to_F_matrix::<R>(create_dummy_matrix(rows, IO + WIT_LEN + 1));
+        let R1CS_B = R1CS_A.clone();
+        let R1CS_C = R1CS_A.clone();
+
+        R1CS::<R> {
+            l: 1,
+            A: R1CS_A,
+            B: R1CS_B,
+            C: R1CS_C,
+        }
+    }
+    pub fn create_dummy_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
+        let mut matrix = vec![vec![0; columns]; rows];
+        for (i, item) in matrix.iter_mut().enumerate().take(rows) {
+            item[i] = 1;
+        }
+        matrix
+    }
+
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         // z = (1, io, w)
         to_F_vec(vec![
@@ -145,6 +167,15 @@ pub mod tests {
                 input * input * input + input,     // x^3 + x
             ]),
         )
+    }
+
+    pub fn get_test_dummy_z<R: Ring>() -> Vec<R> {
+        todo!()
+    }
+
+    pub fn get_test_dummy_z_split<R: Ring, const IO: usize, const WIT_LEN: usize>(
+    ) -> (R, Vec<R>, Vec<R>) {
+        (R::one(), to_F_vec(vec![1; IO]), to_F_vec(vec![1; WIT_LEN]))
     }
 
     #[test]
