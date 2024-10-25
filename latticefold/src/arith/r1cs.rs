@@ -153,6 +153,24 @@ pub mod tests {
         let z = get_test_z(5);
 
         r1cs.check_relation(&z).unwrap();
-        r1cs.relax().check_relation(&z).unwrap();
+        r1cs.clone().relax().check_relation(&z).unwrap();
+
+        // Check the number of non-zero elements in A, B, and C
+        let nnz_A = r1cs.A.nnz();
+        let total_elements_A = r1cs.A.nrows() * r1cs.A.ncols();
+        println!("Matrix A: nnz = {}, total elements = {}", nnz_A, total_elements_A);
+
+        let nnz_B = r1cs.B.nnz();
+        let total_elements_B = r1cs.B.nrows() * r1cs.B.ncols();
+        println!("Matrix B: nnz = {}, total elements = {}", nnz_B, total_elements_B);
+
+        let nnz_C = r1cs.C.nnz();
+        let total_elements_C = r1cs.C.nrows() * r1cs.C.ncols();
+        println!("Matrix C: nnz = {}, total elements = {}", nnz_C, total_elements_C);
+
+        // Optional: Assert that nnz is less than total elements
+        assert!(nnz_A <= total_elements_A);
+        assert!(nnz_B <= total_elements_B);
+        assert!(nnz_C <= total_elements_C);
     }
 }
