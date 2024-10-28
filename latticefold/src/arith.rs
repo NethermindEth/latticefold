@@ -227,7 +227,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
                 .map(|x| {
                     x.into_coeffs()
                         .into_iter()
-                        .map(|coeff| <NTT::BaseRing as Field>::from_base_prime_field(coeff))
+                        .map(<NTT::BaseRing as Field>::from_base_prime_field)
                         .collect::<Vec<NTT::BaseRing>>()
                         .chunks(NTT::dimension())
                         .map(|chunk| NTT::from(chunk.to_vec()))

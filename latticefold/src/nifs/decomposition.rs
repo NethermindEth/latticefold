@@ -228,14 +228,15 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        for i in 0..NTT::dimension() {
-            let should_equal_v0: NTT = proof.v_s[i]
+        for (i, &cm_i_value) in cm_i.v.iter().enumerate() {
+            let should_equal_v0: NTT = proof
+                .v_s
                 .iter()
                 .zip(&b_s)
-                .map(|(&v_i, b_i)| v_i * b_i)
+                .map(|(v_i, b_i)| v_i[i] * b_i)
                 .sum();
 
-            if should_equal_v0 != cm_i.v[i] {
+            if should_equal_v0 != cm_i_value {
                 return Err(DecompositionError::RecomposedError);
             }
         }
