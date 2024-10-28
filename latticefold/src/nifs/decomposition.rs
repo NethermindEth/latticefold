@@ -429,7 +429,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
+        let (_, _, w_ccs) = get_test_z_split::<NTT>(10);
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
         let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
@@ -450,4 +450,143 @@ mod tests {
 
         assert!(res.is_err());
     }
+}
+
+#[cfg(test)]
+mod goldilocks_tests {
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
+
+    use rand::thread_rng;
+
+    use crate::{
+        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        commitment::AjtaiCommitmentScheme,
+        nifs::{
+            decomposition::{
+                DecompositionParams, DecompositionProver, DecompositionVerifier,
+                LFDecompositionProver, LFDecompositionVerifier,
+            },
+            linearization::{
+                LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
+                LinearizationVerifier,
+            },
+        },
+        transcript::poseidon::PoseidonTranscript,
+    };
+    use cyclotomic_rings::GoldilocksChallengeSet;
+
+    // Boilerplate code to generate values needed for testing
+    type NTT = RqNTT;
+    type CS = GoldilocksChallengeSet;
+    type T = PoseidonTranscript<NTT, CS>;
+    #[derive(Clone)]
+    struct PP;
+    impl DecompositionParams for PP {
+        const B: u128 = 1_024;
+        const L: usize = 2;
+        const B_SMALL: usize = 2;
+        const K: usize = 10;
+    }
+
+    // Actual Tests
+    #[test]
+    fn test_decomposition() {
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i: CCCS<4, NTT> = CCCS {
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let (_, linearization_proof) =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+                .unwrap();
+
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
+            &cm_i,
+            &linearization_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
+
+        let res = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+            &lcccs,
+            &decomposition_proof,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_failing_decomposition() {
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i: CCCS<4, NTT> = CCCS {
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let (_, linearization_proof) =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+                .unwrap();
+
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
+            &cm_i,
+            &linearization_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let (_, _, w_ccs) = get_test_z_split::<NTT>(10);
+        let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
+
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
+            &lcccs,
+            &fake_witness,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
+
+        let res = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+            &lcccs,
+            &decomposition_proof,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        assert!(res.is_err());
+    }
+
+    //
 }

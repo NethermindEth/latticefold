@@ -123,7 +123,6 @@ mod tests_pow2 {
 
             let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
             let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-            println!("{:?}", sum);
             let res =
                 MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
             assert!(res.is_ok());
