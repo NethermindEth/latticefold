@@ -5,7 +5,7 @@ use ark_std::marker::PhantomData;
 use cyclotomic_rings::SuitableRing;
 use lattirust_ring::OverField;
 use num_bigint::BigUint;
-use num_traits::{ToPrimitive};
+use num_traits::ToPrimitive;
 use std::{f64, time::Instant};
 use utils::get_alphas_betas_zetas_mus;
 
@@ -348,7 +348,6 @@ fn check_ring_modulus_128_bits_security(
 ) -> bool {
     // Calculate the logarithm of stark_modulus
     let ring_modulus_log2 = ring_modulus.bits() as f64;
-    println!("ring_modulus_log2 = {}", ring_modulus_log2);
     let ring_modulus_half = ring_modulus / 2u32;
 
     // Calculate the left side of the inequality
@@ -356,26 +355,18 @@ fn check_ring_modulus_128_bits_security(
         2.0 * (1.0045f64.ln() / 2f64.ln()).sqrt()
             * (degree as f64 * kappa as f64 * ring_modulus_log2).sqrt(),
     );
-    println!("bound = {}", bound_l2);
     let bound_l2_ceil = bound_l2.ceil() as u64; // Ceil and convert to u64
     let bound_l2_bigint = BigUint::from(bound_l2_ceil); // Convert to BigUint
     let bound_l2_check = bound_l2_bigint < ring_modulus_half;
-    println!("bound_l2_check = {}", bound_l2_check);
     // Calculate bound_inf
     let bound_inf = bound_l2 / ((degree as f64 * num_cols as f64).sqrt());
-    println!("bound_inf = {}", bound_inf);
 
     let b_check = b.to_f64().unwrap() < bound_inf;
-    println!("b < bound_inf: {}", b_check);
     // Calculate the right side of the inequality
     // Check if b^l > stark_modulus/2
     let b_bigint = BigUint::from(b);
     let b_pow_l = b_bigint.pow(l as u32);
     let b_pow_l_check = b_pow_l > ring_modulus_half;
-
-    println!("b^l = {}", b_pow_l);
-    println!("ring_modulus/2 = {}", ring_modulus_half);
-    println!("b^l > ring_modulus/2: {}", b_pow_l_check);
 
     // Return the result of the condition
     bound_l2_check && b_check && b_pow_l_check
@@ -550,7 +541,10 @@ mod tests {
     }
 }
 
+#[cfg(test)]
 mod tests_stark {
+    use ark_ff::UniformRand;
+    use lattirust_poly::mle::DenseMultilinearExtension;
     use lattirust_ring::{
         cyclotomic_ring::models::stark_prime::{Fq, RqNTT},
         PolyRing,
@@ -558,21 +552,38 @@ mod tests_stark {
     use num_bigint::BigUint;
     use rand::thread_rng;
 
+    use crate::arith::tests::{get_test_ccs, get_test_dummy_ccs};
     use crate::{
-        arith::{r1cs::tests::get_test_dummy_z_split, tests::get_test_dummy_ccs, Witness, CCCS}, commitment::AjtaiCommitmentScheme, nifs::{
+        arith::r1cs::tests::{get_test_dummy_z_split, get_test_z_split},
+        nifs::{
             decomposition::{
-                DecompositionProver,
-                DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
-            }, folding::{check_ring_modulus_128_bits_security, FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier}, linearization::{
-                LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
-                LinearizationVerifier,
-            }
-        }, parameters::DecompositionParams, transcript::poseidon::PoseidonTranscript
+                DecompositionProver, DecompositionVerifier, LFDecompositionProver,
+                LFDecompositionVerifier,
+            },
+            folding::{
+                check_ring_modulus_128_bits_security, FoldingProver, FoldingVerifier,
+                LFFoldingProver, LFFoldingVerifier,
+            },
+            linearization::LinearizationProver,
+        },
     };
-    use cyclotomic_rings::{challenge_set::BinarySmallSet, StarkChallengeSet};
+    use crate::{
+        arith::{Witness, CCCS},
+        commitment::AjtaiCommitmentScheme,
+        nifs::linearization::{
+            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
+        },
+        parameters::DecompositionParams,
+        transcript::poseidon::PoseidonTranscript,
+    };
+    use cyclotomic_rings::StarkChallengeSet;
 
     #[test]
     fn test_dummy_folding() {
+        #[cfg(feature = "dhat-heap")]
+        #[global_allocator]
+        static ALLOC: dhat::Alloc = dhat::Alloc;
+
         type R = RqNTT;
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
@@ -582,7 +593,6 @@ mod tests_stark {
             10,
         )
         .expect("Failed to parse stark_modulus");
-
 
         if check_ring_modulus_128_bits_security(&stark_modulus, C, 16, W, PP::B, PP::L) {
             println!(" Bound condition satisfied");
@@ -603,20 +613,10 @@ mod tests_stark {
         const IO: usize = 1;
         const WIT_LEN: usize = 512;
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-        let r1cs_rows_size = WIT_LEN+IO+1; // Let's have a square matrix
-        // impl DecompositionParams for PP {
-        //     const B: u128 = 8633754724;
-        //     const L: usize = 8;
-        //     const B_SMALL: usize = 2050;
-        //     const K: usize = 3;
-        // }
+        let r1cs_rows_size = IO + WIT_LEN + 1; // Let's have a square matrix
 
-        // const C: usize = 15;
-        // const IO: usize = 1;
-        // const WIT_LEN: usize = 512;
-        // const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-        // let r1cs_rows_size = 5; // Let's have a square matrix
-
+        #[cfg(feature = "dhat-heap")]
+        let _profiler = dhat::Profiler::new_heap(); // Move a round to measure specific parts
 
         let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
@@ -630,7 +630,8 @@ mod tests_stark {
 
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let linearization_proof = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
+        let linearization_proof =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
 
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
@@ -643,7 +644,7 @@ mod tests_stark {
                     &mut verifier_transcript,
                     &ccs,
                 )
-            },
+            }
             Err(e) => panic!("Linearization proof generation error: {:?}", e),
         };
 
@@ -665,7 +666,8 @@ mod tests_stark {
         let decomposition_proof = match decomposition_prover {
             Ok(res) => {
                 println!("Decomposition proof generated with success");
-                res},
+                res
+            }
             Err(e) => panic!("Decomposition proof generation error: {:?}", e),
         };
 
@@ -702,7 +704,8 @@ mod tests_stark {
         let folding_proof = match folding_prover {
             Ok(res) => {
                 println!("Folding proof generated with success");
-                res},
+                res
+            }
             Err(e) => panic!("Folding proof generation error: {:?}", e),
         };
 

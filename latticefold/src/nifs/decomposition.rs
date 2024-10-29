@@ -1,14 +1,15 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use ark_std::marker::PhantomData;
+use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
     OverField, Ring,
 };
 use num_bigint::BigUint;
-use num_traits::{ToPrimitive};
+use num_traits::ToPrimitive;
 use std::{f64, time::Instant};
 
-use crate::utils::mle::dense_vec_to_dense_mle;
+use crate::{arith::r1cs::R1CS, utils::mle::dense_vec_to_dense_mle};
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -392,7 +393,6 @@ fn check_ring_modulus_128_bits_security(
     bound_l2_check && b_check && b_pow_l_check
 }
 
-
 #[cfg(test)]
 mod tests {
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
@@ -533,6 +533,7 @@ mod tests {
     }
 }
 
+#[cfg(test)]
 mod tests_stark {
     use lattirust_ring::{
         cyclotomic_ring::models::stark_prime::{Fq, RqNTT},
@@ -557,10 +558,6 @@ mod tests_stark {
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::{challenge_set::BinarySmallSet, StarkChallengeSet};
-    #[cfg(feature = "dhat-heap")]
-    #[global_allocator]
-    static ALLOC: dhat::Alloc = dhat::Alloc;
-
 
     #[test]
     fn test_dummy_decomposition() {
@@ -574,7 +571,6 @@ mod tests_stark {
         )
         .expect("Failed to parse stark_modulus");
 
-
         if check_ring_modulus_128_bits_security(&stark_modulus, C, 16, W, PP::B, PP::L) {
             println!(" Bound condition satisfied");
         } else {
@@ -584,30 +580,17 @@ mod tests_stark {
         #[derive(Clone)]
         struct PP;
         impl DecompositionParams for PP {
-            const B: u128 = 3010936384;
+            const B: u128 = 10485760000;
             const L: usize = 8;
-            const B_SMALL: usize = 38;
-            const K: usize = 6;
+            const B_SMALL: usize = 320;
+            const K: usize = 4;
         }
 
-        const C: usize = 15;
+        const C: usize = 16;
         const IO: usize = 1;
-        const WIT_LEN: usize = 512;
+        const WIT_LEN: usize = 2048;
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-        let r1cs_rows_size = WIT_LEN+IO+1; // Let's have a square matrix
-        // impl DecompositionParams for PP {
-        //     const B: u128 = 8633754724;
-        //     const L: usize = 8;
-        //     const B_SMALL: usize = 2050;
-        //     const K: usize = 3;
-        // }
-
-        // const C: usize = 15;
-        // const IO: usize = 1;
-        // const WIT_LEN: usize = 512;
-        // const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-        // let r1cs_rows_size = 5; // Let's have a square matrix
-
+        let r1cs_rows_size = IO + WIT_LEN + 1; // Let's have a square matrix
 
         let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
@@ -621,7 +604,8 @@ mod tests_stark {
 
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let linearization_proof = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
+        let linearization_proof =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
 
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
@@ -642,8 +626,6 @@ mod tests_stark {
 
         let lcccs = linearization_verification.unwrap();
 
-        #[cfg(feature = "dhat-heap")]
-        let _profiler = dhat::Profiler::new_heap();
         let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
             &lcccs,
             &wit,
