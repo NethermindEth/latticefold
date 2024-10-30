@@ -64,10 +64,12 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
         let mut commitment: Vec<NTT> = vec![NTT::zero(); C];
 
-        commitment
-            .iter_mut()
-            .zip(&self.matrix)
-            .for_each(|(x, row)| *x = row.iter().zip(f).map(|(&m, &x)| m * x).sum());
+        for (i, row) in self.matrix.iter().enumerate() {
+            commitment[i] = NTT::zero();
+            for j in 0..W {
+                commitment[i] += row[j] * f[j];
+            }
+        }
 
         Ok(Commitment::from_vec_raw(commitment))
     }
