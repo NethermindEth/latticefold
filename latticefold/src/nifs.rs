@@ -15,7 +15,7 @@ use decomposition::{
 };
 use error::LatticefoldError;
 use folding::{FoldingProof, FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier};
-use linearization::{
+use linearization::structs::{
     LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
     LinearizationVerifier,
 };

@@ -317,7 +317,7 @@ mod tests {
                 DecompositionParams, DecompositionProver, DecompositionVerifier,
                 LFDecompositionProver, LFDecompositionVerifier,
             },
-            linearization::{
+            linearization::structs::{
                 LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
                 LinearizationVerifier,
             },

@@ -315,7 +315,7 @@ mod tests {
                 LFDecompositionVerifier,
             },
             folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
-            linearization::{
+            linearization::structs::{
                 LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
                 LinearizationVerifier,
             },
