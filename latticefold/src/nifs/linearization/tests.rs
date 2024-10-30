@@ -1,8 +1,12 @@
 #[macro_export]
 macro_rules! generate_tests {
     () => {
+        use std::sync::Arc;
+
         use ark_ff::UniformRand;
+        use ark_std::One;
         use lattirust_poly::mle::DenseMultilinearExtension;
+        use lattirust_poly::polynomials::{build_eq_x_r, VirtualPolynomial};
         use rand::thread_rng;
         use $crate::{
             arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -13,6 +17,10 @@ macro_rules! generate_tests {
                 LFLinearizationVerifier, LinearizationVerifier,
             },
             transcript::poseidon::PoseidonTranscript,
+        };
+        use $crate::{
+            nifs::linearization::utils::prepare_lin_sumcheck_polynomial,
+            utils::mle::dense_vec_to_dense_mle,
         };
 
         #[test]
@@ -43,6 +51,55 @@ macro_rules! generate_tests {
             }
         }
 
+        #[test]
+        fn test_linearization_polynomial() {
+            let mut rng = ark_std::test_rng();
+
+            let n_c = 4;
+            let n_r = 4;
+            let log_m = 2;
+            let s_i = 3;
+
+            let mut g = VirtualPolynomial::<RqNTT>::new(log_m);
+            let z: Vec<RqNTT> = (0..n_c).map(|_| RqNTT::rand(&mut rng)).collect();
+            let c = RqNTT::rand(&mut rng);
+            let beta: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
+            let mut M_z_mles: Vec<DenseMultilinearExtension<RqNTT>> = Vec::with_capacity(s_i);
+
+            for _ in 0..s_i {
+                let mut mle = Vec::new();
+                for _ in 0..n_r {
+                    let mut row = Vec::new();
+                    for _ in 0..n_c {
+                        let random_value = RqNTT::rand(&mut rng);
+                        row.push(random_value);
+                    }
+                    let row_z = row
+                        .iter()
+                        .zip(&z)
+                        .map(|(&r_i, z_i)| r_i * z_i)
+                        .sum::<RqNTT>();
+                    mle.push(row_z);
+                }
+                M_z_mles.push(dense_vec_to_dense_mle(log_m, &mle));
+            }
+
+            let _ = g.add_mle_list(M_z_mles.clone().into_iter().map(|mle| Arc::new(mle)), c);
+            let eq_b_r = build_eq_x_r(&beta).unwrap();
+            let _ = g.mul_by_mle(eq_b_r, RqNTT::one());
+
+            let polynomial =
+                prepare_lin_sumcheck_polynomial(log_m, &[c], &M_z_mles, &[vec![0, 1, 2]], &beta)
+                    .unwrap();
+
+            for _ in 0..20 {
+                let point: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
+                assert_eq!(
+                    g.evaluate(&point).unwrap(),
+                    polynomial.evaluate(&point).unwrap()
+                )
+            }
+        }
         // Actual Tests
         #[test]
         fn test_linearization() {
@@ -92,6 +149,7 @@ macro_rules! generate_tests {
 mod tests_pow2 {
 
     use cyclotomic_rings::challenge_set::BinarySmallSet;
+
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
     // Boilerplate code to generate values needed for testing
