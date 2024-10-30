@@ -203,3 +203,17 @@ mod tests_goldilocks {
 
     generate_sumcheck_tests!();
 }
+
+#[cfg(test)]
+mod tests_babybear {
+
+    use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
+
+    use cyclotomic_rings::BabyBearChallengeSet;
+
+    type R = RqNTT;
+
+    type CS = BabyBearChallengeSet;
+
+    generate_sumcheck_tests!();
+}

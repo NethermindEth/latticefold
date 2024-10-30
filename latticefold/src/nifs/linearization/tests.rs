@@ -127,3 +127,13 @@ mod tests_frog {
     type CS = FrogChallengeSet;
     generate_tests!();
 }
+
+#[cfg(test)]
+mod tests_babybear {
+
+    use cyclotomic_rings::BabyBearChallengeSet;
+    use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
+    type CS = BabyBearChallengeSet;
+
+    generate_tests!();
+}
