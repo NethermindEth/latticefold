@@ -32,7 +32,7 @@ pub fn get_test_dummy_r1cs<
 >(
     rows: usize,
 ) -> R1CS<R> {
-    let R1CS_A = to_f_matrix::<R>(create_dummy_matrix(rows, X_LEN + WIT_LEN + 1));
+    let R1CS_A = to_f_matrix::<R>(create_dummy_identity_matrix(rows, X_LEN + WIT_LEN + 1));
     let R1CS_B = R1CS_A.clone();
     let R1CS_C = R1CS_A.clone();
 
@@ -44,7 +44,7 @@ pub fn get_test_dummy_r1cs<
     }
 }
 
-pub fn create_dummy_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
+pub fn create_dummy_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
     let mut matrix = vec![vec![0; columns]; rows];
     for (i, item) in matrix.iter_mut().enumerate().take(rows) {
         item[i] = 1;
