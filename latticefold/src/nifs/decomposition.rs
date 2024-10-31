@@ -1,9 +1,4 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-use ark_std::marker::PhantomData;
-use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    OverField, Ring,
-};
 use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
@@ -13,7 +8,12 @@ use crate::{
     nifs::error::DecompositionError,
     transcript::Transcript,
 };
+use ark_std::marker::PhantomData;
 use cyclotomic_rings::SuitableRing;
+use lattirust_ring::{
+    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    OverField, Ring,
+};
 
 #[derive(Clone)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
@@ -451,10 +451,7 @@ mod tests {
 
 #[cfg(test)]
 mod tests_stark {
-    use lattirust_ring::{
-        cyclotomic_ring::models::stark_prime::{Fq, RqNTT},
-        PolyRing,
-    };
+    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     use num_bigint::BigUint;
     use rand::thread_rng;
 
@@ -463,15 +460,16 @@ mod tests_stark {
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{
-                DecompositionParams, DecompositionProver,
-                DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
+                DecompositionParams, DecompositionProver, DecompositionVerifier,
+                LFDecompositionProver, LFDecompositionVerifier,
             },
             linearization::{
                 LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
                 LinearizationVerifier,
             },
         },
-        transcript::poseidon::PoseidonTranscript, utils::check_ring_modulus_128_bits_security,
+        transcript::poseidon::PoseidonTranscript,
+        utils::check_ring_modulus_128_bits_security,
     };
     use cyclotomic_rings::StarkChallengeSet;
 

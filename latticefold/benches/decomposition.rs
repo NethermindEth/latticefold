@@ -8,11 +8,7 @@ use rand::thread_rng;
 use std::fmt::Debug;
 mod utils;
 use ark_std::UniformRand;
-use cyclotomic_rings::challenge_set::BinarySmallSet;
-use cyclotomic_rings::{
-    BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
-    GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT,
-};
+use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use latticefold::{
     arith::{Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -29,8 +25,6 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
-use paste;
 use std::time::Duration;
 use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
 
@@ -255,7 +249,7 @@ macro_rules! run_single_starkprime_benchmark {
         }
     };
 }
-
+#[macro_export]
 macro_rules! define_goldilocks_params {
     ($w:expr, $b:expr, $l:expr) => {
         paste::paste! {
@@ -271,7 +265,7 @@ macro_rules! define_goldilocks_params {
         }
     };
 }
-
+#[macro_export]
 macro_rules! run_single_goldilocks_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_goldilocks_params!($w, $b, $l);
@@ -281,7 +275,7 @@ macro_rules! run_single_goldilocks_benchmark {
         }
     };
 }
-
+#[macro_export]
 macro_rules! define_babybear_params {
     ($w:expr, $b:expr, $l:expr) => {
         paste::paste! {
@@ -297,7 +291,7 @@ macro_rules! define_babybear_params {
         }
     };
 }
-
+#[macro_export]
 macro_rules! run_single_babybear_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_babybear_params!($w, $b, $l);
@@ -307,7 +301,7 @@ macro_rules! run_single_babybear_benchmark {
         }
     };
 }
-
+#[macro_export]
 macro_rules! define_frog_params {
     ($w:expr, $b:expr, $l:expr) => {
         paste::paste! {
@@ -323,7 +317,7 @@ macro_rules! define_frog_params {
         }
     };
 }
-
+#[macro_export]
 macro_rules! run_single_frog_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_frog_params!($w, $b, $l);
@@ -333,7 +327,7 @@ macro_rules! run_single_frog_benchmark {
         }
     };
 }
-
+#[macro_export]
 macro_rules! define_dilithium_params {
     ($w:expr, $b:expr, $l:expr) => {
         paste::paste! {
@@ -349,7 +343,7 @@ macro_rules! define_dilithium_params {
         }
     };
 }
-
+#[macro_export]
 macro_rules! run_single_dilithium_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
         define_dilithium_params!($w, $b, $l);

@@ -1,8 +1,8 @@
+#![allow(non_snake_case)]
 use ark_std::UniformRand;
 use cyclotomic_rings::SuitableRing;
 use latticefold::arith::{r1cs::R1CS, CCS};
 use lattirust_linear_algebra::SparseMatrix;
-use lattirust_ring::PolyRing;
 use std::fmt::Debug;
 
 pub fn get_test_dummy_z_split<

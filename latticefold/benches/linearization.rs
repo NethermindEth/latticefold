@@ -3,13 +3,8 @@
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::challenge_set::BinarySmallSet;
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
-use cyclotomic_rings::{
-    BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
-    GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT,
-};
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use rand::thread_rng;
 use std::fmt::Debug;
 mod utils;
@@ -79,10 +74,10 @@ fn prover_linearization_benchmark<
 ) -> (LCCCS<C, R>, LinearizationProof<R>) {
     let mut transcript = PoseidonTranscript::<R, CS>::default();
     let res = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-        &cm_i,
-        &wit,
+        cm_i,
+        wit,
         &mut transcript,
-        &ccs,
+        ccs,
     );
     match res {
         Ok(_) => println!("Linearization proof generated with success"),
@@ -147,10 +142,10 @@ fn verifier_linearization_benchmark<
             b.iter(|| {
                 let mut transcript = PoseidonTranscript::<R, CS>::default();
                 let _ = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                    &cm_i,
-                    &proof,
+                    cm_i,
+                    proof,
                     &mut transcript,
-                    &ccs,
+                    ccs,
                 );
             })
         },

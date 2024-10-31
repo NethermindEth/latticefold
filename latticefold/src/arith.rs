@@ -3,9 +3,7 @@ use ark_std::log2;
 use cyclotomic_rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{
-        decompose_balanced_vec, pad_and_transpose, recompose,
-    },
+    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
     Ring,
 };
 

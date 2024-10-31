@@ -3,19 +3,14 @@
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::challenge_set::BinarySmallSet;
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
-use cyclotomic_rings::{
-    BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
-    GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT,
-};
+use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use latticefold::nifs::decomposition::{
     DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
 };
 use latticefold::nifs::folding::{
     FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 use std::fmt::Debug;
 mod utils;
@@ -24,12 +19,11 @@ use std::time::Duration;
 use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
 
 use latticefold::{
-    arith::{Arith, Witness, CCCS, CCS, LCCCS},
+    arith::{Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
-    decomposition_parameters::{DecompositionParamData, DecompositionParams},
+    decomposition_parameters::DecompositionParams,
     nifs::linearization::{
-        LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
-        LinearizationVerifier,
+        LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
     },
     transcript::poseidon::PoseidonTranscript,
 };
@@ -291,7 +285,7 @@ macro_rules! define_starkprime_params {
         }
     };
 }
-
+#[macro_export]
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_starkprime_params!($w, $b, $l, $b_small, $k);

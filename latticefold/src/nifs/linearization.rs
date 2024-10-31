@@ -623,7 +623,7 @@ mod tests_goldilocks {
 mod tests_frog {
     use ark_ff::UniformRand;
     use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::{cyclotomic_ring::models::frog_ring::RqNTT, Ring};
+    use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
     use rand::thread_rng;
 
     use crate::{

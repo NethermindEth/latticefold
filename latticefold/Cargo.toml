@@ -49,6 +49,7 @@ criterion = "0.5.1"
 name = "ajtai"
 harness = false
 
+
 [[bench]]
 name = "linearization"
 harness = false
