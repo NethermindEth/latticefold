@@ -1,6 +1,6 @@
 #[macro_export]
 macro_rules! generate_tests {
-    () => {
+    ( $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         use std::sync::Arc;
 
         use ark_ff::UniformRand;
@@ -106,11 +106,13 @@ macro_rules! generate_tests {
             type R = RqNTT;
             type T = PoseidonTranscript<R, CS>;
 
+            #[derive(Clone)]
+            struct PP;
             impl DecompositionParams for PP {
-                const B: u128 = 1_024;
-                const L: usize = 2;
-                const B_SMALL: usize = 2;
-                const K: usize = 10;
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = $b_small;
+                const K: usize = $k;
             }
 
             const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
@@ -119,8 +121,6 @@ macro_rules! generate_tests {
             let ccs = get_test_ccs::<R>(W);
             let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
             let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-            #[derive(Clone)]
-            struct PP;
 
             let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
             let cm_i: CCCS<4, R> = CCCS {
@@ -157,7 +157,7 @@ mod tests_pow2 {
     const N: usize = 8;
     type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
     type CS = BinarySmallSet<Q, N>;
-    generate_tests!();
+    generate_tests!(1024, 2, 2, 10);
 }
 
 #[cfg(test)]
@@ -166,7 +166,7 @@ mod tests_stark {
     use cyclotomic_rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     type CS = StarkChallengeSet;
-    generate_tests!();
+    generate_tests!(1024, 2, 2, 10);
 }
 
 #[cfg(test)]
@@ -175,7 +175,7 @@ mod tests_goldilocks {
     use cyclotomic_rings::GoldilocksChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
     type CS = GoldilocksChallengeSet;
-    generate_tests!();
+    generate_tests!(1024, 2, 2, 10);
 }
 
 #[cfg(test)]
@@ -183,7 +183,7 @@ mod tests_frog {
     use cyclotomic_rings::FrogChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
     type CS = FrogChallengeSet;
-    generate_tests!();
+    generate_tests!(1024, 2, 2, 10);
 }
 
 #[cfg(test)]
@@ -193,5 +193,5 @@ mod tests_babybear {
     use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
     type CS = BabyBearChallengeSet;
 
-    generate_tests!();
+    generate_tests!(1024, 2, 2, 10);
 }
