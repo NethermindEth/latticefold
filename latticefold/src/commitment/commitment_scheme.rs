@@ -1,7 +1,7 @@
 use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField};
 
 use super::homomorphic_commitment::Commitment;
-use crate::{commitment::CommitmentError, parameters::DecompositionParams};
+use crate::{commitment::CommitmentError, decomposition_parameters::DecompositionParams};
 use cyclotomic_rings::SuitableRing;
 
 /// A concrete instantiation of the Ajtai commitment scheme.
@@ -117,7 +117,7 @@ mod tests {
     use lattirust_ring::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
-    use crate::parameters::DilithiumNTT;
+    use cyclotomic_rings::DilithiumNTT;
 
     pub(crate) fn generate_ajtai<const C: usize, const W: usize, NTT: OverField>(
     ) -> Result<AjtaiCommitmentScheme<C, W, NTT>, CommitmentError> {

@@ -4,7 +4,7 @@
 
 pub mod arith;
 pub mod commitment;
+pub mod decomposition_parameters;
 pub mod nifs;
-pub mod parameters;
 pub mod transcript;
 pub mod utils;

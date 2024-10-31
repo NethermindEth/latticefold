@@ -6,9 +6,9 @@ use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
 use cyclotomic_rings::{
-    BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
+    BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing, DILITHIUM_PRIME,
 };
-use latticefold::{commitment::AjtaiCommitmentScheme, parameters::DILITHIUM_PRIME};
+use latticefold::commitment::AjtaiCommitmentScheme;
 use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 use std::fmt::Debug;

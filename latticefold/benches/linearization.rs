@@ -20,11 +20,11 @@ use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
 use latticefold::{
     arith::{Arith, Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
+    decomposition_parameters::DecompositionParams,
     nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
         LinearizationVerifier,
     },
-    parameters::{DecompositionParamData, DecompositionParams},
     transcript::poseidon::PoseidonTranscript,
 };
 

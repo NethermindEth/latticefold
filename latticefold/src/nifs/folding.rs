@@ -11,7 +11,7 @@ use crate::transcript::TranscriptWithSmallChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
-    parameters::DecompositionParams,
+    decomposition_parameters::DecompositionParams,
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 
@@ -306,6 +306,7 @@ mod tests {
     use crate::{
         arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::{
             decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -317,7 +318,6 @@ mod tests {
                 LinearizationVerifier,
             },
         },
-        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
@@ -470,13 +470,10 @@ mod tests {
 
 #[cfg(test)]
 mod tests_stark {
-    use lattirust_ring::{
-        cyclotomic_ring::models::stark_prime::RqNTT,
-    };
+    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     use num_bigint::BigUint;
     use rand::thread_rng;
 
-    use crate::{arith::tests::get_test_dummy_ccs, utils::check_ring_modulus_128_bits_security};
     use crate::{
         arith::r1cs::tests::get_test_dummy_z_split,
         nifs::{
@@ -484,20 +481,18 @@ mod tests_stark {
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
                 LFDecompositionVerifier,
             },
-            folding::{
-                FoldingProver, FoldingVerifier,
-                LFFoldingProver, LFFoldingVerifier,
-            },
+            folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
             linearization::LinearizationProver,
         },
     };
+    use crate::{arith::tests::get_test_dummy_ccs, utils::check_ring_modulus_128_bits_security};
     use crate::{
         arith::{Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
-        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::StarkChallengeSet;
@@ -561,10 +556,13 @@ mod tests_stark {
 
         let linearization_verification = LFLinearizationVerifier::<_, T>::verify(
             &cm_i,
-            &linearization_proof.expect("Linearization proof generation error").1,
+            &linearization_proof
+                .expect("Linearization proof generation error")
+                .1,
             &mut verifier_transcript,
             &ccs,
-        ).expect("Linearization Verification error");
+        )
+        .expect("Linearization Verification error");
 
         let lcccs = linearization_verification;
 
@@ -576,8 +574,8 @@ mod tests_stark {
             &scheme,
         );
 
-        let decomposition_proof = decomposition_prover
-            .expect("Decomposition proof generation error");
+        let decomposition_proof =
+            decomposition_prover.expect("Decomposition proof generation error");
 
         let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
             &lcccs,

@@ -16,6 +16,7 @@ use cyclotomic_rings::{
 use latticefold::{
     arith::{Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
+    decomposition_parameters::DecompositionParams,
     nifs::{
         decomposition::{
             DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -26,7 +27,6 @@ use latticefold::{
             LinearizationVerifier,
         },
     },
-    parameters::{DecompositionParams, DILITHIUM_PRIME},
     transcript::poseidon::PoseidonTranscript,
 };
 use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
@@ -486,7 +486,6 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_starkprime_benchmark!(&mut group, 1, 25, 2048, 12472537595904, 6, 3531648, 2);
         run_single_starkprime_benchmark!(&mut group, 1, 25, 2048, 12471027759000, 6, 23190, 3);
         run_single_starkprime_benchmark!(&mut group, 1, 25, 2048, 12438910749456, 6, 1878, 4);
-
     }
     // // Frog
     // {

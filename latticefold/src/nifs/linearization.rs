@@ -255,10 +255,10 @@ mod tests_pow2 {
     use crate::{
         arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
-        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::challenge_set::BinarySmallSet;
@@ -373,12 +373,12 @@ mod tests_stark {
             Witness, CCCS,
         },
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::linearization::{
-            LFLinearizationProver, LFLinearizationVerifier,
-            LinearizationVerifier,
+            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
-        parameters::DecompositionParams,
-        transcript::poseidon::PoseidonTranscript, utils::check_ring_modulus_128_bits_security,
+        transcript::poseidon::PoseidonTranscript,
+        utils::check_ring_modulus_128_bits_security,
     };
     use cyclotomic_rings::StarkChallengeSet;
 
@@ -536,10 +536,10 @@ mod tests_goldilocks {
     use crate::{
         arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
-        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::GoldilocksChallengeSet;
@@ -633,10 +633,10 @@ mod tests_frog {
             Arith, Witness, CCCS,
         },
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
-        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::FrogChallengeSet;

@@ -12,7 +12,7 @@ use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithSmallChallenges;
 use crate::{
     arith::{CCS, LCCCS},
-    parameters::DecompositionParams,
+    decomposition_parameters::DecompositionParams,
     transcript::Transcript,
 };
 use cyclotomic_rings::rot_sum;
