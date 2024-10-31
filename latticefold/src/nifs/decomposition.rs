@@ -1,15 +1,10 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use ark_std::marker::PhantomData;
-use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
     OverField, Ring,
 };
-use num_bigint::BigUint;
-use num_traits::ToPrimitive;
-use std::{f64, time::Instant};
-
-use crate::{arith::r1cs::R1CS, utils::mle::dense_vec_to_dense_mle};
+use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -80,28 +75,20 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         ),
         DecompositionError,
     > {
-        let prove_start = Instant::now();
-        let witness_decomposition = Instant::now();
         let wit_s: Vec<Witness<NTT>> = {
             let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f);
             f_s.into_iter().map(|f| Witness::from_f::<P>(f)).collect()
         };
-        let witness_decomposition_end = witness_decomposition.elapsed();
 
-        let decompose_big_vec_start = Instant::now();
         let mut cm_i_x_w = cm_i.x_w.clone();
         cm_i_x_w.push(cm_i.h);
         let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(&cm_i_x_w);
-        let decompose_big_vec_end = decompose_big_vec_start.elapsed();
 
-        let y_s_start = Instant::now();
         let y_s: Vec<Commitment<C, NTT>> = wit_s
             .iter()
             .map(|wit| wit.commit::<C, W, P>(scheme))
             .collect::<Result<Vec<_>, _>>()?;
-        let y_s_end = y_s_start.elapsed();
 
-        let v_s_start = Instant::now();
         let v_s: Vec<NTT> = wit_s
             .iter()
             .map(|wit| {
@@ -110,13 +97,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                     .ok_or(DecompositionError::WitnessMleEvalFail)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let v_s_end = v_s_start.elapsed();
 
-        let u_s_start = Instant::now();
         let mut u_s: Vec<Vec<NTT>> = Vec::with_capacity(ccs.M.len());
 
         for (i, wit) in wit_s.iter().enumerate() {
             let mut u_s_for_i = Vec::with_capacity(P::K);
+
             let z: Vec<NTT> = {
                 let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
 
@@ -134,13 +120,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 );
             }
 
-            u_s.push(u_s_for_i)
+            u_s.push(u_s_for_i);
         }
-        let u_s_end = u_s_start.elapsed();
 
         let mut lcccs_s = Vec::with_capacity(P::K);
 
-        let lcccs_s_start = Instant::now(); 
         for (((x, y), u), v) in x_s.iter().zip(&y_s).zip(&u_s).zip(&v_s) {
             transcript.absorb_slice(x);
             transcript.absorb_slice(y.as_ref());
@@ -160,40 +144,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 h,
             })
         }
-        let lcccs_s_end = lcccs_s_start.elapsed();
 
-        let allocate_proof_start = Instant::now();
         let proof = DecompositionProof { u_s, v_s, x_s, y_s };
-        let allocate_proof_end = allocate_proof_start.elapsed();
 
-        let prove_end = prove_start.elapsed();
-        let total_time = prove_end.as_micros() as f64;
-        println!(
-            "\nDecomposition Prover:\n\
-            witness_decomposition: {:?} ({:.2}%)\n\
-            decompose_big_vec: {:?} ({:.2}%)\n\
-            y_s: {:?} ({:.2}%)\n\
-            v_s: {:?} ({:.2}%)\n\
-            u_s: {:?} ({:.2}%)\n\
-            lcccs_s: {:?} ({:.2}%)\n\
-            allocate_proof: {:?} ({:.2}%)\n\
-            total: {:?}",
-            witness_decomposition_end,
-            (witness_decomposition_end.as_micros() as f64 / total_time) * 100.0,
-            decompose_big_vec_end,
-            (decompose_big_vec_end.as_micros() as f64 / total_time) * 100.0,
-            y_s_end,
-            (y_s_end.as_micros() as f64 / total_time) * 100.0,
-            v_s_end,
-            (v_s_end.as_micros() as f64 / total_time) * 100.0,
-            u_s_end,
-            (u_s_end.as_micros() as f64 / total_time) * 100.0,
-            lcccs_s_end,
-            (lcccs_s_end.as_micros() as f64 / total_time) * 100.0,
-            allocate_proof_end,
-            (allocate_proof_end.as_micros() as f64 / total_time) * 100.0,
-            prove_end
-        );
         Ok((lcccs_s, wit_s, proof))
     }
 }
@@ -342,55 +295,18 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
 fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT],
 ) -> Vec<Vec<NTT>> {
+    // Measure time for coefficient representation conversion
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
-    decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K))
-        .into_iter()
-        .map(|vec| vec.into_iter().map(|x| x.into()).collect())
-        .collect()
-}
+    // Measure time for decomposition
+    let res_coeffs = decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K));
 
-fn check_ring_modulus_128_bits_security(
-    ring_modulus: &BigUint,
-    kappa: usize,
-    degree: usize,
-    num_cols: usize,
-    b: u128,
-    l: usize,
-) -> bool {
-    // Calculate the logarithm of stark_modulus
-    let ring_modulus_log2 = ring_modulus.bits() as f64;
-    println!("ring_modulus_log2 = {}", ring_modulus_log2);
-    let ring_modulus_half = ring_modulus / 2u32;
+    let res = res_coeffs
+        .iter()
+        .map(|vec| vec.iter().map(|&x| x.into()).collect())
+        .collect();
 
-    // Calculate the left side of the inequality
-    let bound_l2 = 2f64.powf(
-        2.0 * (1.0045f64.ln() / 2f64.ln()).sqrt()
-            * (degree as f64 * kappa as f64 * ring_modulus_log2).sqrt(),
-    );
-    println!("bound = {}", bound_l2);
-    let bound_l2_ceil = bound_l2.ceil() as u64; // Ceil and convert to u64
-    let bound_l2_bigint = BigUint::from(bound_l2_ceil); // Convert to BigUint
-    let bound_l2_check = bound_l2_bigint < ring_modulus_half;
-    println!("bound_l2_check = {}", bound_l2_check);
-    // Calculate bound_inf
-    let bound_inf = bound_l2 / ((degree as f64 * num_cols as f64).sqrt());
-    println!("bound_inf = {}", bound_inf);
-
-    let b_check = b.to_f64().unwrap() < bound_inf;
-    println!("b < bound_inf: {}", b_check);
-    // Calculate the right side of the inequality
-    // Check if b^l > stark_modulus/2
-    let b_bigint = BigUint::from(b);
-    let b_pow_l = b_bigint.pow(l as u32);
-    let b_pow_l_check = b_pow_l > ring_modulus_half;
-
-    println!("b^l = {}", b_pow_l);
-    println!("ring_modulus/2 = {}", ring_modulus_half);
-    println!("b^l > ring_modulus/2: {}", b_pow_l_check);
-
-    // Return the result of the condition
-    bound_l2_check && b_check && b_pow_l_check
+    res
 }
 
 #[cfg(test)]
@@ -547,7 +463,7 @@ mod tests_stark {
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{
-                check_ring_modulus_128_bits_security, DecompositionParams, DecompositionProver,
+                DecompositionParams, DecompositionProver,
                 DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
             },
             linearization::{
@@ -555,9 +471,9 @@ mod tests_stark {
                 LinearizationVerifier,
             },
         },
-        transcript::poseidon::PoseidonTranscript,
+        transcript::poseidon::PoseidonTranscript, utils::check_ring_modulus_128_bits_security,
     };
-    use cyclotomic_rings::{challenge_set::BinarySmallSet, StarkChallengeSet};
+    use cyclotomic_rings::StarkChallengeSet;
 
     #[test]
     fn test_dummy_decomposition() {
@@ -605,50 +521,37 @@ mod tests_stark {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
 
         let linearization_proof =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+                .expect("Linearization proof generation error");
 
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let linearization_verification = match linearization_proof {
-            Ok(res) => LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                &cm_i,
-                &res.1,
-                &mut verifier_transcript,
-                &ccs,
-            ),
-            Err(e) => panic!("Linearization proof generation error: {:?}", e),
-        };
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+            &cm_i,
+            &linearization_proof.1,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .expect("Linearization Verification error");
 
-        match &linearization_verification {
-            Ok(_) => println!("Linearization verified with success"),
-            Err(ref e) => println!("Linearization Verification error: {:?}", e),
-        };
-
-        let lcccs = linearization_verification.unwrap();
-
-        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
+        let decomposition_proof = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
             &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,
             &scheme,
-        );
+        )
+        .expect("Decomposition proof generation error")
+        .2;
 
-        let decomposition_proof = match decomposition_prover {
-            Ok(res) => res.2,
-            Err(e) => panic!("Decomposition proof generation error: {:?}", e),
-        };
-
-        let res = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
+        LFDecompositionVerifier::<_, T>::verify::<C, PP>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
             &ccs,
-        );
+        )
+        .expect("Decomposition Verification error");
 
-        match res {
-            Ok(_) => println!("Decomposition verified with success"),
-            Err(ref e) => println!("Decomposition Verification error: {:?}", e),
-        };
+        println!("Decomposition verified with success");
     }
 }

@@ -4,9 +4,6 @@ use ark_std::iterable::Iterable;
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::SuitableRing;
 use lattirust_ring::OverField;
-use num_bigint::BigUint;
-use num_traits::ToPrimitive;
-use std::{f64, time::Instant};
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
@@ -79,14 +76,10 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         let log_m = ccs.s;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
-        let folding_start = Instant::now();
-        let challenges_start = Instant::now();
         let (alpha_s, beta_s, zeta_s, mu_s) =
             get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
-        let challenges_end = challenges_start.elapsed();
 
         // Step 2: Compute g polynomial and sumcheck on it
-        let g_start = Instant::now();
         // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = w_s
             .iter()
@@ -100,8 +93,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .collect::<Vec<_>>();
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
 
-        // Setup matrix_mles for later evaluation of etas
-        // Review creation of this Mi*z mles
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = zis
             .iter()
             .map(|zi| {
@@ -125,8 +116,9 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             &mu_s,
         )?;
 
+        // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
-        let g_end = g_start.elapsed();
+
         let r_0 = prover_state
             .randomness
             .into_iter()
@@ -134,7 +126,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .collect::<Vec<NTT>>();
 
         // Step 3: Evaluate thetas and etas
-        let theta_s_start = Instant::now();
         let theta_s: Vec<NTT> = f_hat_mles
             .iter()
             .map(|f_hat_mle| {
@@ -143,9 +134,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
                     .ok_or(FoldingError::<NTT>::EvaluationError("f_hat".to_string()))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let theta_s_end = theta_s_start.elapsed();
 
-        let eta_s_start = Instant::now();
         let eta_s: Vec<Vec<NTT>> = Mz_mles_vec
             .iter()
             .map(|Mz_mles| {
@@ -160,19 +149,14 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .collect::<Result<Vec<_>, _>>()?;
         transcript.absorb_slice(&theta_s);
         eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
-        let eta_s_end = eta_s_start.elapsed();
 
-        // Step 5 ge    t rho challenges
-        let rho_s_start = Instant::now();
+        // Step 5 get rho challenges
         let rho_s = get_rhos::<_, _, P>(transcript);
-        let rho_s_end = rho_s_start.elapsed();
 
         // Step 6 compute v0, u0, y0, x_w0
-        let v0_u0_x0_cm0_start = Instant::now();    
         let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(&rho_s, &theta_s, cm_i_s, &eta_s, ccs);
-        let v0_u0_x0_cm0_end = v0_u0_x0_cm0_start.elapsed();
+
         // Step 7: Compute f0 and Witness_0
-        let f0_wit0_start = Instant::now();
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
         let lcccs = LCCCS {
             r: r_0,
@@ -197,29 +181,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
                 });
 
         let w_0 = Witness::from_f::<P>(f_0);
-        let f0_wit0_end = f0_wit0_start.elapsed();
-
-        let folding_end = folding_start.elapsed();
-        println!("Folding Prover:\n\
-        folding: {:?} ({:.2}%)\n\
-        challenges: {:?} ({:.2}%)\n\
-        g: {:?} ({:.2}%)\n\
-        theta_s: {:?} ({:.2}%)\n\
-        eta_s: {:?} ({:.2}%)\n\
-        f0_wit0: {:?} ({:.2}%)",
-            folding_end,
-            (folding_end.as_micros() as f64 / folding_end.as_micros() as f64) * 100.0,
-            challenges_end,
-            (challenges_end.as_micros() as f64 / folding_end.as_micros() as f64) * 100.0,
-            g_end,
-            (g_end.as_micros() as f64 / folding_end.as_micros() as f64) * 100.0,
-            theta_s_end,
-            (theta_s_end.as_micros() as f64 / folding_end.as_micros() as f64) * 100.0,
-            eta_s_end,
-            (eta_s_end.as_micros() as f64 / folding_end.as_micros() as f64) * 100.0,
-            f0_wit0_end,
-            (f0_wit0_end.as_micros() as f64 / folding_end.as_micros() as f64) * 100.0
-        );
 
         let folding_proof = FoldingProof {
             pointshift_sumcheck_proof: sum_check_proof,
@@ -336,40 +297,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
             h,
         })
     }
-}
-
-fn check_ring_modulus_128_bits_security(
-    ring_modulus: &BigUint,
-    kappa: usize,
-    degree: usize,
-    num_cols: usize,
-    b: u128,
-    l: usize,
-) -> bool {
-    // Calculate the logarithm of stark_modulus
-    let ring_modulus_log2 = ring_modulus.bits() as f64;
-    let ring_modulus_half = ring_modulus / 2u32;
-
-    // Calculate the left side of the inequality
-    let bound_l2 = 2f64.powf(
-        2.0 * (1.0045f64.ln() / 2f64.ln()).sqrt()
-            * (degree as f64 * kappa as f64 * ring_modulus_log2).sqrt(),
-    );
-    let bound_l2_ceil = bound_l2.ceil() as u64; // Ceil and convert to u64
-    let bound_l2_bigint = BigUint::from(bound_l2_ceil); // Convert to BigUint
-    let bound_l2_check = bound_l2_bigint < ring_modulus_half;
-    // Calculate bound_inf
-    let bound_inf = bound_l2 / ((degree as f64 * num_cols as f64).sqrt());
-
-    let b_check = b.to_f64().unwrap() < bound_inf;
-    // Calculate the right side of the inequality
-    // Check if b^l > stark_modulus/2
-    let b_bigint = BigUint::from(b);
-    let b_pow_l = b_bigint.pow(l as u32);
-    let b_pow_l_check = b_pow_l > ring_modulus_half;
-
-    // Return the result of the condition
-    bound_l2_check && b_check && b_pow_l_check
 }
 
 #[cfg(test)]
@@ -543,25 +470,22 @@ mod tests {
 
 #[cfg(test)]
 mod tests_stark {
-    use ark_ff::UniformRand;
-    use lattirust_poly::mle::DenseMultilinearExtension;
     use lattirust_ring::{
-        cyclotomic_ring::models::stark_prime::{Fq, RqNTT},
-        PolyRing,
+        cyclotomic_ring::models::stark_prime::RqNTT,
     };
     use num_bigint::BigUint;
     use rand::thread_rng;
 
-    use crate::arith::tests::{get_test_ccs, get_test_dummy_ccs};
+    use crate::{arith::tests::get_test_dummy_ccs, utils::check_ring_modulus_128_bits_security};
     use crate::{
-        arith::r1cs::tests::{get_test_dummy_z_split, get_test_z_split},
+        arith::r1cs::tests::get_test_dummy_z_split,
         nifs::{
             decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
                 LFDecompositionVerifier,
             },
             folding::{
-                check_ring_modulus_128_bits_security, FoldingProver, FoldingVerifier,
+                FoldingProver, FoldingVerifier,
                 LFFoldingProver, LFFoldingVerifier,
             },
             linearization::LinearizationProver,
@@ -635,25 +559,14 @@ mod tests_stark {
 
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let linearization_verification = match linearization_proof {
-            Ok(res) => {
-                println!("Linearization proof generated with success");
-                LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                    &cm_i,
-                    &res.1,
-                    &mut verifier_transcript,
-                    &ccs,
-                )
-            }
-            Err(e) => panic!("Linearization proof generation error: {:?}", e),
-        };
+        let linearization_verification = LFLinearizationVerifier::<_, T>::verify(
+            &cm_i,
+            &linearization_proof.expect("Linearization proof generation error").1,
+            &mut verifier_transcript,
+            &ccs,
+        ).expect("Linearization Verification error");
 
-        match &linearization_verification {
-            Ok(_) => println!("Linearization verified with success"),
-            Err(ref e) => println!("Linearization Verification error: {:?}", e),
-        };
-
-        let lcccs = linearization_verification.unwrap();
+        let lcccs = linearization_verification;
 
         let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
             &lcccs,
@@ -663,13 +576,8 @@ mod tests_stark {
             &scheme,
         );
 
-        let decomposition_proof = match decomposition_prover {
-            Ok(res) => {
-                println!("Decomposition proof generated with success");
-                res
-            }
-            Err(e) => panic!("Decomposition proof generation error: {:?}", e),
-        };
+        let decomposition_proof = decomposition_prover
+            .expect("Decomposition proof generation error");
 
         let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
             &lcccs,
@@ -678,12 +586,7 @@ mod tests_stark {
             &ccs,
         );
 
-        match decomposition_verification {
-            Ok(_) => println!("Decomposition verified with success"),
-            Err(ref e) => println!("Decomposition Verification error: {:?}", e),
-        };
-
-        let lcccs = decomposition_verification.unwrap();
+        let lcccs = decomposition_verification.expect("Decomposition Verification error");
 
         #[cfg(feature = "dhat-heap")]
         let _profiler = dhat::Profiler::new_heap();
@@ -701,13 +604,7 @@ mod tests_stark {
         let folding_prover =
             LFFoldingProver::<_, T>::prove::<C, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs);
 
-        let folding_proof = match folding_prover {
-            Ok(res) => {
-                println!("Folding proof generated with success");
-                res
-            }
-            Err(e) => panic!("Folding proof generation error: {:?}", e),
-        };
+        let folding_proof = folding_prover.expect("Folding proof generation error");
 
         let folding_verification = LFFoldingVerifier::<_, T>::verify::<C, PP>(
             &lcccs,
@@ -716,9 +613,6 @@ mod tests_stark {
             &ccs,
         );
 
-        match folding_verification {
-            Ok(_) => println!("Folding verified with success"),
-            Err(ref e) => println!("Folding Verification error: {:?}", e),
-        };
+        folding_verification.expect("Folding Verification error");
     }
 }

@@ -3,7 +3,9 @@ use ark_std::log2;
 use cyclotomic_rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    balanced_decomposition::{
+        decompose_balanced_vec, pad_and_transpose, recompose,
+    },
     Ring,
 };
 
@@ -184,9 +186,13 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-            f.iter().map(|&x| x.into()).collect();
-        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
+        // let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
+        //     f.iter().map(|&x| x.into()).collect();
+
+        // let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
+
+        // Note that f_hat = f this has to be replace with: support for small prime modulus
+        let f_hat = f.clone();
 
         let w_ccs = f
             .chunks(P::L)
