@@ -9,7 +9,7 @@ use crate::{
     decomposition_parameters::DecompositionParams,
     transcript::TranscriptWithSmallChallenges,
 };
-use decomposition::{
+use decomposition::structs::{
     DecompositionProof, DecompositionProver, DecompositionVerifier, LFDecompositionProver,
     LFDecompositionVerifier,
 };

@@ -310,7 +310,7 @@ mod tests {
         commitment::AjtaiCommitmentScheme,
         decomposition_parameters::DecompositionParams,
         nifs::{
-            decomposition::{
+            decomposition::structs::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
                 LFDecompositionVerifier,
             },
