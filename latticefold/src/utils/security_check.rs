@@ -1,6 +1,11 @@
+use ark_ff::Field;
+use cyclotomic_rings::SuitableRing;
+use lattirust_ring::PolyRing;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use std::f64;
+
+use crate::arith::Witness;
 
 fn calculate_bound_l2(degree: usize, kappa: usize, ring_modulus_log2: f64) -> BigUint {
     // The current security parameter use log2(delta)
@@ -21,6 +26,7 @@ pub fn check_ring_modulus_128_bits_security(
     num_cols: usize,
     b: u128,
     l: usize,
+    already_under_bound: bool,
 ) -> bool {
     // Modulus bits and half
     let (ring_modulus_log2, ring_modulus_half) = (ring_modulus.bits() as f64, ring_modulus / 2u32);
@@ -32,9 +38,27 @@ pub fn check_ring_modulus_128_bits_security(
     let bound_inf = bound_l2_bigint.to_f64().unwrap() / ((degree as f64 * num_cols as f64).sqrt());
 
     let b_check = b.to_f64().unwrap() < bound_inf;
-    // Calculate the right side of the inequality and check if b^l > stark_modulus/2
-    let b_pow_l_check = BigUint::from(b).pow(l as u32) > ring_modulus_half;
+    // Check if we need to decompose and b^l > stark_modulus/2
+    let b_pow_l_check = if already_under_bound && l == 1 {
+        true
+    } else {
+        BigUint::from(b).pow(l as u32) > ring_modulus_half
+    };
 
     // Return the result of the condition
     bound_l2_check && b_check && b_pow_l_check
+}
+
+pub fn check_witness_bound<NTT: SuitableRing>(witness: &Witness<NTT>, b: u128) -> bool {
+    let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
+        witness.f.clone().into_iter().map(|x| x.into()).collect();
+
+    // linf_norm should be used in CyclotomicGeneral not in specific ring
+    let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);
+    let all_under_bound = coeffs_repr.iter().all(|ele| {
+        let coeffs = ele.coeffs();
+        coeffs.iter().all(|x| x < &b)
+    });
+
+    all_under_bound
 }

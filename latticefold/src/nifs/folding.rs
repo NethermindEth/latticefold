@@ -484,6 +484,7 @@ mod tests_stark {
             folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
             linearization::LinearizationProver,
         },
+        utils::security_check::check_witness_bound,
     };
     use crate::{
         arith::tests::get_test_dummy_ccs,
@@ -510,18 +511,6 @@ mod tests_stark {
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
 
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
-
-        if check_ring_modulus_128_bits_security(&stark_modulus, C, 16, W, PP::B, PP::L) {
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            println!("Bound condition not satisfied for 128 bits security");
-        }
-
         #[derive(Clone)]
         struct PP;
         impl DecompositionParams for PP {
@@ -545,6 +534,29 @@ mod tests_stark {
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
         let wit = Witness::from_w_ccs::<PP>(&w_ccs);
+
+        // Make bound and securitty checks
+        let witness_within_bound = check_witness_bound(&wit, PP::B);
+        let stark_modulus = BigUint::parse_bytes(
+            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+            10,
+        )
+        .expect("Failed to parse stark_modulus");
+
+        if check_ring_modulus_128_bits_security(
+            &stark_modulus,
+            C,
+            16,
+            W,
+            PP::B,
+            PP::L,
+            witness_within_bound,
+        ) {
+            println!(" Bound condition satisfied for 128 bits security");
+        } else {
+            println!("Bound condition not satisfied for 128 bits security");
+        }
+
         let cm_i = CCCS {
             cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
             x_ccs,
