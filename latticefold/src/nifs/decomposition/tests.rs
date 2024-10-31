@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests_pow2 {
     use ark_ff::UniformRand;
-    use cyclotomic_rings::{challenge_set::BinarySmallSet, SuitableRing};
+    use cyclotomic_rings::challenge_set::BinarySmallSet;
     use lattirust_ring::{
-        balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+        balanced_decomposition::recompose,
         cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT,
     };
 
@@ -20,11 +20,8 @@ mod tests_pow2 {
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{
-                utils::{
-                    decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back,
-                },
-                DecompositionParams, DecompositionProver, DecompositionVerifier,
-                LFDecompositionProver, LFDecompositionVerifier,
+                utils::decompose_B_vec_into_k_vec, DecompositionParams, DecompositionProver,
+                DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
             },
             linearization::{
                 LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
@@ -107,7 +104,7 @@ mod tests_pow2 {
 
     //     for (i, recomposed) in recomposed_in_b_small_repr.iter().enumerate() {
     //         assert_eq!(
-    //             recomposed, 
+    //             recomposed,
     //             &decomposed_in_B[i],
     //             "Mismatch at index {}: recomposed={:?}, original={:?}",
     //             i,
