@@ -169,10 +169,6 @@ pub mod tests {
         )
     }
 
-    pub fn get_test_dummy_z<R: Ring>() -> Vec<R> {
-        todo!()
-    }
-
     pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     ) -> (R, Vec<R>, Vec<R>) {
         (

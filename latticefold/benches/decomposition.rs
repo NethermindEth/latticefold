@@ -5,7 +5,7 @@ use criterion::{
 };
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
 use rand::thread_rng;
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 mod utils;
 use ark_std::UniformRand;
 use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
@@ -25,7 +25,6 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use std::time::Duration;
 use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
 
 fn wit_and_ccs_gen<

@@ -251,6 +251,7 @@ pub mod tests {
         let r1cs = get_test_r1cs::<R>();
         CCS::<R>::from_r1cs(r1cs, W)
     }
+
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_z(input)
     }
