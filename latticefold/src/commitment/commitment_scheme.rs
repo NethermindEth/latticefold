@@ -66,8 +66,9 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
         for (i, row) in self.matrix.iter().enumerate() {
             commitment[i] = NTT::zero();
+            #[allow(clippy::op_ref)] // Allow `&f`, for Mul to be called with ref
             for j in 0..W {
-                commitment[i] += row[j] * f[j];
+                commitment[i] += row[j] * &f[j];
             }
         }
 
