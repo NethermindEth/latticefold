@@ -175,7 +175,11 @@ pub mod tests {
 
     pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     ) -> (R, Vec<R>, Vec<R>) {
-        (R::one(), to_F_vec(vec![1; X_LEN]), to_F_vec(vec![1; WIT_LEN]))
+        (
+            R::one(),
+            to_F_vec(vec![1; X_LEN]),
+            to_F_vec(vec![1; WIT_LEN]),
+        )
     }
 
     #[test]

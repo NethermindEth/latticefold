@@ -485,7 +485,10 @@ mod tests_stark {
             linearization::LinearizationProver,
         },
     };
-    use crate::{arith::tests::get_test_dummy_ccs, utils::check_ring_modulus_128_bits_security};
+    use crate::{
+        arith::tests::get_test_dummy_ccs,
+        utils::security_check::check_ring_modulus_128_bits_security,
+    };
     use crate::{
         arith::{Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
@@ -514,9 +517,9 @@ mod tests_stark {
         .expect("Failed to parse stark_modulus");
 
         if check_ring_modulus_128_bits_security(&stark_modulus, C, 16, W, PP::B, PP::L) {
-            println!(" Bound condition satisfied");
+            println!(" Bound condition satisfied for 128 bits security");
         } else {
-            println!("Bound condition not satisfied");
+            println!("Bound condition not satisfied for 128 bits security");
         }
 
         #[derive(Clone)]

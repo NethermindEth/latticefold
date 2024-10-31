@@ -469,7 +469,7 @@ mod tests_stark {
             },
         },
         transcript::poseidon::PoseidonTranscript,
-        utils::check_ring_modulus_128_bits_security,
+        utils::security_check::check_ring_modulus_128_bits_security,
     };
     use cyclotomic_rings::StarkChallengeSet;
 
@@ -486,9 +486,9 @@ mod tests_stark {
         .expect("Failed to parse stark_modulus");
 
         if check_ring_modulus_128_bits_security(&stark_modulus, C, 16, W, PP::B, PP::L) {
-            println!(" Bound condition satisfied");
+            println!(" Bound condition satisfied for 128 bits security");
         } else {
-            println!("Bound condition not satisfied");
+            println!("Bound condition not satisfied for 128 bits security");
         }
 
         #[derive(Clone)]
@@ -549,7 +549,5 @@ mod tests_stark {
             &ccs,
         )
         .expect("Decomposition Verification error");
-
-        println!("Decomposition verified with success");
     }
 }
