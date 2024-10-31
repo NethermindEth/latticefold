@@ -1,9 +1,10 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-use ark_std::marker::PhantomData;
-use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    OverField, Ring,
+use lattirust_ring::OverField;
+use structs::{
+    DecompositionProof, DecompositionProver, DecompositionVerifier, LFDecompositionProver,
+    LFDecompositionVerifier,
 };
+use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
 use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
@@ -16,48 +17,8 @@ use crate::{
 };
 use cyclotomic_rings::SuitableRing;
 
-#[derive(Clone)]
-pub struct DecompositionProof<const C: usize, NTT: Ring> {
-    pub u_s: Vec<Vec<NTT>>,
-    pub v_s: Vec<NTT>,
-    pub x_s: Vec<Vec<NTT>>,
-    pub y_s: Vec<Commitment<C, NTT>>,
-}
-pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
-    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
-        wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
-    ) -> Result<
-        (
-            Vec<LCCCS<C, NTT>>,
-            Vec<Witness<NTT>>,
-            DecompositionProof<C, NTT>,
-        ),
-        DecompositionError,
-    >;
-}
-
-pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
-        proof: &DecompositionProof<C, NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError>;
-}
-
-pub struct LFDecompositionProver<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
-}
-
-pub struct LFDecompositionVerifier<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
-}
+pub mod structs;
+mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
@@ -259,48 +220,6 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 
         Ok(lcccs_s)
     }
-}
-
-/// Decompose a vector of arbitrary norm in its NTT form into DP::K vectors
-/// and applies the gadget-B matrix again.
-fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: DecompositionParams>(
-    x: &[NTT],
-) -> Vec<Vec<NTT>> {
-    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
-
-    // radix-B
-    let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =
-        pad_and_transpose(decompose_balanced_vec(&coeff_repr, DP::B, Some(DP::L)))
-            .into_iter()
-            .flatten()
-            .collect();
-
-    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, Some(DP::K))
-        .into_iter()
-        .map(|vec| {
-            vec.chunks(DP::L)
-                .map(|chunk| {
-                    recompose(
-                        chunk,
-                        <NTT as SuitableRing>::CoefficientRepresentation::from(DP::B),
-                    )
-                    .into()
-                })
-                .collect()
-        })
-        .collect()
-}
-
-/// Decompose a vector of norm B in its NTT form into DP::K small vectors.
-fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
-    x: &[NTT],
-) -> Vec<Vec<NTT>> {
-    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
-
-    decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K))
-        .into_iter()
-        .map(|vec| vec.into_iter().map(|x| x.into()).collect())
-        .collect()
 }
 
 #[cfg(test)]
