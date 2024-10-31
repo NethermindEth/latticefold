@@ -7,32 +7,32 @@ use std::fmt::Debug;
 
 pub fn get_test_dummy_z_split<
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
-    const IO: usize,
+    const X_LEN: usize,
     const W: usize,
 >() -> (R, Vec<R>, Vec<R>) {
-    (R::one(), to_f_vec(vec![1; IO]), to_f_vec(vec![1; W]))
+    (R::one(), to_f_vec(vec![1; X_LEN]), to_f_vec(vec![1; W]))
 }
 
 pub fn get_test_dummy_ccs<
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
-    const IO: usize,
+    const X_LEN: usize,
     const WIT_LEN: usize,
     const W: usize,
 >(
     r1cs_rows: usize,
 ) -> CCS<R> {
-    let r1cs = get_test_dummy_r1cs::<R, IO, WIT_LEN>(r1cs_rows);
+    let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(r1cs_rows);
     CCS::<R>::from_r1cs(r1cs, W)
 }
 
 pub fn get_test_dummy_r1cs<
     R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
-    const IO: usize,
+    const X_LEN: usize,
     const WIT_LEN: usize,
 >(
     rows: usize,
 ) -> R1CS<R> {
-    let R1CS_A = to_f_matrix::<R>(create_dummy_matrix(rows, IO + WIT_LEN + 1));
+    let R1CS_A = to_f_matrix::<R>(create_dummy_matrix(rows, X_LEN + WIT_LEN + 1));
     let R1CS_B = R1CS_A.clone();
     let R1CS_C = R1CS_A.clone();
 

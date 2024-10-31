@@ -529,16 +529,16 @@ mod tests_stark {
         }
 
         const C: usize = 15;
-        const IO: usize = 1;
+        const X_LEN: usize = 1;
         const WIT_LEN: usize = 512;
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-        let r1cs_rows_size = IO + WIT_LEN + 1; // Let's have a square matrix
+        let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
 
         #[cfg(feature = "dhat-heap")]
         let _profiler = dhat::Profiler::new_heap(); // Move a round to measure specific parts
 
-        let ccs = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows_size);
-        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
         let wit = Witness::from_w_ccs::<PP>(&w_ccs);

@@ -119,10 +119,10 @@ pub mod tests {
         R1CS::<R> { l: 1, A, B, C }
     }
 
-    pub fn get_test_dummy_r1cs<R: Ring, const IO: usize, const WIT_LEN: usize>(
+    pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
         rows: usize,
     ) -> R1CS<R> {
-        let R1CS_A = to_F_matrix::<R>(create_dummy_matrix(rows, IO + WIT_LEN + 1));
+        let R1CS_A = to_F_matrix::<R>(create_dummy_matrix(rows, X_LEN + WIT_LEN + 1));
         let R1CS_B = R1CS_A.clone();
         let R1CS_C = R1CS_A.clone();
 
@@ -173,9 +173,9 @@ pub mod tests {
         todo!()
     }
 
-    pub fn get_test_dummy_z_split<R: Ring, const IO: usize, const WIT_LEN: usize>(
+    pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     ) -> (R, Vec<R>, Vec<R>) {
-        (R::one(), to_F_vec(vec![1; IO]), to_F_vec(vec![1; WIT_LEN]))
+        (R::one(), to_F_vec(vec![1; X_LEN]), to_F_vec(vec![1; WIT_LEN]))
     }
 
     #[test]

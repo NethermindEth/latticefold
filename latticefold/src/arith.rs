@@ -255,10 +255,10 @@ pub mod tests {
         r1cs_get_test_z(input)
     }
 
-    pub fn get_test_dummy_ccs<R: Ring, const IO: usize, const WIT_LEN: usize, const W: usize>(
+    pub fn get_test_dummy_ccs<R: Ring, const X_LEN: usize, const WIT_LEN: usize, const W: usize>(
         rows_size: usize,
     ) -> CCS<R> {
-        let r1cs = get_test_dummy_r1cs::<R, IO, WIT_LEN>(rows_size);
+        let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(rows_size);
         CCS::<R>::from_r1cs(r1cs, W)
     }
 

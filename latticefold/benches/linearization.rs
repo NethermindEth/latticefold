@@ -24,7 +24,7 @@ use latticefold::{
 };
 
 fn wit_and_ccs_gen<
-    const IO: usize,
+    const X_LEN: usize,
     const C: usize, // rows
     const WIT_LEN: usize,
     const W: usize, // columns
@@ -39,8 +39,8 @@ fn wit_and_ccs_gen<
     AjtaiCommitmentScheme<C, W, R>,
 ) {
     //TODO: Ensure we draw elements below bound
-    let ccs: CCS<R> = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows);
-    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
+    let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows);
+    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
@@ -153,7 +153,7 @@ fn verifier_linearization_benchmark<
 }
 
 fn linearization_benchmarks<
-    const IO: usize,
+    const X_LEN: usize,
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
@@ -165,7 +165,7 @@ fn linearization_benchmarks<
 ) {
     let r1cs_rows = 5;
     println!("Witness generation");
-    let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<IO, C, WIT_LEN, W, P, R>(r1cs_rows);
+    let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
     let proof = prover_linearization_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs);
 
@@ -204,7 +204,7 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Decomposition StarkPrime");
         group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, IO, C, W, B, L, B_small, K
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         run_single_starkprime_benchmark!(&mut group, 1, 15, 512, 8633754724, 8, 92918, 2);
         run_single_starkprime_benchmark!(&mut group, 1, 15, 512, 8615125000, 8, 2050, 3);
         run_single_starkprime_benchmark!(&mut group, 1, 15, 512, 8540717056, 8, 304, 4);
