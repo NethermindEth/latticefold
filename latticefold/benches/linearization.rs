@@ -171,13 +171,13 @@ fn linearization_benchmarks<
     verifier_linearization_benchmark::<C, W, P, R, CS>(group, &cm_i, &ccs, proof);
 }
 
-macro_rules! define_starkprime_params {
+macro_rules! define_params {
     ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         paste::paste! {
             #[derive(Clone)]
-            struct [<StarkPrimeParamsWithB $b W $w>];
+            struct [<DecompParamsWithB $b W $w b $b_small K $k>];
 
-            impl DecompositionParams for [<StarkPrimeParamsWithB $b W $w>] {
+            impl DecompositionParams for [<DecompParamsWithB $b W $w b $b_small K $k>] {
                 const B: u128 = $b;
                 const L: usize = $l;
                 const B_SMALL: usize = $b_small;
@@ -189,9 +189,9 @@ macro_rules! define_starkprime_params {
 
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_starkprime_params!($w, $b, $l, $b_small, $k);
+        define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            linearization_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit);
+            linearization_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }

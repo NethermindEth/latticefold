@@ -224,13 +224,13 @@ fn decomposition_benchmarks<
 }
 
 // Macros
-macro_rules! define_starkprime_params {
+macro_rules! define_params {
     ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         paste::paste! {
             #[derive(Clone)]
-            struct [<StarkPrimeParamsWithB $b W $w>];
+            struct [<DecompParamsWithB $b W $w b $b_small K $k>];
 
-            impl DecompositionParams for [<StarkPrimeParamsWithB $b W $w>] {
+            impl DecompositionParams for [<DecompParamsWithB $b W $w b $b_small K $k>] {
                 const B: u128 = $b;
                 const L: usize = $l;
                 const B_SMALL: usize = $b_small;
@@ -239,115 +239,51 @@ macro_rules! define_starkprime_params {
         }
     };
 }
-
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_starkprime_params!($w, $b, $l, $b_small, $k);
+        define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            decomposition_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<StarkPrimeParamsWithB $b W $w>]>($crit);
+            decomposition_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
-#[macro_export]
-macro_rules! define_goldilocks_params {
-    ($w:expr, $b:expr, $l:expr) => {
-        paste::paste! {
-            #[derive(Clone)]
-            struct [<GoldilocksParamsWithB $b W $w>];
 
-            impl DecompositionParams for [<GoldilocksParamsWithB $b W $w>] {
-                const B: u128 = $b;
-                const L: usize = $l;
-                const B_SMALL: usize = 2; // This is not use in decompose or linearization
-                const K: usize = 28;// This is not use in decompose or linearization
-            }
-        }
-    };
-}
 #[macro_export]
 macro_rules! run_single_goldilocks_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_goldilocks_params!($w, $b, $l);
+        define_params!($w, $b, $l);
         paste::paste! {
-            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<GoldilocksParamsWithB $b W $w>]>($crit);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
 
-        }
-    };
-}
-#[macro_export]
-macro_rules! define_babybear_params {
-    ($w:expr, $b:expr, $l:expr) => {
-        paste::paste! {
-            #[derive(Clone)]
-            struct [<BabyBearParamsWithB $b W $w>];
-
-            impl DecompositionParams for [<BabyBearParamsWithB $b W $w>] {
-                const B: u128 = $b;
-                const L: usize = $l;
-                const B_SMALL: usize = 2; // This is not use in decompose or linearization
-                const K: usize = 28;// This is not use in decompose or linearization
-            }
         }
     };
 }
 #[macro_export]
 macro_rules! run_single_babybear_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_babybear_params!($w, $b, $l);
+        define_params!($w, $b, $l);
         paste::paste! {
-            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<BabyBearParamsWithB $b W $w>]>($crit);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
 
-        }
-    };
-}
-#[macro_export]
-macro_rules! define_frog_params {
-    ($w:expr, $b:expr, $l:expr) => {
-        paste::paste! {
-            #[derive(Clone)]
-            struct [<FrogParamsWithB $b W $w>];
-
-            impl DecompositionParams for [<FrogParamsWithB $b W $w>] {
-                const B: u128 = $b;
-                const L: usize = $l;
-                const B_SMALL: usize = 2; // This is not use in decompose or commit
-                const K: usize = 28;// This is not use in decompose or commit
-            }
         }
     };
 }
 #[macro_export]
 macro_rules! run_single_frog_benchmark {
     ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_frog_params!($w, $b, $l);
+        define_params!($w, $b, $l);
         paste::paste! {
-            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<FrogParamsWithB $b W $w>]>($crit);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
 
-        }
-    };
-}
-#[macro_export]
-macro_rules! define_dilithium_params {
-    ($w:expr, $b:expr, $l:expr) => {
-        paste::paste! {
-            #[derive(Clone)]
-            struct [<DilithiumParamsWithB $b W $w>];
-
-            impl DecompositionParams for [<DilithiumParamsWithB $b W $w>] {
-                const B: u128 = $b;
-                const L: usize = $l;
-                const B_SMALL: usize = 2; // This is not use in decompose or commit
-                const K: usize = 28;// This is not use in decompose or commit
-            }
         }
     };
 }
 #[macro_export]
 macro_rules! run_single_dilithium_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_dilithium_params!($w, $b, $l);
+        define_params!($w, $b, $l);
         paste::paste! {
-            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>, [<DilithiumParamsWithB $b W $w>]>($crit);
+            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
