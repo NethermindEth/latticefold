@@ -34,7 +34,7 @@ use latticefold::{
 };
 
 fn wit_and_ccs_gen<
-    const IO: usize,
+    const X_LEN: usize,
     const C: usize, // rows
     const WIT_LEN: usize,
     const W: usize, // columns
@@ -49,8 +49,8 @@ fn wit_and_ccs_gen<
     AjtaiCommitmentScheme<C, W, R>,
 ) {
     //TODO: Ensure we draw elements below bound
-    let ccs: CCS<R> = get_test_dummy_ccs::<R, IO, WIT_LEN, W>(r1cs_rows);
-    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, IO, WIT_LEN>();
+    let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows);
+    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
@@ -257,7 +257,7 @@ fn verifier_folding_benchmark<
 }
 
 fn folding_benchmarks<
-    const IO: usize,
+    const X_LEN: usize,
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
@@ -267,8 +267,8 @@ fn folding_benchmarks<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let r1cs_rows = WIT_LEN + IO + 1; // This makes a square matrix but is too much memory
-    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<IO, C, WIT_LEN, W, P, R>(r1cs_rows);
+    let r1cs_rows = WIT_LEN + X_LEN + 1; // This makes a square matrix but is too much memory
+    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
     prover_folding_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 
@@ -341,7 +341,7 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Folding Goldilocks");
         group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, IO, C, W, B, L, B_small, K
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         /*
         run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 134, 9, 2, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 2, 8);
@@ -359,7 +359,7 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Folding Goldilocks");
         group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, IO, C, W, B, L, B_small, K
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         /*
         run_single_babybear_benchmark!(&mut group, 1, 6, 1024, 512, 4, 2, 9);
         run_single_babybear_benchmark!(&mut group, 1, 7, 1024, 2048, 3, 2, 11);
@@ -375,7 +375,7 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Folding StarkPrime");
         group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, IO, C, W, B, L, B_small, K
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316, 8, 2, 30);
         run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296, 8, 2, 32);
         run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592, 8, 2, 33);
@@ -390,7 +390,7 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Folding Frog");
         group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, IO, C, W, B, L, B_small, K
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         /*
         run_single_frog_benchmark!(&mut group, 1, 5, 512, 8, 23, 2, 3);
         run_single_frog_benchmark!(&mut group, 1, 9, 1024, 128, 10, 2, 7);
