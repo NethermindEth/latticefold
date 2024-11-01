@@ -15,7 +15,7 @@ use latticefold::{
     arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
-    nifs::linearization::structs::{
+    nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
         LinearizationVerifier,
     },

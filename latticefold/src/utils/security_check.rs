@@ -1,9 +1,9 @@
 use ark_ff::Field;
+use ark_std::f64;
 use cyclotomic_rings::SuitableRing;
 use lattirust_ring::PolyRing;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use std::f64;
 
 use crate::arith::Witness;
 

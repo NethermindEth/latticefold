@@ -313,7 +313,7 @@ mod tests {
                 LFDecompositionVerifier,
             },
             folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
-            linearization::structs::{
+            linearization::{
                 LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
                 LinearizationVerifier,
             },
@@ -482,7 +482,7 @@ mod tests_stark {
                 LFDecompositionVerifier,
             },
             folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
-            linearization::structs::LinearizationProver,
+            linearization::LinearizationProver,
         },
         utils::security_check::check_witness_bound,
     };
@@ -494,7 +494,7 @@ mod tests_stark {
         arith::{Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         decomposition_parameters::DecompositionParams,
-        nifs::linearization::structs::{
+        nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
         transcript::poseidon::PoseidonTranscript,

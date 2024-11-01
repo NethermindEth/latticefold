@@ -1,7 +1,7 @@
 #[macro_export]
 macro_rules! generate_tests {
     ( $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        use std::sync::Arc;
+        use ark_std::sync::Arc;
 
         use ark_ff::UniformRand;
         use ark_std::One;

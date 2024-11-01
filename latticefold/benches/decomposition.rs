@@ -18,7 +18,7 @@ use latticefold::{
             DecompositionProver, DecompositionVerifier, LFDecompositionProver,
             LFDecompositionVerifier,
         },
-        linearization::structs::{
+        linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
             LinearizationVerifier,
         },

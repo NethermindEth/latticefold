@@ -6,10 +6,6 @@ use lattirust_poly::{
     polynomials::{eq_eval, VPAuxInfo},
 };
 
-use structs::{
-    LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
-    LinearizationVerifier,
-};
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
@@ -22,7 +18,8 @@ use crate::{
     },
 };
 
-pub mod structs;
+pub use structs::*;
+mod structs;
 mod tests;
 mod utils;
 
