@@ -20,7 +20,7 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VirtualPolynomial},
 };
-use lattirust_ring::OverField;
+use lattirust_ring::{OverField, PolyRing};
 
 pub(super) fn get_alphas_betas_zetas_mus<
     NTT: OverField,
@@ -30,36 +30,27 @@ pub(super) fn get_alphas_betas_zetas_mus<
     log_m: usize,
     transcript: &mut T,
 ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>) {
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
+    ));
     let alpha_s = transcript
         .get_challenges(2 * P::K)
         .into_iter()
         .map(|x| NTT::from(x))
         .collect::<Vec<_>>();
 
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"zeta_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"zeta_s"),
+    ));
     let zeta_s = transcript
         .get_challenges(2 * P::K)
         .into_iter()
         .map(|x| NTT::from(x))
         .collect::<Vec<_>>();
 
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"mu_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"mu_s"),
+    ));
     let mut mu_s = transcript
         .get_challenges((2 * P::K) - 1)
         .into_iter()
@@ -68,12 +59,9 @@ pub(super) fn get_alphas_betas_zetas_mus<
 
     mu_s.push(NTT::ONE);
 
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+    ));
     let beta_s = transcript
         .get_challenges(log_m)
         .into_iter()
@@ -90,12 +78,9 @@ pub(super) fn get_rhos<
 >(
     transcript: &mut T,
 ) -> Vec<R::CoefficientRepresentation> {
-    transcript.absorb_field_element(
-        &<R::BaseRing as Field>::from_base_prime_field_elems(&[
-            <R::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"rho_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<R::BaseRing as Field>::from_base_prime_field(
+        <R::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"rho_s"),
+    ));
 
     let mut rhos = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
     rhos.push(R::CoefficientRepresentation::ONE);
@@ -207,10 +192,11 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .iter()
         .zip(transposed_theta_s.iter())
         .map(|(&rho_i, theta_j)| {
-            theta_j
-                .iter()
-                .map(|theta_j_i| NTT::from(rot_sum::<NTT>(rho_i, theta_j_i.coeffs()))) // TODO: Double check
-                .sum()
+            let mut v_i = Vec::with_capacity(NTT::CoefficientRepresentation::dimension());
+
+            theta_j.iter().for_each(|theta_j_i| {
+                v_i.extend_from_slice(theta.coefficients());
+            });
         })
         .collect();
 
