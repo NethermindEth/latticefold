@@ -172,6 +172,7 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
                     .zip(theta_s[i].iter())
                     .map(|(mu_power, &theta)| {
                         mu_power
+                            * theta
                             * (1..P::B_SMALL)
                                 .map(|x| NTT::from(x as u128))
                                 .map(|j_hat| (theta - j_hat) * (theta + j_hat))
@@ -300,7 +301,7 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
 
         g.add_mle_list(mle_list, mu)?;
     }
-    
+
     Ok(())
 }
 

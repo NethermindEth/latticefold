@@ -162,8 +162,8 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
 
         theta_s
             .iter()
-            .for_each(|thetas| transcript.absorb_slice(&thetas));
-        eta_s.iter().for_each(|etas| transcript.absorb_slice(&etas));
+            .for_each(|thetas| transcript.absorb_slice(thetas));
+        eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
         // Step 5 get rho challenges
         let rho_s = get_rhos::<_, _, P>(transcript);
@@ -299,11 +299,11 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         proof
             .theta_s
             .iter()
-            .for_each(|thetas| transcript.absorb_slice(&thetas));
+            .for_each(|thetas| transcript.absorb_slice(thetas));
         proof
             .eta_s
             .iter()
-            .for_each(|etas| transcript.absorb_slice(&etas));
+            .for_each(|etas| transcript.absorb_slice(etas));
         let rho_s = get_rhos::<_, _, P>(transcript);
 
         // Step 6
