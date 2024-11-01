@@ -9,7 +9,7 @@ macro_rules! generate_tests {
         use lattirust_poly::polynomials::{build_eq_x_r, VirtualPolynomial};
         use rand::thread_rng;
         use $crate::{
-            arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+            arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
             commitment::AjtaiCommitmentScheme,
             decomposition_parameters::DecompositionParams,
             nifs::linearization::{
@@ -165,8 +165,84 @@ mod tests_stark {
 
     use cyclotomic_rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
+    use num_bigint::BigUint;
+
+    use crate::{
+        arith::{r1cs::get_test_dummy_z_split, tests::get_test_dummy_ccs},
+        utils::security_check::{check_ring_modulus_128_bits_security, check_witness_bound},
+    };
     type CS = StarkChallengeSet;
     generate_tests!(1024, 2, 2, 10);
+
+    #[test]
+    fn test_dummy_linearization() {
+        type R = RqNTT;
+        type CS = StarkChallengeSet;
+        type T = PoseidonTranscript<R, CS>;
+
+        #[derive(Clone)]
+        struct PP;
+        impl DecompositionParams for PP {
+            const B: u128 = 10485760000;
+            const L: usize = 8;
+            const B_SMALL: usize = 320;
+            const K: usize = 4;
+        }
+
+        const C: usize = 16;
+        const X_LEN: usize = 1;
+        const WIT_LEN: usize = 2048;
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
+
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+        let wit = Witness::from_w_ccs::<PP>(&w_ccs);
+
+        // Make bound and securitty checks
+        let witness_within_bound = check_witness_bound(&wit, PP::B);
+        let stark_modulus = BigUint::parse_bytes(
+            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+            10,
+        )
+        .expect("Failed to parse stark_modulus");
+
+        if check_ring_modulus_128_bits_security(
+            &stark_modulus,
+            C,
+            16,
+            W,
+            PP::B,
+            PP::L,
+            witness_within_bound,
+        ) {
+            println!(" Bound condition satisfied for 128 bits security");
+        } else {
+            println!("Bound condition not satisfied for 128 bits security");
+        }
+
+        let cm_i = CCCS {
+            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+            &cm_i,
+            &res.expect("Linearization proof generation error").1,
+            &mut transcript,
+            &ccs,
+        );
+
+        res.expect("Linearization Verification error");
+    }
 }
 
 #[cfg(test)]

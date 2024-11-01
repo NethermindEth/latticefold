@@ -69,7 +69,9 @@ impl<R: Ring> Arith<R> for CCS<R> {
             // complete the hadamard chain
             let mut hadamard_result = vec![R::one(); self.m];
             for M_j in vec_M_j.into_iter() {
-                hadamard_result = hadamard(&hadamard_result, &mat_vec_mul(M_j, z)?)?;
+                let mut res = mat_vec_mul(M_j, z)?;
+                res.resize(self.m, R::ZERO);
+                hadamard_result = hadamard(&hadamard_result, &res)?;
             }
 
             // multiply by the coefficient of this step
@@ -182,9 +184,13 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-            f.iter().map(|&x| x.into()).collect();
-        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
+        // let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
+        //     f.iter().map(|&x| x.into()).collect();
+
+        // let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
+
+        // Note that f_hat = f this has to be replace with: support for small prime modulus
+        let f_hat = f.clone();
 
         let w_ccs = f
             .chunks(P::L)
@@ -237,15 +243,23 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::arith::r1cs::tests::{get_test_r1cs, get_test_z as r1cs_get_test_z};
+    use crate::arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z};
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
         CCS::<R>::from_r1cs(r1cs, W)
     }
+
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_z(input)
+    }
+
+    pub fn get_test_dummy_ccs<R: Ring, const X_LEN: usize, const WIT_LEN: usize, const W: usize>(
+        rows_size: usize,
+    ) -> CCS<R> {
+        let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(rows_size);
+        CCS::<R>::from_r1cs(r1cs, W)
     }
 
     /// Test that a basic CCS relation can be satisfied

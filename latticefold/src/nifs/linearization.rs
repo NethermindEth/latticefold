@@ -1,4 +1,3 @@
-#![allow(non_snake_case)]
 use ark_ff::{Field, PrimeField};
 
 use cyclotomic_rings::SuitableRing;
@@ -63,13 +62,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
+
         // Extract the evaluation point
         let r = prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
-
         // Step 3: Compute v, u_vector
 
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
@@ -87,7 +86,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             v,
             u: u.clone(),
         };
-
         let lcccs = LCCCS {
             r,
             v,
@@ -96,7 +94,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         };
-
         Ok((lcccs, linearization_proof))
     }
 }

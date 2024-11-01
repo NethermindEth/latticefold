@@ -262,16 +262,16 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
 
     for i in 1..b {
         let i_hat = NTT::from(i as u128);
-
-        mle_list.push(Arc::from(fi_mle.clone() - i_hat));
-        mle_list.push(Arc::from(fi_mle.clone() + i_hat));
+        mle_list.push(Arc::new(fi_mle.clone() - i_hat));
+        mle_list.push(Arc::new(fi_mle.clone() + i_hat));
     }
 
     mle_list.push(Arc::from(fi_mle));
-
     mle_list.push(beta_eq_x);
 
-    g.add_mle_list(mle_list, mu_i)
+    g.add_mle_list(mle_list, mu_i)?;
+
+    Ok(())
 }
 
 fn prepare_g3_i_mle_list<NTT: OverField>(
@@ -283,6 +283,5 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
         g.add_mle_list(vec![Arc::from(M.clone()), r_i_eq.clone()], zeta)?;
     }
-
     Ok(())
 }
