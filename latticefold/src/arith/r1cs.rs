@@ -75,78 +75,108 @@ impl<R: Ring> RelaxedR1CS<R> {
     }
 }
 
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
-    use lattirust_ring::Ring;
+pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
+    to_F_dense_matrix::<R>(M).as_slice().into()
+}
 
-    pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-        to_F_dense_matrix::<R>(M).as_slice().into()
+pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
+    M.iter()
+        .map(|m| m.iter().map(|r| R::from(*r as u64)).collect())
+        .collect()
+}
+pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
+    z.iter().map(|c| R::from(*c as u64)).collect()
+}
+
+pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
+    // R1CS for: x^3 + x + 5 = y (example from article
+    // https://www.vitalik.ca/general/2016/12/10/qap.html )
+    let A = to_F_matrix::<R>(vec![
+        vec![1, 0, 0, 0, 0, 0],
+        vec![0, 0, 0, 1, 0, 0],
+        vec![1, 0, 0, 0, 1, 0],
+        vec![0, 5, 0, 0, 0, 1],
+    ]);
+    let B = to_F_matrix::<R>(vec![
+        vec![1, 0, 0, 0, 0, 0],
+        vec![1, 0, 0, 0, 0, 0],
+        vec![0, 1, 0, 0, 0, 0],
+        vec![0, 1, 0, 0, 0, 0],
+    ]);
+    let C = to_F_matrix::<R>(vec![
+        vec![0, 0, 0, 1, 0, 0],
+        vec![0, 0, 0, 0, 1, 0],
+        vec![0, 0, 0, 0, 0, 1],
+        vec![0, 0, 1, 0, 0, 0],
+    ]);
+
+    R1CS::<R> { l: 1, A, B, C }
+}
+
+pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
+    rows: usize,
+) -> R1CS<R> {
+    let R1CS_A = to_F_matrix::<R>(create_dummy_identity_matrix(rows, X_LEN + WIT_LEN + 1));
+    let R1CS_B = R1CS_A.clone();
+    let R1CS_C = R1CS_A.clone();
+
+    R1CS::<R> {
+        l: 1,
+        A: R1CS_A,
+        B: R1CS_B,
+        C: R1CS_C,
     }
-
-    pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
-        M.iter()
-            .map(|m| m.iter().map(|r| R::from(*r as u64)).collect())
-            .collect()
+}
+pub fn create_dummy_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
+    let mut matrix = vec![vec![0; columns]; rows];
+    for (i, item) in matrix.iter_mut().enumerate().take(rows) {
+        item[i] = 1;
     }
-    pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
-        z.iter().map(|c| R::from(*c as u64)).collect()
-    }
+    matrix
+}
 
-    pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
-        // R1CS for: x^3 + x + 5 = y (example from article
-        // https://www.vitalik.ca/general/2016/12/10/qap.html )
-        let A = to_F_matrix::<R>(vec![
-            vec![1, 0, 0, 0, 0, 0],
-            vec![0, 0, 0, 1, 0, 0],
-            vec![1, 0, 0, 0, 1, 0],
-            vec![0, 5, 0, 0, 0, 1],
-        ]);
-        let B = to_F_matrix::<R>(vec![
-            vec![1, 0, 0, 0, 0, 0],
-            vec![1, 0, 0, 0, 0, 0],
-            vec![0, 1, 0, 0, 0, 0],
-            vec![0, 1, 0, 0, 0, 0],
-        ]);
-        let C = to_F_matrix::<R>(vec![
-            vec![0, 0, 0, 1, 0, 0],
-            vec![0, 0, 0, 0, 1, 0],
-            vec![0, 0, 0, 0, 0, 1],
-            vec![0, 0, 1, 0, 0, 0],
-        ]);
+pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
+    // z = (1, io, w)
+    to_F_vec(vec![
+        input, // io
+        1,
+        input * input * input + input + 5, // x^3 + x + 5
+        input * input,                     // x^2
+        input * input * input,             // x^2 * x
+        input * input * input + input,     // x^3 + x
+    ])
+}
 
-        R1CS::<R> { l: 1, A, B, C }
-    }
-
-    pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
-        // z = (1, io, w)
+pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
+    // z = (1, io, w)
+    (
+        R::one(),
         to_F_vec(vec![
             input, // io
-            1,
+        ]),
+        to_F_vec(vec![
             input * input * input + input + 5, // x^3 + x + 5
             input * input,                     // x^2
             input * input * input,             // x^2 * x
             input * input * input + input,     // x^3 + x
-        ])
-    }
+        ]),
+    )
+}
 
-    pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
-        // z = (1, io, w)
-        (
-            R::one(),
-            to_F_vec(vec![
-                input, // io
-            ]),
-            to_F_vec(vec![
-                input * input * input + input + 5, // x^3 + x + 5
-                input * input,                     // x^2
-                input * input * input,             // x^2 * x
-                input * input * input + input,     // x^3 + x
-            ]),
-        )
-    }
+pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
+) -> (R, Vec<R>, Vec<R>) {
+    (
+        R::one(),
+        to_F_vec(vec![1; X_LEN]),
+        to_F_vec(vec![1; WIT_LEN]),
+    )
+}
 
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
     #[test]
     fn test_check_relation() {
         let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>>();

@@ -12,7 +12,7 @@ use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithSmallChallenges;
 use crate::{
     arith::{CCS, LCCCS},
-    parameters::DecompositionParams,
+    decomposition_parameters::DecompositionParams,
     transcript::Transcript,
 };
 use cyclotomic_rings::rot_sum;
@@ -312,6 +312,5 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
         g.add_mle_list(vec![Arc::from(M.clone()), r_i_eq.clone()], zeta)?;
     }
-
     Ok(())
 }

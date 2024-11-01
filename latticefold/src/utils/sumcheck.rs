@@ -100,11 +100,58 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     }
 }
 
+#[macro_export]
+macro_rules! generate_sumcheck_tests {
+    () => {
+        use ark_ff::Zero;
+        use $crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
+
+        use lattirust_poly::polynomials::VirtualPolynomial;
+        #[test]
+        fn test_sumcheck() {
+            let mut rng = ark_std::test_rng();
+
+            for _ in 0..20 {
+                let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+
+                let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+
+                let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
+
+                let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+                let res =
+                    MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
+                assert!(res.is_ok())
+            }
+        }
+        #[test]
+        fn test_failing_sumcheck() {
+            let mut rng = ark_std::test_rng();
+
+            for _ in 0..20 {
+                let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+
+                let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+                let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
+
+                let not_sum = poly
+                    .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
+                    .unwrap();
+
+                let res = MLSumcheck::verify_as_subprotocol(
+                    &mut transcript,
+                    &poly.aux_info,
+                    not_sum,
+                    &proof,
+                );
+                assert!(res.is_err());
+            }
+        }
+    };
+}
 #[cfg(test)]
 mod tests_pow2 {
-    use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
-    use ark_ff::Zero;
-    use lattirust_poly::polynomials::VirtualPolynomial;
+
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
     use cyclotomic_rings::challenge_set::BinarySmallSet;
@@ -114,187 +161,59 @@ mod tests_pow2 {
 
     type CS = BinarySmallSet<Q, N>;
 
-    #[test]
-    fn test_sumcheck() {
-        let mut rng = ark_std::test_rng();
-
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-            let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
-            assert!(res.is_ok());
-        }
-    }
-    #[test]
-    fn test_failing_sumcheck() {
-        let mut rng = ark_std::test_rng();
-
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-            let not_sum = poly
-                .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
-                .unwrap();
-
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
-            assert!(res.is_err());
-        }
-    }
+    generate_sumcheck_tests!();
 }
 
 #[cfg(test)]
 mod tests_stark {
-    use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
-    use ark_ff::Zero;
-    use cyclotomic_rings::StarkChallengeSet;
-    use lattirust_poly::polynomials::VirtualPolynomial;
-    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
 
+    use cyclotomic_rings::StarkChallengeSet;
+    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     type R = RqNTT;
 
     type CS = StarkChallengeSet;
 
-    #[test]
-    fn test_sumcheck() {
-        let mut rng = ark_std::test_rng();
-
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-            let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
-            assert!(res.is_ok())
-        }
-    }
-    #[test]
-    fn test_failing_sumcheck() {
-        let mut rng = ark_std::test_rng();
-
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-            let not_sum = poly
-                .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
-                .unwrap();
-
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
-            assert!(res.is_err());
-        }
-    }
+    generate_sumcheck_tests!();
 }
 
 #[cfg(test)]
 mod tests_frog {
-    use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
-    use ark_ff::Zero;
+
     use cyclotomic_rings::FrogChallengeSet;
-    use lattirust_poly::polynomials::VirtualPolynomial;
+
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
 
     type R = RqNTT;
 
     type CS = FrogChallengeSet;
 
-    #[test]
-    fn test_sumcheck() {
-        let mut rng = ark_std::test_rng();
-
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-            let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
-            assert!(res.is_ok())
-        }
-    }
-    #[test]
-    fn test_failing_sumcheck() {
-        let mut rng = ark_std::test_rng();
-
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-            let not_sum = poly
-                .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
-                .unwrap();
-
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
-            assert!(res.is_err());
-        }
-    }
+    generate_sumcheck_tests!();
 }
 
 #[cfg(test)]
 mod tests_goldilocks {
-    use crate::{transcript::poseidon::PoseidonTranscript, utils::sumcheck::MLSumcheck};
-    use ark_ff::Zero;
+
     use cyclotomic_rings::GoldilocksChallengeSet;
-    use lattirust_poly::polynomials::VirtualPolynomial;
+
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
 
     type R = RqNTT;
 
     type CS = GoldilocksChallengeSet;
 
-    #[test]
-    fn test_sumcheck() {
-        let mut rng = ark_std::test_rng();
+    generate_sumcheck_tests!();
+}
 
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+#[cfg(test)]
+mod tests_babybear {
 
-            let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+    use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
 
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
+    use cyclotomic_rings::BabyBearChallengeSet;
 
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
-            assert!(res.is_ok())
-        }
-    }
-    #[test]
-    fn test_failing_sumcheck() {
-        let mut rng = ark_std::test_rng();
+    type R = RqNTT;
 
-        for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+    type CS = BabyBearChallengeSet;
 
-            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-            let not_sum = poly
-                .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
-                .unwrap();
-
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
-            assert!(res.is_err());
-        }
-    }
+    generate_sumcheck_tests!();
 }

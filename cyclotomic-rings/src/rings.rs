@@ -8,11 +8,15 @@ use lattirust_ring::{
     Cyclotomic, OverField, PolyRing,
 };
 
+mod babybear;
+mod dilithium;
 mod frog;
 mod goldilocks;
 mod poseidon;
 mod stark;
 
+pub use babybear::*;
+pub use dilithium::*;
 pub use frog::*;
 pub use goldilocks::*;
 pub use stark::*;

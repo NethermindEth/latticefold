@@ -11,7 +11,7 @@ use crate::transcript::TranscriptWithSmallChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
-    parameters::DecompositionParams,
+    decomposition_parameters::DecompositionParams,
     utils::{mle::dense_vec_to_dense_mle, sumcheck},
 };
 
@@ -100,8 +100,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             .collect::<Vec<_>>();
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
 
-        // Setup matrix_mles for later evaluation of etas
-        // Review creation of this Mi*z mles
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = zis
             .iter()
             .map(|zi| {
@@ -125,7 +123,9 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             &mu_s,
         )?;
 
+        // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
+
         let r_0 = prover_state
             .randomness
             .into_iter()
@@ -162,8 +162,8 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
 
         theta_s
             .iter()
-            .for_each(|thetas| transcript.absorb_slice(thetas));
-        eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
+            .for_each(|thetas| transcript.absorb_slice(&thetas));
+        eta_s.iter().for_each(|etas| transcript.absorb_slice(&etas));
 
         // Step 5 get rho challenges
         let rho_s = get_rhos::<_, _, P>(transcript);
@@ -172,7 +172,6 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(&rho_s, &theta_s, cm_i_s, &eta_s, ccs);
 
         // Step 7: Compute f0 and Witness_0
-
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
         let lcccs = LCCCS {
             r: r_0,
@@ -300,11 +299,11 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
         proof
             .theta_s
             .iter()
-            .for_each(|thetas| transcript.absorb_slice(thetas));
+            .for_each(|thetas| transcript.absorb_slice(&thetas));
         proof
             .eta_s
             .iter()
-            .for_each(|etas| transcript.absorb_slice(etas));
+            .for_each(|etas| transcript.absorb_slice(&etas));
         let rho_s = get_rhos::<_, _, P>(transcript);
 
         // Step 6
@@ -331,8 +330,9 @@ mod tests {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
         nifs::{
             decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -344,7 +344,6 @@ mod tests {
                 LinearizationVerifier,
             },
         },
-        parameters::DecompositionParams,
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
@@ -492,5 +491,167 @@ mod tests {
         );
 
         assert!(res.is_err())
+    }
+}
+
+#[cfg(test)]
+mod tests_stark {
+    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
+    use num_bigint::BigUint;
+    use rand::thread_rng;
+
+    use crate::{
+        arith::r1cs::get_test_dummy_z_split,
+        nifs::{
+            decomposition::{
+                DecompositionProver, DecompositionVerifier, LFDecompositionProver,
+                LFDecompositionVerifier,
+            },
+            folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
+            linearization::LinearizationProver,
+        },
+        utils::security_check::check_witness_bound,
+    };
+    use crate::{
+        arith::tests::get_test_dummy_ccs,
+        utils::security_check::check_ring_modulus_128_bits_security,
+    };
+    use crate::{
+        arith::{Witness, CCCS},
+        commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
+        nifs::linearization::{
+            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
+        },
+        transcript::poseidon::PoseidonTranscript,
+    };
+    use cyclotomic_rings::StarkChallengeSet;
+
+    #[test]
+    fn test_dummy_folding() {
+        #[cfg(feature = "dhat-heap")]
+        #[global_allocator]
+        static ALLOC: dhat::Alloc = dhat::Alloc;
+
+        type R = RqNTT;
+        type CS = StarkChallengeSet;
+        type T = PoseidonTranscript<R, CS>;
+
+        #[derive(Clone)]
+        struct PP;
+        impl DecompositionParams for PP {
+            const B: u128 = 3010936384;
+            const L: usize = 8;
+            const B_SMALL: usize = 38;
+            const K: usize = 6;
+        }
+
+        const C: usize = 15;
+        const X_LEN: usize = 1;
+        const WIT_LEN: usize = 512;
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
+
+        #[cfg(feature = "dhat-heap")]
+        let _profiler = dhat::Profiler::new_heap(); // Move a round to measure specific parts
+
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+        let wit = Witness::from_w_ccs::<PP>(&w_ccs);
+
+        // Make bound and securitty checks
+        let witness_within_bound = check_witness_bound(&wit, PP::B);
+        let stark_modulus = BigUint::parse_bytes(
+            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+            10,
+        )
+        .expect("Failed to parse stark_modulus");
+
+        if check_ring_modulus_128_bits_security(
+            &stark_modulus,
+            C,
+            16,
+            W,
+            PP::B,
+            PP::L,
+            witness_within_bound,
+        ) {
+            println!(" Bound condition satisfied for 128 bits security");
+        } else {
+            println!("Bound condition not satisfied for 128 bits security");
+        }
+
+        let cm_i = CCCS {
+            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+
+        let linearization_proof =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
+
+        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
+
+        let linearization_verification = LFLinearizationVerifier::<_, T>::verify(
+            &cm_i,
+            &linearization_proof
+                .expect("Linearization proof generation error")
+                .1,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .expect("Linearization Verification error");
+
+        let lcccs = linearization_verification;
+
+        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        );
+
+        let decomposition_proof =
+            decomposition_prover.expect("Decomposition proof generation error");
+
+        let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
+            &lcccs,
+            &decomposition_proof.2,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        let lcccs = decomposition_verification.expect("Decomposition Verification error");
+
+        #[cfg(feature = "dhat-heap")]
+        let _profiler = dhat::Profiler::new_heap();
+        let (lcccs, wit_s) = {
+            let mut lcccs = lcccs.clone();
+            let mut lcccs_r = lcccs.clone();
+            lcccs.append(&mut lcccs_r);
+
+            let mut wit_s = decomposition_proof.1.clone();
+            let mut wit_s_r = decomposition_proof.1;
+            wit_s.append(&mut wit_s_r);
+
+            (lcccs, wit_s)
+        };
+        let folding_prover =
+            LFFoldingProver::<_, T>::prove::<C, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs);
+
+        let folding_proof = folding_prover.expect("Folding proof generation error");
+
+        let folding_verification = LFFoldingVerifier::<_, T>::verify::<C, PP>(
+            &lcccs,
+            &folding_proof.2,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        folding_verification.expect("Folding Verification error");
     }
 }

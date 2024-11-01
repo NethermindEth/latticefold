@@ -6,7 +6,7 @@ use lattirust_ring::OverField;
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
-    parameters::DecompositionParams,
+    decomposition_parameters::DecompositionParams,
     transcript::TranscriptWithSmallChallenges,
 };
 use decomposition::{

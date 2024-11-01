@@ -12,12 +12,19 @@ lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
 num-traits = { version = "0.2.19", default-features = false }
+paste = "1.0.15"
 rand = { version = "0.8.5", default-features = false }
 thiserror = { workspace = true }
+num-bigint = { version = "0.4.0", default-features = false }
+dhat = "0.3.2"
 
 [features]
 default = [ "std" ]
 std = [ "ark-std/std" ]
+dhat-heap = []
+
+[profile.release]
+debug = 1
 
 
 [lints.clippy]
@@ -36,8 +43,21 @@ match_bool = "warn"
 needless_bool = "warn"
 implicit_clone = "warn"
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.5.1"
 
 [[bench]]
 name = "ajtai"
+harness = false
+
+
+[[bench]]
+name = "linearization"
+harness = false
+
+[[bench]]
+name = "decomposition"
+harness = false
+
+[[bench]]
+name = "folding"
 harness = false

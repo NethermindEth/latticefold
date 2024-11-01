@@ -1,3 +1,4 @@
 /target
 /.vscode
 *.sage.py
+*.sage

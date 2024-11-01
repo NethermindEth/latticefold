@@ -1,7 +1,7 @@
-use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField, Ring};
+use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField};
 
 use super::homomorphic_commitment::Commitment;
-use crate::{commitment::CommitmentError, parameters::DecompositionParams};
+use crate::{commitment::CommitmentError, decomposition_parameters::DecompositionParams};
 use cyclotomic_rings::SuitableRing;
 
 /// A concrete instantiation of the Ajtai commitment scheme.
@@ -10,7 +10,7 @@ use cyclotomic_rings::SuitableRing;
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
 /// `NTT` is a suitable cyclotomic ring.
 #[derive(Clone, Debug)]
-pub struct AjtaiCommitmentScheme<const C: usize, const W: usize, NTT: Ring> {
+pub struct AjtaiCommitmentScheme<const C: usize, const W: usize, NTT: OverField> {
     matrix: Vec<Vec<NTT>>,
 }
 
@@ -46,7 +46,7 @@ impl<const C: usize, const W: usize, NTT: OverField> TryFrom<Vec<Vec<NTT>>>
     }
 }
 
-impl<const C: usize, const W: usize, NTT: Ring> AjtaiCommitmentScheme<C, W, NTT> {
+impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W, NTT> {
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
         Self {
             matrix: vec![vec![NTT::rand(rng); W]; C],
@@ -64,10 +64,12 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
         let mut commitment: Vec<NTT> = vec![NTT::zero(); C];
 
-        commitment
-            .iter_mut()
-            .zip(&self.matrix)
-            .for_each(|(x, row)| *x = row.iter().zip(f).map(|(&m, &x)| m * x).sum());
+        for (i, row) in self.matrix.iter().enumerate() {
+            #[allow(clippy::op_ref)] // Allow `&f`, for Mul to be called with ref
+            for j in 0..W {
+                commitment[i] += row[j] * &f[j];
+            }
+        }
 
         Ok(Commitment::from_vec_raw(commitment))
     }
@@ -117,7 +119,7 @@ mod tests {
     use lattirust_ring::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
-    use crate::parameters::DilithiumNTT;
+    use cyclotomic_rings::DilithiumNTT;
 
     pub(crate) fn generate_ajtai<const C: usize, const W: usize, NTT: OverField>(
     ) -> Result<AjtaiCommitmentScheme<C, W, NTT>, CommitmentError> {
