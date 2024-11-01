@@ -66,8 +66,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
-        // Step 3: Compute v, u_vector
 
+        // Step 3: Compute v, u_vector
         let v: Vec<NTT> = wit.f_hat.iter().map(|f_hat_row| dense_vec_to_dense_mle(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
 
         let u = compute_u(&Mz_mles, &r)?;

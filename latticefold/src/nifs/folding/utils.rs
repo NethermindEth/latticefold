@@ -283,7 +283,7 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     beta_eq_x: Arc<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
-        successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.iter())
+        successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
         let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
 
@@ -294,12 +294,13 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
             mle_list.push(Arc::from(fi_hat_mle.clone() + i_hat));
         }
 
-        mle_list.push(Arc::from(fi_hat_mle.clone()));
+        mle_list.push(Arc::from(fi_hat_mle));
 
         mle_list.push(beta_eq_x.clone());
 
-        let _ = g.add_mle_list(mle_list, mu);
+        g.add_mle_list(mle_list, mu)?;
     }
+    
     Ok(())
 }
 
@@ -312,5 +313,6 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
         g.add_mle_list(vec![Arc::from(M.clone()), r_i_eq.clone()], zeta)?;
     }
+
     Ok(())
 }
