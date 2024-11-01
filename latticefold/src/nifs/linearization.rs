@@ -253,7 +253,7 @@ mod tests_pow2 {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         decomposition_parameters::DecompositionParams,
         nifs::linearization::{
@@ -368,7 +368,7 @@ mod tests_stark {
 
     use crate::{
         arith::{
-            r1cs::tests::{get_test_dummy_z_split, get_test_z_split},
+            r1cs::{get_test_dummy_z_split, get_test_z_split},
             tests::{get_test_ccs, get_test_dummy_ccs},
             Witness, CCCS,
         },
@@ -545,7 +545,7 @@ mod tests_goldilocks {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         decomposition_parameters::DecompositionParams,
         nifs::linearization::{
@@ -639,7 +639,7 @@ mod tests_frog {
 
     use crate::{
         arith::{
-            r1cs::tests::{get_test_z, get_test_z_split},
+            r1cs::{get_test_z, get_test_z_split},
             tests::get_test_ccs,
             Arith, Witness, CCCS,
         },

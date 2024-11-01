@@ -10,7 +10,7 @@ mod utils;
 use ark_std::UniformRand;
 use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use latticefold::{
-    arith::{Arith, Witness, CCCS, CCS},
+    arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::{
@@ -25,7 +25,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
+use utils::get_test_dummy_ccs;
 
 fn wit_and_ccs_gen<
     const X_LEN: usize,

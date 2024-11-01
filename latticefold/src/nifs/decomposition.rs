@@ -316,7 +316,7 @@ mod tests {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{
@@ -456,7 +456,7 @@ mod tests_stark {
     use rand::thread_rng;
 
     use crate::{
-        arith::{r1cs::tests::get_test_dummy_z_split, tests::get_test_dummy_ccs, Witness, CCCS},
+        arith::{r1cs::get_test_dummy_z_split, tests::get_test_dummy_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         nifs::{
             decomposition::{

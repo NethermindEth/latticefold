@@ -9,10 +9,10 @@ use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
 mod utils;
 use ark_std::UniformRand;
-use utils::{get_test_dummy_ccs, get_test_dummy_z_split};
+use utils::get_test_dummy_ccs;
 
 use latticefold::{
-    arith::{Arith, Witness, CCCS, CCS, LCCCS},
+    arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::linearization::{

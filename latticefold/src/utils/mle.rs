@@ -121,7 +121,7 @@ fn pad_vector(mut vec: Vec<usize>, target_length: usize) -> Vec<usize> {
 #[allow(non_snake_case)]
 mod tests {
     use super::*;
-    use crate::arith::{r1cs::tests::to_F_matrix, tests::get_test_z};
+    use crate::arith::{r1cs::to_F_matrix, tests::get_test_z};
 
     use ark_ff::Zero;
     use lattirust_poly::mle::MultilinearExtension;
