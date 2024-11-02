@@ -1,4 +1,6 @@
 //! Prover
+use std::sync::Arc;
+
 use ark_std::{cfg_iter_mut, vec::Vec};
 use lattirust_poly::{
     mle::MultilinearExtension,
@@ -19,11 +21,8 @@ pub struct ProverMsg<R: Ring> {
 pub struct ProverState<R: OverField> {
     /// sampled randomness given by the verifier
     pub randomness: Vec<R::BaseRing>,
-    /// Stores the list of products that is meant to be added together. Each multiplicand is represented by
-    /// the index in flattened_ml_extensions
-    pub list_of_products: Vec<(R, Vec<usize>)>,
-    /// Stores a list of multilinear extensions in which `self.list_of_products` points to
-    pub flattened_ml_extensions: Vec<DenseMultilinearExtension<R>>,
+    /// flattened multilinear extensions
+    pub products: Vec<(R, DenseMultilinearExtension<R>)>,
     /// Number of variables
     pub num_vars: usize,
     /// Max number of multiplicands in a product
@@ -51,17 +50,9 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             panic!("Attempt to prove a constant.")
         }
 
-        // create a deep copy of all unique MLExtensions
-        let flattened_ml_extensions = polynomial
-            .flattened_ml_extensions
-            .iter()
-            .map(|x| x.as_ref().clone())
-            .collect();
-
         ProverState {
             randomness: Vec::with_capacity(polynomial.aux_info.num_variables),
-            list_of_products: polynomial.products.clone(),
-            flattened_ml_extensions,
+            products: polynomial.products.clone(),
             num_vars: polynomial.aux_info.num_variables,
             max_multiplicands: polynomial.aux_info.max_degree,
             round: 0,
@@ -84,8 +75,8 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             // fix argument
             let i = prover_state.round;
             let r = prover_state.randomness[i - 1];
-            cfg_iter_mut!(prover_state.flattened_ml_extensions).for_each(|multiplicand| {
-                *multiplicand = multiplicand.fix_variables(&[r.into()]);
+            cfg_iter_mut!(prover_state.products).for_each(|(_, mle)| {
+                *mle = mle.fix_variables(&[r.into()]);
             });
         } else if prover_state.round > 0 {
             panic!("verifier message is empty");
@@ -102,37 +93,30 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let degree = prover_state.max_multiplicands; // the degree of univariate polynomial sent by prover at this round
 
         // #[cfg(not(feature = "parallel"))]
-        let zeros = (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
+        let zeros= vec![R::zero(); degree + 1];
         // #[cfg(feature = "parallel")]
         // let zeros = || (vec![F::zero(); degree + 1], vec![F::zero(); degree + 1]);
 
         // generate sum
         let fold_result = ark_std::cfg_into_iter!(0..1 << (nv - i), 1 << 10).fold(
             zeros,
-            |(mut products_sum, mut product), b| {
+            |mut products_sum, b| {
                 // In effect, this fold is essentially doing simply:
                 // for b in 0..1 << (nv - i) {
-                for (coefficient, products) in &prover_state.list_of_products {
-                    product.fill(*coefficient);
-                    for &jth_product in products {
-                        let table = &prover_state.flattened_ml_extensions[jth_product];
-                        let mut start = table[b << 1];
-                        let step = table[(b << 1) + 1] - start;
-                        for p in product.iter_mut() {
-                            *p *= start;
-                            start += step;
-                        }
-                    }
+                for (coefficient, mle) in &prover_state.products {
+                    let table = &mle.evaluations;
+                    let start = table[b << 1];
+                    let step = table[(b << 1) + 1] - start;
                     for t in 0..degree + 1 {
-                        products_sum[t] += product[t];
+                        products_sum[t] += *coefficient * (start + step*R::from(t as u64));
                     }
                 }
-                (products_sum, product)
+                products_sum
             },
         );
 
         // #[cfg(not(feature = "parallel"))]
-        let products_sum = fold_result.0;
+        let products_sum = fold_result;
 
         // When rayon is used, the `fold` operation results in a iterator of `Vec<F>` rather than a single `Vec<F>`. In this case, we simply need to sum them.
         // #[cfg(feature = "parallel")]

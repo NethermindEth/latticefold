@@ -233,10 +233,10 @@ fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     let mut g = VirtualPolynomial::new(log_m);
 
     for (i, coefficient) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
-        let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::with_capacity(S[i].len());
+        let mut mle_list: Vec<DenseMultilinearExtension<NTT>> = Vec::with_capacity(S[i].len());
 
         for &j in &S[i] {
-            mle_list.push(Arc::new(M_mles[j].clone()));
+            mle_list.push(M_mles[j].clone());
         }
 
         g.add_mle_list(mle_list, *coefficient)?;

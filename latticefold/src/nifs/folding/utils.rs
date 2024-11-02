@@ -245,10 +245,10 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_mle: DenseMultilinearExtension<NTT>,
-    r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
+    r_i_eq: DenseMultilinearExtension<NTT>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
-    g.add_mle_list(vec![r_i_eq, Arc::from(fi_mle)], alpha_i)
+    g.add_mle_list(vec![r_i_eq, fi_mle], alpha_i)
 }
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
@@ -256,18 +256,18 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     fi_mle: DenseMultilinearExtension<NTT>,
     b: usize,
     mu_i: NTT,
-    beta_eq_x: Arc<DenseMultilinearExtension<NTT>>,
+    beta_eq_x: DenseMultilinearExtension<NTT>,
 ) -> Result<(), ArithErrors> {
-    let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
+    let mut mle_list: Vec<DenseMultilinearExtension<NTT>> = Vec::new();
 
     for i in 1..b {
         let i_hat = NTT::from(i as u128);
 
-        mle_list.push(Arc::from(fi_mle.clone() - i_hat));
-        mle_list.push(Arc::from(fi_mle.clone() + i_hat));
+        mle_list.push(fi_mle.clone() - i_hat);
+        mle_list.push(fi_mle.clone() + i_hat);
     }
 
-    mle_list.push(Arc::from(fi_mle));
+    mle_list.push(fi_mle);
 
     mle_list.push(beta_eq_x);
 
@@ -278,10 +278,10 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     zeta_i: NTT,
-    r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
+    r_i_eq: DenseMultilinearExtension<NTT>,
 ) -> Result<(), ArithErrors> {
     for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
-        g.add_mle_list(vec![Arc::from(M.clone()), r_i_eq.clone()], zeta)?;
+        g.add_mle_list(vec![M.clone(), r_i_eq.clone()], zeta)?;
     }
 
     Ok(())

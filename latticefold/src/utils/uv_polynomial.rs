@@ -56,28 +56,17 @@ impl<R: Ring> TryFrom<&DenseMultilinearExtension<R>> for UVPolynomial<R> {
 impl<R: Ring> TryFrom<VirtualPolynomial<R>> for UVPolynomial<R> {
     type Error = ArithErrors;
     fn try_from(poly: VirtualPolynomial<R>) -> Result<Self, ArithErrors> {
-        let flattened_ml_extensions: Vec<DenseMultilinearExtension<R>> = poly
-            .flattened_ml_extensions
-            .iter()
-            .map(|x| x.as_ref().clone())
-            .collect();
+
         // Start with an empty polynomial
         let mut result_poly = UVPolynomial::new();
 
-        // Iterate over the products in the virtual polynomial
-        for (coeff, list) in poly.products.iter() {
-            // Start with the polynomial from the first MLE in the list
-            let mut unipoly = UVPolynomial::try_from(&flattened_ml_extensions[list[0]])?;
-
-            for &index in &list[1..] {
-                unipoly = unipoly * &flattened_ml_extensions[index];
-            }
-
-            // Scale the polynomial by the coefficient
-            unipoly = unipoly * coeff;
-
-            // Accumulate the result
-            result_poly += &unipoly;
+        for (coeff, mle) in poly.products.iter() {
+            //TODO, when removing arc, change this to clone
+            let unipoly = UVPolynomial::try_from(mle)?;
+    
+            let scaled_poly = unipoly * coeff;
+    
+            result_poly += &scaled_poly;
         }
         Ok(result_poly)
     }
@@ -147,8 +136,14 @@ mod tests {
     // Define a sample VirtualPolynomial for testing
     fn sample_virtual_polynomial() -> VirtualPolynomial<Fq> {
         let mut polynomial = VirtualPolynomial::new(1);
-        polynomial.flattened_ml_extensions = (0..2).map(|_| Arc::new(sample_mle())).collect();
-        polynomial.products = vec![(Fq::from(1u128), vec![0, 1])];
+            // Create individual MLEs
+        let mle0 = sample_mle();
+        let mle1 = sample_mle();
+        
+    
+        // Add the list of MLEs as a single product with coefficient 1
+        polynomial.add_mle_list(vec![mle0, mle1], Fq::from(1u128))
+        .expect("Add MLE list failed");
         polynomial
     }
 
