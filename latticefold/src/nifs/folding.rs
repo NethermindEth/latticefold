@@ -356,6 +356,8 @@ mod tests {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
+        println!("round 1");
+        println!("########################");
         let (_, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
@@ -368,6 +370,9 @@ mod tests {
         )
         .unwrap();
 
+        
+        println!("round 2");
+        println!("########################");
         let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
             &lcccs,
             &wit,
@@ -395,6 +400,9 @@ mod tests {
 
             (lcccs, wit_s)
         };
+        
+        println!("round 3");
+        println!("########################");
         let (lcccs_prover, _, folding_proof) =
             LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
                 .unwrap();

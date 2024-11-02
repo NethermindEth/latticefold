@@ -109,6 +109,8 @@ impl<R: OverField, T: Transcript<R>> IPForMLSumcheck<R, T> {
             }
             let p0 = evaluations[0];
             let p1 = evaluations[1];
+            println!("p0: {:?}, p1: {:?}", p0, p1);
+            println!("expected: {:?}", expected);
             if p0 + p1 != expected {
                 return Err(SumCheckError::SumCheckFailed(p0 + p1, expected));
             }

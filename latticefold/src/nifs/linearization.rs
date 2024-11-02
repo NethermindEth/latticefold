@@ -89,6 +89,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+        println!("g: {:?}", g);
+        println!("##################");
+
 
         // Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
