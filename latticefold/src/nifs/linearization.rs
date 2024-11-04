@@ -1,12 +1,12 @@
-#![allow(non_snake_case)]
 use ark_ff::{Field, PrimeField};
-use ark_std::{marker::PhantomData, sync::Arc};
+
 use cyclotomic_rings::SuitableRing;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+    polynomials::{eq_eval, VPAuxInfo},
 };
-use lattirust_ring::OverField;
+
+use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
 use crate::{
@@ -14,47 +14,14 @@ use crate::{
     transcript::Transcript,
     utils::{
         mle::dense_vec_to_dense_mle,
-        sumcheck,
         sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
     },
 };
 
-#[derive(Clone)]
-pub struct LinearizationProof<NTT: OverField> {
-    // Sent in the step 2. of the linearization subprotocol
-    pub linearization_sumcheck: sumcheck::Proof<NTT>,
-    // Sent in the step 3.
-    pub v: NTT,
-    pub u: Vec<NTT>,
-}
-
-pub trait LinearizationProver<NTT: OverField, T: Transcript<NTT>> {
-    fn prove<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
-        wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
-}
-
-pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
-    fn verify<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
-        proof: &LinearizationProof<NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
-}
-
-pub struct LFLinearizationProver<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
-}
-
-pub struct LFLinearizationVerifier<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
-}
+pub use structs::*;
+mod structs;
+mod tests;
+mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
     for LFLinearizationProver<NTT, T>
@@ -92,13 +59,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
+
         // Extract the evaluation point
         let r = prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
-
         // Step 3: Compute v, u_vector
 
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
@@ -116,7 +83,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             v,
             u: u.clone(),
         };
-
         let lcccs = LCCCS {
             r,
             v,
@@ -125,7 +91,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         };
-
         Ok((lcccs, linearization_proof))
     }
 }
@@ -200,453 +165,5 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         })
-    }
-}
-
-/// Batch compute the values of mles at the point r.
-fn compute_u<NTT: OverField>(
-    Mz_mles: &[DenseMultilinearExtension<NTT>],
-    r: &[NTT],
-) -> Result<Vec<NTT>, LinearizationError<NTT>> {
-    Mz_mles
-        .iter()
-        .map(|M_i_mle| {
-            M_i_mle
-                .evaluate(r)
-                .ok_or(LinearizationError::ParametersError(format!(
-                    "one of the CCS matrices has an incorrect length {}, expected {}",
-                    M_i_mle.evaluations.len(),
-                    1 << r.len(),
-                )))
-        })
-        .collect()
-}
-
-/// Prepare the main linearization polynomial.
-fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
-    log_m: usize,
-    c: &[NTT],
-    M_mles: &[DenseMultilinearExtension<NTT>],
-    S: &[Vec<usize>],
-    beta_s: &[NTT],
-) -> Result<VirtualPolynomial<NTT>, LinearizationError<NTT>> {
-    let mut g = VirtualPolynomial::new(log_m);
-
-    for (i, coefficient) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
-        let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::with_capacity(S[i].len());
-
-        for &j in &S[i] {
-            mle_list.push(Arc::new(M_mles[j].clone()));
-        }
-
-        g.add_mle_list(mle_list, *coefficient)?;
-    }
-
-    g.mul_by_mle(build_eq_x_r(beta_s)?, NTT::one())?;
-
-    Ok(g)
-}
-
-#[cfg(test)]
-mod tests_pow2 {
-    use ark_ff::UniformRand;
-    use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::{
-        cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT, zn::z_q::Zq, PolyRing,
-    };
-    use rand::thread_rng;
-
-    use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
-        commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::DecompositionParams,
-        nifs::linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
-        },
-        transcript::poseidon::PoseidonTranscript,
-    };
-    use cyclotomic_rings::challenge_set::BinarySmallSet;
-
-    use super::{compute_u, LinearizationProver};
-
-    // Boilerplate code to generate values needed for testing
-    const Q: u64 = 17; // Replace with an appropriate modulus
-    const N: usize = 8;
-
-    fn generate_coefficient_i(_i: usize) -> Zq<Q> {
-        let mut rng = thread_rng();
-        Zq::<Q>::rand(&mut rng)
-    }
-
-    fn generate_a_ring_elem() -> Pow2CyclotomicPolyRingNTT<Q, N> {
-        // 1 is placeholder
-        Pow2CyclotomicPolyRingNTT::<Q, N>::from_scalar(generate_coefficient_i(1))
-    }
-
-    #[test]
-    fn test_compute_u() {
-        let mut mles = Vec::with_capacity(10);
-
-        // generate evals
-        for _i in 0..10 {
-            let evals: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> =
-                (0..8).map(|_| generate_a_ring_elem()).collect();
-
-            mles.push(DenseMultilinearExtension::from_evaluations_slice(3, &evals))
-        }
-
-        for b in 0..8_u8 {
-            let us: Vec<Pow2CyclotomicPolyRingNTT<Q, N>> = compute_u(
-                &mles,
-                &[
-                    (b & 0x01).into(),
-                    ((b & 0x2) >> 1).into(),
-                    ((b & 0x4) >> 2).into(),
-                ],
-            )
-            .unwrap();
-
-            for (i, &u) in us.iter().enumerate() {
-                assert_eq!(u, mles[i].evaluations[b.to_le() as usize]);
-            }
-        }
-    }
-
-    // Actual Tests
-    #[test]
-    fn test_linearization() {
-        const Q: u64 = 17;
-        const N: usize = 8;
-        type R = Pow2CyclotomicPolyRingNTT<Q, N>;
-        type CS = BinarySmallSet<Q, N>;
-        type T = PoseidonTranscript<Pow2CyclotomicPolyRingNTT<Q, N>, CS>;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 2;
-            const B_SMALL: usize = 2;
-            const K: usize = 10;
-        }
-
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
-
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
-            x_ccs,
-        };
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
-
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &res.unwrap().1,
-            &mut transcript,
-            &ccs,
-        );
-
-        res.unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tests_stark {
-    use ark_ff::UniformRand;
-    use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::{
-        cyclotomic_ring::models::stark_prime::{Fq, RqNTT},
-        PolyRing,
-    };
-    use rand::thread_rng;
-
-    use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
-        commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::DecompositionParams,
-        nifs::linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
-        },
-        transcript::poseidon::PoseidonTranscript,
-    };
-    use cyclotomic_rings::StarkChallengeSet;
-
-    use super::{compute_u, LinearizationProver};
-
-    fn generate_coefficient_i(_i: usize) -> Fq {
-        let mut rng = thread_rng();
-        Fq::rand(&mut rng)
-    }
-
-    fn generate_a_ring_elem() -> RqNTT {
-        // 1 is placeholder
-        RqNTT::from_scalar(generate_coefficient_i(1))
-    }
-
-    #[test]
-    fn test_compute_u() {
-        let mut mles = Vec::with_capacity(10);
-
-        // generate evals
-        for _i in 0..10 {
-            let evals: Vec<RqNTT> = (0..8).map(|_| generate_a_ring_elem()).collect();
-
-            mles.push(DenseMultilinearExtension::from_evaluations_slice(3, &evals))
-        }
-
-        for b in 0..8_u8 {
-            let us: Vec<RqNTT> = compute_u(
-                &mles,
-                &[
-                    (b & 0x01).into(),
-                    ((b & 0x2) >> 1).into(),
-                    ((b & 0x4) >> 2).into(),
-                ],
-            )
-            .unwrap();
-
-            for (i, &u) in us.iter().enumerate() {
-                assert_eq!(u, mles[i].evaluations[b.to_le() as usize]);
-            }
-        }
-    }
-
-    // Actual Tests
-    #[test]
-    fn test_linearization() {
-        type R = RqNTT;
-        type CS = StarkChallengeSet;
-        type T = PoseidonTranscript<R, CS>;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 2;
-            const B_SMALL: usize = 2;
-            const K: usize = 10;
-        }
-
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
-
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
-            x_ccs,
-        };
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
-
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &res.unwrap().1,
-            &mut transcript,
-            &ccs,
-        );
-
-        res.unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tests_goldilocks {
-    use ark_ff::UniformRand;
-    use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
-    use rand::thread_rng;
-
-    use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
-        commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::DecompositionParams,
-        nifs::linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
-        },
-        transcript::poseidon::PoseidonTranscript,
-    };
-    use cyclotomic_rings::GoldilocksChallengeSet;
-
-    use super::{compute_u, LinearizationProver};
-
-    #[test]
-    fn test_compute_u() {
-        let mut mles = Vec::with_capacity(10);
-        let mut rng = ark_std::test_rng();
-        // generate evals
-        for _i in 0..10 {
-            let evals: Vec<RqNTT> = (0..8).map(|_| RqNTT::rand(&mut rng)).collect();
-
-            mles.push(DenseMultilinearExtension::from_evaluations_slice(3, &evals))
-        }
-
-        for b in 0..8_u8 {
-            let us: Vec<RqNTT> = compute_u(
-                &mles,
-                &[
-                    (b & 0x01).into(),
-                    ((b & 0x2) >> 1).into(),
-                    ((b & 0x4) >> 2).into(),
-                ],
-            )
-            .unwrap();
-
-            for (i, &u) in us.iter().enumerate() {
-                assert_eq!(u, mles[i].evaluations[b.to_le() as usize]);
-            }
-        }
-    }
-
-    // Actual Tests
-    #[test]
-    fn test_linearization() {
-        type R = RqNTT;
-        type CS = GoldilocksChallengeSet;
-        type T = PoseidonTranscript<R, CS>;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 2;
-            const B_SMALL: usize = 2;
-            const K: usize = 10;
-        }
-
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
-
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
-            x_ccs,
-        };
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
-
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &res.unwrap().1,
-            &mut transcript,
-            &ccs,
-        );
-
-        res.unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tests_frog {
-    use ark_ff::UniformRand;
-    use lattirust_poly::mle::DenseMultilinearExtension;
-    use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
-    use rand::thread_rng;
-
-    use crate::{
-        arith::{r1cs::tests::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
-        commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::DecompositionParams,
-        nifs::linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
-        },
-        transcript::poseidon::PoseidonTranscript,
-    };
-    use cyclotomic_rings::FrogChallengeSet;
-
-    use super::{compute_u, LinearizationProver};
-
-    #[test]
-    fn test_compute_u() {
-        let mut mles = Vec::with_capacity(10);
-        let mut rng = ark_std::test_rng();
-        // generate evals
-        for _i in 0..10 {
-            let evals: Vec<RqNTT> = (0..8).map(|_| RqNTT::rand(&mut rng)).collect();
-
-            mles.push(DenseMultilinearExtension::from_evaluations_slice(3, &evals))
-        }
-
-        for b in 0..8_u8 {
-            let us: Vec<RqNTT> = compute_u(
-                &mles,
-                &[
-                    (b & 0x01).into(),
-                    ((b & 0x2) >> 1).into(),
-                    ((b & 0x4) >> 2).into(),
-                ],
-            )
-            .unwrap();
-
-            for (i, &u) in us.iter().enumerate() {
-                assert_eq!(u, mles[i].evaluations[b.to_le() as usize]);
-            }
-        }
-    }
-
-    // Actual Tests
-    #[test]
-    fn test_linearization() {
-        type R = RqNTT;
-        type CS = FrogChallengeSet;
-        type T = PoseidonTranscript<R, CS>;
-
-        impl DecompositionParams for PP {
-            const B: u128 = 1_024;
-            const L: usize = 2;
-            const B_SMALL: usize = 2;
-            const K: usize = 10;
-        }
-
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        #[derive(Clone)]
-        struct PP;
-
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
-            x_ccs,
-        };
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
-
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
-
-        let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &res.unwrap().1,
-            &mut transcript,
-            &ccs,
-        );
-
-        res.unwrap();
     }
 }

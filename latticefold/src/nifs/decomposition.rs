@@ -66,6 +66,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         for (i, wit) in wit_s.iter().enumerate() {
             let mut u_s_for_i = Vec::with_capacity(P::K);
+
             let z: Vec<NTT> = {
                 let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
 
@@ -83,7 +84,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 );
             }
 
-            u_s.push(u_s_for_i)
+            u_s.push(u_s_for_i);
         }
 
         let mut lcccs_s = Vec::with_capacity(P::K);
