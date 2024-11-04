@@ -1,9 +1,5 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use lattirust_ring::OverField;
-use structs::{
-    DecompositionProof, DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-    LFDecompositionVerifier,
-};
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
 use crate::utils::mle::dense_vec_to_dense_mle;
@@ -21,6 +17,8 @@ pub mod structs;
 #[cfg(test)]
 mod tests;
 mod utils;
+
+pub use self::structs::*;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
