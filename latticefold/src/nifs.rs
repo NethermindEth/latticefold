@@ -9,10 +9,7 @@ use crate::{
     decomposition_parameters::DecompositionParams,
     transcript::TranscriptWithSmallChallenges,
 };
-use decomposition::structs::{
-    DecompositionProof, DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-    LFDecompositionVerifier,
-};
+use decomposition::structs::*;
 use error::LatticefoldError;
 use folding::{FoldingProof, FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier};
 use linearization::{
