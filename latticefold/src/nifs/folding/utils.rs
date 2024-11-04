@@ -3,7 +3,7 @@ use ark_ff::{Field, PrimeField};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::sync::Arc;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::{rot_lin_combination, SuitableRing};
 use lattirust_poly::polynomials::ArithErrors;
 use lattirust_ring::Ring;
 
@@ -188,17 +188,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .map(|i| theta_s.iter().map(|row| row[i]).collect::<Vec<NTT>>())
         .collect::<Vec<Vec<NTT>>>();
 
-    let v_0: Vec<NTT> = rho_s
-        .iter()
-        .zip(transposed_theta_s.iter())
-        .map(|(&rho_i, theta_j)| {
-            let mut v_i = Vec::with_capacity(NTT::CoefficientRepresentation::dimension());
-
-            theta_j.iter().for_each(|theta_j_i| {
-                v_i.extend_from_slice(theta.coefficients());
-            });
-        })
-        .collect();
+    let v_0: Vec<NTT> = rot_lin_combination(rho_s, &transposed_theta_s);
 
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()

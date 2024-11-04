@@ -30,6 +30,24 @@ pub fn rot_sum<R: SuitableRing>(
         )
 }
 
+pub fn rot_lin_combination<R: SuitableRing>(rho_s: &[R::CoefficientRepresentation], theta_s: &[Vec<R>]) -> Vec<R> {
+    assert_eq!(rho_s.len(), theta_s.len());
+
+    let mut res = R::flatten_to_coeffs(vec![R::zero(); theta_s[0].len()]);
+
+    for (&rho_i, theta_i) in rho_s.iter().zip(theta_s) {
+        let theta_flat = R::flatten_to_coeffs(theta_i.clone());
+
+        let sum = rot_sum::<R>(rho_i, &theta_flat);
+
+        for (i, x) in sum.iter().enumerate() {
+            res[i] += x;
+        }
+    }
+
+    R::promote_from_coeffs(res).expect("All lengths and capacities should be correct")
+}
+
 #[cfg(test)]
 mod tests {
     use ark_ff::UniformRand;
