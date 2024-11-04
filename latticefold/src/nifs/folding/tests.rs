@@ -1,4 +1,3 @@
-use rand::thread_rng;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
@@ -17,6 +16,7 @@ use crate::{
     transcript::poseidon::PoseidonTranscript,
 };
 use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
+use rand::thread_rng;
 
 // Boilerplate code to generate values needed for testing
 type R = StarkRingNTT;
@@ -51,8 +51,7 @@ fn test_folding() {
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
     let (_, linearization_proof) =
-        LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-            .unwrap();
+        LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs).unwrap();
 
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         &cm_i,
@@ -122,8 +121,7 @@ fn test_failing_folding_prover() {
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
     let (_, linearization_proof) =
-        LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-            .unwrap();
+        LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs).unwrap();
 
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         &cm_i,
@@ -133,15 +131,14 @@ fn test_failing_folding_prover() {
     )
     .unwrap();
 
-    let (_, mut vec_wit, decomposition_proof) =
-        LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
+    let (_, mut vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        &lcccs,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+        &scheme,
+    )
+    .unwrap();
 
     let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
         &lcccs,
@@ -153,12 +150,8 @@ fn test_failing_folding_prover() {
 
     vec_wit[0] = Witness::<R>::from_w_ccs::<PP>(&w_ccs);
 
-    let res = LFFoldingProver::<_, T>::prove::<4, PP>(
-        &vec_lcccs,
-        &vec_wit,
-        &mut prover_transcript,
-        &ccs,
-    );
+    let res =
+        LFFoldingProver::<_, T>::prove::<4, PP>(&vec_lcccs, &vec_wit, &mut prover_transcript, &ccs);
 
     assert!(res.is_err())
 }
@@ -166,13 +159,9 @@ fn test_failing_folding_prover() {
 use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
 use num_bigint::BigUint;
 
+use crate::{arith::r1cs::get_test_dummy_z_split, utils::security_check::check_witness_bound};
 use crate::{
-    arith::r1cs::get_test_dummy_z_split,
-    utils::security_check::check_witness_bound,
-};
-use crate::{
-    arith::tests::get_test_dummy_ccs,
-    utils::security_check::check_ring_modulus_128_bits_security,
+    arith::tests::get_test_dummy_ccs, utils::security_check::check_ring_modulus_128_bits_security,
 };
 
 #[test]
@@ -263,8 +252,7 @@ fn test_dummy_folding() {
         &scheme,
     );
 
-    let decomposition_proof =
-        decomposition_prover.expect("Decomposition proof generation error");
+    let decomposition_proof = decomposition_prover.expect("Decomposition proof generation error");
 
     let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
         &lcccs,
@@ -301,4 +289,4 @@ fn test_dummy_folding() {
     );
 
     folding_verification.expect("Folding Verification error");
-} 
+}

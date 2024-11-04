@@ -17,8 +17,8 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{eq_eval, VPAuxInfo},
 };
-use utils::*;
 pub use structs::*;
+use utils::*;
 
 mod structs;
 #[cfg(test)]
