@@ -17,9 +17,7 @@ macro_rules! generate_decomposition_tests {
             transcript::poseidon::PoseidonTranscript,
         };
         use ark_ff::UniformRand;
-        use lattirust_ring::{
-            balanced_decomposition::recompose, PolyRing,
-        };
+        use lattirust_ring::{balanced_decomposition::recompose, PolyRing};
         use rand::thread_rng;
         use rand::{rngs::ThreadRng, Rng};
 
@@ -141,6 +139,8 @@ mod tests_pow2 {
         cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
     };
 
+    use crate::nifs::decomposition::utils::decompose_big_vec_into_k_vec_and_compose_back;
+
     use super::*;
     const Q: u64 = 17;
     const N: usize = 8;
@@ -152,47 +152,18 @@ mod tests_pow2 {
     #[test]
     fn test_decompose_big_vec_into_k_vec_and_compose_back() {
         // Create a test vector
-        const N: usize = 10;
+        const N: usize = 2;
         let test_vector: Vec<RqNTT> = (0..N).map(|_| RqNTT::rand(&mut thread_rng())).collect();
-        let coeff_repr: Vec<<RqNTT as SuitableRing>::CoefficientRepresentation> =
-            test_vector.iter().map(|&x| x.into()).collect();
-
-        // radix-B
-        let decomposed_in_B: Vec<<RqNTT as SuitableRing>::CoefficientRepresentation> =
-            pad_and_transpose(decompose_balanced_vec(&coeff_repr, PP::B, Some(PP::L)))
-                .into_iter()
-                .flatten()
-                .collect();
-        let decomposed_in_b_small =
-            decompose_balanced_vec(&decomposed_in_B, PP::B_SMALL as u128, Some(PP::K));
-
-        let recomposed_in_l: Vec<Vec<RqNTT>> = decomposed_in_b_small
-            .into_iter()
-            .map(|vec| {
-                vec.chunks(PP::L)
-                    .map(|chunk| {
-                        recompose(
-                            chunk,
-                            <RqNTT as SuitableRing>::CoefficientRepresentation::from(PP::B),
-                        )
-                        .into()
-                    })
-                    .collect()
-            })
-            .collect();
-
-        // Decompose and recompose
-        let recomposed_in_b_small = recompose_from_k_vec_to_big_vec::<RqNTT, PP>(&recomposed_in_l);
+        let decomposed_and_composed_back =
+            decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(&test_vector);
+        let restore_decomposed = recompose_from_k_vec_to_big_vec::<RqNTT, PP>(&decomposed_and_composed_back);
 
         // Check each entry matches
-        for i in 0..decomposed_in_B.len() {
+        for i in 0..test_vector.len() {
             assert_eq!(
-                recomposed_in_b_small[i], 
-                decomposed_in_B[i],
-                "Mismatch at index {}: recomposed={:?}, original={:?}", 
-                i,
-                recomposed_in_b_small[i],
-                decomposed_in_B[i]
+                restore_decomposed[i], test_vector[i].into(),
+                "Mismatch at index {}: decomposed_and_composed_back={}, test_vector={}",
+                i, restore_decomposed[i], test_vector[i]
             );
         }
     }
@@ -238,9 +209,7 @@ mod tests_pow2 {
 mod tests_stark {
 
     use cyclotomic_rings::StarkChallengeSet;
-    use lattirust_ring::{
-        cyclotomic_ring::models::stark_prime::{RqPoly, RqNTT},
-    };
+    use lattirust_ring::cyclotomic_ring::models::stark_prime::{RqNTT, RqPoly};
     use num_bigint::BigUint;
 
     use crate::{
