@@ -17,8 +17,11 @@ macro_rules! generate_decomposition_tests {
             transcript::poseidon::PoseidonTranscript,
         };
         use ark_ff::UniformRand;
-        use lattirust_ring::balanced_decomposition::recompose;
+        use lattirust_ring::{
+            balanced_decomposition::recompose, PolyRing,
+        };
         use rand::thread_rng;
+        use rand::{rngs::ThreadRng, Rng};
 
         type T = PoseidonTranscript<RqNTT, CS>;
 
@@ -29,6 +32,17 @@ macro_rules! generate_decomposition_tests {
             const L: usize = $l;
             const B_SMALL: usize = $b_small;
             const K: usize = $k;
+        }
+
+        fn draw_ring_bellow_bound<const B: u128>(rng: &mut ThreadRng) -> RqNTT {
+            let degree = <RqPoly as PolyRing>::dimension();
+            let mut coeffs = Vec::with_capacity(degree);
+            for _ in 0..degree {
+                let random_coeff = rng.gen_range(0..B);
+                coeffs.push(<RqPoly as PolyRing>::BaseRing::from(random_coeff));
+            }
+            let coeff_repr = RqPoly::from(coeffs);
+            coeff_repr.into()
         }
 
         #[test]
@@ -78,6 +92,41 @@ macro_rules! generate_decomposition_tests {
 
             assert!(res.is_ok());
         }
+
+        #[test]
+        fn test_decompose_B_vec_into_k_vec() {
+            // Create a test vector
+            const N: usize = 32;
+            let mut rng = thread_rng();
+            let test_vector: Vec<RqNTT> = (0..N)
+                .map(|_| draw_ring_bellow_bound::<{ PP::B }>(&mut rng))
+                .collect();
+
+            // Call the function
+            let decomposed = decompose_B_vec_into_k_vec::<RqNTT, PP>(&test_vector);
+
+            // Check that we get K vectors back from the decomposition
+            assert_eq!(
+                decomposed.len(),
+                PP::K,
+                "Decomposition should output K={} vectors",
+                PP::K
+            );
+
+            // Check the length of each inner vector
+            for vec in &decomposed {
+                assert_eq!(vec.len(), N);
+            }
+
+            // Check that the decomposition is correct
+            for i in 0..test_vector.len() {
+                let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
+                assert_eq!(
+                    test_vector[i],
+                    recompose(&decomp_i, RqNTT::from(PP::B_SMALL as u128))
+                );
+            }
+        }
     };
 }
 
@@ -88,52 +137,17 @@ mod tests_pow2 {
         balanced_decomposition::{
             convertible_ring::ConvertibleRing, decompose_balanced, decompose_balanced_vec,
             pad_and_transpose, Decompose,
-        }, cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT, PolyRing
+        },
+        cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
     };
-    // Remove previous imports after macro is implemented
 
     use super::*;
     const Q: u64 = 17;
     const N: usize = 8;
     type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+    type RqPoly = Pow2CyclotomicPolyRing<Q, N>;
     type CS = BinarySmallSet<Q, N>;
     generate_decomposition_tests!(1024, 2, 2, 10);
-
-    // decompose_balance_vec in rust passes, so this should too
-    // double check this test is correct for other rings
-    #[test]
-    fn test_decompose_B_vec_into_k_vec() {
-        // Create a test vector
-        const N: usize = 20;
-        let test_vector: Vec<RqNTT> = (0..N * PP::L)
-            .map(|_| RqNTT::rand(&mut thread_rng()))
-            .collect();
-
-        // Call the function
-        let decomposed = decompose_B_vec_into_k_vec::<RqNTT, PP>(&test_vector);
-
-        // Check that we get K vectors back from the decomposition
-        assert_eq!(
-            decomposed.len(),
-            PP::K,
-            "Decomposition should output K={} vectors",
-            PP::K
-        );
-
-        // Check the length of each inner vector
-        for vec in &decomposed {
-            assert_eq!(vec.len(), N * PP::L);
-        }
-
-        // Check that the decomposition is correct
-        for i in 0..test_vector.len() {
-            let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
-            assert_eq!(
-                test_vector[i],
-                recompose(&decomp_i, RqNTT::from(PP::B_SMALL as u128))
-            );
-        }
-    }
 
     #[test]
     fn test_decompose_big_vec_into_k_vec_and_compose_back() {
@@ -170,8 +184,17 @@ mod tests_pow2 {
         // Decompose and recompose
         let recomposed_in_b_small = recompose_from_k_vec_to_big_vec::<RqNTT, PP>(&recomposed_in_l);
 
-        // Partially working
-        assert_eq!(recomposed_in_b_small[0], decomposed_in_B[0]);
+        // Check each entry matches
+        for i in 0..decomposed_in_B.len() {
+            assert_eq!(
+                recomposed_in_b_small[i], 
+                decomposed_in_B[i],
+                "Mismatch at index {}: recomposed={:?}, original={:?}", 
+                i,
+                recomposed_in_b_small[i],
+                decomposed_in_B[i]
+            );
+        }
     }
     fn recompose_from_k_vec_to_big_vec<NTT: SuitableRing, DP: DecompositionParams>(
         k_vecs: &[Vec<NTT>],
@@ -215,7 +238,9 @@ mod tests_pow2 {
 mod tests_stark {
 
     use cyclotomic_rings::StarkChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
+    use lattirust_ring::{
+        cyclotomic_ring::models::stark_prime::{RqPoly, RqNTT},
+    };
     use num_bigint::BigUint;
 
     use crate::{
@@ -224,40 +249,6 @@ mod tests_stark {
     };
     type CS = StarkChallengeSet;
     generate_decomposition_tests!(1024, 2, 2, 10);
-
-    #[test]
-    fn test_decompose_B_vec_into_k_vec() {
-        // Create a test vector
-        const N: usize = 20;
-        let test_vector: Vec<RqNTT> = (0..N * PP::L)
-            .map(|_| RqNTT::rand(&mut thread_rng()))
-            .collect();
-
-        // Call the function
-        let decomposed = decompose_B_vec_into_k_vec::<RqNTT, PP>(&test_vector);
-
-        // Check that we get K vectors back from the decomposition
-        assert_eq!(
-            decomposed.len(),
-            PP::K,
-            "Decomposition should output K={} vectors",
-            PP::K
-        );
-
-        // Check the length of each inner vector
-        for vec in &decomposed {
-            assert_eq!(vec.len(), N * PP::L);
-        }
-
-        // Check that the decomposition is correct
-        for i in 0..test_vector.len() {
-            let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
-            assert_eq!(
-                test_vector[i],
-                recompose(&decomp_i, RqNTT::from(PP::B_SMALL as u128))
-            );
-        }
-    }
 
     #[test]
     fn test_dummy_decomposition() {
@@ -334,7 +325,7 @@ mod tests_stark {
 mod tests_goldilocks {
 
     use cyclotomic_rings::GoldilocksChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::{RqNTT, RqPoly};
     type CS = GoldilocksChallengeSet;
     generate_decomposition_tests!(1024, 2, 2, 10);
 }
@@ -342,7 +333,7 @@ mod tests_goldilocks {
 #[cfg(test)]
 mod tests_frog {
     use cyclotomic_rings::FrogChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
+    use lattirust_ring::cyclotomic_ring::models::frog_ring::{RqNTT, RqPoly};
     type CS = FrogChallengeSet;
     generate_decomposition_tests!(1024, 2, 2, 10);
 }
@@ -351,7 +342,7 @@ mod tests_frog {
 mod tests_babybear {
 
     use cyclotomic_rings::BabyBearChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
+    use lattirust_ring::cyclotomic_ring::models::babybear::{RqNTT, RqPoly};
     type CS = BabyBearChallengeSet;
 
     generate_decomposition_tests!(1024, 2, 2, 10);
