@@ -226,6 +226,40 @@ mod tests_stark {
     generate_decomposition_tests!(1024, 2, 2, 10);
 
     #[test]
+    fn test_decompose_B_vec_into_k_vec() {
+        // Create a test vector
+        const N: usize = 20;
+        let test_vector: Vec<RqNTT> = (0..N * PP::L)
+            .map(|_| RqNTT::rand(&mut thread_rng()))
+            .collect();
+
+        // Call the function
+        let decomposed = decompose_B_vec_into_k_vec::<RqNTT, PP>(&test_vector);
+
+        // Check that we get K vectors back from the decomposition
+        assert_eq!(
+            decomposed.len(),
+            PP::K,
+            "Decomposition should output K={} vectors",
+            PP::K
+        );
+
+        // Check the length of each inner vector
+        for vec in &decomposed {
+            assert_eq!(vec.len(), N * PP::L);
+        }
+
+        // Check that the decomposition is correct
+        for i in 0..test_vector.len() {
+            let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
+            assert_eq!(
+                test_vector[i],
+                recompose(&decomp_i, RqNTT::from(PP::B_SMALL as u128))
+            );
+        }
+    }
+
+    #[test]
     fn test_dummy_decomposition() {
         type R = RqNTT;
         type CS = StarkChallengeSet;
