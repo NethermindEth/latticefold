@@ -242,7 +242,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     (v_0, cm_0, u_0, x_0)
 }
 
-fn prepare_g1_i_mle_list<NTT: OverField>(
+pub fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_mle: DenseMultilinearExtension<NTT>,
     r_i_eq: Arc<DenseMultilinearExtension<NTT>>,

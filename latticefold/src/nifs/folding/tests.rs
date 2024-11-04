@@ -7,7 +7,10 @@ use crate::{
             DecompositionProver, DecompositionVerifier, LFDecompositionProver,
             LFDecompositionVerifier,
         },
-        folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
+        folding::{
+            prepare_g1_i_mle_list, FoldingProver, FoldingVerifier, LFFoldingProver,
+            LFFoldingVerifier,
+        },
         linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
             LinearizationVerifier,
@@ -15,7 +18,12 @@ use crate::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use ark_ff::UniformRand;
 use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
+use lattirust_poly::{
+    mle::DenseMultilinearExtension,
+    polynomials::{build_eq_x_r, eq_eval, VirtualPolynomial},
+};
 use rand::thread_rng;
 
 // Boilerplate code to generate values needed for testing
@@ -31,6 +39,34 @@ impl DecompositionParams for PP {
     const L: usize = 1;
     const B_SMALL: usize = 2;
     const K: usize = 10;
+}
+#[test]
+fn test_g_1() {
+    let mut rng = thread_rng();
+    let m = 8;
+    let log_m = 3;
+
+    let f_i: Vec<R> = (0..m).map(|_| R::rand(&mut rng)).collect();
+    let r_i: Vec<R> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+
+    let fi_mle = DenseMultilinearExtension::from_evaluations_vec(log_m, f_i.clone());
+    let r_i_eq = build_eq_x_r(&r_i).unwrap();
+    let mle_coeff = R::rand(&mut rng);
+    fn evaluate(x: &[R], f_i: &DenseMultilinearExtension<R>, r_i: &[R], coeff: &R) -> R {
+        eq_eval(r_i, x).unwrap() * f_i.evaluate(x).unwrap() * coeff
+    }
+
+    let mut g = VirtualPolynomial::new(log_m);
+
+    let _ = prepare_g1_i_mle_list(&mut g, fi_mle.clone(), r_i_eq, mle_coeff);
+
+    for _ in 0..20 {
+        let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+        assert_eq!(
+            g.evaluate(&point).unwrap(),
+            evaluate(&point, &fi_mle, &r_i, &mle_coeff)
+        )
+    }
 }
 
 #[test]
