@@ -8,8 +8,8 @@ use crate::{
             LFDecompositionVerifier,
         },
         folding::{
-            prepare_g1_i_mle_list, prepare_g2_i_mle_list, FoldingProver, FoldingVerifier,
-            LFFoldingProver, LFFoldingVerifier,
+            prepare_g1_i_mle_list, prepare_g2_i_mle_list, prepare_g3_i_mle_list, FoldingProver,
+            FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
         },
         linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
@@ -19,6 +19,8 @@ use crate::{
     transcript::poseidon::PoseidonTranscript,
 };
 use ark_ff::{One, UniformRand};
+use ark_std::iter::successors;
+use ark_std::Zero;
 use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
@@ -109,6 +111,45 @@ fn test_g_2() {
     }
 }
 
+#[test]
+fn test_g_3() {
+    let mut rng = thread_rng();
+    let m = 8;
+    let log_m = 3;
+    let t = 3;
+
+    let mz_s: Vec<Vec<R>> = (0..t)
+        .map(|_| (0..m).map(|_| R::rand(&mut rng)).collect())
+        .collect();
+    let r_i: Vec<R> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+
+    let mz_mles: Vec<DenseMultilinearExtension<R>> = mz_s
+        .into_iter()
+        .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
+        .collect();
+    let r_i_eq = build_eq_x_r(&r_i).unwrap();
+    let zeta_i = R::rand(&mut rng);
+    fn evaluate(x: &[R], mz_mles: &[DenseMultilinearExtension<R>], r_i: &[R], zeta_i: &R) -> R {
+        let mut evaluation = R::zero();
+
+        for (zeta, M) in successors(Some(*zeta_i), |y| Some(*zeta_i * *y)).zip(mz_mles.iter()) {
+            evaluation += zeta * M.evaluate(x).unwrap();
+        }
+        evaluation * eq_eval(x, r_i).unwrap()
+    }
+
+    let mut g = VirtualPolynomial::new(log_m);
+
+    let _ = prepare_g3_i_mle_list(&mut g, &mz_mles, zeta_i, r_i_eq);
+
+    for _ in 0..20 {
+        let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+        assert_eq!(
+            g.evaluate(&point).unwrap(),
+            evaluate(&point, &mz_mles, &r_i, &zeta_i)
+        )
+    }
+}
 #[test]
 fn test_folding() {
     const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example

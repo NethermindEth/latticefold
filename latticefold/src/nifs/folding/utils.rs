@@ -274,7 +274,7 @@ pub fn prepare_g2_i_mle_list<NTT: OverField>(
     Ok(())
 }
 
-fn prepare_g3_i_mle_list<NTT: OverField>(
+pub fn prepare_g3_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     zeta_i: NTT,
