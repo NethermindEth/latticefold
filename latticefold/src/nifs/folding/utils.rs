@@ -251,7 +251,7 @@ pub fn prepare_g1_i_mle_list<NTT: OverField>(
     g.add_mle_list(vec![r_i_eq, Arc::from(fi_mle)], alpha_i)
 }
 
-fn prepare_g2_i_mle_list<NTT: OverField>(
+pub fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_mle: DenseMultilinearExtension<NTT>,
     b: usize,

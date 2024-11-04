@@ -8,8 +8,8 @@ use crate::{
             LFDecompositionVerifier,
         },
         folding::{
-            prepare_g1_i_mle_list, FoldingProver, FoldingVerifier, LFFoldingProver,
-            LFFoldingVerifier,
+            prepare_g1_i_mle_list, prepare_g2_i_mle_list, FoldingProver, FoldingVerifier,
+            LFFoldingProver, LFFoldingVerifier,
         },
         linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
@@ -18,7 +18,7 @@ use crate::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use ark_ff::UniformRand;
+use ark_ff::{One, UniformRand};
 use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
@@ -65,6 +65,46 @@ fn test_g_1() {
         assert_eq!(
             g.evaluate(&point).unwrap(),
             evaluate(&point, &fi_mle, &r_i, &mle_coeff)
+        )
+    }
+}
+
+#[test]
+fn test_g_2() {
+    let mut rng = thread_rng();
+    let m = 8;
+    let log_m = 3;
+    let b = 8;
+    let f_i: Vec<R> = (0..m).map(|_| R::rand(&mut rng)).collect();
+    let beta: Vec<R> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+
+    let fi_mle = DenseMultilinearExtension::from_evaluations_vec(log_m, f_i.clone());
+    let beta_eq_x = build_eq_x_r(&beta).unwrap();
+    let mu_i = R::rand(&mut rng);
+
+    fn evaluate(x: &[R], f_i: &DenseMultilinearExtension<R>, b: usize, beta: &[R], mu_i: &R) -> R {
+        let mut evaluation = R::one();
+
+        for i in 1..b {
+            let i_hat = R::from(i as u128);
+
+            evaluation *= f_i.evaluate(x).unwrap() - i_hat;
+            evaluation *= f_i.evaluate(x).unwrap() + i_hat;
+        }
+        evaluation *= f_i.evaluate(x).unwrap();
+        evaluation *= eq_eval(beta, x).unwrap();
+        evaluation * mu_i
+    }
+
+    let mut g = VirtualPolynomial::new(log_m);
+
+    let _ = prepare_g2_i_mle_list(&mut g, fi_mle.clone(), b, mu_i, beta_eq_x);
+
+    for _ in 0..20 {
+        let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+        assert_eq!(
+            g.evaluate(&point).unwrap(),
+            evaluate(&point, &fi_mle, b, &beta, &mu_i)
         )
     }
 }
