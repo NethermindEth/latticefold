@@ -15,16 +15,14 @@ use latticefold::nifs::decomposition::{
 use latticefold::nifs::folding::{
     FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
-use rand::thread_rng;
 use std::fmt::Debug;
 mod utils;
 use ark_std::UniformRand;
 use std::time::Duration;
 
-use crate::utils::get_test_dummy_ccs;
-use latticefold::arith::r1cs::get_test_dummy_z_split;
+use crate::utils::wit_and_ccs_gen;
 use latticefold::{
-    arith::{Arith, Witness, CCCS, CCS},
+    arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::linearization::{
@@ -32,42 +30,6 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-
-fn wit_and_ccs_gen<
-    const X_LEN: usize,
-    const C: usize, // rows
-    const WIT_LEN: usize,
-    const W: usize, // columns
-    P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
->(
-    r1cs_rows: usize,
-) -> (
-    CCCS<C, R>,
-    Witness<R>,
-    CCS<R>,
-    AjtaiCommitmentScheme<C, W, R>,
-) {
-    //TODO: Ensure we draw elements below bound
-    let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows);
-    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-    let mut z = vec![one];
-    z.extend(&x_ccs);
-    z.extend(&w_ccs);
-    match ccs.check_relation(&z) {
-        Ok(_) => println!("R1CS valid!"),
-        Err(e) => println!("R1CS invalid: {:?}", e),
-    }
-
-    let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut thread_rng());
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
-    let cm_i: CCCS<C, R> = CCCS {
-        cm: wit.commit::<C, W, P>(&scheme).unwrap(),
-        x_ccs,
-    };
-
-    (cm_i, wit, ccs, scheme)
-}
 
 fn prover_folding_benchmark<
     const C: usize,
@@ -267,7 +229,8 @@ fn folding_benchmarks<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let r1cs_rows = WIT_LEN + X_LEN + 1; // This makes a square matrix but is too much memory
+    let r1cs_rows = X_LEN + WIT_LEN + 1; // This makes a square matrix but is too much memory;
+
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
     prover_folding_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
@@ -278,6 +241,7 @@ fn folding_benchmarks<
 macro_rules! define_params {
     ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         paste::paste! {
+
             #[derive(Clone)]
             struct [<DecompParamsWithB $b W $w b $b_small K $k>];
 
@@ -375,12 +339,15 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Folding StarkPrime");
         group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316, 8, 2, 30);
-        run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296, 8, 2, 32);
-        run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592, 8, 2, 33);
-        run_single_starkprime_benchmark!(&mut group, 1, 18, 2048, 20833367754, 8, 2, 34);
-        run_single_starkprime_benchmark!(&mut group, 1, 19, 2048, 34359738368, 8, 2, 35);
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K 3052596316
+        #[allow(clippy::identity_op)]
+        {
+            run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316u128, 1, 2, 30);
+            run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296u128, 1, 2, 32);
+            run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592u128, 1, 2, 33);
+            run_single_starkprime_benchmark!(&mut group, 1, 18, 2048, 20833367754u128, 1, 2, 34);
+            run_single_starkprime_benchmark!(&mut group, 1, 19, 2048, 34359738368u128, 1, 2, 35);
+        }
     }
 
     // Frog

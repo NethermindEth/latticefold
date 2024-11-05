@@ -1,12 +1,3 @@
-use ark_ff::{Field, PrimeField};
-use ark_std::{marker::PhantomData, sync::Arc};
-use cyclotomic_rings::SuitableRing;
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
-};
-use lattirust_ring::OverField;
-
 use super::error::LinearizationError;
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
@@ -17,6 +8,14 @@ use crate::{
         sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
     },
 };
+use ark_ff::{Field, PrimeField};
+use ark_std::{marker::PhantomData, sync::Arc};
+use cyclotomic_rings::SuitableRing;
+use lattirust_poly::{
+    mle::DenseMultilinearExtension,
+    polynomials::{build_eq_x_r, eq_eval, VPAuxInfo, VirtualPolynomial},
+};
+use lattirust_ring::OverField;
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
@@ -68,16 +67,15 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
         ));
+
         let beta_s: Vec<NTT> = transcript
             .get_challenges(log_m)
             .into_iter()
             .map(|x| x.into())
             .collect();
         // Step 2: Sum check protocol
-
         // z_ccs vector, i.e. concatenation x || 1 || w.
-        let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
-
+        let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
         // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
         let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
             .M
