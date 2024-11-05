@@ -183,7 +183,12 @@ macro_rules! generate_decomposition_tests {
             // Recompose first with B_SMALL, then with B
             transposed
                 .iter()
-                .map(|vec| recompose(vec, NTT::CoefficientRepresentation::from(DP::B_SMALL as u128)))
+                .map(|vec| {
+                    recompose(
+                        vec,
+                        NTT::CoefficientRepresentation::from(DP::B_SMALL as u128),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .chunks(DP::L)
                 .map(|chunk| recompose(chunk, NTT::CoefficientRepresentation::from(DP::B)))
