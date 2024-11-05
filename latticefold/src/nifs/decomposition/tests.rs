@@ -122,7 +122,7 @@ macro_rules! generate_decomposition_tests {
             }
 
             // Check that the decomposition is correct
-            for i in 0..test_vector.len() {
+            for i in 0..N {
                 let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
                 assert_eq!(
                     test_vector[i],
@@ -145,7 +145,7 @@ macro_rules! generate_decomposition_tests {
                 recompose_from_k_vec_to_big_vec::<RqNTT, PP>(&decomposed_and_composed_back);
 
             // Check each entry matches
-            for i in 0..test_vector.len() {
+            for i in 0..N {
                 assert_eq!(
                     restore_decomposed[i],
                     test_vector[i].into(),
