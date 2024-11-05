@@ -804,7 +804,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov/native-array-for-good-and-flatten#af6a8af46459a921e27aa4d12d612139432a9b68"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#a7ac67a00b3a99d3ffc065bbbe039c717dd70942"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -821,7 +821,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov/native-array-for-good-and-flatten#af6a8af46459a921e27aa4d12d612139432a9b68"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#a7ac67a00b3a99d3ffc065bbbe039c717dd70942"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -836,7 +836,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov/native-array-for-good-and-flatten#af6a8af46459a921e27aa4d12d612139432a9b68"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#a7ac67a00b3a99d3ffc065bbbe039c717dd70942"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
