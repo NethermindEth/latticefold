@@ -1,7 +1,6 @@
 use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
-use lattirust_ring::cyclotomic_ring::Flatten;
 use lattirust_ring::{
     balanced_decomposition::Decompose,
     cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
@@ -27,7 +26,7 @@ pub use stark::*;
 /// The type itself is meant to be the NTT-representation of a ring.
 /// The associated type `CoefficientRepresentation` is the ring in the coefficient basis.
 pub trait SuitableRing:
-    OverField + From<Self::CoefficientRepresentation> + Into<Self::CoefficientRepresentation> + Flatten
+    OverField + From<Self::CoefficientRepresentation> + Into<Self::CoefficientRepresentation>
 where
     <<Self as PolyRing>::BaseRing as Field>::BasePrimeField: Absorb,
 {

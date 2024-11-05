@@ -185,17 +185,14 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<Vec<NTT>> {
-        // TODO: Improve this, too much copying is happening here.
         pad_and_transpose(
             f.iter()
                 .map(|x| {
-                    x.into_coeffs()
-                        .into_iter()
-                        .map(<NTT::BaseRing as Field>::from_base_prime_field)
-                        .collect::<Vec<NTT::BaseRing>>()
-                        .chunks(NTT::dimension())
-                        .map(|chunk| NTT::from(chunk.to_vec()))
-                        .collect()
+                    NTT::promote_from_coeffs(x.coeffs()
+                        .iter()
+                        .map(|&coeff| <NTT::BaseRing as Field>::from_base_prime_field(coeff))
+                        .collect::<Vec<NTT::BaseRing>>())
+                    .expect("The length of the argument is the length of x.coeffs() which is the degree of the ring so we should not end up here.")
                 })
                 .collect(),
         )
