@@ -15,12 +15,11 @@ use crate::{
     decomposition_parameters::DecompositionParams,
     transcript::Transcript,
 };
-use cyclotomic_rings::rot_sum;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VirtualPolynomial},
 };
-use lattirust_ring::{OverField, PolyRing};
+use lattirust_ring::OverField;
 
 pub(super) fn get_alphas_betas_zetas_mus<
     NTT: OverField,
@@ -184,11 +183,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
 ) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
-    let transposed_theta_s = (0..theta_s[0].len())
-        .map(|i| theta_s.iter().map(|row| row[i]).collect::<Vec<NTT>>())
-        .collect::<Vec<Vec<NTT>>>();
-
-    let v_0: Vec<NTT> = rot_lin_combination(rho_s, &transposed_theta_s);
+    let v_0: Vec<NTT> = rot_lin_combination(rho_s, theta_s);
 
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()

@@ -30,7 +30,10 @@ pub fn rot_sum<R: SuitableRing>(
         )
 }
 
-pub fn rot_lin_combination<R: SuitableRing>(rho_s: &[R::CoefficientRepresentation], theta_s: &[Vec<R>]) -> Vec<R> {
+pub fn rot_lin_combination<R: SuitableRing>(
+    rho_s: &[R::CoefficientRepresentation],
+    theta_s: &[Vec<R>],
+) -> Vec<R> {
     assert_eq!(rho_s.len(), theta_s.len());
 
     let mut res = R::flatten_to_coeffs(vec![R::zero(); theta_s[0].len()]);
