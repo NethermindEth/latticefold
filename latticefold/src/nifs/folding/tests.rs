@@ -54,9 +54,6 @@ fn test_g_1() {
     let fi_mle = DenseMultilinearExtension::from_evaluations_vec(log_m, f_i.clone());
     let r_i_eq = build_eq_x_r(&r_i).unwrap();
     let mle_coeff = R::rand(&mut rng);
-    fn evaluate(x: &[R], f_i: &DenseMultilinearExtension<R>, r_i: &[R], coeff: &R) -> R {
-        eq_eval(r_i, x).unwrap() * f_i.evaluate(x).unwrap() * coeff
-    }
 
     let mut g = VirtualPolynomial::new(log_m);
 
@@ -66,11 +63,13 @@ fn test_g_1() {
         let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
         assert_eq!(
             g.evaluate(&point).unwrap(),
-            evaluate(&point, &fi_mle, &r_i, &mle_coeff)
+            evaluate_g_1(&point, &fi_mle, &r_i, &mle_coeff)
         )
     }
 }
-
+fn evaluate_g_1(x: &[R], f_i: &DenseMultilinearExtension<R>, r_i: &[R], coeff: &R) -> R {
+    eq_eval(r_i, x).unwrap() * f_i.evaluate(x).unwrap() * coeff
+}
 #[test]
 fn test_g_2() {
     let mut rng = thread_rng();
@@ -84,20 +83,6 @@ fn test_g_2() {
     let beta_eq_x = build_eq_x_r(&beta).unwrap();
     let mu_i = R::rand(&mut rng);
 
-    fn evaluate(x: &[R], f_i: &DenseMultilinearExtension<R>, b: usize, beta: &[R], mu_i: &R) -> R {
-        let mut evaluation = R::one();
-
-        for i in 1..b {
-            let i_hat = R::from(i as u128);
-
-            evaluation *= f_i.evaluate(x).unwrap() - i_hat;
-            evaluation *= f_i.evaluate(x).unwrap() + i_hat;
-        }
-        evaluation *= f_i.evaluate(x).unwrap();
-        evaluation *= eq_eval(beta, x).unwrap();
-        evaluation * mu_i
-    }
-
     let mut g = VirtualPolynomial::new(log_m);
 
     let _ = prepare_g2_i_mle_list(&mut g, fi_mle.clone(), b, mu_i, beta_eq_x);
@@ -106,11 +91,24 @@ fn test_g_2() {
         let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
         assert_eq!(
             g.evaluate(&point).unwrap(),
-            evaluate(&point, &fi_mle, b, &beta, &mu_i)
+            evaluate_g_2(&point, &fi_mle, b, &beta, &mu_i)
         )
     }
 }
 
+fn evaluate_g_2(x: &[R], f_i: &DenseMultilinearExtension<R>, b: usize, beta: &[R], mu_i: &R) -> R {
+    let mut evaluation = R::one();
+
+    for i in 1..b {
+        let i_hat = R::from(i as u128);
+
+        evaluation *= f_i.evaluate(x).unwrap() - i_hat;
+        evaluation *= f_i.evaluate(x).unwrap() + i_hat;
+    }
+    evaluation *= f_i.evaluate(x).unwrap();
+    evaluation *= eq_eval(beta, x).unwrap();
+    evaluation * mu_i
+}
 #[test]
 fn test_g_3() {
     let mut rng = thread_rng();
@@ -129,14 +127,6 @@ fn test_g_3() {
         .collect();
     let r_i_eq = build_eq_x_r(&r_i).unwrap();
     let zeta_i = R::rand(&mut rng);
-    fn evaluate(x: &[R], mz_mles: &[DenseMultilinearExtension<R>], r_i: &[R], zeta_i: &R) -> R {
-        let mut evaluation = R::zero();
-
-        for (zeta, M) in successors(Some(*zeta_i), |y| Some(*zeta_i * *y)).zip(mz_mles.iter()) {
-            evaluation += zeta * M.evaluate(x).unwrap();
-        }
-        evaluation * eq_eval(x, r_i).unwrap()
-    }
 
     let mut g = VirtualPolynomial::new(log_m);
 
@@ -146,7 +136,103 @@ fn test_g_3() {
         let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
         assert_eq!(
             g.evaluate(&point).unwrap(),
-            evaluate(&point, &mz_mles, &r_i, &zeta_i)
+            evaluate_g_3(&point, &mz_mles, &r_i, &zeta_i)
+        )
+    }
+}
+fn evaluate_g_3(x: &[R], mz_mles: &[DenseMultilinearExtension<R>], r_i: &[R], zeta_i: &R) -> R {
+    let mut evaluation = R::zero();
+
+    for (zeta, M) in successors(Some(*zeta_i), |y| Some(*zeta_i * *y)).zip(mz_mles.iter()) {
+        evaluation += zeta * M.evaluate(x).unwrap();
+    }
+    evaluation * eq_eval(x, r_i).unwrap()
+}
+#[test]
+fn test_sumcheck_polynomial() {
+    let mut rng = thread_rng();
+    let m = 8;
+    let log_m = 3;
+    let t = 3;
+    let alpha_s: Vec<R> = (0..2 * PP::K).map(|_| R::rand(&mut rng)).collect();
+    let mu_s: Vec<R> = (0..2 * PP::K).map(|_| R::rand(&mut rng)).collect();
+    let zeta_s: Vec<R> = (0..2 * PP::K).map(|_| R::rand(&mut rng)).collect();
+    let beta_s: Vec<R> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+    let r_s: Vec<Vec<R>> = (0..2 * PP::K)
+        .map(|_| (0..log_m).map(|_| R::rand(&mut rng)).collect())
+        .collect();
+    let f_hats: Vec<Vec<R>> = (0..2 * PP::K)
+        .map(|_| (0..m).map(|_| R::rand(&mut rng)).collect())
+        .collect();
+    let f_hat_mles: Vec<DenseMultilinearExtension<R>> = f_hats
+        .into_iter()
+        .map(|f_hat| DenseMultilinearExtension::from_evaluations_vec(log_m, f_hat))
+        .collect();
+    let mz_s: Vec<Vec<Vec<R>>> = (0..2 * PP::K)
+        .map(|_| {
+            (0..t)
+                .map(|_| (0..m).map(|_| R::rand(&mut rng)).collect())
+                .collect()
+        })
+        .collect();
+
+    let mz_mles: Vec<Vec<DenseMultilinearExtension<R>>> = mz_s
+        .into_iter()
+        .map(|mz_list| {
+            mz_list
+                .into_iter()
+                .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
+                .collect()
+        })
+        .collect();
+
+    let g = create_sumcheck_polynomial::<R, PP>(
+        log_m,
+        &f_hat_mles,
+        &alpha_s,
+        &mz_mles,
+        &zeta_s,
+        &r_s,
+        &beta_s,
+        &mu_s,
+    )
+    .unwrap();
+
+    fn evaluate_poly(
+        x: &[R],
+        f_hat_mles: &[DenseMultilinearExtension<R>],
+        alpha_s: &[R],
+        Mz_mles: &[Vec<DenseMultilinearExtension<R>>],
+        zeta_s: &[R],
+        r_s: &[Vec<R>],
+        beta_s: &[R],
+        mu_s: &[R],
+    ) -> R {
+        (0..2 * PP::K)
+            .map(|i| {
+                let mut summand = R::zero();
+                summand += evaluate_g_1(x, &f_hat_mles[i], &r_s[i], &alpha_s[i]);
+                summand += evaluate_g_2(x, &f_hat_mles[i], PP::B_SMALL, beta_s, &mu_s[i]);
+                summand += evaluate_g_3(x, &Mz_mles[i], &r_s[i], &zeta_s[i]);
+                summand
+            })
+            .sum()
+    }
+
+    for _ in 0..20 {
+        let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
+        assert_eq!(
+            g.evaluate(&point).unwrap(),
+            evaluate_poly(
+                &point,
+                &f_hat_mles,
+                &alpha_s,
+                &mz_mles,
+                &zeta_s,
+                &r_s,
+                &beta_s,
+                &mu_s
+            )
         )
     }
 }
@@ -280,6 +366,8 @@ use crate::{arith::r1cs::get_test_dummy_z_split, utils::security_check::check_wi
 use crate::{
     arith::tests::get_test_dummy_ccs, utils::security_check::check_ring_modulus_128_bits_security,
 };
+
+use super::create_sumcheck_polynomial;
 
 #[test]
 fn test_dummy_folding() {
