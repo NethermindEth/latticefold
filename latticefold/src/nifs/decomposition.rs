@@ -13,12 +13,11 @@ use crate::{
 };
 use cyclotomic_rings::SuitableRing;
 
-pub mod structs;
+pub use structs::*;
+mod structs;
 #[cfg(test)]
 mod tests;
 mod utils;
-
-pub use self::structs::*;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>

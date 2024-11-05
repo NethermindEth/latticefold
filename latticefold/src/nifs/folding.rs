@@ -308,7 +308,7 @@ mod tests {
         commitment::AjtaiCommitmentScheme,
         decomposition_parameters::DecompositionParams,
         nifs::{
-            decomposition::structs::{
+            decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
                 LFDecompositionVerifier,
             },
@@ -477,7 +477,7 @@ mod tests_stark {
     use crate::{
         arith::r1cs::get_test_dummy_z_split,
         nifs::{
-            decomposition::structs::{
+            decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
                 LFDecompositionVerifier,
             },
