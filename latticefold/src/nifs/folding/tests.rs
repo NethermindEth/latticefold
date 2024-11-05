@@ -197,7 +197,7 @@ fn test_sumcheck_polynomial() {
         &mu_s,
     )
     .unwrap();
-
+    #[allow(clippy::too_many_arguments)]
     fn evaluate_poly(
         x: &[R],
         f_hat_mles: &[DenseMultilinearExtension<R>],
