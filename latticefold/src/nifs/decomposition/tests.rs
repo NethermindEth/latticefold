@@ -18,7 +18,6 @@ macro_rules! generate_decomposition_tests {
             },
             transcript::poseidon::PoseidonTranscript,
         };
-        use ark_ff::UniformRand;
         use cyclotomic_rings::SuitableRing;
         use lattirust_ring::{
             balanced_decomposition::{decompose_balanced_vec, recompose},
