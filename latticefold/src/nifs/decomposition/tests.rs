@@ -6,7 +6,9 @@ macro_rules! generate_decomposition_tests {
             nifs::{
                 decomposition::{
                     structs::{LFDecompositionProver, LFDecompositionVerifier},
-                    utils::decompose_B_vec_into_k_vec,
+                    utils::{
+                        decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back,
+                    },
                     DecompositionParams, DecompositionProver, DecompositionVerifier,
                 },
                 linearization::{
@@ -17,7 +19,11 @@ macro_rules! generate_decomposition_tests {
             transcript::poseidon::PoseidonTranscript,
         };
         use ark_ff::UniformRand;
-        use lattirust_ring::{balanced_decomposition::recompose, PolyRing};
+        use cyclotomic_rings::SuitableRing;
+        use lattirust_ring::{
+            balanced_decomposition::{decompose_balanced_vec, recompose},
+            PolyRing,
+        };
         use rand::thread_rng;
         use rand::{rngs::ThreadRng, Rng};
 
@@ -125,84 +131,80 @@ macro_rules! generate_decomposition_tests {
                 );
             }
         }
+
+        #[test]
+        fn test_decompose_big_vec_into_k_vec_and_compose_back() {
+            // Create a test vector
+            const N: usize = 32;
+            let mut rng = thread_rng();
+            let test_vector: Vec<RqNTT> = (0..N)
+                .map(|_| draw_ring_bellow_bound::<{ PP::B }>(&mut rng))
+                .collect();
+            let decomposed_and_composed_back =
+                decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(&test_vector);
+            let restore_decomposed =
+                recompose_from_k_vec_to_big_vec::<RqNTT, PP>(&decomposed_and_composed_back);
+
+            // Check each entry matches
+            for i in 0..test_vector.len() {
+                assert_eq!(
+                    restore_decomposed[i],
+                    test_vector[i].into(),
+                    "Mismatch at index {}: decomposed_and_composed_back={}, test_vector={}",
+                    i,
+                    restore_decomposed[i],
+                    RqPoly::from(test_vector[i])
+                );
+            }
+        }
+
+        fn recompose_from_k_vec_to_big_vec<NTT: SuitableRing, DP: DecompositionParams>(
+            k_vecs: &[Vec<NTT>],
+        ) -> Vec<NTT::CoefficientRepresentation> {
+            let decomposed_in_b: Vec<Vec<NTT::CoefficientRepresentation>> = k_vecs
+                .iter()
+                .map(|vec| {
+                    vec.iter()
+                        .map(|&x| decompose_balanced_vec(&[x.into()], DP::B, Some(DP::L)))
+                        .flatten()
+                        .flatten()
+                        .collect()
+                })
+                .collect();
+
+            // Transpose the decomposed vectors
+            let mut transposed = vec![vec![]; decomposed_in_b[0].len()];
+            for row in &decomposed_in_b {
+                for (j, &val) in row.iter().enumerate() {
+                    transposed[j].push(val);
+                }
+            }
+
+            // Recompose first with B_SMALL, then with B
+            transposed
+                .iter()
+                .map(|vec| recompose(vec, NTT::CoefficientRepresentation::from(DP::B_SMALL as u128)))
+                .collect::<Vec<_>>()
+                .chunks(DP::L)
+                .map(|chunk| recompose(chunk, NTT::CoefficientRepresentation::from(DP::B)))
+                .collect()
+        }
     };
 }
 
 #[cfg(test)]
 mod tests_pow2 {
-    use cyclotomic_rings::{challenge_set::BinarySmallSet, SuitableRing};
-    use lattirust_ring::{
-        balanced_decomposition::{
-            convertible_ring::ConvertibleRing, decompose_balanced, decompose_balanced_vec,
-            pad_and_transpose, Decompose,
-        },
-        cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
+    use cyclotomic_rings::challenge_set::BinarySmallSet;
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
+        Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
     };
 
-    use crate::nifs::decomposition::utils::decompose_big_vec_into_k_vec_and_compose_back;
-
-    use super::*;
     const Q: u64 = 17;
     const N: usize = 8;
     type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
     type RqPoly = Pow2CyclotomicPolyRing<Q, N>;
     type CS = BinarySmallSet<Q, N>;
     generate_decomposition_tests!(1024, 2, 2, 10);
-
-    #[test]
-    fn test_decompose_big_vec_into_k_vec_and_compose_back() {
-        // Create a test vector
-        const N: usize = 2;
-        let test_vector: Vec<RqNTT> = (0..N).map(|_| RqNTT::rand(&mut thread_rng())).collect();
-        let decomposed_and_composed_back =
-            decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(&test_vector);
-        let restore_decomposed = recompose_from_k_vec_to_big_vec::<RqNTT, PP>(&decomposed_and_composed_back);
-
-        // Check each entry matches
-        for i in 0..test_vector.len() {
-            assert_eq!(
-                restore_decomposed[i], test_vector[i].into(),
-                "Mismatch at index {}: decomposed_and_composed_back={}, test_vector={}",
-                i, restore_decomposed[i], test_vector[i]
-            );
-        }
-    }
-    fn recompose_from_k_vec_to_big_vec<NTT: SuitableRing, DP: DecompositionParams>(
-        k_vecs: &[Vec<NTT>],
-    ) -> Vec<NTT::CoefficientRepresentation> {
-        let decomposed_in_b: Vec<Vec<NTT::CoefficientRepresentation>> = k_vecs
-            .iter()
-            .map(|vec| {
-                let decomposed_vec = vec
-                    .into_iter()
-                    .map(|&x| {
-                        let coeff_repr: NTT::CoefficientRepresentation = x.into();
-                        decompose_balanced_vec(&[coeff_repr], DP::B, Some(DP::L))
-                            .into_iter()
-                            .flatten()
-                            .collect::<Vec<NTT::CoefficientRepresentation>>()[0]
-                            .clone()
-                    })
-                    .collect::<Vec<NTT::CoefficientRepresentation>>();
-                decomposed_vec
-            })
-            .collect();
-
-        let mut decompose_in_l =
-            vec![NTT::CoefficientRepresentation::default(); decomposed_in_b[0].len()];
-        for j in 0..decomposed_in_b[0].len() {
-            let coeffs: Vec<_> = decomposed_in_b
-                .iter()
-                .map(|decomposed_vec| decomposed_vec[j])
-                .collect();
-            decompose_in_l[j] = recompose(
-                &coeffs,
-                NTT::CoefficientRepresentation::from(DP::B_SMALL as u128),
-            );
-        }
-
-        decompose_in_l
-    }
 }
 
 #[cfg(test)]
