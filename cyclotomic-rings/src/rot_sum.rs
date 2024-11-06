@@ -9,25 +9,15 @@ pub fn rot_sum<R: SuitableRing>(
 ) -> Vec<R::BaseRing> {
     assert_eq!(b.len(), R::CoefficientRepresentation::dimension());
 
-    b.iter()
-        .zip(a.into_rot_iter())
-        .map(|(b_i, x_i_a)| {
-            x_i_a
-                .into_coeffs()
-                .into_iter()
-                .map(|x| <R::BaseRing as Field>::from_base_prime_field(x) * b_i)
-                .collect::<Vec<R::BaseRing>>()
-        })
-        .fold(
-            vec![R::BaseRing::zero(); R::CoefficientRepresentation::dimension()],
-            |mut acc, b_i_times_coeff_x_i_a| {
-                acc.iter_mut()
-                    .zip(b_i_times_coeff_x_i_a)
-                    .for_each(|(acc_j, b_i_times_coeff_x_i_a_j)| *acc_j += b_i_times_coeff_x_i_a_j);
+    let mut acc = vec![R::BaseRing::zero(); R::CoefficientRepresentation::dimension()];
 
-                acc
-            },
-        )
+    for (b_i, x_i_a) in b.iter().zip(a.into_rot_iter()) {
+        for (acc_j, x) in acc.iter_mut().zip(x_i_a.into_coeffs()) {
+            *acc_j += <R::BaseRing as Field>::from_base_prime_field(x) * b_i;
+        }
+    }
+
+    acc
 }
 
 #[cfg(test)]
