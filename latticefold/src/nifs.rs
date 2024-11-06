@@ -73,15 +73,23 @@ impl<
             ccs,
             &mut latticefold_state,
         )?;
-        let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
-        let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
+        let (decomposed_wit_l, decomposition_proof_l) =
+            LFDecompositionProver::<_, T>::prove::<W, C, P>(
+                acc,
+                w_acc,
+                transcript,
+                ccs,
+                scheme,
+                &mut latticefold_state,
+            )?;
+        let (decomposed_wit_r, decomposition_proof_r) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(
                 &latticefold_state.lcccs,
                 w_i,
                 transcript,
                 ccs,
                 scheme,
+                &mut latticefold_state,
             )?;
 
         let (lcccs, wit_s) = {

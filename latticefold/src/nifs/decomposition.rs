@@ -15,6 +15,8 @@ use lattirust_ring::{
     OverField, Ring,
 };
 
+use super::structs::LatticefoldState;
+
 #[derive(Clone)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
     pub u_s: Vec<Vec<NTT>>,
@@ -29,14 +31,8 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
-    ) -> Result<
-        (
-            Vec<LCCCS<C, NTT>>,
-            Vec<Witness<NTT>>,
-            DecompositionProof<C, NTT>,
-        ),
-        DecompositionError,
-    >;
+        state: &mut LatticefoldState<C, NTT>,
+    ) -> Result<DecompositionProof<C, NTT>, DecompositionError>;
 }
 
 pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
@@ -67,14 +63,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
-    ) -> Result<
-        (
-            Vec<LCCCS<C, NTT>>,
-            Vec<Witness<NTT>>,
-            DecompositionProof<C, NTT>,
-        ),
-        DecompositionError,
-    > {
+        state: &mut LatticefoldState<C, NTT>,
+    ) -> Result<DecompositionProof<C, NTT>, DecompositionError> {
         let wit_s: Vec<Witness<NTT>> = {
             let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f);
             f_s.into_iter().map(|f| Witness::from_f::<P>(f)).collect()
@@ -123,8 +113,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             u_s.push(u_s_for_i);
         }
 
-        let mut lcccs_s = Vec::with_capacity(P::K);
-
         for (((x, y), u), v) in x_s.iter().zip(&y_s).zip(&u_s).zip(&v_s) {
             transcript.absorb_slice(x);
             transcript.absorb_slice(y.as_ref());
@@ -135,7 +123,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 .last()
                 .cloned()
                 .ok_or(DecompositionError::IncorrectLength)?;
-            lcccs_s.push(LCCCS {
+            state.decomposed_lcccs_s.push(LCCCS {
                 r: cm_i.r.clone(),
                 v: *v,
                 cm: y.clone(),
@@ -146,8 +134,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         }
 
         let proof = DecompositionProof { u_s, v_s, x_s, y_s };
-
-        Ok((lcccs_s, wit_s, proof))
+        state.wit_s.extend(wit_s);
+        Ok(proof)
     }
 }
 
@@ -364,10 +352,9 @@ mod tests {
             x_ccs,
         };
 
+        let mut latticefold_state = LatticefoldState::<4, NTT>::default();
         let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
-
-        let mut latticefold_state = LatticefoldState::<4, NTT>::default();
 
         let linearization_proof = LFLinearizationProver::<_, T>::prove(
             &cm_i,
@@ -386,12 +373,13 @@ mod tests {
         )
         .unwrap();
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
+        let decomposition_proof = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
             &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,
             &scheme,
+            &mut latticefold_state,
         )
         .unwrap();
 
@@ -444,12 +432,13 @@ mod tests {
         let (_, _, w_ccs) = get_test_z_split::<NTT>(100);
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
-        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
+        let decomposition_proof = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
             &lcccs,
             &fake_witness,
             &mut prover_transcript,
             &ccs,
             &scheme,
+            &mut latticefold_state,
         )
         .unwrap();
 
@@ -572,9 +561,9 @@ mod tests_stark {
             &mut prover_transcript,
             &ccs,
             &scheme,
+            &mut latticefold_state,
         )
-        .expect("Decomposition proof generation error")
-        .2;
+        .expect("Decomposition proof generation error");
 
         LFDecompositionVerifier::<_, T>::verify::<C, PP>(
             &lcccs,

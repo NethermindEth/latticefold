@@ -374,12 +374,13 @@ mod tests {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let decomposition_proof = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
             &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,
             &scheme,
+            &mut latticefold_state,
         )
         .unwrap();
 
@@ -452,15 +453,15 @@ mod tests {
         )
         .unwrap();
 
-        let (_, mut vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
-                &lcccs,
-                &wit,
-                &mut prover_transcript,
-                &ccs,
-                &scheme,
-            )
-            .unwrap();
+        let decomposition_proof = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+            &mut latticefold_state,
+        )
+        .unwrap();
 
         let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
             &lcccs,
@@ -608,6 +609,7 @@ mod tests_stark {
             &mut prover_transcript,
             &ccs,
             &scheme,
+            &mut latticefold_state,
         );
 
         let decomposition_proof =
@@ -615,7 +617,7 @@ mod tests_stark {
 
         let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
             &lcccs,
-            &decomposition_proof.2,
+            &decomposition_proof.1,
             &mut verifier_transcript,
             &ccs,
         );

@@ -1,4 +1,4 @@
-use crate::arith::LCCCS;
+use crate::arith::{Witness, LCCCS};
 use crate::commitment::Commitment;
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
@@ -9,6 +9,7 @@ pub struct LatticefoldState<const C: usize, R: OverField> {
     pub mz_mles: Vec<DenseMultilinearExtension<R>>,
     pub lcccs: LCCCS<C, R>,
     pub decomposed_lcccs_s: Vec<LCCCS<C, R>>,
+    pub wit_s: Vec<Witness<R>>,
 }
 
 impl<const C: usize, R: OverField + Default> Default for LatticefoldState<C, R> {
@@ -26,6 +27,7 @@ impl<const C: usize, R: OverField + Default> Default for LatticefoldState<C, R> 
                 h: R::default(),
             },
             decomposed_lcccs_s: Vec::new(),
+            wit_s: Vec::new(),
         }
     }
 }
