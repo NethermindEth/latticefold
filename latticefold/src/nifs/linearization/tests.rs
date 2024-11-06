@@ -209,19 +209,18 @@ mod tests_stark {
         )
         .expect("Failed to parse stark_modulus");
 
-        if check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            PP::B,
-            PP::L,
-            witness_within_bound,
-        ) {
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            println!("Bound condition not satisfied for 128 bits security");
-        }
+        debug_assert!(
+            check_ring_modulus_128_bits_security(
+                &stark_modulus,
+                C,
+                16,
+                W,
+                PP::B,
+                PP::L,
+                witness_within_bound,
+            ),
+            "Bound condition not satisfied for 128 bits security"
+        );
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
