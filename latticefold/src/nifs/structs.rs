@@ -6,7 +6,6 @@ use num_traits::Zero;
 
 pub struct LatticefoldState<const C: usize, R: OverField> {
     pub powers_of_b: Vec<R>,
-    pub r_0: Vec<R>,
     pub mz_mles: Vec<DenseMultilinearExtension<R>>,
     pub lcccs: LCCCS<C, R>,
     pub decomposed_lcccs_s: Vec<LCCCS<C, R>>,
@@ -16,7 +15,7 @@ impl<const C: usize, R: OverField + Default> Default for LatticefoldState<C, R> 
     fn default() -> Self {
         LatticefoldState {
             powers_of_b: Vec::new(),
-            r_0: Vec::new(),
+
             mz_mles: Vec::new(),
             lcccs: LCCCS {
                 r: vec![],

@@ -67,7 +67,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
 
         // Extract the evaluation point
-        latticefold_state.r_0 = prover_state
+        let r_0 = prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
@@ -75,9 +75,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // Step 3: Compute v, u_vector
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
-            .evaluate(&latticefold_state.r_0)
+            .evaluate(&r_0)
             .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
-        let u = compute_u(&latticefold_state.mz_mles, &latticefold_state.r_0)?;
+        let u = compute_u(&latticefold_state.mz_mles, &r_0)?;
 
         // Absorbing the prover's messages to the verifier.
         transcript.absorb(&v);
@@ -90,7 +90,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             u: u.clone(),
         };
         latticefold_state.lcccs = LCCCS {
-            r: latticefold_state.r_0.clone(),
+            r: r_0,
             v,
             cm: cm_i.cm.clone(),
             u,
