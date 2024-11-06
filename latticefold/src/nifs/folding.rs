@@ -303,6 +303,7 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<N
 mod tests {
     use rand::thread_rng;
 
+    use crate::nifs::structs::LatticefoldState;
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
@@ -354,9 +355,16 @@ mod tests {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
+        let mut latticefold_state = LatticefoldState::<4, R>::default();
+
+        let linearization_proof = LFLinearizationProver::<_, T>::prove(
+            &cm_i,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &mut latticefold_state,
+        )
+        .unwrap();
 
         let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
@@ -425,9 +433,16 @@ mod tests {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
+        let mut latticefold_state = LatticefoldState::<4, R>::default();
+
+        let linearization_proof = LFLinearizationProver::<_, T>::prove(
+            &cm_i,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &mut latticefold_state,
+        )
+        .unwrap();
 
         let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
@@ -474,6 +489,7 @@ mod tests_stark {
     use num_bigint::BigUint;
     use rand::thread_rng;
 
+    use crate::nifs::structs::LatticefoldState;
     use crate::{
         arith::r1cs::get_test_dummy_z_split,
         nifs::{
@@ -564,16 +580,21 @@ mod tests_stark {
 
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let linearization_proof =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
+        let mut latticefold_state = LatticefoldState::<C, R>::default();
+
+        let linearization_proof = LFLinearizationProver::<_, T>::prove(
+            &cm_i,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &mut latticefold_state,
+        );
 
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
         let linearization_verification = LFLinearizationVerifier::<_, T>::verify(
             &cm_i,
-            &linearization_proof
-                .expect("Linearization proof generation error")
-                .1,
+            &linearization_proof.expect("Linearization proof generation error"),
             &mut verifier_transcript,
             &ccs,
         )

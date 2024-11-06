@@ -26,6 +26,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use latticefold::nifs::structs::LatticefoldState;
 
 fn wit_and_ccs_gen<
     const X_LEN: usize,
@@ -83,11 +84,13 @@ fn prover_folding_benchmark<
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
     println!("prove linearization");
-    let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+    let mut latticefold_state = LatticefoldState::<C, R>::default();
+    let linearization_proof = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
         &mut prover_transcript,
         ccs,
+        &mut latticefold_state
     )
     .unwrap();
 
@@ -178,11 +181,13 @@ fn verifier_folding_benchmark<
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
     println!("prove linearization");
-    let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+    let mut latticefold_state = LatticefoldState::<C, R>::default();
+    let linearization_proof = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
         &mut prover_transcript,
         ccs,
+        &mut latticefold_state
     )
     .unwrap();
 

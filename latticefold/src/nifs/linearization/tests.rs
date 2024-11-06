@@ -20,7 +20,7 @@ macro_rules! generate_tests {
         };
         use $crate::{
             nifs::linearization::utils::prepare_lin_sumcheck_polynomial,
-            utils::mle::dense_vec_to_dense_mle,
+            nifs::structs::LatticefoldState, utils::mle::dense_vec_to_dense_mle,
         };
 
         #[test]
@@ -129,13 +129,21 @@ macro_rules! generate_tests {
             };
             let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-            let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+            let mut latticefold_State = LatticefoldState::<4, R>::default();
+
+            let res = LFLinearizationProver::<_, T>::prove(
+                &cm_i,
+                &wit,
+                &mut transcript,
+                &ccs,
+                &mut latticefold_State,
+            );
 
             let mut transcript = PoseidonTranscript::<R, CS>::default();
 
             let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
                 &cm_i,
-                &res.unwrap().1,
+                &res.unwrap(),
                 &mut transcript,
                 &ccs,
             );
@@ -230,13 +238,21 @@ mod tests_stark {
 
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let res = LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs);
+        let mut latticefold_state = LatticefoldState::<C, R>::default();
+
+        let res = LFLinearizationProver::<_, T>::prove(
+            &cm_i,
+            &wit,
+            &mut transcript,
+            &ccs,
+            &mut latticefold_state,
+        );
 
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
         let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
-            &res.expect("Linearization proof generation error").1,
+            &res.expect("Linearization proof generation error"),
             &mut transcript,
             &ccs,
         );

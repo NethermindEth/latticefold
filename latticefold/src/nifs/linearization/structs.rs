@@ -7,8 +7,8 @@ use crate::{
     utils::sumcheck,
 };
 
-use lattirust_ring::OverField;
 use crate::nifs::structs::LatticefoldState;
+use lattirust_ring::OverField;
 
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {
@@ -25,8 +25,8 @@ pub trait LinearizationProver<NTT: OverField, T: Transcript<NTT>> {
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-        state: &mut LatticefoldState<C, NTT>
-    ) -> Result<(LinearizationProof<NTT>), LinearizationError<NTT>>;
+        state: &mut LatticefoldState<C, NTT>,
+    ) -> Result<LinearizationProof<NTT>, LinearizationError<NTT>>;
 }
 
 pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {

@@ -1,10 +1,7 @@
 use ark_ff::{Field, PrimeField};
 
 use cyclotomic_rings::SuitableRing;
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{eq_eval, VPAuxInfo},
-};
+use lattirust_poly::polynomials::{eq_eval, VPAuxInfo};
 
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
@@ -18,8 +15,8 @@ use crate::{
     },
 };
 
-pub use structs::*;
 use crate::nifs::structs::LatticefoldState;
+pub use structs::*;
 
 mod structs;
 mod tests;
@@ -33,8 +30,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-        latticefold_state: &mut LatticefoldState<C, NTT>
-    ) -> Result<(LinearizationProof<NTT>), LinearizationError<NTT>> {
+        latticefold_state: &mut LatticefoldState<C, NTT>,
+    ) -> Result<LinearizationProof<NTT>, LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
@@ -58,7 +55,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .collect::<Result<_, LinearizationError<_>>>()?;
 
         // The sumcheck polynomial
-        let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+        let g = prepare_lin_sumcheck_polynomial(
+            log_m,
+            &ccs.c,
+            &latticefold_state.mz_mles,
+            &ccs.S,
+            &beta_s,
+        )?;
 
         // Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
@@ -87,7 +90,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             u: u.clone(),
         };
         latticefold_state.lcccs = LCCCS {
-            r,
+            r: latticefold_state.r_0.clone(),
             v,
             cm: cm_i.cm.clone(),
             u,

@@ -3,6 +3,7 @@ use ark_std::marker::PhantomData;
 use cyclotomic_rings::SuitableRing;
 use lattirust_ring::OverField;
 
+use crate::nifs::structs::LatticefoldState;
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -19,6 +20,7 @@ use linearization::{
     LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
     LinearizationVerifier,
 };
+
 pub mod decomposition;
 pub mod error;
 pub mod folding;
@@ -63,13 +65,19 @@ impl<
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
-        let (linearized_cm_i, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
+        let mut latticefold_state = LatticefoldState::<C, NTT>::default();
+        let linearization_proof = LFLinearizationProver::<_, T>::prove(
+            cm_i,
+            w_i,
+            transcript,
+            ccs,
+            &mut latticefold_state,
+        )?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(
-                &linearized_cm_i,
+                &latticefold_state.lcccs,
                 w_i,
                 transcript,
                 ccs,
