@@ -804,7 +804,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov/flatten-coefficient-form#ccbfa4622e9112dc9f409b4cd27b957d86eb9824"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#91927611aae8ade0682d9ff25df4484b4d2b1152"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -821,7 +821,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov/flatten-coefficient-form#ccbfa4622e9112dc9f409b4cd27b957d86eb9824"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#91927611aae8ade0682d9ff25df4484b4d2b1152"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -836,7 +836,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov/flatten-coefficient-form#ccbfa4622e9112dc9f409b4cd27b957d86eb9824"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#91927611aae8ade0682d9ff25df4484b4d2b1152"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
