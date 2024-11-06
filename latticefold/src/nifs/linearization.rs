@@ -19,6 +19,8 @@ use crate::{
 };
 
 pub use structs::*;
+use crate::nifs::structs::LatticefoldState;
+
 mod structs;
 mod tests;
 mod utils;
@@ -31,7 +33,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
+        latticefold_state: &mut LatticefoldState<C, NTT>
+    ) -> Result<(LinearizationProof<NTT>), LinearizationError<NTT>> {
         let log_m = ccs.s;
         // Step 1: Generate the beta challenges.
         transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
@@ -42,13 +45,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .into_iter()
             .map(|x| x.into())
             .collect();
-        // Step 2: Sum check protocol
 
+        // Step 2: Sum check protocol
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
 
         // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
-        let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
+        latticefold_state.mz_mles = ccs
             .M
             .iter()
             .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, &z_ccs)?)))
@@ -61,17 +64,17 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
 
         // Extract the evaluation point
-        let r = prover_state
+        latticefold_state.r_0 = prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
-        // Step 3: Compute v, u_vector
 
+        // Step 3: Compute v, u_vector
         let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
-            .evaluate(&r)
+            .evaluate(&latticefold_state.r_0)
             .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
-        let u = compute_u(&Mz_mles, &r)?;
+        let u = compute_u(&latticefold_state.mz_mles, &latticefold_state.r_0)?;
 
         // Absorbing the prover's messages to the verifier.
         transcript.absorb(&v);
@@ -83,7 +86,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             v,
             u: u.clone(),
         };
-        let lcccs = LCCCS {
+        latticefold_state.lcccs = LCCCS {
             r,
             v,
             cm: cm_i.cm.clone(),
@@ -91,7 +94,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         };
-        Ok((lcccs, linearization_proof))
+
+        Ok(linearization_proof)
     }
 }
 

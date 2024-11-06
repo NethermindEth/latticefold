@@ -8,6 +8,8 @@ use crate::{
 };
 
 use lattirust_ring::OverField;
+use crate::nifs::structs::LatticefoldState;
+
 #[derive(Clone)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
@@ -23,7 +25,8 @@ pub trait LinearizationProver<NTT: OverField, T: Transcript<NTT>> {
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
+        state: &mut LatticefoldState<C, NTT>
+    ) -> Result<(LinearizationProof<NTT>), LinearizationError<NTT>>;
 }
 
 pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
