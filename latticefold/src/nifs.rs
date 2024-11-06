@@ -23,6 +23,7 @@ pub mod decomposition;
 pub mod error;
 pub mod folding;
 pub mod linearization;
+pub mod structs;
 
 /// `C` is the length of Ajtai commitment vectors.
 /// `NTT` is a cyclotomic ring in the NTT form.
