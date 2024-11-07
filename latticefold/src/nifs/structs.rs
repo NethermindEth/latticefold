@@ -21,12 +21,12 @@ pub struct LatticefoldState<const C: usize, R: OverField> {
 impl<const C: usize, R: OverField + Default> Default for LatticefoldState<C, R> {
     fn default() -> Self {
         LatticefoldState {
-            powers_of_b: Vec::new(),
+            powers_of_b: vec![],
 
             mz_mles: Vec::new(),
             lcccs: LCCCS {
                 r: vec![],
-                v: R::default(),
+                v: vec![],
                 cm: Commitment::zero(),
                 u: vec![],
                 x_w: vec![],

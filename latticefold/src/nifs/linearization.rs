@@ -67,30 +67,29 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
 
         // Extract the evaluation point
-        let r_0 = prover_state
+        let r = prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
 
         // Step 3: Compute v, u_vector
-        let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
-            .evaluate(&r_0)
-            .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
-        let u = compute_u(&latticefold_state.mz_mles, &r_0)?;
+        let v: Vec<NTT> = wit.f_hat.iter().map(|f_hat_row| dense_vec_to_dense_mle(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
+
+        let u = compute_u(&latticefold_state.mz_mles, &r)?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb(&v);
+        transcript.absorb_slice(&v);
         transcript.absorb_slice(&u);
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
             linearization_sumcheck: sum_check_proof,
-            v,
+            v: v.clone(),
             u: u.clone(),
         };
         latticefold_state.lcccs = LCCCS {
-            r: r_0,
+            r,
             v,
             cm: cm_i.cm.clone(),
             u,
@@ -135,7 +134,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         )?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb(&proof.v);
+        transcript.absorb_slice(&proof.v);
         transcript.absorb_slice(&proof.u);
 
         // The final evaluation claim from the sumcheck.
@@ -166,7 +165,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
 
         Ok(LCCCS::<C, NTT> {
             r: point_r,
-            v: proof.v,
+            v: proof.v.clone(),
             cm: cm_i.cm.clone(),
             u: proof.u.clone(),
             x_w: cm_i.x_ccs.clone(),
