@@ -11,14 +11,12 @@ use crate::{
     transcript::TranscriptWithSmallChallenges,
 };
 use decomposition::{
-    DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-    LFDecompositionVerifier,
+    DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
 };
 use error::LatticefoldError;
 use folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier};
 use linearization::{
-    LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
-    LinearizationVerifier,
+    LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
 };
 
 pub mod decomposition;
@@ -26,7 +24,6 @@ pub mod error;
 pub mod folding;
 pub mod linearization;
 pub mod structs;
-
 
 /// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
