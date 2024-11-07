@@ -12,3 +12,6 @@ lattirust-linear-algebra = { git = "ssh://git@github.com/NethermindEth/lattirust
 lattirust-poly = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "main", default-features = false }
 lattirust-ring = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "main", default-features = false }
 thiserror = { version = "1.0.63", default-features = false }
+
+[workspace.metadata.docs.rs]
+rustdoc-args = [ "--html-in-header", "docs-header.html" ]
