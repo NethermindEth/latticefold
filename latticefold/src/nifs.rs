@@ -39,7 +39,6 @@ impl<
     > NIFSProver<C, W, NTT, P, T>
 {
     pub fn prove(
-        acc: &LCCCS<C, NTT>,
         w_acc: &Witness<NTT>,
         cm_i: &CCCS<C, NTT>,
         w_i: &Witness<NTT>,
@@ -56,7 +55,6 @@ impl<
             &mut latticefold_state,
         )?;
         let decomposition_proof_l = LFDecompositionProver::<_, T>::prove::<W, C, P>(
-            acc,
             w_acc,
             transcript,
             ccs,
@@ -64,9 +62,8 @@ impl<
             &mut latticefold_state,
         )?;
         // Work around for the mutable and inmmutable borrow at the same time, needs a better solution
-        let lcccs_for_decomposition = latticefold_state.lcccs.clone();
         let decomposition_proof_r = LFDecompositionProver::<_, T>::prove::<W, C, P>(
-            &lcccs_for_decomposition,
+            //&latticefold_state.lcccs,
             w_i,
             transcript,
             ccs,

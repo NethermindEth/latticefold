@@ -43,7 +43,6 @@ fn wit_and_ccs_gen<
     CCS<R>,
     AjtaiCommitmentScheme<C, W, R>,
 ) {
-    //TODO: Ensure we draw elements below bound
     let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows);
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
     let mut z = vec![one];
@@ -104,35 +103,24 @@ fn prover_folding_benchmark<
     .unwrap();
 
     println!("prove decomposition");
-    let (_, wit_vec, decomposition_proof) =
+    let decomposition_proof =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
-            &lcccs,
             wit,
             &mut prover_transcript,
             ccs,
             scheme,
+            &mut latticefold_state,
         )
         .unwrap();
 
     println!("verify decomposition");
-    let lcccs_vec = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
+    let _ = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
         &lcccs,
         &decomposition_proof,
         &mut verifier_transcript,
         ccs,
     )
     .unwrap();
-    let (lcccs, wit_s) = {
-        let mut lcccs = lcccs_vec.clone();
-        let mut lcccs_r = lcccs_vec;
-        lcccs.append(&mut lcccs_r);
-
-        let mut wit_s = wit_vec.clone();
-        let mut wit_s_r = wit_vec;
-        wit_s.append(&mut wit_s_r);
-
-        (lcccs, wit_s)
-    };
 
     c.bench_with_input(
         BenchmarkId::new(
@@ -147,14 +135,13 @@ fn prover_folding_benchmark<
                 P::K
             ),
         ),
-        &(lcccs, wit_s, ccs),
-        |b, (lcccs_vec, wit_vec, ccs)| {
+        &(ccs),
+        |b, ccs| {
             b.iter(|| {
                 let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
-                    lcccs_vec,
-                    wit_vec,
                     &mut prover_transcript,
                     ccs,
+                    &latticefold_state,
                 )
                 .unwrap();
             })
@@ -201,13 +188,13 @@ fn verifier_folding_benchmark<
     .unwrap();
 
     println!("prove decomposition");
-    let (_, wit_vec, decomposition_proof) =
+    let decomposition_proof =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
-            &lcccs,
             wit,
             &mut prover_transcript,
             ccs,
             scheme,
+            &mut latticefold_state,
         )
         .unwrap();
 
@@ -221,10 +208,9 @@ fn verifier_folding_benchmark<
     .unwrap();
     println!("prove folding");
     let (_, _, folding_proof) = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
-        &lcccs_vec,
-        &wit_vec,
         &mut prover_transcript,
         ccs,
+        &latticefold_state,
     )
     .unwrap();
     c.bench_with_input(

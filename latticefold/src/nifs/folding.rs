@@ -385,7 +385,6 @@ mod tests {
         .unwrap();
 
         let decomposition_proof = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
-            &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,
@@ -468,7 +467,6 @@ mod tests {
         .unwrap();
 
         let decomposition_proof = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
-            &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,
@@ -619,7 +617,6 @@ mod tests_stark {
         let lcccs = linearization_verification;
 
         let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
-            &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,

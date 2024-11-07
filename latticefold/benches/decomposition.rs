@@ -95,7 +95,7 @@ fn prover_decomposition_benchmark<
     .unwrap();
 
     println!("verify linearization");
-    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+    let _ = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
         &mut verifier_transcript,
@@ -116,14 +116,16 @@ fn prover_decomposition_benchmark<
                 P::K
             ),
         ),
-        &(lcccs, wit, ccs),
-        |b, (lcccs, wit, ccs)| {
+        &(wit, ccs),
+        |b, (wit, ccs)| {
             b.iter(|| {
-                let (_, _, _) = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<
-                    W,
-                    C,
-                    P,
-                >(lcccs, wit, &mut prover_transcript, ccs, scheme)
+                let _ = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
+                    wit,
+                    &mut prover_transcript,
+                    ccs,
+                    scheme,
+                    &mut latticefold_state,
+                )
                 .unwrap();
             })
         },
@@ -169,13 +171,13 @@ fn verifier_decomposition_benchmark<
     .unwrap();
 
     println!("prove decomposition");
-    let (_, _, decomposition_proof) =
+    let decomposition_proof =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
-            &lcccs,
             wit,
             &mut prover_transcript,
             ccs,
             scheme,
+            &mut latticefold_state,
         )
         .unwrap();
 

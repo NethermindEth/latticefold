@@ -26,7 +26,6 @@ pub struct DecompositionProof<const C: usize, NTT: Ring> {
 }
 pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
     fn prove<const W: usize, const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
@@ -58,7 +57,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {
     fn prove<const W: usize, const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
@@ -70,8 +68,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             f_s.into_iter().map(|f| Witness::from_f::<P>(f)).collect()
         };
 
-        let mut cm_i_x_w = cm_i.x_w.clone();
-        cm_i_x_w.push(cm_i.h);
+        let mut cm_i_x_w = state.lcccs.x_w.clone();
+        cm_i_x_w.push(state.lcccs.h);
         let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(&cm_i_x_w);
 
         let y_s: Vec<Commitment<C, NTT>> = wit_s
@@ -83,7 +81,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             .iter()
             .map(|wit| {
                 dense_vec_to_dense_mle(ccs.s, &wit.f_hat)
-                    .evaluate(&cm_i.r)
+                    .evaluate(&state.lcccs.r)
                     .ok_or(DecompositionError::WitnessMleEvalFail)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -105,7 +103,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             for M in &ccs.M {
                 u_s_for_i.push(
                     dense_vec_to_dense_mle(ccs.s, &mat_vec_mul(M, &z)?)
-                        .evaluate(&cm_i.r)
+                        .evaluate(&state.lcccs.r)
                         .ok_or(DecompositionError::WitnessMleEvalFail)?,
                 );
             }
@@ -124,7 +122,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 .cloned()
                 .ok_or(DecompositionError::IncorrectLength)?;
             state.decomposed_lcccs_s.push(LCCCS {
-                r: cm_i.r.clone(),
+                r: state.lcccs.r.clone(),
                 v: *v,
                 cm: y.clone(),
                 u: u.clone(),
@@ -374,7 +372,6 @@ mod tests {
         .unwrap();
 
         let decomposition_proof = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
-            &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,
@@ -433,7 +430,6 @@ mod tests {
         let fake_witness = Witness::<NTT>::from_w_ccs::<PP>(&w_ccs);
 
         let decomposition_proof = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
-            &lcccs,
             &fake_witness,
             &mut prover_transcript,
             &ccs,
@@ -556,7 +552,6 @@ mod tests_stark {
         .expect("Linearization Verification error");
 
         let decomposition_proof = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
-            &lcccs,
             &wit,
             &mut prover_transcript,
             &ccs,
