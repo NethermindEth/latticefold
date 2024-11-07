@@ -17,6 +17,7 @@ mod utils;
 use ark_std::UniformRand;
 use utils::get_test_dummy_ccs;
 
+use latticefold::nifs::structs::LatticefoldState;
 use latticefold::{
     arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -26,7 +27,6 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use latticefold::nifs::structs::LatticefoldState;
 
 fn wit_and_ccs_gen<
     const X_LEN: usize,
@@ -90,7 +90,7 @@ fn prover_folding_benchmark<
         wit,
         &mut prover_transcript,
         ccs,
-        &mut latticefold_state
+        &mut latticefold_state,
     )
     .unwrap();
 
@@ -187,7 +187,7 @@ fn verifier_folding_benchmark<
         wit,
         &mut prover_transcript,
         ccs,
-        &mut latticefold_state
+        &mut latticefold_state,
     )
     .unwrap();
 

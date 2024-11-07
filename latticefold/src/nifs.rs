@@ -93,7 +93,7 @@ impl<
         )?;
 
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs)?;
+            LFFoldingProver::<_, T>::prove::<C, P>(transcript, ccs, &latticefold_state)?;
 
         Ok((
             folded_lcccs,

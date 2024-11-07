@@ -9,6 +9,7 @@ use std::{fmt::Debug, time::Duration};
 mod utils;
 use ark_std::UniformRand;
 use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
+use latticefold::nifs::structs::LatticefoldState;
 use latticefold::{
     arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -25,7 +26,6 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use latticefold::nifs::structs::LatticefoldState;
 use utils::get_test_dummy_ccs;
 
 fn wit_and_ccs_gen<
@@ -90,7 +90,7 @@ fn prover_decomposition_benchmark<
         wit,
         &mut prover_transcript,
         ccs,
-        &mut latticefold_state
+        &mut latticefold_state,
     )
     .unwrap();
 
@@ -155,7 +155,7 @@ fn verifier_decomposition_benchmark<
         wit,
         &mut prover_transcript,
         ccs,
-        &mut latticefold_state
+        &mut latticefold_state,
     )
     .unwrap();
 

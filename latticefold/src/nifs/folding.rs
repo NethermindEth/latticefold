@@ -7,6 +7,7 @@ use lattirust_ring::OverField;
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
+use super::structs::LatticefoldState;
 use crate::transcript::TranscriptWithSmallChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
@@ -34,10 +35,9 @@ pub struct FoldingProof<NTT: OverField> {
 
 pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> {
     fn prove<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
-        w_s: &[Witness<NTT>],
         transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
+        state: &LatticefoldState<C, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
 }
 
@@ -64,12 +64,16 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
     for LFFoldingProver<NTT, T>
 {
     fn prove<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
-        w_s: &[Witness<NTT>],
         transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
+        state: &LatticefoldState<C, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
-        if cm_i_s.len() != 2 * P::K {
+        if state.decomposed_lcccs_s.len() != 2 * P::K {
+            println!(
+                "decomposed_lcccs_s.len() ({}) != 2 * P::K ({})",
+                state.decomposed_lcccs_s.len(),
+                2 * P::K
+            );
             return Err(FoldingError::IncorrectLength);
         }
 
@@ -81,17 +85,23 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
 
         // Step 2: Compute g polynomial and sumcheck on it
         // Setup f_hat_mle for later evaluation of thetas
-        let f_hat_mles = w_s
+        let f_hat_mles = state
+            .wit_s
             .iter()
             .map(|w| DenseMultilinearExtension::from_evaluations_slice(log_m, &w.f_hat))
             .collect::<Vec<DenseMultilinearExtension<NTT>>>();
 
-        let zis = cm_i_s
+        let zis = state
+            .decomposed_lcccs_s
             .iter()
-            .zip(w_s.iter())
+            .zip(state.wit_s.iter())
             .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
             .collect::<Vec<_>>();
-        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+        let ris = state
+            .decomposed_lcccs_s
+            .iter()
+            .map(|cm_i| cm_i.r.clone())
+            .collect::<Vec<_>>();
 
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = zis
             .iter()
@@ -154,7 +164,8 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
         let rho_s = get_rhos::<_, _, P>(transcript);
 
         // Step 6 compute v0, u0, y0, x_w0
-        let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(&rho_s, &theta_s, cm_i_s, &eta_s, ccs);
+        let (v_0, cm_0, u_0, x_0) =
+            compute_v0_u0_x0_cm_0(&rho_s, &theta_s, &state.decomposed_lcccs_s, &eta_s, ccs);
 
         // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
@@ -167,18 +178,17 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
             h,
         };
 
-        let f_0: Vec<NTT> =
-            rho_s
-                .iter()
-                .zip(w_s)
-                .fold(vec![NTT::ZERO; w_s[0].f.len()], |acc, (&rho_i, w_i)| {
-                    let rho_i: NTT = rho_i.into();
+        let f_0: Vec<NTT> = rho_s.iter().zip(state.wit_s.iter()).fold(
+            vec![NTT::ZERO; state.wit_s[0].f.len()],
+            |acc, (&rho_i, w_i)| {
+                let rho_i: NTT = rho_i.into();
 
-                    acc.into_iter()
-                        .zip(w_i.f.iter())
-                        .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
-                        .collect()
-                });
+                acc.into_iter()
+                    .zip(w_i.f.iter())
+                    .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
+                    .collect()
+            },
+        );
 
         let w_0 = Witness::from_f::<P>(f_0);
 
@@ -391,23 +401,27 @@ mod tests {
             &ccs,
         )
         .unwrap();
-        let (lcccs, wit_s) = {
+        {
             let mut lcccs = vec_lcccs.clone();
             let mut lcccs_r = vec_lcccs;
             lcccs.append(&mut lcccs_r);
+            latticefold_state.decomposed_lcccs_s = lcccs.clone();
 
-            let mut wit_s = vec_wit.clone();
-            let mut wit_s_r = vec_wit;
+            let mut wit_s = latticefold_state.wit_s.clone();
+            let mut wit_s_r = latticefold_state.wit_s.clone();
             wit_s.append(&mut wit_s_r);
 
-            (lcccs, wit_s)
-        };
-        let (lcccs_prover, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
+            latticefold_state.wit_s = wit_s.clone();
+        }
+        let (lcccs_prover, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, PP>(
+            &mut prover_transcript,
+            &ccs,
+            &latticefold_state,
+        )
+        .unwrap();
 
         let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, PP>(
-            &lcccs,
+            &latticefold_state.decomposed_lcccs_s,
             &folding_proof,
             &mut verifier_transcript,
             &ccs,
@@ -463,7 +477,7 @@ mod tests {
         )
         .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+        let _ = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -471,13 +485,12 @@ mod tests {
         )
         .unwrap();
 
-        vec_wit[0] = Witness::<R>::from_w_ccs::<PP>(&w_ccs);
+        latticefold_state.wit_s[0] = Witness::<R>::from_w_ccs::<PP>(&w_ccs);
 
         let res = LFFoldingProver::<_, T>::prove::<4, PP>(
-            &vec_lcccs,
-            &vec_wit,
             &mut prover_transcript,
             &ccs,
+            &latticefold_state,
         );
 
         assert!(res.is_err())
@@ -579,6 +592,8 @@ mod tests_stark {
             x_ccs,
         };
 
+        #[cfg(feature = "dhat-heap")]
+        let _profiler = dhat::Profiler::new_heap();
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
 
         let mut latticefold_state = LatticefoldState::<C, R>::default();
@@ -617,34 +632,34 @@ mod tests_stark {
 
         let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
             &lcccs,
-            &decomposition_proof.1,
+            &decomposition_proof,
             &mut verifier_transcript,
             &ccs,
         );
 
         let lcccs = decomposition_verification.expect("Decomposition Verification error");
-
-        #[cfg(feature = "dhat-heap")]
-        let _profiler = dhat::Profiler::new_heap();
-        let (lcccs, wit_s) = {
+        {
             let mut lcccs = lcccs.clone();
             let mut lcccs_r = lcccs.clone();
             lcccs.append(&mut lcccs_r);
+            latticefold_state.decomposed_lcccs_s = lcccs;
 
-            let mut wit_s = decomposition_proof.1.clone();
-            let mut wit_s_r = decomposition_proof.1;
+            let mut wit_s = latticefold_state.wit_s.clone();
+            let mut wit_s_r = latticefold_state.wit_s.clone();
             wit_s.append(&mut wit_s_r);
+            latticefold_state.wit_s = wit_s;
+        }
 
-            (lcccs, wit_s)
-        };
-        let folding_prover =
-            LFFoldingProver::<_, T>::prove::<C, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs);
-
-        let folding_proof = folding_prover.expect("Folding proof generation error");
+        let folding_prover = LFFoldingProver::<_, T>::prove::<C, PP>(
+            &mut prover_transcript,
+            &ccs,
+            &latticefold_state,
+        )
+        .expect("Folding proof generation error");
 
         let folding_verification = LFFoldingVerifier::<_, T>::verify::<C, PP>(
-            &lcccs,
-            &folding_proof.2,
+            &latticefold_state.decomposed_lcccs_s,
+            &folding_prover.2,
             &mut verifier_transcript,
             &ccs,
         );
