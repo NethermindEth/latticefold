@@ -1,6 +1,6 @@
 # LatticeFold
 
-A proof-of-concept implementation of the LatticeFold folding scheme done by [Nethermind](nethermind.io) based on the work 
+A proof-of-concept implementation of the LatticeFold folding scheme engineered by [Nethermind](nethermind.io) based on the work 
 [LatticeFold: A Lattice-based Folding Scheme and its Applications to Succinct Proof Systems](https://eprint.iacr.org/2024/257) by Dan Boneh and Binyi Chen.
 
 **DISCLAIMER:** This is a proof-of-concept prototype, and in particular has not received careful code review. This implementation is provided "as is" and NOT ready for production use. Use at your own risk.
