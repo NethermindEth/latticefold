@@ -73,36 +73,24 @@ impl<
             ccs,
             &mut latticefold_state,
         )?;
-        let (decomposed_wit_l, decomposition_proof_l) =
-            LFDecompositionProver::<_, T>::prove::<W, C, P>(
-                acc,
-                w_acc,
-                transcript,
-                ccs,
-                scheme,
-                &mut latticefold_state,
-            )?;
-        let (decomposed_wit_r, decomposition_proof_r) =
-            LFDecompositionProver::<_, T>::prove::<W, C, P>(
-                &latticefold_state.lcccs,
-                w_i,
-                transcript,
-                ccs,
-                scheme,
-                &mut latticefold_state,
-            )?;
-
-        let (lcccs, wit_s) = {
-            let mut lcccs = decomposed_lcccs_l;
-            let mut lcccs_r = decomposed_lcccs_r;
-            lcccs.append(&mut lcccs_r);
-
-            let mut wit_s = decomposed_wit_l;
-            let mut wit_s_r = decomposed_wit_r;
-            wit_s.append(&mut wit_s_r);
-
-            (lcccs, wit_s)
-        };
+        let decomposition_proof_l = LFDecompositionProver::<_, T>::prove::<W, C, P>(
+            acc,
+            w_acc,
+            transcript,
+            ccs,
+            scheme,
+            &mut latticefold_state,
+        )?;
+        // Work around for the mutable and inmmutable borrow at the same time, needs a better solution
+        let lcccs_for_decomposition = latticefold_state.lcccs.clone();
+        let decomposition_proof_r = LFDecompositionProver::<_, T>::prove::<W, C, P>(
+            &lcccs_for_decomposition,
+            w_i,
+            transcript,
+            ccs,
+            scheme,
+            &mut latticefold_state,
+        )?;
 
         let (folded_lcccs, wit, folding_proof) =
             LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs)?;
