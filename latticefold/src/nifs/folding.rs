@@ -694,7 +694,7 @@ mod tests_goldilocks {
         let res = LFFoldingProver::<_, T>::prove::<4, PP>(
             &mut prover_transcript,
             &ccs,
-            &mut latticefold_state,
+            &latticefold_state,
         );
 
         assert!(res.is_err())
