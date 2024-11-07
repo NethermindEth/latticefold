@@ -14,7 +14,7 @@ One can install the `nightly-2024-06-05` toolchain by invoking:
 rustup install nightly-2024-06-05
 ```
 
-After that, use `cargo`, the standard Rust build tool, to build the libraries:
+After that, use `cargo`, the standard Rust build tool, to build the library:
 
 ```bash
 git clone https://github.com/NethermindEth/latticefold.git
