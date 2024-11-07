@@ -31,7 +31,7 @@ latticefold = { git = "https://github.com/NethermindEth/latticefold.git", packag
 
 Available packages:
 - `latticefold`: main crate, contains the non-interactive folding scheme implementation, together with the Ajtai commitment scheme, R1CS/CCS structures, Fiat-Shamir transcript machinery, etc.
-- `cyclotomic-rings`: contains the trait definition of a suitable ring which can be used in the LatticeFold protocol alongside with a few ready-to-use rings and short challenge set machinery.
+- `cyclotomic-rings`: contains the trait definition of a ring suitable to be used in the LatticeFold protocol, a few ready-to-use rings and short challenge set machinery.
 
 ## Frontends
 
