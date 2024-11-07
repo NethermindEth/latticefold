@@ -1,7 +1,7 @@
 use ark_std::marker::PhantomData;
 
 use cyclotomic_rings::SuitableRing;
-use lattirust_ring::OverField;
+use structs::{LFProof, NIFSProver};
 
 use crate::nifs::structs::LatticefoldState;
 use crate::{
@@ -11,13 +11,13 @@ use crate::{
     transcript::TranscriptWithSmallChallenges,
 };
 use decomposition::{
-    DecompositionProof, DecompositionProver, DecompositionVerifier, LFDecompositionProver,
+    DecompositionProver, DecompositionVerifier, LFDecompositionProver,
     LFDecompositionVerifier,
 };
 use error::LatticefoldError;
-use folding::{FoldingProof, FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier};
+use folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier};
 use linearization::{
-    LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
+    LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
     LinearizationVerifier,
 };
 
@@ -27,27 +27,12 @@ pub mod folding;
 pub mod linearization;
 pub mod structs;
 
-/// `C` is the length of Ajtai commitment vectors.
-/// `NTT` is a cyclotomic ring in the NTT form.
-#[derive(Clone)]
-pub struct LFProof<const C: usize, NTT: OverField> {
-    pub linearization_proof: LinearizationProof<NTT>,
-    pub decomposition_proof_l: DecompositionProof<C, NTT>,
-    pub decomposition_proof_r: DecompositionProof<C, NTT>,
-    pub folding_proof: FoldingProof<NTT>,
-}
 
 /// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
 /// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
 /// `NTT` is a suitable cyclotomic ring.
 /// `P` is the decomposition parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSProver<const C: usize, const W: usize, NTT, P, T> {
-    _r: PhantomData<NTT>,
-    _p: PhantomData<P>,
-    _t: PhantomData<T>,
-}
-
 impl<
         const C: usize,
         const W: usize,
