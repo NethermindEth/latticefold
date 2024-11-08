@@ -1,3 +1,7 @@
+//!
+//!  Short challenge set API.
+//!
+
 use error::ChallengeSetError;
 use lattirust_ring::{
     cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},

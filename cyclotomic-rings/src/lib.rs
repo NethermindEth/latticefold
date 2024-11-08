@@ -7,10 +7,6 @@
 #![feature(generic_const_exprs)]
 #![forbid(unsafe_code)]
 
-/// Short challenge set API.
 pub mod challenge_set;
-/// Cyclotomic ring API for the LatticeFold protocol.
 pub mod rings;
-mod rot_sum;
-
-pub use rot_sum::*;
+pub mod rotation;

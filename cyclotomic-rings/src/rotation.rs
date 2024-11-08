@@ -1,3 +1,7 @@
+//!
+//!  Everything related to the $\mathrm{RotSum}$ operation.
+//!
+
 use ark_ff::{Field, Zero};
 use lattirust_ring::{Cyclotomic, PolyRing};
 

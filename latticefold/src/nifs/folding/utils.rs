@@ -3,7 +3,7 @@ use ark_ff::{Field, PrimeField};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::sync::Arc;
-use cyclotomic_rings::{rings::SuitableRing, rot_lin_combination};
+use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use lattirust_poly::polynomials::ArithErrors;
 use lattirust_ring::Ring;
 

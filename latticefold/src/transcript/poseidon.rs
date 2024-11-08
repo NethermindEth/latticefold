@@ -7,7 +7,10 @@ use ark_std::marker::PhantomData;
 use lattirust_ring::OverField;
 
 use super::{Transcript, TranscriptWithShortChallenges};
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::{GetPoseidonParams, SuitableRing}};
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{GetPoseidonParams, SuitableRing},
+};
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS> {

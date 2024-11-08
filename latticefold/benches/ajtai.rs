@@ -9,7 +9,6 @@ use cyclotomic_rings::rings::{
     BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 use std::fmt::Debug;
 
