@@ -5,7 +5,16 @@ use crate::{challenge_set::error, challenge_set::LatticefoldChallengeSet};
 
 use super::SuitableRing;
 
+/// Starknet prime ring in the NTT form.
+///
+/// The base field of the NTT form is the Starknet prime ring.
+///
+/// The NTT form has 16 components.
 pub type StarkRingNTT = RqNTT;
+
+/// Starknet prime ring in the coefficient form.
+///
+/// The cyclotomic polynomial is $X^16 + 1$ of degree 16.
 pub type StarkRingPoly = RqPoly;
 
 impl SuitableRing for StarkRingNTT {

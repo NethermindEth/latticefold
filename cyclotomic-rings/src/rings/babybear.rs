@@ -4,7 +4,17 @@ use super::SuitableRing;
 use crate::challenge_set::error;
 use crate::challenge_set::LatticefoldChallengeSet;
 
+/// BabyBear ring in the NTT form.
+///
+/// The base field of the NTT form is a degree-9
+/// extension of the BabyBear field.
+///
+/// The NTT form has 8 components.
 pub type BabyBearRingNTT = RqNTT;
+
+/// BabyBear ring in the coefficient form.
+///
+/// The cyclotomic polynomial is $X^72 - X^36 + 1$ of degree 72.
 pub type BabyBearRingPoly = RqPoly;
 
 impl SuitableRing for BabyBearRingNTT {
