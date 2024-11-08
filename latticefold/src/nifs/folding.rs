@@ -2,7 +2,7 @@
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::marker::PhantomData;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::OverField;
 use utils::get_alphas_betas_zetas_mus;
 
@@ -346,7 +346,7 @@ mod tests {
         },
         transcript::poseidon::PoseidonTranscript,
     };
-    use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
+    use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
 
     // Boilerplate code to generate values needed for testing
     type R = StarkRingNTT;
@@ -515,7 +515,7 @@ mod tests_goldilocks {
         },
         transcript::poseidon::PoseidonTranscript,
     };
-    use cyclotomic_rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
+    use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
 
     // Boilerplate code to generate values needed for testing
     type R = GoldilocksRingNTT;
@@ -694,7 +694,7 @@ mod tests_stark {
         },
         transcript::poseidon::PoseidonTranscript,
     };
-    use cyclotomic_rings::StarkChallengeSet;
+    use cyclotomic_rings::rings::StarkChallengeSet;
 
     #[test]
     fn test_dummy_folding() {

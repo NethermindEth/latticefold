@@ -1,9 +1,16 @@
 use ark_ff::{Field, Zero};
 use lattirust_ring::{Cyclotomic, PolyRing};
 
-use crate::SuitableRing;
+use crate::rings::SuitableRing;
 
-/// An implementation of the RotSum operation from lemma 2.1 of the Latticefold paper.
+/// An implementation of the $\mathrm{RotSum}$ operation from lemma 2.1 of the Latticefold paper.
+///
+/// The formula is
+/// $$
+/// \mathrm{RotSum}(a\in \mathcal{R}\_p, \vec{B}\in\mathbb{Z}\_{p^\tau}^d)=\sum\_{i=1}^d B_i\cdot
+///     \mathrm{Coeff}(X^{i-1}a)\in\mathbb{Z}\_{p^\tau}^d.
+/// $$
+///
 /// The function computes the linear combination of successive rotations of a ring element
 /// (treated as their coefficient vectors) with coefficients from the base field of the NTT form
 /// of the ring.
@@ -48,7 +55,7 @@ pub fn rot_sum<R: SuitableRing>(
     acc
 }
 
-/// Computes the sum `Σ_{i=1}^{2k} RotSum(ρᵢ, NTT(θᵢ))`.
+/// Computes the sum $\sum\_{i=1}^{2k} \mathrm{RotSum}(\rho\_i, \mathrm{NTT}(\theta\_i))$.
 ///
 /// The function takes two slices: one of coefficient representations of the rho's (`rho_s`),
 /// and one of the theta vectors (`theta_s`) from the base field. For each pair of elements
@@ -62,7 +69,7 @@ pub fn rot_sum<R: SuitableRing>(
 /// - `theta_s`: A slice of vectors of ring elements in the NTT form (`Vec<R>`).
 ///
 /// # Returns:
-/// A `Vec<R>` which is the sum of the rotated sums `RotSum(ρᵢ, NTT(θᵢ))`.
+/// A `Vec<R>` which is the sum of the rotated sums $\mathrm{RotSum}(\rho\_i, \mathrm{NTT}(\theta\_i))$.
 ///
 /// # Panics:
 /// The function will panic if the lengths of `rho_s` and `theta_s` do not match,
@@ -99,7 +106,7 @@ mod tests {
     use rand::thread_rng;
 
     use super::*;
-    use crate::{GoldilocksRingNTT, GoldilocksRingPoly};
+    use crate::rings::{GoldilocksRingNTT, GoldilocksRingPoly};
 
     #[test]
     fn test_rot_sum_with_coeffs() {

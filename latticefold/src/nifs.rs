@@ -1,6 +1,6 @@
 use ark_std::marker::PhantomData;
 
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::OverField;
 
 use crate::{

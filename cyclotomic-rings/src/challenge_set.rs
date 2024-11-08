@@ -4,7 +4,7 @@ use lattirust_ring::{
     zn::z_q::Zq,
 };
 
-use crate::SuitableRing;
+use crate::rings::SuitableRing;
 
 pub mod error;
 
@@ -12,7 +12,7 @@ pub trait LatticefoldChallengeSet<R: SuitableRing> {
     // Amount of bytes needed to obtain a single small challenge.
     const BYTES_NEEDED: usize;
 
-    fn small_challenge_from_random_bytes(
+    fn short_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<R::CoefficientRepresentation, ChallengeSetError>;
 }
@@ -27,7 +27,7 @@ where
 {
     const BYTES_NEEDED: usize = N * 8;
 
-    fn small_challenge_from_random_bytes(
+    fn short_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<Pow2CyclotomicPolyRing<Q, N>, ChallengeSetError> {
         if bs.len() != Self::BYTES_NEEDED {

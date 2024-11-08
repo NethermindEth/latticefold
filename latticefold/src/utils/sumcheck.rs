@@ -167,7 +167,7 @@ mod tests_pow2 {
 #[cfg(test)]
 mod tests_stark {
 
-    use cyclotomic_rings::StarkChallengeSet;
+    use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     type R = RqNTT;
 
@@ -179,7 +179,7 @@ mod tests_stark {
 #[cfg(test)]
 mod tests_frog {
 
-    use cyclotomic_rings::FrogChallengeSet;
+    use cyclotomic_rings::rings::FrogChallengeSet;
 
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
 
@@ -193,7 +193,7 @@ mod tests_frog {
 #[cfg(test)]
 mod tests_goldilocks {
 
-    use cyclotomic_rings::GoldilocksChallengeSet;
+    use cyclotomic_rings::rings::GoldilocksChallengeSet;
 
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
 
@@ -209,7 +209,7 @@ mod tests_babybear {
 
     use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
 
-    use cyclotomic_rings::BabyBearChallengeSet;
+    use cyclotomic_rings::rings::BabyBearChallengeSet;
 
     type R = RqNTT;
 

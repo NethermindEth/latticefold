@@ -7,7 +7,10 @@ use ark_std::marker::PhantomData;
 use lattirust_ring::OverField;
 
 use super::{Transcript, TranscriptWithSmallChallenges};
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, GetPoseidonParams, SuitableRing};
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{GetPoseidonParams, SuitableRing},
+};
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 pub struct PoseidonTranscript<R: OverField, CS> {
@@ -60,7 +63,7 @@ impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithSmallChallen
     fn get_small_challenge(&mut self) -> R::CoefficientRepresentation {
         let random_bytes = self.sponge.squeeze_bytes(Self::ChallengeSet::BYTES_NEEDED);
 
-        Self::ChallengeSet::small_challenge_from_random_bytes(&random_bytes)
+        Self::ChallengeSet::short_challenge_from_random_bytes(&random_bytes)
             .expect("not enough bytes to get a small challenge")
     }
 }
@@ -68,7 +71,7 @@ impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithSmallChallen
 #[cfg(test)]
 mod tests {
     use ark_ff::BigInt;
-    use cyclotomic_rings::{GoldilocksChallengeSet, GoldilocksRingNTT, GoldilocksRingPoly};
+    use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, GoldilocksRingPoly};
     use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     use super::*;
