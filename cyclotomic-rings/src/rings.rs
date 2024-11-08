@@ -32,7 +32,7 @@ pub use stark::*;
 ///     $$\mathbb{Z}_p\[X\]/(f(X))\cong \prod\limits\_{i=1}^\tau\mathbb{Z}_p\[X\]/(f\_i(X)),$$
 ///     where $f\_1(X),\ldots, f\_\tau(X)$ are irreducible polynomials in $ \mathbb{Z}_p\[X\]$ such that
 ///     $$f(X) = f\_1(X)\cdot\ldots\cdot f\_\tau(X).$$
-/// 
+///
 /// When $f(X)$ is a cyclotomic polynomial the factors $f\_1(X),\ldots, f\_\tau(X)$ have equal degrees, thus the fields in the RHS of
 /// the Chinese-remainder isomorphism are all isomorphic to the same extension of the field $\mathbb{Z}\_p$, implying the NTT form
 /// of the ring is a direct product of $\tau$ instances of $\mathbb{Z}\_{p^k}$ for some $k$ with componentwise operations.
