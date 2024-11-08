@@ -14,4 +14,6 @@ lattirust-ring = { git = "ssh://git@github.com/NethermindEth/lattirust.git", bra
 thiserror = { version = "1.0.63", default-features = false }
 
 [workspace.metadata.docs.rs]
+# To build locally, use 
+# RUSTDOCFLAGS="--html-in-header docs-header.html" cargo doc --no-deps --document-private-items --open
 rustdoc-args = [ "--html-in-header", "docs-header.html" ]

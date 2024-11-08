@@ -28,16 +28,17 @@ pub use stark::*;
 /// two isomorphic forms:
 ///   * <i>The coefficient form</i>, i.e. a ring element is represented as the unique polynomial $g$ of the
 ///     degree $\mathrm{deg}\ g < \mathrm{deg}\ f$.
-///   * <i>The CRT (or NTT) form</i>, i.e. a ring element is represented as its image along the Chinese-remainder isomorphism
-///     $$\mathbb{Z}_p\[X\]/(f(X))\cong \mathbb{Z}_p\[X\]/(f\_1(X))\times \mathbb{Z}_p\[X\]/(f\_1(X))\times\ldots\times \mathbb{Z}_p\[X\]/(f\_\tau(X)),$$
+///   * <i>The NTT form</i>, i.e. a ring element is represented as its image along the Chinese-remainder isomorphism
+///     $$\mathbb{Z}_p\[X\]/(f(X))\cong \prod\limits\_{i=1}^\tau\mathbb{Z}_p\[X\]/(f\_i(X)),$$
 ///     where $f\_1(X),\ldots, f\_\tau(X)$ are irreducible polynomials in $ \mathbb{Z}_p\[X\]$ such that
 ///     $$f(X) = f\_1(X)\cdot\ldots\cdot f\_\tau(X).$$
+/// 
 /// When $f(X)$ is a cyclotomic polynomial the factors $f\_1(X),\ldots, f\_\tau(X)$ have equal degrees, thus the fields in the RHS of
-/// the Chinese-remainder isomorphism are all isomorphic to the same extension of the field $\mathbb{Z}\_p$, implying the CRT form
-/// of the ring is a direct product of $\tau$ instance of $\mathbb{Z}\_{p^k}$ for some $k$ with componentwise operations.
+/// the Chinese-remainder isomorphism are all isomorphic to the same extension of the field $\mathbb{Z}\_p$, implying the NTT form
+/// of the ring is a direct product of $\tau$ instances of $\mathbb{Z}\_{p^k}$ for some $k$ with componentwise operations.
 ///
-/// If `R: SuitableRing` then we assume that the type `R` represents the CRT form of the ring as the arithmetic operations
-/// in the CRT form are much faster and we intend to use the CRT form as much as possible only occasionally turning to the
+/// If `R: SuitableRing` then we assume that the type `R` represents the NTT form of the ring as the arithmetic operations
+/// in the NTT form are much faster and we intend to use the NTT form as much as possible only occasionally turning to the
 /// coefficient form (usually, when Ajtai security aspects are discussed). The associated type `CoefficientRepresentation` is the corresponding
 /// coefficient form representation of the ring.
 ///
@@ -48,7 +49,7 @@ pub use stark::*;
 ///   * `R` and `R::CoefficientRepresentation` should be convertible into each other.
 ///   * `R::CoefficientRepresentation` is radix-$B$ decomposable and exhibits cyclotomic structure (`R::CoefficientRepresentation: Decompose + Cyclotomic`).
 ///
-/// In addition to the data above a suitable ring has to provide Poseidon hash parameters for its base prime ring (i.e. $\mathbb{Z}\_p$).
+/// In addition to the data above a suitable ring has to provide Poseidon hash parameters for its base prime field (i.e. $\mathbb{Z}\_p$).
 pub trait SuitableRing:
     OverField + From<Self::CoefficientRepresentation> + Into<Self::CoefficientRepresentation>
 where
