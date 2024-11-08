@@ -16,7 +16,7 @@ pub struct FoldingProof<NTT: OverField> {
     // Step 2.
     pub pointshift_sumcheck_proof: sumcheck::Proof<NTT>,
     // Step 3
-    pub theta_s: Vec<NTT>,
+    pub theta_s: Vec<Vec<NTT>>,
     pub eta_s: Vec<Vec<NTT>>,
 }
 

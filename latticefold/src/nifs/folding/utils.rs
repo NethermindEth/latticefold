@@ -3,7 +3,7 @@ use ark_ff::{Field, PrimeField};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::sync::Arc;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::{rot_lin_combination, SuitableRing};
 use lattirust_poly::polynomials::ArithErrors;
 use lattirust_ring::Ring;
 
@@ -15,7 +15,6 @@ use crate::{
     decomposition_parameters::DecompositionParams,
     transcript::Transcript,
 };
-use cyclotomic_rings::rot_sum;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VirtualPolynomial},
@@ -30,36 +29,27 @@ pub(super) fn get_alphas_betas_zetas_mus<
     log_m: usize,
     transcript: &mut T,
 ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>) {
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
+    ));
     let alpha_s = transcript
         .get_challenges(2 * P::K)
         .into_iter()
         .map(|x| NTT::from(x))
         .collect::<Vec<_>>();
 
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"zeta_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"zeta_s"),
+    ));
     let zeta_s = transcript
         .get_challenges(2 * P::K)
         .into_iter()
         .map(|x| NTT::from(x))
         .collect::<Vec<_>>();
 
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"mu_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"mu_s"),
+    ));
     let mut mu_s = transcript
         .get_challenges((2 * P::K) - 1)
         .into_iter()
@@ -68,12 +58,9 @@ pub(super) fn get_alphas_betas_zetas_mus<
 
     mu_s.push(NTT::ONE);
 
-    transcript.absorb_field_element(
-        &<NTT::BaseRing as Field>::from_base_prime_field_elems(&[
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+    ));
     let beta_s = transcript
         .get_challenges(log_m)
         .into_iter()
@@ -90,12 +77,9 @@ pub(super) fn get_rhos<
 >(
     transcript: &mut T,
 ) -> Vec<R::CoefficientRepresentation> {
-    transcript.absorb_field_element(
-        &<R::BaseRing as Field>::from_base_prime_field_elems(&[
-            <R::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"rho_s"),
-        ])
-        .unwrap(),
-    );
+    transcript.absorb_field_element(&<R::BaseRing as Field>::from_base_prime_field(
+        <R::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"rho_s"),
+    ));
 
     let mut rhos = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
     rhos.push(R::CoefficientRepresentation::ONE);
@@ -106,7 +90,7 @@ pub(super) fn get_rhos<
 #[allow(clippy::too_many_arguments)]
 pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     log_m: usize,
-    f_hat_mles: &[DenseMultilinearExtension<NTT>],
+    f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     alpha_s: &[NTT],
     Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     zeta_s: &[NTT],
@@ -150,7 +134,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
 pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
     alpha_s: &[NTT],
     mu_s: &[NTT],
-    theta_s: &[NTT],
+    theta_s: &[Vec<NTT>],
     e_asterisk: NTT,
     e_s: &[NTT],
     zeta_s: &[NTT],
@@ -159,16 +143,26 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
     (0..(2 * P::K))
         .map(|i| {
             // Evaluation claims about f hats.
-            let mut s_summand = alpha_s[i] * e_s[i] * theta_s[i];
+            let mut s_summand: NTT = successors(Some(alpha_s[i]), |alpha_power| {
+                Some(alpha_s[i] * alpha_power)
+            })
+            .zip(theta_s[i].iter())
+            .map(|(pow_of_alpha_i, theta)| pow_of_alpha_i * e_s[i] * theta) // Might need to change e_s[i] double check
+            .sum();
 
             // norm range check contribution
             s_summand += e_asterisk
-                * mu_s[i]
-                * theta_s[i]
-                * (1..P::B_SMALL)
-                    .map(|x| NTT::from(x as u128))
-                    .map(|j_hat| (theta_s[i] - j_hat) * (theta_s[i] + j_hat))
-                    .product::<NTT>();
+                * successors(Some(mu_s[i]), |mu_power| Some(mu_s[i] * mu_power))
+                    .zip(theta_s[i].iter())
+                    .map(|(mu_power, &theta)| {
+                        mu_power
+                            * theta
+                            * (1..P::B_SMALL)
+                                .map(|x| NTT::from(x as u128))
+                                .map(|j_hat| (theta - j_hat) * (theta + j_hat))
+                                .product::<NTT>()
+                    })
+                    .sum::<NTT>();
 
             // linearisation claims contribuition
             s_summand += e_s[i]
@@ -184,16 +178,12 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 
 pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     rho_s: &[NTT::CoefficientRepresentation],
-    theta_s: &[NTT],
+    theta_s: &[Vec<NTT>],
     cm_i_s: &[LCCCS<C, NTT>],
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
-) -> (NTT, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
-    let v_0: NTT = rho_s
-        .iter()
-        .zip(theta_s.iter())
-        .map(|(&rho_i, theta_i)| NTT::from(rot_sum::<NTT>(rho_i, theta_i.coeffs())))
-        .sum();
+) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
+    let v_0: Vec<NTT> = rot_lin_combination(rho_s, theta_s);
 
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()
@@ -244,32 +234,44 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 
 pub fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_mle: DenseMultilinearExtension<NTT>,
+    fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
     r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
-    g.add_mle_list(vec![r_i_eq, Arc::from(fi_mle)], alpha_i)
+    for (alpha, fi_hat_mle) in successors(Some(alpha_i), |alpha_power| Some(alpha_i * alpha_power))
+        .zip(fi_hat_mle_s.iter())
+    {
+        g.add_mle_list(vec![r_i_eq.clone(), Arc::from(fi_hat_mle.clone())], alpha)?;
+    }
+
+    Ok(())
 }
 
 pub fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_mle: DenseMultilinearExtension<NTT>,
+    fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
     b: usize,
     mu_i: NTT,
     beta_eq_x: Arc<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
-    let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
+    for (mu, fi_hat_mle) in
+        successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
+    {
+        let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
 
-    for i in 1..b {
-        let i_hat = NTT::from(i as u128);
-        mle_list.push(Arc::new(fi_mle.clone() - i_hat));
-        mle_list.push(Arc::new(fi_mle.clone() + i_hat));
+        for i in 1..b {
+            let i_hat = NTT::from(i as u128);
+
+            mle_list.push(Arc::from(fi_hat_mle.clone() - i_hat));
+            mle_list.push(Arc::from(fi_hat_mle.clone() + i_hat));
+        }
+
+        mle_list.push(Arc::from(fi_hat_mle));
+
+        mle_list.push(beta_eq_x.clone());
+
+        g.add_mle_list(mle_list, mu)?;
     }
-
-    mle_list.push(Arc::from(fi_mle));
-    mle_list.push(beta_eq_x);
-
-    g.add_mle_list(mle_list, mu_i)?;
 
     Ok(())
 }
@@ -283,5 +285,6 @@ pub fn prepare_g3_i_mle_list<NTT: OverField>(
     for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
         g.add_mle_list(vec![Arc::from(M.clone()), r_i_eq.clone()], zeta)?;
     }
+
     Ok(())
 }
