@@ -48,7 +48,7 @@ fn test_g_1() {
     let m = 8;
     let log_m = 3;
     // See d_over_t is the extension degree of the NTT field
-    // d is the degree fo the coefficient representation
+    // d is the degree of the coefficient representation
     // t is the number of quotient rings we are splitting into
     let d_over_t = 3;
     let f_i: Vec<Vec<R>> = (0..d_over_t)
