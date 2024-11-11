@@ -5,7 +5,7 @@ use criterion::{
 };
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
-    rings::{StarkChallengeSet, StarkRingNTT, SuitableRing},
+    rings::{StarkChallengeSet, StarkRingNTT, GoldilocksRingNTT, GoldilocksChallengeSet, SuitableRing},
 };
 use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
@@ -365,15 +365,15 @@ fn benchmarks_main(c: &mut Criterion) {
     //     run_single_babybear_benchmark!(1, &mut group, 6, 1024, 10, 2);
     // }
 
-    // // Godlilocks
-    // {
-    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    //     let mut group = c.benchmark_group("Decomposition Godlilocks");
-    //     group.plot_config(plot_config.clone());
+    // Godlilocks
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Decomposition Godlilocks");
+        group.plot_config(plot_config.clone());
 
-    //     // TODO: Update configurations
-    //     run_single_goldilocks_benchmark!(1, &mut group, 6, 1024, 10, 2);
-    // }
+        // TODO: Update configurations
+        run_single_goldilocks_benchmark!(1, &mut group, 6, 1024, 10, 2);
+    }
 
     // StarkPrime
     {
