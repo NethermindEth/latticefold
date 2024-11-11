@@ -160,7 +160,7 @@ macro_rules! generate_sumcheck_tests {
 
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
 
-            let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
 
             let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
 
