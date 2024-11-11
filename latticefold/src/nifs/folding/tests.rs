@@ -47,11 +47,19 @@ fn test_g_1() {
     let mut rng = thread_rng();
     let m = 8;
     let log_m = 3;
-
-    let f_i: Vec<R> = (0..m).map(|_| R::rand(&mut rng)).collect();
+    // See d_over_t is the extension degree of the NTT field
+    // d is the degree fo the coefficient representation
+    // t is the number of quotient rings we are splitting into
+    let d_over_t = 3;
+    let f_i: Vec<Vec<R>> = (0..d_over_t)
+        .map(|_| (0..m).map(|_| R::rand(&mut rng)).collect())
+        .collect();
     let r_i: Vec<R> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
 
-    let fi_mle = DenseMultilinearExtension::from_evaluations_vec(log_m, f_i.clone());
+    let fi_mle: Vec<DenseMultilinearExtension<R>> = f_i
+        .into_iter()
+        .map(|f_i| DenseMultilinearExtension::from_evaluations_vec(log_m, f_i))
+        .collect();
     let r_i_eq = build_eq_x_r(&r_i).unwrap();
     let mle_coeff = R::rand(&mut rng);
 
@@ -63,12 +71,16 @@ fn test_g_1() {
         let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
         assert_eq!(
             g.evaluate(&point).unwrap(),
-            evaluate_g_1(&point, &fi_mle, &r_i, &mle_coeff)
+            evaluate_g_1(&point, &fi_mle, &r_i, mle_coeff)
         )
     }
 }
-fn evaluate_g_1(x: &[R], f_i: &DenseMultilinearExtension<R>, r_i: &[R], coeff: &R) -> R {
-    eq_eval(r_i, x).unwrap() * f_i.evaluate(x).unwrap() * coeff
+fn evaluate_g_1(x: &[R], f_i: &[DenseMultilinearExtension<R>], r_i: &[R], coeff: R) -> R {
+    let mut res = R::zero();
+    for (coeff, f) in successors(Some(coeff), |x| Some(coeff * *x)).zip(f_i.iter()) {
+        res += eq_eval(r_i, x).unwrap() * f.evaluate(x).unwrap() * coeff
+    }
+    res
 }
 #[test]
 fn test_g_2() {
@@ -76,10 +88,17 @@ fn test_g_2() {
     let m = 8;
     let log_m = 3;
     let b = 8;
-    let f_i: Vec<R> = (0..m).map(|_| R::rand(&mut rng)).collect();
+    let d_over_t = 3;
+    let f_i: Vec<Vec<R>> = (0..d_over_t)
+        .map(|_| (0..m).map(|_| R::rand(&mut rng)).collect())
+        .collect();
+
     let beta: Vec<R> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
 
-    let fi_mle = DenseMultilinearExtension::from_evaluations_vec(log_m, f_i.clone());
+    let fi_mle: Vec<DenseMultilinearExtension<R>> = f_i
+        .into_iter()
+        .map(|f_i| DenseMultilinearExtension::from_evaluations_vec(log_m, f_i))
+        .collect();
     let beta_eq_x = build_eq_x_r(&beta).unwrap();
     let mu_i = R::rand(&mut rng);
 
@@ -91,23 +110,35 @@ fn test_g_2() {
         let point: Vec<RqNTT> = (0..log_m).map(|_| R::rand(&mut rng)).collect();
         assert_eq!(
             g.evaluate(&point).unwrap(),
-            evaluate_g_2(&point, &fi_mle, b, &beta, &mu_i)
+            evaluate_g_2(&point, &fi_mle, b, &beta, mu_i)
         )
     }
 }
 
-fn evaluate_g_2(x: &[R], f_i: &DenseMultilinearExtension<R>, b: usize, beta: &[R], mu_i: &R) -> R {
-    let mut evaluation = R::one();
+fn evaluate_g_2(
+    x: &[R],
+    fi_hat_mle_s: &[DenseMultilinearExtension<R>],
+    b: usize,
+    beta: &[R],
+    mu_i: R,
+) -> R {
+    let mut evaluation = R::zero();
+    for (mu, f_i) in
+        successors(Some(mu_i), |mu_power| Some(mu_i * *mu_power)).zip(fi_hat_mle_s.iter())
+    {
+        let mut evaluation_j = R::one();
+        for i in 1..b {
+            let i_hat = R::from(i as u128);
 
-    for i in 1..b {
-        let i_hat = R::from(i as u128);
-
-        evaluation *= f_i.evaluate(x).unwrap() - i_hat;
-        evaluation *= f_i.evaluate(x).unwrap() + i_hat;
+            evaluation_j *= f_i.evaluate(x).unwrap() - i_hat;
+            evaluation_j *= f_i.evaluate(x).unwrap() + i_hat;
+        }
+        evaluation_j *= f_i.evaluate(x).unwrap();
+        evaluation_j *= eq_eval(beta, x).unwrap();
+        evaluation_j *= mu;
+        evaluation += evaluation_j;
     }
-    evaluation *= f_i.evaluate(x).unwrap();
-    evaluation *= eq_eval(beta, x).unwrap();
-    evaluation * mu_i
+    evaluation
 }
 #[test]
 fn test_g_3() {
@@ -154,6 +185,9 @@ fn test_sumcheck_polynomial() {
     let m = 8;
     let log_m = 3;
     let t = 3;
+    let d_over_t = 3;
+
+    // Challenges
     let alpha_s: Vec<R> = (0..2 * PP::K).map(|_| R::rand(&mut rng)).collect();
     let mu_s: Vec<R> = (0..2 * PP::K).map(|_| R::rand(&mut rng)).collect();
     let zeta_s: Vec<R> = (0..2 * PP::K).map(|_| R::rand(&mut rng)).collect();
@@ -161,12 +195,23 @@ fn test_sumcheck_polynomial() {
     let r_s: Vec<Vec<R>> = (0..2 * PP::K)
         .map(|_| (0..log_m).map(|_| R::rand(&mut rng)).collect())
         .collect();
-    let f_hats: Vec<Vec<R>> = (0..2 * PP::K)
-        .map(|_| (0..m).map(|_| R::rand(&mut rng)).collect())
+
+    // Witnesses and extensions
+    let f_hats: Vec<Vec<Vec<R>>> = (0..2 * PP::K)
+        .map(|_| {
+            (0..d_over_t)
+                .map(|_| (0..m).map(|_| R::rand(&mut rng)).collect())
+                .collect()
+        })
         .collect();
-    let f_hat_mles: Vec<DenseMultilinearExtension<R>> = f_hats
+    let f_hat_mles: Vec<Vec<DenseMultilinearExtension<R>>> = f_hats
         .into_iter()
-        .map(|f_hat| DenseMultilinearExtension::from_evaluations_vec(log_m, f_hat))
+        .map(|mz_list| {
+            mz_list
+                .into_iter()
+                .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
+                .collect()
+        })
         .collect();
     let mz_s: Vec<Vec<Vec<R>>> = (0..2 * PP::K)
         .map(|_| {
@@ -175,7 +220,6 @@ fn test_sumcheck_polynomial() {
                 .collect()
         })
         .collect();
-
     let mz_mles: Vec<Vec<DenseMultilinearExtension<R>>> = mz_s
         .into_iter()
         .map(|mz_list| {
@@ -200,7 +244,7 @@ fn test_sumcheck_polynomial() {
     #[allow(clippy::too_many_arguments)]
     fn evaluate_poly(
         x: &[R],
-        f_hat_mles: &[DenseMultilinearExtension<R>],
+        f_hat_mles: &[Vec<DenseMultilinearExtension<R>>],
         alpha_s: &[R],
         Mz_mles: &[Vec<DenseMultilinearExtension<R>>],
         zeta_s: &[R],
@@ -211,8 +255,8 @@ fn test_sumcheck_polynomial() {
         (0..2 * PP::K)
             .map(|i| {
                 let mut summand = R::zero();
-                summand += evaluate_g_1(x, &f_hat_mles[i], &r_s[i], &alpha_s[i]);
-                summand += evaluate_g_2(x, &f_hat_mles[i], PP::B_SMALL, beta_s, &mu_s[i]);
+                summand += evaluate_g_1(x, &f_hat_mles[i], &r_s[i], alpha_s[i]);
+                summand += evaluate_g_2(x, &f_hat_mles[i], PP::B_SMALL, beta_s, mu_s[i]);
                 summand += evaluate_g_3(x, &Mz_mles[i], &r_s[i], &zeta_s[i]);
                 summand
             })
