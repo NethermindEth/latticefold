@@ -282,15 +282,6 @@ macro_rules! run_single_frog_benchmark {
         }
     };
 }
-#[macro_export]
-macro_rules! run_single_dilithium_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
-        paste::paste! {
-            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-        }
-    };
-}
 
 fn benchmarks_main(c: &mut Criterion) {
     // // Babybear
@@ -428,16 +419,6 @@ fn benchmarks_main(c: &mut Criterion) {
 
     //     // TODO: Update configurations
     //     run_single_frog_benchmark!(1, &mut group, 6, 1024, 10, 2);
-    // }
-
-    // // Dilithium
-    // {
-    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    //     let mut group = c.benchmark_group("Decomposition Dilithium");
-    //     group.plot_config(plot_config.clone());
-
-    //     // TODO: Update configurations
-    //     run_single_dilithium_benchmark!(1, &mut group, 6, 1024, 10, 2);
     // }
 }
 
