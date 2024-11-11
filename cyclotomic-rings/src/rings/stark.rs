@@ -7,7 +7,7 @@ use super::SuitableRing;
 
 /// Starknet prime ring in the NTT form.
 ///
-/// The base field of the NTT form is the Starknet prime ring.
+/// The base field of the NTT form is the Starknet prime field.
 ///
 /// The NTT form has 16 components.
 pub type StarkRingNTT = RqNTT;
