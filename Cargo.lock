@@ -390,9 +390,9 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cpufeatures"
-version = "0.2.14"
+version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "608697df725056feaccfa42cffdaeeec3fccc4ffc38358ecd19b243e716a78e0"
+checksum = "0ca741a962e1b0bff6d724a1a0958b686406e853bb14061f218562e1896f95e6"
 dependencies = [
  "libc",
 ]
@@ -804,7 +804,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e818cf45f8ccbfd0696b71747763ab2f7b7e0169"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#40ea2621f75432f4929c61ce38ac64057c7a4d36"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -813,6 +813,7 @@ dependencies = [
  "derive_more",
  "nalgebra",
  "nalgebra-sparse",
+ "num-integer",
  "rand",
  "rayon",
  "serde",
@@ -821,12 +822,13 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e818cf45f8ccbfd0696b71747763ab2f7b7e0169"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#40ea2621f75432f4929c61ce38ac64057c7a4d36"
 dependencies = [
  "ark-ff",
  "ark-serialize",
  "ark-std",
  "displaydoc",
+ "lattirust-linear-algebra",
  "lattirust-ring",
  "rand",
  "rayon",
@@ -836,7 +838,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e818cf45f8ccbfd0696b71747763ab2f7b7e0169"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#40ea2621f75432f4929c61ce38ac64057c7a4d36"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
@@ -1205,9 +1207,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "368758f23274712b504848e9d5a6f010445cc8b87a7cdb4d7cbee666c1288da3"
+checksum = "809e8dc61f6de73b46c85f4c96486310fe304c434cfa43669d7b40f711150908"
 dependencies = [
  "aho-corasick",
  "memchr",

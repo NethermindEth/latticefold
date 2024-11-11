@@ -4,7 +4,7 @@ use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    balanced_decomposition::{decompose_balanced_vec, recompose},
     PolyRing, Ring,
 };
 
@@ -167,7 +167,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
 
         // decompose radix-B
         let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-            pad_and_transpose(decompose_balanced_vec(&coef_repr, P::B, Some(P::L)))
+            decompose_balanced_vec(&coef_repr, P::B, Some(P::L))
                 .into_iter()
                 .flatten()
                 .collect();
