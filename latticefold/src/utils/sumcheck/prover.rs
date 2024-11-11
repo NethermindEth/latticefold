@@ -1,4 +1,6 @@
 //! Prover
+
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_iter_mut, vec::Vec};
 use lattirust_poly::{
     mle::MultilinearExtension,
@@ -9,10 +11,10 @@ use lattirust_ring::{OverField, Ring};
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
 
 /// Prover Message
-#[derive(Clone)]
-pub struct ProverMsg<R: Ring> {
+#[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
+pub struct ProverMsg<R1: Ring> {
     /// evaluations on P(0), P(1), P(2), ...
-    pub(crate) evaluations: Vec<R>,
+    pub(crate) evaluations: Vec<R1>,
 }
 
 /// Prover State
