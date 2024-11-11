@@ -3,13 +3,13 @@ use ark_ff::{Field, PrimeField};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::sync::Arc;
-use cyclotomic_rings::{rot_lin_combination, SuitableRing};
+use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use lattirust_poly::polynomials::ArithErrors;
 use lattirust_ring::Ring;
 
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
-use crate::transcript::TranscriptWithSmallChallenges;
+use crate::transcript::TranscriptWithShortChallenges;
 use crate::{
     arith::{CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
@@ -72,7 +72,7 @@ pub(super) fn get_alphas_betas_zetas_mus<
 
 pub(super) fn get_rhos<
     R: SuitableRing,
-    T: TranscriptWithSmallChallenges<R>,
+    T: TranscriptWithShortChallenges<R>,
     P: DecompositionParams,
 >(
     transcript: &mut T,

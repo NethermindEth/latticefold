@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 use ark_std::marker::PhantomData;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::OverField;
 
 use crate::nifs::error::FoldingError;
-use crate::transcript::TranscriptWithSmallChallenges;
+use crate::transcript::TranscriptWithShortChallenges;
 use crate::{
     arith::{Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
@@ -20,20 +20,20 @@ pub struct FoldingProof<NTT: OverField> {
     pub eta_s: Vec<Vec<NTT>>,
 }
 
-pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> {
+pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
     fn prove<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
-        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
 }
 
-pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> {
+pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
     fn verify<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>>;
 }

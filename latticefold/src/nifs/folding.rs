@@ -1,12 +1,14 @@
 #![allow(non_snake_case)]
+use crate::utils::mle::dense_vec_to_dense_mle;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
-use cyclotomic_rings::SuitableRing;
+
+use cyclotomic_rings::rings::SuitableRing;
+
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
-use crate::transcript::TranscriptWithSmallChallenges;
-use crate::utils::mle::dense_vec_to_dense_mle;
+use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
@@ -25,13 +27,13 @@ mod structs;
 mod tests;
 mod utils;
 
-impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT, T>
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT, T>
     for LFFoldingProver<NTT, T>
 {
     fn prove<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
-        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         if cm_i_s.len() != 2 * P::K {
@@ -172,13 +174,13 @@ impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<NTT, T>
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
     for LFFoldingVerifier<NTT, T>
 {
     fn verify<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
         proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
         if cm_i_s.len() != 2 * P::K {

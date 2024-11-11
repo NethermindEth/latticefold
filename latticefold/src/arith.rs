@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 use ark_ff::Field;
 use ark_std::log2;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
@@ -286,7 +286,7 @@ pub mod tests {
 
     use super::*;
     use crate::arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use cyclotomic_rings::{GoldilocksRingNTT, GoldilocksRingPoly};
+    use cyclotomic_rings::rings::{GoldilocksRingNTT, GoldilocksRingPoly};
     use lattirust_ring::cyclotomic_ring::models::{
         goldilocks::{Fq, Fq3},
         pow2_debug::Pow2CyclotomicPolyRingNTT,

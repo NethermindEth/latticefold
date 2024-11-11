@@ -21,7 +21,7 @@ use crate::{
 use ark_ff::{One, UniformRand};
 use ark_std::iter::successors;
 use ark_std::Zero;
-use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
+use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, eq_eval, VirtualPolynomial},

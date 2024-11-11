@@ -9,7 +9,7 @@ use crate::{
     transcript::Transcript,
 };
 use ark_std::marker::PhantomData;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
     OverField, Ring,
@@ -480,7 +480,7 @@ mod tests_stark {
         transcript::poseidon::PoseidonTranscript,
         utils::security_check::{check_ring_modulus_128_bits_security, check_witness_bound},
     };
-    use cyclotomic_rings::StarkChallengeSet;
+    use cyclotomic_rings::rings::StarkChallengeSet;
 
     #[test]
     fn test_dummy_decomposition() {

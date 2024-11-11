@@ -1,12 +1,20 @@
-// PGold = 2^64 − 2^32 + 1
-
 use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly};
 
 use super::SuitableRing;
 use crate::challenge_set::error;
 use crate::challenge_set::LatticefoldChallengeSet;
 
+/// Goldilocks ring in the NTT form.
+///
+/// The base field of the NTT form is a degree-3
+/// extension of the Goldilocks field.
+///
+/// The NTT form has 8 components.
 pub type GoldilocksRingNTT = RqNTT;
+
+/// BabyBear ring in the coefficient form.
+///
+/// The cyclotomic polynomial is $X^24-X^12+1$ of degree 24.
 pub type GoldilocksRingPoly = RqPoly;
 
 impl SuitableRing for GoldilocksRingNTT {
@@ -27,7 +35,7 @@ impl LatticefoldChallengeSet<GoldilocksRingNTT> for GoldilocksChallengeSet {
     /// Thus to generate 24 coefficients in that range 18 bytes is enough.
     const BYTES_NEEDED: usize = 18;
 
-    fn small_challenge_from_random_bytes(
+    fn short_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<GoldilocksRingPoly, error::ChallengeSetError> {
         if bs.len() != Self::BYTES_NEEDED {
@@ -65,7 +73,7 @@ mod tests {
 
     #[test]
     fn test_small_challenge_from_random_bytes() {
-        let challenge = GoldilocksChallengeSet::small_challenge_from_random_bytes(&[
+        let challenge = GoldilocksChallengeSet::short_challenge_from_random_bytes(&[
             0x7b, 0x4b, 0xe5, 0x8e, 0xe5, 0x11, 0xd2, 0xd0, 0x9c, 0x22, 0xba, 0x2e, 0xeb, 0xa8,
             0xba, 0x35, 0xf2, 0x18,
         ])

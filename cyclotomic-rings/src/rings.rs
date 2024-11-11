@@ -1,3 +1,7 @@
+//!
+//!  Cyclotomic ring API for the LatticeFold protocol.
+//!
+
 use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
@@ -9,14 +13,12 @@ use lattirust_ring::{
 };
 
 mod babybear;
-mod dilithium;
 mod frog;
 mod goldilocks;
 mod poseidon;
 mod stark;
 
 pub use babybear::*;
-pub use dilithium::*;
 pub use frog::*;
 pub use goldilocks::*;
 pub use stark::*;
@@ -24,18 +26,18 @@ pub use stark::*;
 /// An umbrella trait of a ring suitable to be used in the LatticeFold protocol.
 ///
 /// The ring is assumed to be of the form $$\mathbb{Z}_p\[X\]/(f(X)),$$ for a polynomial
-/// $f(X) \in \mathbb{Z}_p\[X\]$ (typically, this is a cyclotomic polynomial $\Phi_m(X)$) so it has
+/// $f(X) \in \mathbb{Z}_p\[X\],\: d=\mathrm{deg}\ f(X)$, (typically, this is a cyclotomic polynomial $\Phi_m(X)$) so it has
 /// two isomorphic forms:
 ///   * <i>The coefficient form</i>, i.e. a ring element is represented as the unique polynomial $g$ of the
-///     degree $\mathrm{deg}\ g < \mathrm{deg}\ f$.
+///     degree $\mathrm{deg}\ g < d$.
 ///   * <i>The NTT form</i>, i.e. a ring element is represented as its image along the Chinese-remainder isomorphism
-///     $$\mathbb{Z}_p\[X\]/(f(X))\cong \prod\limits\_{i=1}^\tau\mathbb{Z}_p\[X\]/(f\_i(X)),$$
-///     where $f\_1(X),\ldots, f\_\tau(X)$ are irreducible polynomials in $ \mathbb{Z}_p\[X\]$ such that
-///     $$f(X) = f\_1(X)\cdot\ldots\cdot f\_\tau(X).$$
+///     $$\mathbb{Z}_p\[X\]/(f(X))\cong \prod\limits\_{i=1}^t\mathbb{Z}_p\[X\]/(f\_i(X)),$$
+///     where $f\_1(X),\ldots, f\_t(X)$ are irreducible polynomials in $ \mathbb{Z}_p\[X\]$ such that
+///     $$f(X) = f\_1(X)\cdot\ldots\cdot f\_t(X).$$
 ///
-/// When $f(X)$ is a cyclotomic polynomial the factors $f\_1(X),\ldots, f\_\tau(X)$ have equal degrees, thus the fields in the RHS of
+/// When $f(X)$ is a cyclotomic polynomial the factors $f\_1(X),\ldots, f\_t(X)$ have equal degrees, thus the fields in the RHS of
 /// the Chinese-remainder isomorphism are all isomorphic to the same extension of the field $\mathbb{Z}\_p$, implying the NTT form
-/// of the ring is a direct product of $\tau$ instances of $\mathbb{Z}\_{p^k}$ for some $k$ with componentwise operations.
+/// of the ring is a direct product of $t$ instances of $\mathbb{Z}\_{p^\tau}$ for $\tau=\frac{d}{t}$ with componentwise operations.
 ///
 /// If `R: SuitableRing` then we assume that the type `R` represents the NTT form of the ring as the arithmetic operations
 /// in the NTT form are much faster and we intend to use the NTT form as much as possible only occasionally turning to the

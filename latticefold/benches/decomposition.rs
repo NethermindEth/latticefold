@@ -3,12 +3,14 @@
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{StarkChallengeSet, StarkRingNTT, SuitableRing},
+};
 use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
 mod utils;
 use ark_std::UniformRand;
-use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use latticefold::{
     arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
