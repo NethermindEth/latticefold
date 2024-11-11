@@ -31,13 +31,13 @@ pub use stark::*;
 ///   * <i>The coefficient form</i>, i.e. a ring element is represented as the unique polynomial $g$ of the
 ///     degree $\mathrm{deg}\ g < d$.
 ///   * <i>The NTT form</i>, i.e. a ring element is represented as its image along the Chinese-remainder isomorphism
-///     $$\mathbb{Z}_p\[X\]/(f(X))\cong \prod\limits\_{i=1}^k\mathbb{Z}_p\[X\]/(f\_i(X)),$$
-///     where $f\_1(X),\ldots, f\_k(X)$ are irreducible polynomials in $ \mathbb{Z}_p\[X\]$ such that
-///     $$f(X) = f\_1(X)\cdot\ldots\cdot f\_k(X).$$
+///     $$\mathbb{Z}_p\[X\]/(f(X))\cong \prod\limits\_{i=1}^t\mathbb{Z}_p\[X\]/(f\_i(X)),$$
+///     where $f\_1(X),\ldots, f\_t(X)$ are irreducible polynomials in $ \mathbb{Z}_p\[X\]$ such that
+///     $$f(X) = f\_1(X)\cdot\ldots\cdot f\_t(X).$$
 ///
-/// When $f(X)$ is a cyclotomic polynomial the factors $f\_1(X),\ldots, f\_k(X)$ have equal degrees, thus the fields in the RHS of
+/// When $f(X)$ is a cyclotomic polynomial the factors $f\_1(X),\ldots, f\_t(X)$ have equal degrees, thus the fields in the RHS of
 /// the Chinese-remainder isomorphism are all isomorphic to the same extension of the field $\mathbb{Z}\_p$, implying the NTT form
-/// of the ring is a direct product of $k$ instances of $\mathbb{Z}\_{p^\tau}$ for some $\tau$ with componentwise operations.
+/// of the ring is a direct product of $t$ instances of $\mathbb{Z}\_{p^\tau}$ for $\tau=\frac{d}{t}$ with componentwise operations.
 ///
 /// If `R: SuitableRing` then we assume that the type `R` represents the NTT form of the ring as the arithmetic operations
 /// in the NTT form are much faster and we intend to use the NTT form as much as possible only occasionally turning to the
