@@ -5,7 +5,7 @@ use criterion::{
 };
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
-    rings::{StarkChallengeSet, StarkRingNTT, SuitableRing},
+    {StarkChallengeSet, StarkRingNTT, SuitableRing},
 };
 use latticefold::nifs::decomposition::{
     DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,

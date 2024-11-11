@@ -5,7 +5,7 @@ use criterion::{
 };
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
-    rings::{StarkChallengeSet, StarkRingNTT, SuitableRing},
+    {GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing},
 };
 use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
@@ -198,11 +198,48 @@ macro_rules! run_single_starkprime_benchmark {
     };
 }
 
+#[macro_export]
+macro_rules! define_goldilocks_params {
+    ($w:expr, $b:expr, $l:expr,  $b_small:expr, $k:expr) => {
+        paste::paste! {
+            #[derive(Clone)]
+            struct [<GoldilocksParamsWithB $b W $w>];
+
+            impl DecompositionParams for [<GoldilocksParamsWithB $b W $w>] {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = $b_small; // This is not use in decompose or linearization
+                const K: usize = $l;// This is not use in decompose or linearization
+            }
+        }
+    };
+}
+#[macro_export]
+macro_rules! run_single_goldilocks_benchmark {
+    ( $crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr,  $b_small:expr, $k:expr) => {
+        define_goldilocks_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            linearization_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<GoldilocksParamsWithB $b W $w>]>($crit);
+
+        }
+    };
+}
 fn benchmarks_main(c: &mut Criterion) {
+    // Goldilocks
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Linearization Godlilocks");
+        group.plot_config(plot_config.clone());
+
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
+        // TODO: Update configurations
+        run_single_goldilocks_benchmark!(&mut group, 1, 6, 1024, 10, 2, 2, 28);
+    }
+
     // StarkPrime
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition StarkPrime");
+        let mut group = c.benchmark_group("Linearization StarkPrime");
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
