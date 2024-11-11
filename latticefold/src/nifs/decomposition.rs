@@ -1,4 +1,5 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
+
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -7,6 +8,7 @@ use crate::{
     nifs::error::DecompositionError,
     transcript::Transcript,
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::ops::Transpose;
@@ -16,7 +18,7 @@ use lattirust_ring::{
     OverField, Ring,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
     pub u_s: Vec<Vec<NTT>>,
     pub v_s: Vec<Vec<NTT>>,
@@ -323,10 +325,13 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
 
 #[cfg(test)]
 mod tests {
+    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+    use ark_std::io::Cursor;
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
     use rand::thread_rng;
 
+    use crate::nifs::decomposition::DecompositionProof;
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
@@ -458,6 +463,57 @@ mod tests {
         );
 
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_decomposition_proof_serialization() {
+        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+        let ccs = get_test_ccs::<NTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<NTT>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let wit: Witness<NTT> = Witness::from_w_ccs::<PP>(&w_ccs);
+        let cm_i: CCCS<4, NTT> = CCCS {
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<NTT, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<NTT, CS>::default();
+
+        let (_, linearization_proof) =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+                .unwrap();
+
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<NTT, CS>>::verify(
+            &cm_i,
+            &linearization_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let (_, _, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<W, 4, PP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
+
+        let mut serialized = Vec::new();
+        decomposition_proof
+            .serialize_with_mode(&mut serialized, Compress::Yes)
+            .expect("Failed to serialize proof");
+
+        let mut cursor = Cursor::new(&serialized);
+        assert_eq!(
+            decomposition_proof,
+            DecompositionProof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
+                .expect("Failed to deserialize decomposition proof")
+        );
     }
 }
 
