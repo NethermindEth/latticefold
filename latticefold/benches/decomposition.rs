@@ -4,8 +4,10 @@ use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
 use cyclotomic_rings::{
-    challenge_set::LatticefoldChallengeSet, GoldilocksChallengeSet, GoldilocksRingNTT,
-    StarkChallengeSet, StarkRingNTT, SuitableRing,
+    challenge_set::LatticefoldChallengeSet,
+    rings::{
+        GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
+    },
 };
 use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
