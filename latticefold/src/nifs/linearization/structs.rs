@@ -83,11 +83,17 @@ pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
 }
 
+/// The LatticeFold prover
+///
+/// The implementation of the `LinearizationProver` trait is defined in the main linearization file.
 pub struct LFLinearizationProver<NTT, T> {
     _ntt: PhantomData<NTT>,
     _t: PhantomData<T>,
 }
 
+/// The LatticeFold verifier
+///
+/// The implementation of the `LinearizationVerifier` trait is defined in the main linearization file.
 pub struct LFLinearizationVerifier<NTT, T> {
     _ntt: PhantomData<NTT>,
     _t: PhantomData<T>,
