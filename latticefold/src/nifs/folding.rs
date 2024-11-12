@@ -87,7 +87,14 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                 w.f_hat
                     .iter()
                     .map(|f_hat_row| {
-                        DenseMultilinearExtension::from_evaluations_slice(log_m, f_hat_row)
+                        if 1 << log_m != f_hat_row.len() {
+                            let mut padded = Vec::with_capacity(1 << log_m);
+                            padded.extend_from_slice(f_hat_row);
+                            padded.resize(1 << log_m, NTT::zero());
+                            DenseMultilinearExtension::from_evaluations_slice(log_m, &padded)
+                        } else {
+                            DenseMultilinearExtension::from_evaluations_slice(log_m, f_hat_row)
+                        }
                     })
                     .collect()
             })
