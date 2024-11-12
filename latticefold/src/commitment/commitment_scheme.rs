@@ -4,6 +4,10 @@ use super::homomorphic_commitment::Commitment;
 use crate::{commitment::CommitmentError, decomposition_parameters::DecompositionParams};
 use cyclotomic_rings::rings::SuitableRing;
 
+use ark_std::cfg_iter;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 /// A concrete instantiation of the Ajtai commitment scheme.
 /// Contains a random Ajtai matrix for the corresponding Ajtai parameters
 /// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
@@ -62,14 +66,15 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
             return Err(CommitmentError::WrongWitnessLength(f.len(), W));
         }
 
-        let mut commitment: Vec<NTT> = vec![NTT::zero(); C];
-
-        for (i, row) in self.matrix.iter().enumerate() {
-            #[allow(clippy::op_ref)] // Allow `&f`, for Mul to be called with ref
-            for j in 0..W {
-                commitment[i] += row[j] * &f[j];
-            }
-        }
+        let commitment: Vec<NTT> = cfg_iter!(self.matrix)
+                .map(|row| {
+                    let mut sum = NTT::zero();
+                    for j in 0..W {
+                        sum += row[j] * &f[j];
+                    }
+                    sum
+                })
+                .collect();
 
         Ok(Commitment::from_vec_raw(commitment))
     }
