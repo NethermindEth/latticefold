@@ -38,8 +38,12 @@ Available packages:
 Currently, the only way to define a circuit to be folded is by specifying it as a [rank-1 constraint system (R1CS)](https://github.com/NethermindEth/latticefold/blob/main/latticefold/src/arith/r1cs.rs) or a [customizable constraint system (CCS)](https://github.com/NethermindEth/latticefold/blob/main/latticefold/src/arith.rs).
 
 ## License
+The crates in this repository are licensed under either of the following licenses, at your discretion.
 
-LatticeFold is [MIT Licensed](https://github.com/NethermindEth/latticefold/blob/main/LICENSE).
+* Apache License Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+* MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+Unless you explicitly state otherwise, any contribution submitted for inclusion in this library by you shall be dual licensed as above (as defined in the Apache v2 License), without any additional terms or conditions.
 
 ## Acknowledgments
 

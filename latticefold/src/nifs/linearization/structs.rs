@@ -1,3 +1,4 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 
 use crate::{
@@ -8,7 +9,7 @@ use crate::{
 };
 
 use lattirust_ring::OverField;
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
     pub linearization_sumcheck: sumcheck::Proof<NTT>,

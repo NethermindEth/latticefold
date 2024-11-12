@@ -4,7 +4,8 @@ macro_rules! generate_linearization_tests {
         use ark_std::sync::Arc;
 
         use ark_ff::UniformRand;
-        use ark_std::One;
+        use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+        use ark_std::{io::Cursor, One};
         use lattirust_poly::mle::DenseMultilinearExtension;
         use lattirust_poly::polynomials::{build_eq_x_r, VirtualPolynomial};
         use rand::thread_rng;
@@ -14,7 +15,7 @@ macro_rules! generate_linearization_tests {
             decomposition_parameters::DecompositionParams,
             nifs::linearization::{
                 structs::LinearizationProver, utils::compute_u, LFLinearizationProver,
-                LFLinearizationVerifier, LinearizationVerifier,
+                LFLinearizationVerifier, LinearizationProof, LinearizationVerifier,
             },
             transcript::poseidon::PoseidonTranscript,
         };
@@ -142,6 +143,56 @@ macro_rules! generate_linearization_tests {
             );
 
             res.unwrap();
+        }
+
+        #[test]
+        fn test_linearization_proof_serialization() {
+            type R = RqNTT;
+            type T = PoseidonTranscript<R, CS>;
+
+            #[derive(Clone)]
+            struct PP;
+            impl DecompositionParams for PP {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = $b_small;
+                const K: usize = $k;
+            }
+
+            const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
+            const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+
+            let ccs = get_test_ccs::<R>(W);
+            let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
+            let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+            let wit: Witness<R> = Witness::from_w_ccs::<PP>(&w_ccs);
+            let cm_i: CCCS<4, R> = CCCS {
+                cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
+                x_ccs,
+            };
+            let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+            let linearization_proof =
+                LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut transcript, &ccs)
+                    .unwrap()
+                    .1;
+
+            let mut serialized = Vec::new();
+            linearization_proof
+                .serialize_with_mode(&mut serialized, Compress::Yes)
+                .expect("Failed to serialize proof");
+
+            let mut cursor = Cursor::new(&serialized);
+            assert_eq!(
+                linearization_proof,
+                LinearizationProof::deserialize_with_mode(
+                    &mut cursor,
+                    Compress::Yes,
+                    Validate::Yes
+                )
+                .expect("Failed to deserialize proof")
+            );
         }
     };
 }

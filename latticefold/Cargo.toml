@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
+ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 cyclotomic-rings = { path = "../cyclotomic-rings"}
 lattirust-linear-algebra = { workspace = true }

@@ -1,4 +1,5 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use lattirust_ring::{OverField, Ring};
 
@@ -12,7 +13,7 @@ use crate::{
 };
 use cyclotomic_rings::rings::SuitableRing;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
     pub u_s: Vec<Vec<NTT>>,
     pub v_s: Vec<Vec<NTT>>,
