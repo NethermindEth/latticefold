@@ -1,6 +1,6 @@
 use ark_ff::Field;
 use ark_std::f64;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::PolyRing;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;

@@ -2,7 +2,7 @@ use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField};
 
 use super::homomorphic_commitment::Commitment;
 use crate::{commitment::CommitmentError, decomposition_parameters::DecompositionParams};
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 
 /// A concrete instantiation of the Ajtai commitment scheme.
 /// Contains a random Ajtai matrix for the corresponding Ajtai parameters
@@ -119,7 +119,7 @@ mod tests {
     use lattirust_ring::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
-    use cyclotomic_rings::DilithiumNTT;
+    use cyclotomic_rings::rings::GoldilocksRingNTT;
 
     pub(crate) fn generate_ajtai<const C: usize, const W: usize, NTT: OverField>(
     ) -> Result<AjtaiCommitmentScheme<C, W, NTT>, CommitmentError> {
@@ -141,7 +141,7 @@ mod tests {
         const WITNESS_SIZE: usize = 1 << 15;
         const OUTPUT_SIZE: usize = 9;
 
-        let ajtai_data: AjtaiCommitmentScheme<OUTPUT_SIZE, WITNESS_SIZE, DilithiumNTT> =
+        let ajtai_data: AjtaiCommitmentScheme<OUTPUT_SIZE, WITNESS_SIZE, GoldilocksRingNTT> =
             generate_ajtai()?;
         let witness: Vec<_> = (0..(1 << 15)).map(|_| 2_u128.into()).collect();
 

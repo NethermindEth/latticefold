@@ -18,7 +18,7 @@ macro_rules! generate_decomposition_tests {
             },
             transcript::poseidon::PoseidonTranscript,
         };
-        use cyclotomic_rings::SuitableRing;
+        use cyclotomic_rings::rings::SuitableRing;
         use lattirust_ring::{
             balanced_decomposition::{decompose_balanced_vec, recompose},
             PolyRing,
@@ -214,7 +214,7 @@ mod tests_pow2 {
 #[cfg(test)]
 mod tests_stark {
 
-    use cyclotomic_rings::StarkChallengeSet;
+    use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::{RqNTT, RqPoly};
     use num_bigint::BigUint;
 
@@ -299,7 +299,7 @@ mod tests_stark {
 #[cfg(test)]
 mod tests_goldilocks {
 
-    use cyclotomic_rings::GoldilocksChallengeSet;
+    use cyclotomic_rings::rings::GoldilocksChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::{RqNTT, RqPoly};
     type CS = GoldilocksChallengeSet;
     generate_decomposition_tests!(1024, 2, 2, 10);
@@ -307,7 +307,7 @@ mod tests_goldilocks {
 
 #[cfg(test)]
 mod tests_frog {
-    use cyclotomic_rings::FrogChallengeSet;
+    use cyclotomic_rings::rings::FrogChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::frog_ring::{RqNTT, RqPoly};
     type CS = FrogChallengeSet;
     generate_decomposition_tests!(1024, 2, 2, 10);
@@ -316,7 +316,7 @@ mod tests_frog {
 #[cfg(test)]
 mod tests_babybear {
 
-    use cyclotomic_rings::BabyBearChallengeSet;
+    use cyclotomic_rings::rings::BabyBearChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::babybear::{RqNTT, RqPoly};
     type CS = BabyBearChallengeSet;
 

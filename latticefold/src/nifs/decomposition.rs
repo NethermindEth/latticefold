@@ -1,8 +1,8 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
+use lattirust_poly::polynomials::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
-use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -11,7 +11,7 @@ use crate::{
     nifs::error::DecompositionError,
     transcript::Transcript,
 };
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 
 pub use structs::*;
 mod structs;
@@ -36,6 +36,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         ),
         DecompositionError,
     > {
+        let log_m = ccs.s;
+
         let wit_s: Vec<Witness<NTT>> = {
             let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f);
             f_s.into_iter().map(|f| Witness::from_f::<P>(f)).collect()
@@ -50,12 +52,17 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             .map(|wit| wit.commit::<C, W, P>(scheme))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let v_s: Vec<NTT> = wit_s
+        let v_s: Vec<Vec<NTT>> = wit_s
             .iter()
             .map(|wit| {
-                dense_vec_to_dense_mle(ccs.s, &wit.f_hat)
-                    .evaluate(&cm_i.r)
-                    .ok_or(DecompositionError::WitnessMleEvalFail)
+                wit.f_hat
+                    .iter()
+                    .map(|f_hat_row| {
+                        DenseMultilinearExtension::from_slice(log_m, f_hat_row)
+                            .evaluate(&cm_i.r)
+                            .ok_or(DecompositionError::WitnessMleEvalFail)
+                    })
+                    .collect::<Result<Vec<_>, _>>()
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -75,7 +82,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
             for M in &ccs.M {
                 u_s_for_i.push(
-                    dense_vec_to_dense_mle(ccs.s, &mat_vec_mul(M, &z)?)
+                    DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
                         .evaluate(&cm_i.r)
                         .ok_or(DecompositionError::WitnessMleEvalFail)?,
                 );
@@ -90,7 +97,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             transcript.absorb_slice(x);
             transcript.absorb_slice(y.as_ref());
             transcript.absorb_slice(u);
-            transcript.absorb(v);
+            transcript.absorb_slice(v);
 
             let h = x
                 .last()
@@ -98,7 +105,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 .ok_or(DecompositionError::IncorrectLength)?;
             lcccs_s.push(LCCCS {
                 r: cm_i.r.clone(),
-                v: *v,
+                v: v.clone(),
                 cm: y.clone(),
                 u: u.clone(),
                 x_w: x[0..x.len() - 1].to_vec(),
@@ -133,7 +140,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             transcript.absorb_slice(x);
             transcript.absorb_slice(y.as_ref());
             transcript.absorb_slice(u);
-            transcript.absorb(v);
+            transcript.absorb_slice(v);
 
             let h = x
                 .last()
@@ -141,7 +148,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
                 .ok_or(DecompositionError::IncorrectLength)?;
             lcccs_s.push(LCCCS {
                 r: cm_i.r.clone(),
-                v: *v,
+                v: v.clone(),
                 cm: y.clone(),
                 u: u.clone(),
                 x_w: x[0..x.len() - 1].to_vec(),
@@ -182,15 +189,17 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        let should_equal_v0: NTT = proof
-            .v_s
-            .iter()
-            .zip(&b_s)
-            .map(|(&v_i, b_i)| v_i * b_i)
-            .sum();
+        for (i, &cm_i_value) in cm_i.v.iter().enumerate() {
+            let should_equal_v0: NTT = proof
+                .v_s
+                .iter()
+                .zip(&b_s)
+                .map(|(v_i, b_i)| v_i[i] * b_i)
+                .sum();
 
-        if should_equal_v0 != cm_i.v {
-            return Err(DecompositionError::RecomposedError);
+            if should_equal_v0 != cm_i_value {
+                return Err(DecompositionError::RecomposedError);
+            }
         }
 
         let mut should_equal_xw: Vec<NTT> = proof

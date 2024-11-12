@@ -3,8 +3,10 @@
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
-use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{StarkChallengeSet, StarkRingNTT, SuitableRing},
+};
 use latticefold::nifs::decomposition::{
     DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
 };

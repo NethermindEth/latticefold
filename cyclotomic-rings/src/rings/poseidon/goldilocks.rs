@@ -1,7 +1,7 @@
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
 
-use crate::{GetPoseidonParams, GoldilocksPoseidonConfig};
+use crate::rings::{GetPoseidonParams, GoldilocksPoseidonConfig};
 
 impl GetPoseidonParams<Fq> for GoldilocksPoseidonConfig {
     fn get_poseidon_config() -> PoseidonConfig<Fq> {

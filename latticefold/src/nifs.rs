@@ -1,13 +1,13 @@
 use ark_std::marker::PhantomData;
 
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::OverField;
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
-    transcript::TranscriptWithSmallChallenges,
+    transcript::TranscriptWithShortChallenges,
 };
 use decomposition::*;
 use error::LatticefoldError;
@@ -47,7 +47,7 @@ impl<
         const W: usize,
         NTT: SuitableRing,
         P: DecompositionParams,
-        T: TranscriptWithSmallChallenges<NTT>,
+        T: TranscriptWithShortChallenges<NTT>,
     > NIFSProver<C, W, NTT, P, T>
 {
     pub fn prove(
@@ -55,7 +55,7 @@ impl<
         w_acc: &Witness<NTT>,
         cm_i: &CCCS<C, NTT>,
         w_i: &Witness<NTT>,
-        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
@@ -115,14 +115,14 @@ impl<
         const C: usize,
         NTT: SuitableRing,
         P: DecompositionParams,
-        T: TranscriptWithSmallChallenges<NTT>,
+        T: TranscriptWithShortChallenges<NTT>,
     > NIFSVerifier<C, NTT, P, T>
 {
     pub fn verify(
         acc: &LCCCS<C, NTT>,
         cm_i: &CCCS<C, NTT>,
         proof: &LFProof<C, NTT>,
-        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LatticefoldError<NTT>> {
         let linearized_cm_i = LFLinearizationVerifier::<_, T>::verify(

@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
+use ark_ff::Field;
 use ark_std::log2;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
-    Ring,
+    balanced_decomposition::{decompose_balanced_vec, recompose},
+    PolyRing, Ring,
 };
 
 use crate::{
@@ -142,7 +143,7 @@ pub struct CCCS<const C: usize, R: Ring> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LCCCS<const C: usize, R: Ring> {
     pub r: Vec<R>,
-    pub v: R,
+    pub v: Vec<R>,
     pub cm: Commitment<C, R>,
     pub u: Vec<R>,
     pub x_w: Vec<R>,
@@ -153,8 +154,8 @@ pub struct LCCCS<const C: usize, R: Ring> {
 pub struct Witness<NTT: Ring> {
     // F is B-decomposed ccs witness
     pub f: Vec<NTT>,
-    // f_hat = vec(CR repr of f)
-    pub f_hat: Vec<NTT>,
+    // NTT(f_hat) = Coeff(coefficient representation of f)
+    pub f_hat: Vec<Vec<NTT>>,
     pub w_ccs: Vec<NTT>,
 }
 
@@ -166,7 +167,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
 
         // decompose radix-B
         let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-            pad_and_transpose(decompose_balanced_vec(&coef_repr, P::B, Some(P::L)))
+            decompose_balanced_vec(&coef_repr, P::B, Some(P::L))
                 .into_iter()
                 .flatten()
                 .collect();
@@ -174,7 +175,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
-        let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
+        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&coef_repr_decomposed);
 
         Self {
             f,
@@ -183,14 +184,53 @@ impl<NTT: SuitableRing> Witness<NTT> {
         }
     }
 
+    /// Given a gadget-decomposed witness slice `f` returns the f-hat matrix from the Latticefold paper,
+    /// i.e. a matrix of dimension `tau x f.len()`, where `tau = NTT::CoefficientRepresentation::dimension() / NTT::dimension()`,
+    /// such that the `j`th row of the matrix is obtained as (in pseudocode)
+    /// ```text
+    ///   [
+    ///      NTT(f[0][NTT::dimension() * j .. NTT::dimension() * (j+1)]),
+    ///      NTT(f[1][NTT::dimension() * j .. NTT::dimension() * (j+1)]),
+    ///      ...,
+    ///      NTT(f[f.len() - 1][NTT::dimension() * j .. NTT::dimension() * (j+1)])
+    ///   ].
+    /// ```
+    /// Note, that our definition of the hat-matrix is equivalent up to transposing to the
+    /// one in the Latticefold paper, since it is more often the case that we need to iterate
+    /// over the columns (of the original latticefold f-hat) rather than the rows.
+    ///
+    /// # Arguments
+    ///
+    /// * `f` - A gadget-decomposed witness slice in the coefficient form.
+    ///
+    /// # Returns
+    ///
+    /// The hat matrix `Vec<Vec<NTT>>`.
+    ///
+    fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<Vec<NTT>> {
+        let mut fhat = vec![
+            vec![NTT::zero(); f.len()];
+            NTT::CoefficientRepresentation::dimension() / NTT::dimension()
+        ];
+
+        for (i, f_i) in f.iter().enumerate() {
+            for (j, coeff_chunk_j) in f_i.coeffs().chunks(NTT::dimension()).enumerate() {
+                for (&coeff_from_chunk, fhat_j_i_coeff) in
+                    coeff_chunk_j.iter().zip(fhat[j][i].coeffs_mut().iter_mut())
+                {
+                    *fhat_j_i_coeff =
+                        <NTT::BaseRing as Field>::from_base_prime_field(coeff_from_chunk);
+                }
+            }
+        }
+
+        fhat
+    }
+
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        // let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-        //     f.iter().map(|&x| x.into()).collect();
-
-        // let f_hat: Vec<NTT> = coef_repr_decomposed.into_iter().map(|x| x.into()).collect();
-
-        // Note that f_hat = f this has to be replace with: support for small prime modulus
-        let f_hat = f.clone();
+        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
+            f.iter().map(|&x| x.into()).collect();
+        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&coef_repr_decomposed);
 
         let w_ccs = f
             .chunks(P::L)
@@ -242,9 +282,15 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 
 #[cfg(test)]
 pub mod tests {
+    use ark_ff::{One, Zero};
+
     use super::*;
     use crate::arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+    use cyclotomic_rings::rings::{GoldilocksRingNTT, GoldilocksRingPoly};
+    use lattirust_ring::cyclotomic_ring::models::{
+        goldilocks::{Fq, Fq3},
+        pow2_debug::Pow2CyclotomicPolyRingNTT,
+    };
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
@@ -269,5 +315,51 @@ pub mod tests {
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();
+    }
+
+    #[test]
+    fn test_get_fhat() {
+        let mut f_1_coeffs = vec![Fq::from(1), Fq::from(2), Fq::from(3)];
+        let mut f_2_coeffs = vec![Fq::from(4), Fq::from(5), Fq::from(6)];
+
+        f_1_coeffs.extend((0..GoldilocksRingPoly::dimension() - 3).map(|_| Fq::zero()));
+        f_2_coeffs.extend((0..GoldilocksRingPoly::dimension() - 3).map(|_| Fq::one()));
+
+        let f: Vec<GoldilocksRingPoly> = vec![
+            GoldilocksRingPoly::from(f_1_coeffs),
+            GoldilocksRingPoly::from(f_2_coeffs),
+        ];
+
+        let fhat = Witness::<GoldilocksRingNTT>::get_fhat(&f);
+
+        assert_eq!(
+            fhat,
+            vec![
+                vec![
+                    GoldilocksRingNTT::from(vec![
+                        Fq3::from_base_prime_field(Fq::from(1)),
+                        Fq3::from_base_prime_field(Fq::from(2)),
+                        Fq3::from_base_prime_field(Fq::from(3)),
+                        Fq3::zero(),
+                        Fq3::zero(),
+                        Fq3::zero(),
+                        Fq3::zero(),
+                        Fq3::zero(),
+                    ]),
+                    GoldilocksRingNTT::from(vec![
+                        Fq3::from_base_prime_field(Fq::from(4)),
+                        Fq3::from_base_prime_field(Fq::from(5)),
+                        Fq3::from_base_prime_field(Fq::from(6)),
+                        Fq3::one(),
+                        Fq3::one(),
+                        Fq3::one(),
+                        Fq3::one(),
+                        Fq3::one(),
+                    ]),
+                ],
+                vec![GoldilocksRingNTT::zero(), GoldilocksRingNTT::one()],
+                vec![GoldilocksRingNTT::zero(), GoldilocksRingNTT::one()]
+            ]
+        );
     }
 }

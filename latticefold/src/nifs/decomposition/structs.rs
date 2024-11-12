@@ -10,15 +10,16 @@ use crate::{
     nifs::error::DecompositionError,
     transcript::Transcript,
 };
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 
 #[derive(Clone)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
     pub u_s: Vec<Vec<NTT>>,
-    pub v_s: Vec<NTT>,
+    pub v_s: Vec<Vec<NTT>>,
     pub x_s: Vec<Vec<NTT>>,
     pub y_s: Vec<Commitment<C, NTT>>,
 }
+
 pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
     fn prove<const W: usize, const C: usize, P: DecompositionParams>(
         cm_i: &LCCCS<C, NTT>,

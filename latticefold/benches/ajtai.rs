@@ -5,11 +5,10 @@ use ark_std::{time::Duration, UniformRand};
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::{
-    BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing, DILITHIUM_PRIME,
+use cyclotomic_rings::rings::{
+    BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
-use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 use rand::thread_rng;
 use std::fmt::Debug;
 
@@ -88,12 +87,6 @@ macro_rules! run_single_babybear_benchmark {
 macro_rules! run_single_frog_benchmark {
     ($crit:expr, $cw:expr, $w:expr) => {
         ajtai_benchmark::<$cw, $w, FrogRingNTT>($crit);
-    };
-}
-
-macro_rules! run_single_dilithium_benchmark {
-    ($crit:expr, $cw:expr, $w:expr) => {
-        ajtai_benchmark::<$cw, $w, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>>($crit);
     };
 }
 
@@ -313,35 +306,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_frog_benchmark!(&mut group, 19, 262144);
         run_single_frog_benchmark!(&mut group, 20, 524288);
         run_single_frog_benchmark!(&mut group, 21, 1048576);
-
-        group.finish();
-    }
-
-    // Dilithium
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Ajtai Dilithium");
-        group.plot_config(plot_config.clone());
-
-        // Existing benchmarks
-        run_single_dilithium_benchmark!(&mut group, 1, 32768);
-        run_single_dilithium_benchmark!(&mut group, 2, 32768);
-        run_single_dilithium_benchmark!(&mut group, 3, 32768);
-        run_single_dilithium_benchmark!(&mut group, 1, 65536);
-        run_single_dilithium_benchmark!(&mut group, 2, 65536);
-        run_single_dilithium_benchmark!(&mut group, 3, 65536);
-        run_single_dilithium_benchmark!(&mut group, 1, 131072);
-        run_single_dilithium_benchmark!(&mut group, 2, 131072);
-        run_single_dilithium_benchmark!(&mut group, 3, 131072);
-        run_single_dilithium_benchmark!(&mut group, 1, 262144);
-        run_single_dilithium_benchmark!(&mut group, 2, 262144);
-        run_single_dilithium_benchmark!(&mut group, 3, 262144);
-        run_single_dilithium_benchmark!(&mut group, 1, 524288);
-        run_single_dilithium_benchmark!(&mut group, 2, 524288);
-        run_single_dilithium_benchmark!(&mut group, 3, 524288);
-        run_single_dilithium_benchmark!(&mut group, 1, 1048576);
-        run_single_dilithium_benchmark!(&mut group, 2, 1048576);
-        run_single_dilithium_benchmark!(&mut group, 3, 1048576);
 
         group.finish();
     }
