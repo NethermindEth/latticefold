@@ -12,7 +12,7 @@ use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
-    utils::{mle::dense_vec_to_dense_mle, sumcheck},
+    utils::sumcheck,
 };
 
 use lattirust_poly::{
@@ -106,7 +106,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                 let Mz_mle = ccs
                     .M
                     .iter()
-                    .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, zi)?)))
+                    .map(|M| {
+                        Ok(DenseMultilinearExtension::from_slice(
+                            log_m,
+                            &mat_vec_mul(M, zi)?,
+                        ))
+                    })
                     .collect::<Result<_, FoldingError<_>>>()?;
                 Ok(Mz_mle)
             })

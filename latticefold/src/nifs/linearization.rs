@@ -12,10 +12,7 @@ use super::error::LinearizationError;
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::{
-        mle::dense_vec_to_dense_mle,
-        sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
-    },
+    utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
 
 pub use structs::*;
@@ -51,7 +48,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
             .M
             .iter()
-            .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, &z_ccs)?)))
+            .map(|M| {
+                Ok(DenseMultilinearExtension::from_slice(
+                    log_m,
+                    &mat_vec_mul(M, &z_ccs)?,
+                ))
+            })
             .collect::<Result<_, LinearizationError<_>>>()?;
 
         // The sumcheck polynomial
@@ -68,7 +70,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .collect::<Vec<NTT>>();
 
         // Step 3: Compute v, u_vector
-        let v: Vec<NTT> = wit.f_hat.iter().map(|f_hat_row| dense_vec_to_dense_mle(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
+        let v: Vec<NTT> = wit.f_hat.iter().map(|f_hat_row| DenseMultilinearExtension::from_slice(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
 
         let u = compute_u(&Mz_mles, &r)?;
 

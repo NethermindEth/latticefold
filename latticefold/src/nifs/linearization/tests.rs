@@ -20,7 +20,7 @@ macro_rules! generate_tests {
         };
         use $crate::{
             nifs::linearization::utils::prepare_lin_sumcheck_polynomial,
-            utils::mle::dense_vec_to_dense_mle,
+            //utils::mle::dense_vec_to_dense_mle,
         };
 
         #[test]
@@ -81,7 +81,8 @@ macro_rules! generate_tests {
                         .sum::<RqNTT>();
                     mle.push(row_z);
                 }
-                M_z_mles.push(dense_vec_to_dense_mle(log_m, &mle));
+                //M_z_mles.push(dense_vec_to_dense_mle(log_m, &mle));
+                M_z_mles.push(DenseMultilinearExtension::from_slice(log_m, &mle));
             }
 
             let _ = g.add_mle_list(M_z_mles.clone().into_iter().map(|mle| Arc::new(mle)), c);

@@ -1,5 +1,4 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -11,6 +10,7 @@ use crate::{
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::ops::Transpose;
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, recompose},
     OverField, Ring,
@@ -98,7 +98,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 wit.f_hat
                     .iter()
                     .map(|f_hat_row| {
-                        dense_vec_to_dense_mle(log_m, f_hat_row)
+                        DenseMultilinearExtension::from_slice(log_m, f_hat_row)
                             .evaluate(&cm_i.r)
                             .ok_or(DecompositionError::WitnessMleEvalFail)
                     })
@@ -122,7 +122,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
             for M in &ccs.M {
                 u_s_for_i.push(
-                    dense_vec_to_dense_mle(ccs.s, &mat_vec_mul(M, &z)?)
+                    DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
                         .evaluate(&cm_i.r)
                         .ok_or(DecompositionError::WitnessMleEvalFail)?,
                 );
