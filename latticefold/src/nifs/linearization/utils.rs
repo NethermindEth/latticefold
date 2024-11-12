@@ -21,6 +21,26 @@ pub fn compute_u<NTT: OverField>(
 }
 
 /// Prepare the main linearization polynomial.
+///
+/// # Parameters:
+///
+/// * `log_m` (`usize`): The number of variables in the polynomial
+///
+/// * `c` (`&[NTT]`): Polynomial is a linear comibination lists of MLEs, c is the coefficients of the lists
+///
+/// * `M_mles` (`&[DenseMultilinearExtension<NTT>]`): MLEs that the polynomial is constructed from
+///
+/// * `S` (`&[Vec<usize>]`): ] indices for the MLE lists
+///
+/// * `beta_s` (`&[NTT]`): Randomness
+///
+/// # Returns:
+///
+/// * `VirtualPolynomial<NTT>`: The linearization sumcheck polynomial
+///
+/// # Errors:
+/// * Will return an error if na of the MLEs are of the wrong size
+///
 pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     log_m: usize,
     c: &[NTT],
