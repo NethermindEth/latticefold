@@ -988,10 +988,6 @@ mod tests_stark {
 
     #[test]
     fn test_folding_proof_serialization() {
-        #[cfg(feature = "dhat-heap")]
-        #[global_allocator]
-        static ALLOC: dhat::Alloc = dhat::Alloc;
-
         type R = RqNTT;
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
@@ -1010,9 +1006,6 @@ mod tests_stark {
         const WIT_LEN: usize = 512;
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
-
-        #[cfg(feature = "dhat-heap")]
-        let _profiler = dhat::Profiler::new_heap(); // Move a round to measure specific parts
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
@@ -1086,8 +1079,6 @@ mod tests_stark {
 
         let lcccs = decomposition_verification.expect("Decomposition Verification error");
 
-        #[cfg(feature = "dhat-heap")]
-        let _profiler = dhat::Profiler::new_heap();
         let (lcccs, wit_s) = {
             let mut lcccs = lcccs.clone();
             let mut lcccs_r = lcccs.clone();
