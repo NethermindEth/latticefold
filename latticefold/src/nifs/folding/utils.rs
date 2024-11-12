@@ -21,6 +21,9 @@ use lattirust_poly::{
 };
 use lattirust_ring::OverField;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 pub(super) fn get_alphas_betas_zetas_mus<
     NTT: OverField,
     T: Transcript<NTT>,
