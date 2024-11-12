@@ -1,7 +1,7 @@
 //! Prover
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::{cfg_iter_mut, vec::Vec};
+use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
 use lattirust_poly::{
     mle::MultilinearExtension,
     polynomials::{DenseMultilinearExtension, VirtualPolynomial},
@@ -112,7 +112,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
 
         // generate sum
-        let fold_result = ark_std::cfg_into_iter!(0..1 << (nv - i), 1 << 10).fold(
+        let fold_result = cfg_into_iter!(0..1 << (nv - i), 1 << 10).fold(
             zeros,
             |(mut products_sum, mut product), b| {
                 // In effect, this fold is essentially doing simply:
