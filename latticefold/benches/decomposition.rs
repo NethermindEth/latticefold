@@ -9,13 +9,11 @@ use cyclotomic_rings::{
         GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
-use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
 mod utils;
 use ark_std::UniformRand;
-use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
 use latticefold::{
-    arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS},
+    arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::{
@@ -30,6 +28,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use utils::wit_and_ccs_gen;
 
 fn prover_decomposition_benchmark<
     const C: usize,
@@ -217,8 +216,8 @@ macro_rules! run_single_starkprime_benchmark {
 
 #[macro_export]
 macro_rules! run_single_goldilocks_benchmark {
-    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_params!($w, $b, $l);
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
 
@@ -227,8 +226,8 @@ macro_rules! run_single_goldilocks_benchmark {
 }
 #[macro_export]
 macro_rules! run_single_babybear_benchmark {
-    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_params!($w, $b, $l);
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
 
@@ -237,20 +236,11 @@ macro_rules! run_single_babybear_benchmark {
 }
 #[macro_export]
 macro_rules! run_single_frog_benchmark {
-    ($io:expr, $crit:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_params!($w, $b, $l);
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
 
-        }
-    };
-}
-#[macro_export]
-macro_rules! run_single_dilithium_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr) => {
-        define_params!($w, $b, $l);
-        paste::paste! {
-            decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, BinarySmallSet<DILITHIUM_PRIME, 256>, Pow2CyclotomicPolyRingNTT<DILITHIUM_PRIME, 256>, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -304,39 +294,39 @@ fn benchmarks_main(c: &mut Criterion) {
         #[allow(clippy::identity_op)]
         {
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 512, 8633754724, 1, /*8*/
+                &mut group, 1, 15, 512, 8633754724, 1, 
                 92918, 2
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 512, 8615125000, 1, /*8*/
+                &mut group, 1, 15, 512, 8615125000, 1, 
                 2050, 3
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 512, 8540717056, 1, /*8*/
+                &mut group, 1, 15, 512, 8540717056, 1, 
                 304, 4
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 1024, 6104921956, 1, /*8*/
+                &mut group, 1, 15, 1024, 6104921956, 1, 
                 78134, 2
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 1024, 6088387976, 1, /*8*/
+                &mut group, 1, 15, 1024, 6088387976, 1, 
                 1826, 3
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 1024, 5972816656, 1, /*8*/
+                &mut group, 1, 15, 1024, 5972816656, 1, 
                 278, 4
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 2048, 4317015616, 1, /*8*/
+                &mut group, 1, 15, 2048, 4317015616, 1, 
                 65704, 2
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 2048, 4314825152, 1, /*8*/
+                &mut group, 1, 15, 2048, 4314825152, 1, 
                 1628, 3
             );
             run_single_starkprime_benchmark!(
-                &mut group, 1, 15, 2048, 4294967296, 1, /*8*/
+                &mut group, 1, 15, 2048, 4294967296, 1, 
                 256, 4
             );
             run_single_starkprime_benchmark!(
@@ -345,7 +335,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 512,
                 21195283396,
-                1, /*8*/
+                1, 
                 145586,
                 2
             );
@@ -355,7 +345,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 512,
                 21161991096,
-                1, /*8*/
+                1, 
                 2766,
                 3
             );
@@ -365,7 +355,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 512,
                 20851360000,
-                1, /*8*/
+                1, 
                 380,
                 4
             );
@@ -375,7 +365,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 1024,
                 14987635776,
-                1, /*8*/
+                1, 
                 122424,
                 2
             );
@@ -385,7 +375,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 1024,
                 14959673344,
-                1, /*8*/
+                1, 
                 2464,
                 3
             );
@@ -395,7 +385,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 1024,
                 14666178816,
-                1, /*8*/
+                1, 
                 348,
                 4
             );
@@ -405,7 +395,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 2048,
                 10597878916,
-                1, /*8*/
+                1, 
                 102946,
                 2
             );
@@ -415,7 +405,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 2048,
                 10590025536,
-                1, /*8*/
+                1, 
                 2196,
                 3
             );
@@ -425,7 +415,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 16,
                 2048,
                 10485760000,
-                1, /*8*/
+                1, 
                 320,
                 4
             );
@@ -435,7 +425,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 512,
                 50614200576,
-                1, /*8*/
+                1, 
                 224976,
                 2
             );
@@ -445,7 +435,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 512,
                 50570904392,
-                1, /*8*/
+                1, 
                 3698,
                 3
             );
@@ -455,7 +445,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 512,
                 50479304976,
-                1, /*8*/
+                1, 
                 474,
                 4
             );
@@ -465,7 +455,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 1024,
                 35789072400,
-                1, /*8*/
+                1, 
                 189180,
                 2
             );
@@ -475,7 +465,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 1024,
                 35741336184,
-                1, /*8*/
+                1, 
                 3294,
                 3
             );
@@ -485,7 +475,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 1024,
                 35477982736,
-                1, /*8*/
+                1, 
                 434,
                 4
             );
@@ -495,7 +485,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 2048,
                 25307082724,
-                1, /*8*/
+                1, 
                 159082,
                 2
             );
@@ -505,7 +495,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 2048,
                 25256916504,
-                1, /*8*/
+                1, 
                 2934,
                 3
             );
@@ -515,7 +505,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 17,
                 2048,
                 25091827216,
-                1, /*8*/
+                1, 
                 398,
                 4
             );
@@ -525,7 +515,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 512,
                 117850770436,
-                1, /*7*/
+                1, 
                 343294,
                 2
             );
@@ -535,7 +525,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 512,
                 117793118808,
-                1, /*7*/
+                1, 
                 4902,
                 3
             );
@@ -545,7 +535,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 512,
                 116319195136,
-                1, /*7*/
+                1, 
                 584,
                 4
             );
@@ -555,7 +545,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 1024,
                 83332678276,
-                1, /*7*/
+                1, 
                 288674,
                 2
             );
@@ -565,7 +555,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 1024,
                 83224499896,
-                1, /*7*/
+                1, 
                 4366,
                 3
             );
@@ -575,7 +565,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 1024,
                 82538991616,
-                1, /*7*/
+                1, 
                 536,
                 4
             );
@@ -585,7 +575,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 2048,
                 58925620516,
-                1, /*7*/
+                1, 
                 242746,
                 2
             );
@@ -595,7 +585,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 2048,
                 58863869000,
-                1, /*7*/
+                1, 
                 3890,
                 3
             );
@@ -605,7 +595,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 18,
                 2048,
                 58594980096,
-                1, /*7*/
+                1, 
                 492,
                 4
             );
@@ -615,7 +605,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 512,
                 268120982416,
-                1, /*7*/
+                1, 
                 517804,
                 2
             );
@@ -625,7 +615,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 512,
                 268086587392,
-                1, /*7*/
+                1, 
                 6448,
                 3
             );
@@ -635,7 +625,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 512,
                 265764994576,
-                1, /*7*/
+                1, 
                 718,
                 4
             );
@@ -645,7 +635,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 1024,
                 189590576400,
-                1, /*7*/
+                1, 
                 435420,
                 2
             );
@@ -655,7 +645,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 1024,
                 189514870784,
-                1, /*7*/
+                1, 
                 5744,
                 3
             );
@@ -665,7 +655,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 1024,
                 187457825296,
-                1, /*7*/
+                1, 
                 658,
                 4
             );
@@ -675,7 +665,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 2048,
                 134059964164,
-                1, /*7*/
+                1, 
                 366142,
                 2
             );
@@ -685,7 +675,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 2048,
                 134060503032,
-                1, /*7*/
+                1, 
                 5118,
                 3
             );
@@ -695,7 +685,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 19,
                 2048,
                 133090713856,
-                1, /*7*/
+                1, 
                 604,
                 4
             );
@@ -705,7 +695,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 512,
                 597108561984,
-                1, /*7*/
+                1, 
                 772728,
                 2
             );
@@ -715,7 +705,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 512,
                 596947688000,
-                1, /*7*/
+                1, 
                 8420,
                 3
             );
@@ -725,7 +715,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 512,
                 594262141456,
-                1, /*7*/
+                1, 
                 878,
                 4
             );
@@ -735,7 +725,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 1024,
                 422219246656,
-                1, /*7*/
+                1, 
                 649784,
                 2
             );
@@ -745,7 +735,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 1024,
                 422212590008,
-                1, /*7*/
+                1, 
                 7502,
                 3
             );
@@ -755,7 +745,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 1024,
                 422026932496,
-                1, /*7*/
+                1, 
                 806,
                 4
             );
@@ -765,7 +755,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 2048,
                 298552960000,
-                1, /*7*/
+                1, 
                 546400,
                 2
             );
@@ -775,7 +765,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 2048,
                 298345446568,
-                1, /*7*/
+                1, 
                 6682,
                 3
             );
@@ -785,7 +775,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 20,
                 2048,
                 296637086736,
-                1, /*7*/
+                1, 
                 738,
                 4
             );
@@ -795,7 +785,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 512,
                 1303720941636,
-                1, /*7*/
+                1, 
                 1141806,
                 2
             );
@@ -805,7 +795,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 512,
                 1303602169024,
-                1, /*7*/
+                1, 
                 10924,
                 3
             );
@@ -815,7 +805,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 512,
                 1301023109376,
-                1, /*7*/
+                1, 
                 1068,
                 4
             );
@@ -825,7 +815,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 1024,
                 921868819600,
-                1, /*7*/
+                1, 
                 960140,
                 2
             );
@@ -835,7 +825,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 1024,
                 921735471168,
-                1, /*7*/
+                1, 
                 9732,
                 3
             );
@@ -845,7 +835,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 1024,
                 914861642256,
-                1, /*7*/
+                1, 
                 978,
                 4
             );
@@ -855,7 +845,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 2048,
                 651859234884,
-                1, /*7*/
+                1, 
                 807378,
                 2
             );
@@ -865,7 +855,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 2048,
                 651714363000,
-                1, /*7*/
+                1, 
                 8670,
                 3
             );
@@ -875,7 +865,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 21,
                 2048,
                 650287411216,
-                1, /*7*/
+                1, 
                 898,
                 4
             );
@@ -885,7 +875,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 512,
                 2794687879824,
-                1, /*7*/
+                1, 
                 1671732,
                 2
             );
@@ -895,7 +885,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 512,
                 2793688944704,
-                1, /*7*/
+                1, 
                 14084,
                 3
             );
@@ -905,7 +895,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 512,
                 2786442301696,
-                1, /*7*/
+                1, 
                 1292,
                 4
             );
@@ -915,7 +905,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 1024,
                 1976138685504,
-                1, /*7*/
+                1, 
                 1405752,
                 2
             );
@@ -925,7 +915,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 1024,
                 1975711510592,
-                1, /*7*/
+                1, 
                 12548,
                 3
             );
@@ -935,7 +925,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 1024,
                 1965200244736,
-                1, /*7*/
+                1, 
                 1184,
                 4
             );
@@ -945,7 +935,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 2048,
                 1397341496464,
-                1, /*7*/
+                1, 
                 1182092,
                 2
             );
@@ -955,7 +945,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 2048,
                 1396665211752,
-                1, /*7*/
+                1, 
                 11178,
                 3
             );
@@ -965,7 +955,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 22,
                 2048,
                 1390974924816,
-                1, /*7*/
+                1, 
                 1086,
                 4
             );
@@ -975,7 +965,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 512,
                 5888940837796,
-                1, /*6*/
+                1, 
                 2426714,
                 2
             );
@@ -985,7 +975,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 512,
                 5888557851112,
-                1, /*6*/
+                1, 
                 18058,
                 3
             );
@@ -995,7 +985,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 512,
                 5861899530496,
-                1, /*6*/
+                1, 
                 1556,
                 4
             );
@@ -1005,7 +995,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 1024,
                 4164105496996,
-                1, /*6*/
+                1, 
                 2040614,
                 2
             );
@@ -1015,7 +1005,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 1024,
                 4163956393472,
-                1, /*6*/
+                1, 
                 16088,
                 3
             );
@@ -1025,7 +1015,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 1024,
                 4158271385856,
-                1, /*6*/
+                1, 
                 1428,
                 4
             );
@@ -1035,7 +1025,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 2048,
                 2944470674916,
-                1, /*7*/
+                1, 
                 1715946,
                 2
             );
@@ -1045,7 +1035,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 2048,
                 2943882002368,
-                1, /*7*/
+                1, 
                 14332,
                 3
             );
@@ -1055,7 +1045,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 23,
                 2048,
                 2927055626496,
-                1, /*7*/
+                1, 
                 1308,
                 4
             );
@@ -1065,7 +1055,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 512,
                 12211739920900,
-                1, /*6*/
+                1, 
                 3494530,
                 2
             );
@@ -1075,7 +1065,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 512,
                 12211490117952,
-                1, /*6*/
+                1, 
                 23028,
                 3
             );
@@ -1085,7 +1075,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 512,
                 12176079851776,
-                1, /*6*/
+                1, 
                 1868,
                 4
             );
@@ -1095,7 +1085,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 1024,
                 8635005577444,
-                1, /*6*/
+                1, 
                 2938538,
                 2
             );
@@ -1105,7 +1095,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 1024,
                 8632787556744,
-                1, /*6*/
+                1, 
                 20514,
                 3
             );
@@ -1115,7 +1105,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 1024,
                 8630645337616,
-                1, /*6*/
+                1, 
                 1714,
                 4
             );
@@ -1125,7 +1115,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 2048,
                 6105870652036,
-                1, /*6*/
+                1, 
                 2471006,
                 2
             );
@@ -1135,7 +1125,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 2048,
                 6104406528576,
-                1, /*6*/
+                1, 
                 18276,
                 3
             );
@@ -1145,7 +1135,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 24,
                 2048,
                 6075732010000,
-                1, /*6*/
+                1, 
                 1570,
                 4
             );
@@ -1155,7 +1145,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 512,
                 24945070206016,
-                1, /*6*/
+                1, 
                 4994504,
                 2
             );
@@ -1165,7 +1155,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 512,
                 24943158948232,
-                1, /*6*/
+                1, 
                 29218,
                 3
             );
@@ -1175,7 +1165,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 512,
                 24907645451536,
-                1, /*6*/
+                1, 
                 2234,
                 4
             );
@@ -1185,7 +1175,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 1024,
                 17638824019600,
-                1, /*6*/
+                1, 
                 4199860,
                 2
             );
@@ -1195,7 +1185,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 1024,
                 17636910227000,
-                1, /*6*/
+                1, 
                 26030,
                 3
             );
@@ -1205,7 +1195,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 1024,
                 17592186044416,
-                1, /*6*/
+                1, 
                 16,
                 11
             );
@@ -1215,7 +1205,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 2048,
                 12472537595904,
-                1, /*6*/
+                1, 
                 3531648,
                 2
             );
@@ -1225,7 +1215,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 2048,
                 12471027759000,
-                1, /*6*/
+                1, 
                 23190,
                 3
             );
@@ -1235,7 +1225,7 @@ fn benchmarks_main(c: &mut Criterion) {
                 25,
                 2048,
                 12438910749456,
-                1, /*6*/
+                1, 
                 1878,
                 4
             );

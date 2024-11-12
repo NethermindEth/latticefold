@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use ark_std::{fmt::Debug, UniformRand};
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use latticefold::arith::r1cs::get_test_dummy_z_split;
 use latticefold::arith::{r1cs::get_test_dummy_r1cs, Arith, Witness, CCCS, CCS};
 use latticefold::commitment::AjtaiCommitmentScheme;

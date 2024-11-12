@@ -13,15 +13,13 @@ use latticefold::nifs::decomposition::{
 use latticefold::nifs::folding::{
     FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
-use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
 mod utils;
 use ark_std::UniformRand;
-use utils::get_test_dummy_ccs;
 
 use crate::utils::wit_and_ccs_gen;
 use latticefold::{
-    arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS},
+    arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::linearization::{
