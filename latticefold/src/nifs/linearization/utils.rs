@@ -12,7 +12,17 @@ use crate::transcript::Transcript;
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 
-/// Batch compute the values of mles at the point r.
+/// Computes the evaluation of the MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$ at the sumcheck challenge point
+///
+/// # Parameters
+///
+/// * `Mz_mles` (`&[DenseMultilinearExtension<NTT>]`): The MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$
+/// * `r` (`&[NTT]`): The sumcheck challenge point
+///
+/// # Errors
+///
+/// This function may return a `LinearizationError` if there are inconsistencies in the dimensions of `Mz_mles` and `r`.
+///
 pub fn compute_u<NTT: OverField>(
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     r: &[NTT],
