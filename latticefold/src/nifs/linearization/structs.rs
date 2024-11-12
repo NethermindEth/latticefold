@@ -22,10 +22,14 @@ use lattirust_ring::OverField;
 /// * u - The MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$ evaluated at sumcheck challenge point
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinearizationProof<NTT: OverField> {
-    // Sent in the step 2. of the linearization subprotocol
+    /// * linearization_sumcheck - A list of non-interactive sumcheck prover messages
+    /// * Sent in step 2 of linearization subprotocol
     pub linearization_sumcheck: sumcheck::Proof<NTT>,
-    // Sent in the step 3.
+    /// * The MLE of $\hat{\mathbf{f}}$ evaluated at the sumcheck challenge point
+    /// * Sent in the step 3 of linearization subprotocol.
     pub v: Vec<NTT>,
+    /// * The MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$ evaluated at sumcheck challenge point.
+    /// * Sent in the step 3 of linearization subprotocol.
     pub u: Vec<NTT>,
 }
 
