@@ -13,6 +13,10 @@ use crate::{
 };
 use cyclotomic_rings::rings::SuitableRing;
 
+use ark_std::{cfg_into_iter, cfg_iter};
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 pub use structs::*;
 mod structs;
 #[cfg(test)]
@@ -40,7 +44,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let wit_s: Vec<Witness<NTT>> = {
             let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
-            f_s.into_iter()
+            cfg_into_iter!(f_s)
                 .map(|f| Witness::from_f_coeff::<P>(f))
                 .collect()
         };
@@ -49,13 +53,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         cm_i_x_w.push(cm_i.h);
         let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(&cm_i_x_w);
 
-        let y_s: Vec<Commitment<C, NTT>> = wit_s
-            .iter()
+        let y_s: Vec<Commitment<C, NTT>> = cfg_iter!(wit_s)
             .map(|wit| wit.commit::<C, W, P>(scheme))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let v_s: Vec<Vec<NTT>> = wit_s
-            .iter()
+        let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
                 wit.f_hat
                     .iter()
@@ -68,30 +70,31 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut u_s: Vec<Vec<NTT>> = Vec::with_capacity(ccs.M.len());
+        let u_s = cfg_iter!(wit_s)
+            .enumerate()
+            .map(|(i, wit)| {
+                let mut u_s_for_i = Vec::with_capacity(P::K);
 
-        for (i, wit) in wit_s.iter().enumerate() {
-            let mut u_s_for_i = Vec::with_capacity(P::K);
+                let z: Vec<NTT> = {
+                    let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
 
-            let z: Vec<NTT> = {
-                let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
+                    z.extend_from_slice(&x_s[i]);
+                    z.extend_from_slice(&wit.w_ccs);
 
-                z.extend_from_slice(&x_s[i]);
-                z.extend_from_slice(&wit.w_ccs);
+                    z
+                };
 
-                z
-            };
+                for M in &ccs.M {
+                    u_s_for_i.push(
+                        DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
+                            .evaluate(&cm_i.r)
+                            .ok_or(DecompositionError::WitnessMleEvalFail)?,
+                    );
+                }
 
-            for M in &ccs.M {
-                u_s_for_i.push(
-                    DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
-                        .evaluate(&cm_i.r)
-                        .ok_or(DecompositionError::WitnessMleEvalFail)?,
-                );
-            }
-
-            u_s.push(u_s_for_i);
-        }
+                Ok(u_s_for_i)
+            })
+            .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()?;
 
         let mut lcccs_s = Vec::with_capacity(P::K);
 
