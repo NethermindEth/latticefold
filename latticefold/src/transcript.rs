@@ -1,7 +1,7 @@
 use ark_std::fmt::Debug;
 use lattirust_ring::OverField;
 
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
+use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 
 pub mod poseidon;
 
@@ -31,14 +31,14 @@ pub trait Transcript<R: OverField> {
     }
 }
 
-pub trait TranscriptWithSmallChallenges<R: SuitableRing>: Transcript<R> {
+pub trait TranscriptWithShortChallenges<R: SuitableRing>: Transcript<R> {
     type ChallengeSet: LatticefoldChallengeSet<R>;
 
-    fn get_small_challenge(&mut self) -> R::CoefficientRepresentation;
+    fn get_short_challenge(&mut self) -> R::CoefficientRepresentation;
 
     fn get_small_challenges(&mut self, n: usize) -> Vec<R::CoefficientRepresentation> {
         let mut challenges = Vec::with_capacity(n);
-        challenges.extend((0..n).map(|_| self.get_small_challenge()));
+        challenges.extend((0..n).map(|_| self.get_short_challenge()));
         challenges
     }
 }

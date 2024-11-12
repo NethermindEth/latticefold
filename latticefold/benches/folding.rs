@@ -3,11 +3,9 @@
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
-#[allow(unused_imports)]
 use cyclotomic_rings::{
-    BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
-    GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT,
+    challenge_set::LatticefoldChallengeSet,
+    rings::{StarkChallengeSet, StarkRingNTT, SuitableRing},
 };
 use latticefold::nifs::decomposition::{
     DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
@@ -15,14 +13,15 @@ use latticefold::nifs::decomposition::{
 use latticefold::nifs::folding::{
     FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
-use std::fmt::Debug;
+use rand::thread_rng;
+use std::{fmt::Debug, time::Duration};
 mod utils;
 use ark_std::UniformRand;
-use std::time::Duration;
+use utils::get_test_dummy_ccs;
 
 use crate::utils::wit_and_ccs_gen;
 use latticefold::{
-    arith::{Witness, CCCS, CCS},
+    arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::linearization::{

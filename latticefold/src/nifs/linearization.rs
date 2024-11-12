@@ -1,6 +1,6 @@
 use ark_ff::{Field, PrimeField};
 
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{eq_eval, VPAuxInfo},
@@ -12,10 +12,7 @@ use super::error::LinearizationError;
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::{
-        mle::dense_vec_to_dense_mle,
-        sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
-    },
+    utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
 
 pub use structs::*;
@@ -51,7 +48,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
             .M
             .iter()
-            .map(|M| Ok(dense_vec_to_dense_mle(log_m, &mat_vec_mul(M, &z_ccs)?)))
+            .map(|M| {
+                Ok(DenseMultilinearExtension::from_slice(
+                    log_m,
+                    &mat_vec_mul(M, &z_ccs)?,
+                ))
+            })
             .collect::<Result<_, LinearizationError<_>>>()?;
 
         // The sumcheck polynomial
@@ -66,21 +68,20 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
-        // Step 3: Compute v, u_vector
 
-        let v = dense_vec_to_dense_mle(log_m, &wit.f_hat)
-            .evaluate(&r)
-            .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m");
+        // Step 3: Compute v, u_vector
+        let v: Vec<NTT> = wit.f_hat.iter().map(|f_hat_row| DenseMultilinearExtension::from_slice(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
+
         let u = compute_u(&Mz_mles, &r)?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb(&v);
+        transcript.absorb_slice(&v);
         transcript.absorb_slice(&u);
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
             linearization_sumcheck: sum_check_proof,
-            v,
+            v: v.clone(),
             u: u.clone(),
         };
         let lcccs = LCCCS {
@@ -128,7 +129,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         )?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb(&proof.v);
+        transcript.absorb_slice(&proof.v);
         transcript.absorb_slice(&proof.u);
 
         // The final evaluation claim from the sumcheck.
@@ -159,7 +160,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
 
         Ok(LCCCS::<C, NTT> {
             r: point_r,
-            v: proof.v,
+            v: proof.v.clone(),
             cm: cm_i.cm.clone(),
             u: proof.u.clone(),
             x_w: cm_i.x_ccs.clone(),

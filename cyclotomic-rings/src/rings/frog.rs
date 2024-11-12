@@ -1,11 +1,20 @@
-// PGold = 2^64 − 2^32 + 1
 use lattirust_ring::cyclotomic_ring::models::frog_ring::{Fq, RqNTT, RqPoly};
 
 use crate::challenge_set::{error, LatticefoldChallengeSet};
 
 use super::SuitableRing;
 
+/// Frog ring in the NTT form.
+///
+/// The base field of the NTT form is a degree-4
+/// extension of the Frog field ($p=15912092521325583641$).
+///
+/// The NTT norm has 4 components.
 pub type FrogRingNTT = RqNTT;
+
+/// Frog ring in the coefficient form.
+///
+/// The cyclotomic polynomial is $X^16+1$ of degree 16.
 pub type FrogRingPoly = RqPoly;
 
 impl SuitableRing for FrogRingNTT {
@@ -22,7 +31,7 @@ pub struct FrogChallengeSet;
 impl LatticefoldChallengeSet<FrogRingNTT> for FrogChallengeSet {
     const BYTES_NEEDED: usize = 16;
 
-    fn small_challenge_from_random_bytes(
+    fn short_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<
         <FrogRingNTT as SuitableRing>::CoefficientRepresentation,
@@ -52,7 +61,7 @@ mod tests {
 
     #[test]
     fn test_small_challenge_from_random_bytes() {
-        let challenge = FrogChallengeSet::small_challenge_from_random_bytes(&[
+        let challenge = FrogChallengeSet::short_challenge_from_random_bytes(&[
             0x7b, 0x4b, 0xe5, 0x8e, 0xe5, 0x11, 0xd2, 0xd0, 0x9c, 0x22, 0xba, 0x2e, 0xeb, 0xa8,
             0xba, 0x35,
         ])

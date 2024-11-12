@@ -3,13 +3,19 @@
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, SuitableRing};
-use cyclotomic_rings::{StarkChallengeSet, StarkRingNTT};
-use std::time::Duration;
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{
+        GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
+    },
+};
+use rand::thread_rng;
+use std::{fmt::Debug, time::Duration};
 mod utils;
 use crate::utils::wit_and_ccs_gen;
 use latticefold::{
-    arith::{Witness, CCCS, CCS, LCCCS},
+    arith::{r1cs::get_test_dummy_z_split, Arith, Witness, CCCS, CCS, LCCCS},
+    commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,

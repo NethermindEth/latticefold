@@ -1,18 +1,26 @@
+//!
+//!  Short challenge set API.
+//!
+
 use error::ChallengeSetError;
 use lattirust_ring::{
     cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
     zn::z_q::Zq,
 };
 
-use crate::SuitableRing;
+use crate::rings::SuitableRing;
 
 pub mod error;
 
+/// A trait to specify short challenge set for use in the LatticeFold protocol.
 pub trait LatticefoldChallengeSet<R: SuitableRing> {
-    // Amount of bytes needed to obtain a single small challenge.
+    /// Amount of bytes needed to obtain a single short challenge.
     const BYTES_NEEDED: usize;
 
-    fn small_challenge_from_random_bytes(
+    /// Given a slice of bytes `bs` returns the short challenge encode with these bytes
+    /// in the coefficient form. Returns `TooFewBytes` error if there is not enough bytes
+    /// to obtain a short challenge.
+    fn short_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<R::CoefficientRepresentation, ChallengeSetError>;
 }
@@ -27,7 +35,7 @@ where
 {
     const BYTES_NEEDED: usize = N * 8;
 
-    fn small_challenge_from_random_bytes(
+    fn short_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<Pow2CyclotomicPolyRing<Q, N>, ChallengeSetError> {
         if bs.len() != Self::BYTES_NEEDED {

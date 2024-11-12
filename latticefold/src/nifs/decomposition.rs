@@ -1,5 +1,4 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-use crate::utils::mle::dense_vec_to_dense_mle;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
@@ -9,16 +8,18 @@ use crate::{
     transcript::Transcript,
 };
 use ark_std::marker::PhantomData;
-use cyclotomic_rings::SuitableRing;
+use cyclotomic_rings::rings::SuitableRing;
+use lattirust_linear_algebra::ops::Transpose;
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, pad_and_transpose, recompose},
+    balanced_decomposition::{decompose_balanced_vec, recompose},
     OverField, Ring,
 };
 
 #[derive(Clone)]
 pub struct DecompositionProof<const C: usize, NTT: Ring> {
     pub u_s: Vec<Vec<NTT>>,
-    pub v_s: Vec<NTT>,
+    pub v_s: Vec<Vec<NTT>>,
     pub x_s: Vec<Vec<NTT>>,
     pub y_s: Vec<Commitment<C, NTT>>,
 }
@@ -75,6 +76,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         ),
         DecompositionError,
     > {
+        let log_m = ccs.s;
+
         let wit_s: Vec<Witness<NTT>> = {
             let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f);
             f_s.into_iter().map(|f| Witness::from_f::<P>(f)).collect()
@@ -89,12 +92,17 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             .map(|wit| wit.commit::<C, W, P>(scheme))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let v_s: Vec<NTT> = wit_s
+        let v_s: Vec<Vec<NTT>> = wit_s
             .iter()
             .map(|wit| {
-                dense_vec_to_dense_mle(ccs.s, &wit.f_hat)
-                    .evaluate(&cm_i.r)
-                    .ok_or(DecompositionError::WitnessMleEvalFail)
+                wit.f_hat
+                    .iter()
+                    .map(|f_hat_row| {
+                        DenseMultilinearExtension::from_slice(log_m, f_hat_row)
+                            .evaluate(&cm_i.r)
+                            .ok_or(DecompositionError::WitnessMleEvalFail)
+                    })
+                    .collect::<Result<Vec<_>, _>>()
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -114,7 +122,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
             for M in &ccs.M {
                 u_s_for_i.push(
-                    dense_vec_to_dense_mle(ccs.s, &mat_vec_mul(M, &z)?)
+                    DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
                         .evaluate(&cm_i.r)
                         .ok_or(DecompositionError::WitnessMleEvalFail)?,
                 );
@@ -129,7 +137,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             transcript.absorb_slice(x);
             transcript.absorb_slice(y.as_ref());
             transcript.absorb_slice(u);
-            transcript.absorb(v);
+            transcript.absorb_slice(v);
 
             let h = x
                 .last()
@@ -137,7 +145,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 .ok_or(DecompositionError::IncorrectLength)?;
             lcccs_s.push(LCCCS {
                 r: cm_i.r.clone(),
-                v: *v,
+                v: v.clone(),
                 cm: y.clone(),
                 u: u.clone(),
                 x_w: x[0..x.len() - 1].to_vec(),
@@ -172,7 +180,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             transcript.absorb_slice(x);
             transcript.absorb_slice(y.as_ref());
             transcript.absorb_slice(u);
-            transcript.absorb(v);
+            transcript.absorb_slice(v);
 
             let h = x
                 .last()
@@ -180,7 +188,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
                 .ok_or(DecompositionError::IncorrectLength)?;
             lcccs_s.push(LCCCS {
                 r: cm_i.r.clone(),
-                v: *v,
+                v: v.clone(),
                 cm: y.clone(),
                 u: u.clone(),
                 x_w: x[0..x.len() - 1].to_vec(),
@@ -221,15 +229,17 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        let should_equal_v0: NTT = proof
-            .v_s
-            .iter()
-            .zip(&b_s)
-            .map(|(&v_i, b_i)| v_i * b_i)
-            .sum();
+        for (i, &cm_i_value) in cm_i.v.iter().enumerate() {
+            let should_equal_v0: NTT = proof
+                .v_s
+                .iter()
+                .zip(&b_s)
+                .map(|(v_i, b_i)| v_i[i] * b_i)
+                .sum();
 
-        if should_equal_v0 != cm_i.v {
-            return Err(DecompositionError::RecomposedError);
+            if should_equal_v0 != cm_i_value {
+                return Err(DecompositionError::RecomposedError);
+            }
         }
 
         let mut should_equal_xw: Vec<NTT> = proof
@@ -270,12 +280,13 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
 
     // radix-B
     let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =
-        pad_and_transpose(decompose_balanced_vec(&coeff_repr, DP::B, Some(DP::L)))
+        decompose_balanced_vec(&coeff_repr, DP::B, Some(DP::L))
             .into_iter()
             .flatten()
             .collect();
 
     decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, Some(DP::K))
+        .transpose()
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
@@ -299,7 +310,8 @@ fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
     // Measure time for decomposition
-    let res_coeffs = decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K));
+    let res_coeffs =
+        decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K)).transpose();
 
     let res = res_coeffs
         .iter()
@@ -471,7 +483,7 @@ mod tests_stark {
         transcript::poseidon::PoseidonTranscript,
         utils::security_check::{check_ring_modulus_128_bits_security, check_witness_bound},
     };
-    use cyclotomic_rings::StarkChallengeSet;
+    use cyclotomic_rings::rings::StarkChallengeSet;
 
     #[test]
     fn test_dummy_decomposition() {

@@ -13,7 +13,7 @@ pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
     pub linearization_sumcheck: sumcheck::Proof<NTT>,
     // Sent in the step 3.
-    pub v: NTT,
+    pub v: Vec<NTT>,
     pub u: Vec<NTT>,
 }
 

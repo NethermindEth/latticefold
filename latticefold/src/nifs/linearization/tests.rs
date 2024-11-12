@@ -20,7 +20,7 @@ macro_rules! generate_tests {
         };
         use $crate::{
             nifs::linearization::utils::prepare_lin_sumcheck_polynomial,
-            utils::mle::dense_vec_to_dense_mle,
+            //utils::mle::dense_vec_to_dense_mle,
         };
 
         #[test]
@@ -81,7 +81,8 @@ macro_rules! generate_tests {
                         .sum::<RqNTT>();
                     mle.push(row_z);
                 }
-                M_z_mles.push(dense_vec_to_dense_mle(log_m, &mle));
+                //M_z_mles.push(dense_vec_to_dense_mle(log_m, &mle));
+                M_z_mles.push(DenseMultilinearExtension::from_slice(log_m, &mle));
             }
 
             let _ = g.add_mle_list(M_z_mles.clone().into_iter().map(|mle| Arc::new(mle)), c);
@@ -163,7 +164,7 @@ mod tests_pow2 {
 #[cfg(test)]
 mod tests_stark {
 
-    use cyclotomic_rings::StarkChallengeSet;
+    use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     use num_bigint::BigUint;
 
@@ -248,7 +249,7 @@ mod tests_stark {
 #[cfg(test)]
 mod tests_goldilocks {
 
-    use cyclotomic_rings::GoldilocksChallengeSet;
+    use cyclotomic_rings::rings::GoldilocksChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
     type CS = GoldilocksChallengeSet;
     generate_tests!(1024, 2, 2, 10);
@@ -256,7 +257,7 @@ mod tests_goldilocks {
 
 #[cfg(test)]
 mod tests_frog {
-    use cyclotomic_rings::FrogChallengeSet;
+    use cyclotomic_rings::rings::FrogChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
     type CS = FrogChallengeSet;
     generate_tests!(1024, 2, 2, 10);
@@ -265,7 +266,7 @@ mod tests_frog {
 #[cfg(test)]
 mod tests_babybear {
 
-    use cyclotomic_rings::BabyBearChallengeSet;
+    use cyclotomic_rings::rings::BabyBearChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
     type CS = BabyBearChallengeSet;
 
