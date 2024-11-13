@@ -1,3 +1,5 @@
+use ark_std::ops::Mul;
+
 use ark_std::marker::PhantomData;
 
 use cyclotomic_rings::rings::SuitableRing;
@@ -52,6 +54,9 @@ impl<
         P: DecompositionParams,
         T: TranscriptWithShortChallenges<NTT>,
     > NIFSProver<C, W, NTT, P, T>
+where
+    <NTT as SuitableRing>::CoefficientRepresentation:
+        Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>,
 {
     pub fn prove(
         acc: &LCCCS<C, NTT>,

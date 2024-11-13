@@ -232,7 +232,10 @@ impl<NTT: SuitableRing> Witness<NTT> {
             f.iter().map(|&x| x.into()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&coef_repr_decomposed);
 
-        let w_ccs = f.chunks(P::L).map(|chunk| recompose(chunk, P::B)).collect();
+        let w_ccs = f
+            .chunks(P::L)
+            .map(|chunk| recompose(chunk, NTT::from(P::B)))
+            .collect();
 
         Self { f, f_hat, w_ccs }
     }

@@ -9,7 +9,7 @@ use crate::{
     transcript::Transcript,
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::marker::PhantomData;
+use ark_std::{marker::PhantomData, ops::Mul};
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::ops::Transpose;
 use lattirust_poly::mle::DenseMultilinearExtension;
@@ -39,7 +39,10 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
             DecompositionProof<C, NTT>,
         ),
         DecompositionError,
-    >;
+    >
+    where
+        <NTT as SuitableRing>::CoefficientRepresentation:
+            Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>;
 }
 
 pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
@@ -77,7 +80,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             DecompositionProof<C, NTT>,
         ),
         DecompositionError,
-    > {
+    >
+    where
+        <NTT as SuitableRing>::CoefficientRepresentation:
+            Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>,
+    {
         let log_m = ccs.s;
 
         let wit_s: Vec<Witness<NTT>> = {
@@ -277,7 +284,11 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 /// and applies the gadget-B matrix again.
 fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT],
-) -> Vec<Vec<NTT>> {
+) -> Vec<Vec<NTT>>
+where
+    <NTT as SuitableRing>::CoefficientRepresentation:
+        Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>,
+{
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
     // radix-B
