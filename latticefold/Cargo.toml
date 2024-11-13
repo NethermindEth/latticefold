@@ -24,7 +24,14 @@ rayon = { version = "1.10.0", optional = true }
 default = [ "std" ]
 std = [ "ark-std/std" ]
 dhat-heap = []
-parallel = [ "rayon", "std", "ark-std/parallel" ]
+parallel = [ 
+    "rayon",
+    "std",
+    "ark-std/parallel"
+    "lattirust-linear-algebra/parallel",
+    "lattirust-poly/parallel",
+    "lattirust-ring/parallel"
+ ]
 
 [profile.release]
 debug = 1
