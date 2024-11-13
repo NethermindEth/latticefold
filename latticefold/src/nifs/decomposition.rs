@@ -39,8 +39,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let log_m = ccs.s;
 
         let wit_s: Vec<Witness<NTT>> = {
-            let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f);
-            f_s.into_iter().map(|f| Witness::from_f::<P>(f)).collect()
+            let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
+            f_s.into_iter()
+                .map(|f| Witness::from_f_coeff::<P>(f))
+                .collect()
         };
 
         let mut cm_i_x_w = cm_i.x_w.clone();

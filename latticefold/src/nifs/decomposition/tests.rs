@@ -39,15 +39,14 @@ macro_rules! generate_decomposition_tests {
             const K: usize = $k;
         }
 
-        fn draw_ring_bellow_bound<const B: u128>(rng: &mut ThreadRng) -> RqNTT {
+        fn draw_ring_bellow_bound<const B: u128>(rng: &mut ThreadRng) -> RqPoly {
             let degree = <RqPoly as PolyRing>::dimension();
             let mut coeffs = Vec::with_capacity(degree);
             for _ in 0..degree {
                 let random_coeff = rng.gen_range(0..B);
                 coeffs.push(<RqPoly as PolyRing>::BaseRing::from(random_coeff));
             }
-            let coeff_repr = RqPoly::from(coeffs);
-            coeff_repr.into()
+            RqPoly::from(coeffs)
         }
 
         #[test]
@@ -103,7 +102,7 @@ macro_rules! generate_decomposition_tests {
             // Create a test vector
             const N: usize = 32;
             let mut rng = thread_rng();
-            let test_vector: Vec<RqNTT> = (0..N)
+            let test_vector: Vec<RqPoly> = (0..N)
                 .map(|_| draw_ring_bellow_bound::<{ PP::B }>(&mut rng))
                 .collect();
 
@@ -128,7 +127,7 @@ macro_rules! generate_decomposition_tests {
                 let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
                 assert_eq!(
                     test_vector[i],
-                    recompose(&decomp_i, RqNTT::from(PP::B_SMALL as u128))
+                    recompose(&decomp_i, RqPoly::from(PP::B_SMALL as u128))
                 );
             }
         }
@@ -139,7 +138,7 @@ macro_rules! generate_decomposition_tests {
             const N: usize = 32;
             let mut rng = thread_rng();
             let test_vector: Vec<RqNTT> = (0..N)
-                .map(|_| draw_ring_bellow_bound::<{ PP::B }>(&mut rng))
+                .map(|_| draw_ring_bellow_bound::<{ PP::B }>(&mut rng).into())
                 .collect();
             let decomposed_and_composed_back =
                 decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(&test_vector);

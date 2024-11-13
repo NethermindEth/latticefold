@@ -40,19 +40,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 
 /// Decompose a vector of norm B in its NTT form into DP::K small vectors.
 pub(super) fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
-    x: &[NTT],
-) -> Vec<Vec<NTT>> {
-    // TODO: Measure time for coefficient representation conversion
-    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
-
-    // TODO: Measure time for decomposition
-    let res_coeffs =
-        decompose_balanced_vec(&coeff_repr, DP::B_SMALL as u128, Some(DP::K)).transpose();
-
-    let res = res_coeffs
-        .iter()
-        .map(|vec| vec.iter().map(|&x| x.into()).collect())
-        .collect();
-
-    res
+    x: &[NTT::CoefficientRepresentation],
+) -> Vec<Vec<NTT::CoefficientRepresentation>> {
+    decompose_balanced_vec(x, DP::B_SMALL as u128, Some(DP::K)).transpose()
 }
