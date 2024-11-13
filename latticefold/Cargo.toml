@@ -27,7 +27,7 @@ dhat-heap = []
 parallel = [ 
     "rayon",
     "std",
-    "ark-std/parallel"
+    "ark-std/parallel",
     "lattirust-linear-algebra/parallel",
     "lattirust-poly/parallel",
     "lattirust-ring/parallel"
