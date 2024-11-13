@@ -80,7 +80,10 @@ fn prover_decomposition_benchmark<
     wit: &Witness<R>,
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
-) {
+) where
+    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
+        std::ops::MulAssign<&'a u128>,
+{
     println!("Proving decomposition");
     println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
@@ -143,7 +146,10 @@ fn verifier_decomposition_benchmark<
     wit: &Witness<R>,
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
-) {
+) where
+    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
+        std::ops::MulAssign<&'a u128>,
+{
     println!("verify decomposition");
     println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
@@ -216,7 +222,10 @@ fn decomposition_benchmarks<
     P: DecompositionParams + Clone,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
-) {
+) where
+    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
+        std::ops::MulAssign<&'a u128>,
+{
     let r1cs_rows = X_LEN + WIT_LEN + 1;
     println!("Witness generation");
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);

@@ -78,7 +78,10 @@ fn prover_folding_benchmark<
     wit: &Witness<R>,
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
-) {
+) where
+    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
+        std::ops::MulAssign<&'a u128>,
+{
     println!("prove folding");
     println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
@@ -173,7 +176,10 @@ fn verifier_folding_benchmark<
     wit: &Witness<R>,
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
-) {
+) where
+    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
+        std::ops::MulAssign<&'a u128>,
+{
     println!("verify folding");
     println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
@@ -261,7 +267,10 @@ fn linearization_benchmarks<
     P: DecompositionParams,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
-) {
+) where
+    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
+        std::ops::MulAssign<&'a u128>,
+{
     let r1cs_rows = 5; // This makes a square matrix but is too much memory
     println!("Witness generation");
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
