@@ -108,7 +108,12 @@ impl<R: Ring> Arith<R> for CCS<R> {
 
 impl<R: Ring> CCS<R> {
     pub fn from_r1cs(r1cs: R1CS<R>, W: usize) -> Self {
-        let m = W;
+        let mut target_len = W;
+        if target_len & (target_len - 1) != 0 {
+            // If it's not a power of 2, we increase it to the next power of 2
+            target_len = 1 << log2(target_len) as usize;
+        }
+        let m = target_len;
         let n = r1cs.A.ncols();
 
         CCS {
