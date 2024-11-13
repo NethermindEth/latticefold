@@ -292,13 +292,7 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
-                .map(|chunk| {
-                    recompose(
-                        chunk,
-                        <NTT as SuitableRing>::CoefficientRepresentation::from(DP::B),
-                    )
-                    .into()
-                })
+                .map(|chunk| recompose(chunk, DP::B).into())
                 .collect()
         })
         .collect()
