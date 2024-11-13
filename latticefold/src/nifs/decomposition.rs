@@ -9,7 +9,7 @@ use crate::{
     transcript::Transcript,
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::{marker::PhantomData, ops::Mul};
+use ark_std::{marker::PhantomData, ops::MulAssign};
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::ops::Transpose;
 use lattirust_poly::mle::DenseMultilinearExtension;
@@ -41,8 +41,7 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
         DecompositionError,
     >
     where
-        <NTT as SuitableRing>::CoefficientRepresentation:
-            Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>;
+        for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>;
 }
 
 pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
@@ -82,8 +81,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         DecompositionError,
     >
     where
-        <NTT as SuitableRing>::CoefficientRepresentation:
-            Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>,
+        for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
     {
         let log_m = ccs.s;
 
@@ -286,8 +284,7 @@ fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: Decompos
     x: &[NTT],
 ) -> Vec<Vec<NTT>>
 where
-    <NTT as SuitableRing>::CoefficientRepresentation:
-        Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>,
+    for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
 {
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
@@ -303,7 +300,13 @@ where
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
-                .map(|chunk| recompose(chunk, DP::B).into())
+                .map(|chunk| {
+                    recompose::<<NTT as SuitableRing>::CoefficientRepresentation, u128>(
+                        chunk,
+                        DP::B,
+                    )
+                    .into()
+                })
                 .collect()
         })
         .collect()

@@ -1,4 +1,4 @@
-use ark_std::ops::Mul;
+use ark_std::ops::MulAssign;
 
 use ark_std::marker::PhantomData;
 
@@ -55,8 +55,7 @@ impl<
         T: TranscriptWithShortChallenges<NTT>,
     > NIFSProver<C, W, NTT, P, T>
 where
-    <NTT as SuitableRing>::CoefficientRepresentation:
-        Mul<u128, Output = <NTT as SuitableRing>::CoefficientRepresentation>,
+    for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
 {
     pub fn prove(
         acc: &LCCCS<C, NTT>,
