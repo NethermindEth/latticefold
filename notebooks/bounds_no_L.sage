@@ -8,9 +8,14 @@ def bound_2(d, kappa, p):
 def bound_inf_no_L(d, kappa, p, n):
     bound_value = floor(bound_2(d, kappa, p) / sqrt(d * n).n())
     
+    
     # Adjust bound_value to be even
     if bound_value % 2 == 1:
         bound_value -= 1
+    
+    # Return "unpractical" if bound_value is 0
+    if bound_value <= 2:
+        return "unpractical"
     
     return bound_value
 
@@ -73,7 +78,7 @@ params = {
 }
 
 # Range of num_cols values
-num_cols_values = [2^15, 2^16, 2^17, 2^18, 2^19, 2^20]
+num_cols_values = [2^9, 2^10, 2^11, 2^12]
 
 # Iterate over each prime and calculate the maximum kappa and perform bound calculations
 for prime_name, param in params.items():
@@ -111,6 +116,6 @@ for prime_name, param in params.items():
             pairs = find_b_k_pairs_no_L(current_bound_inf)
             
             # Display the results
-            print(f"\tkappa = {kappa}, n = {n}: B = {current_bound_inf}")
+            #print(f"\tkappa = {kappa}, n = {n}: B = {current_bound_inf}")
             for b, k, B in pairs:
-                print(f"\t\t(b, k) = ({b}, {k}), B = {b**k}") 
+                print(f"run_single_{prime_name.lower()}_benchmark!(&mut group, 1, {kappa}, {n}, {current_bound_inf}, 1, {b}, {k});")

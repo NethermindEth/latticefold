@@ -137,4 +137,4 @@ for prime_name, param in params.items():
                 
                 # Discard any L equal to 1 or less and where L*n > 2^14
                 if L > 1 and L * n <= 2^14:
-                    print(f"\t\t(b, k) = ({b}, {k}), B = {b**k}, L = {L}")
+                    print(f"run_single_{prime_name.lower()}_benchmark!(&mut group, 1, {kappa}, {n}, {current_bound_inf}, 1, {b}, {k});")
