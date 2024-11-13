@@ -102,147 +102,206 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     }
 }
 
-#[macro_export]
-macro_rules! generate_sumcheck_tests {
-    () => {
-        use ark_ff::Zero;
-        use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-        use ark_std::io::Cursor;
-        use lattirust_poly::polynomials::VirtualPolynomial;
-        use $crate::{
-            transcript::poseidon::PoseidonTranscript,
-            utils::sumcheck::{MLSumcheck, Proof},
-        };
+#[cfg(test)]
+mod tests {
+    use crate::transcript::poseidon::PoseidonTranscript;
+    use crate::utils::sumcheck::{MLSumcheck, Proof};
+    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+    use ark_std::io::Cursor;
+    use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
+    use cyclotomic_rings::rings::SuitableRing;
+    use lattirust_poly::polynomials::VirtualPolynomial;
+    use rand::Rng;
+
+    fn generate_sumcheck_proof<R, CS>(
+        mut rng: &mut (impl Rng + Sized),
+    ) -> (VirtualPolynomial<R>, R, Proof<R>)
+    where
+        R: SuitableRing,
+        CS: LatticefoldChallengeSet<R>,
+    {
+        let mut transcript = PoseidonTranscript::<R, CS>::default();
+
+        let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+
+        let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
+        (poly, sum, proof)
+    }
+
+    fn test_sumcheck<R, CS>()
+    where
+        R: SuitableRing,
+        CS: LatticefoldChallengeSet<R>,
+    {
+        let mut rng = ark_std::test_rng();
+
+        for _ in 0..20 {
+            let (poly, sum, proof) = generate_sumcheck_proof::<R, CS>(&mut rng);
+
+            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+            let res =
+                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
+            assert!(res.is_ok())
+        }
+    }
+
+    fn test_sumcheck_proof_serialization<R, CS>()
+    where
+        R: SuitableRing,
+        CS: LatticefoldChallengeSet<R>,
+    {
+        let mut rng = ark_std::test_rng();
+
+        let proof = generate_sumcheck_proof::<R, CS>(&mut rng).2;
+
+        let mut serialized = Vec::new();
+        proof
+            .serialize_with_mode(&mut serialized, Compress::Yes)
+            .expect("Failed to serialize proof");
+
+        let mut cursor = Cursor::new(&serialized);
+        assert_eq!(
+            proof,
+            Proof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
+                .expect("Failed to deserialize proof")
+        );
+    }
+
+    fn test_failing_sumcheck<R, CS>()
+    where
+        R: SuitableRing,
+        CS: LatticefoldChallengeSet<R>,
+    {
+        let mut rng = ark_std::test_rng();
+
+        for _ in 0..20 {
+            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+
+            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
+
+            let not_sum = poly
+                .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
+                .unwrap();
+
+            let res =
+                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
+            assert!(res.is_err());
+        }
+    }
+
+    mod pow2 {
+
+        use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+
+        use cyclotomic_rings::challenge_set::BinarySmallSet;
+        const Q: u64 = 17;
+        const N: usize = 8;
+        type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+
+        type CS = BinarySmallSet<Q, N>;
+
         #[test]
         fn test_sumcheck() {
-            let mut rng = ark_std::test_rng();
-
-            for _ in 0..20 {
-                let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-                let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-
-                let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-                let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-                let res =
-                    MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
-                assert!(res.is_ok())
-            }
-        }
-        #[test]
-        fn test_failing_sumcheck() {
-            let mut rng = ark_std::test_rng();
-
-            for _ in 0..20 {
-                let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-                let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-                let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-                let not_sum = poly
-                    .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
-                    .unwrap();
-
-                let res = MLSumcheck::verify_as_subprotocol(
-                    &mut transcript,
-                    &poly.aux_info,
-                    not_sum,
-                    &proof,
-                );
-                assert!(res.is_err());
-            }
+            super::test_sumcheck::<RqNTT, CS>();
         }
 
         #[test]
         fn test_sumcheck_proof_serialization() {
-            let mut rng = ark_std::test_rng();
-
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-
-            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
-
-            let mut serialized = Vec::new();
-            proof
-                .serialize_with_mode(&mut serialized, Compress::Yes)
-                .expect("Failed to serialize proof");
-
-            let mut cursor = Cursor::new(&serialized);
-            assert_eq!(
-                proof,
-                Proof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
-                    .expect("Failed to deserialize proof")
-            );
+            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
         }
-    };
-}
-#[cfg(test)]
-mod tests_pow2 {
 
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+        #[test]
+        fn test_failing_sumcheck() {
+            super::test_failing_sumcheck::<RqNTT, CS>();
+        }
+    }
 
-    use cyclotomic_rings::challenge_set::BinarySmallSet;
-    const Q: u64 = 17;
-    const N: usize = 8;
-    type R = Pow2CyclotomicPolyRingNTT<Q, N>;
+    mod stark {
+        use cyclotomic_rings::rings::StarkChallengeSet;
+        use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
 
-    type CS = BinarySmallSet<Q, N>;
+        type CS = StarkChallengeSet;
 
-    generate_sumcheck_tests!();
-}
+        #[test]
+        fn test_sumcheck() {
+            super::test_sumcheck::<RqNTT, CS>();
+        }
 
-#[cfg(test)]
-mod tests_stark {
+        #[test]
+        fn test_sumcheck_proof_serialization() {
+            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+        }
 
-    use cyclotomic_rings::rings::StarkChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    type R = RqNTT;
+        #[test]
+        fn test_failing_sumcheck() {
+            super::test_failing_sumcheck::<RqNTT, CS>();
+        }
+    }
 
-    type CS = StarkChallengeSet;
+    mod frog {
+        use cyclotomic_rings::rings::FrogChallengeSet;
+        use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
 
-    generate_sumcheck_tests!();
-}
+        type CS = FrogChallengeSet;
 
-#[cfg(test)]
-mod tests_frog {
+        #[test]
+        fn test_sumcheck() {
+            super::test_sumcheck::<RqNTT, CS>();
+        }
 
-    use cyclotomic_rings::rings::FrogChallengeSet;
+        #[test]
+        fn test_sumcheck_proof_serialization() {
+            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+        }
 
-    use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
+        #[test]
+        fn test_failing_sumcheck() {
+            super::test_failing_sumcheck::<RqNTT, CS>();
+        }
+    }
 
-    type R = RqNTT;
+    mod goldilocks {
+        use cyclotomic_rings::rings::GoldilocksChallengeSet;
+        use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
 
-    type CS = FrogChallengeSet;
+        type CS = GoldilocksChallengeSet;
 
-    generate_sumcheck_tests!();
-}
+        #[test]
+        fn test_sumcheck() {
+            super::test_sumcheck::<RqNTT, CS>();
+        }
 
-#[cfg(test)]
-mod tests_goldilocks {
+        #[test]
+        fn test_sumcheck_proof_serialization() {
+            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+        }
 
-    use cyclotomic_rings::rings::GoldilocksChallengeSet;
+        #[test]
+        fn test_failing_sumcheck() {
+            super::test_failing_sumcheck::<RqNTT, CS>();
+        }
+    }
 
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
+    mod babybear {
+        use cyclotomic_rings::rings::BabyBearChallengeSet;
+        use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
 
-    type R = RqNTT;
+        type CS = BabyBearChallengeSet;
 
-    type CS = GoldilocksChallengeSet;
+        #[test]
+        fn test_sumcheck() {
+            super::test_sumcheck::<RqNTT, CS>();
+        }
 
-    generate_sumcheck_tests!();
-}
+        #[test]
+        fn test_sumcheck_proof_serialization() {
+            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+        }
 
-#[cfg(test)]
-mod tests_babybear {
-
-    use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
-
-    use cyclotomic_rings::rings::BabyBearChallengeSet;
-
-    type R = RqNTT;
-
-    type CS = BabyBearChallengeSet;
-
-    generate_sumcheck_tests!();
+        #[test]
+        fn test_failing_sumcheck() {
+            super::test_failing_sumcheck::<RqNTT, CS>();
+        }
+    }
 }
