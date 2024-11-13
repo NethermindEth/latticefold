@@ -60,16 +60,21 @@ impl<
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
+        // Take ownership and pad CCS instance
+        let mut owned_ccs = ccs.clone();
+        owned_ccs.pad_rows_to_the_next_pow_of_2();
         let (linearized_cm_i, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
+            LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, &owned_ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
+            LFDecompositionProver::<_, T>::prove::<W, C, P>(
+                acc, w_acc, transcript, &owned_ccs, scheme,
+            )?;
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(
                 &linearized_cm_i,
                 w_i,
                 transcript,
-                ccs,
+                &owned_ccs,
                 scheme,
             )?;
 
@@ -86,7 +91,7 @@ impl<
         };
 
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs)?;
+            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, &owned_ccs)?;
 
         Ok((
             folded_lcccs,

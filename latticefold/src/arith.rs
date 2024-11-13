@@ -108,12 +108,7 @@ impl<R: Ring> Arith<R> for CCS<R> {
 
 impl<R: Ring> CCS<R> {
     pub fn from_r1cs(r1cs: R1CS<R>, W: usize) -> Self {
-        let mut target_len = W;
-        if target_len & (target_len - 1) != 0 {
-            // If it's not a power of 2, we increase it to the next power of 2
-            target_len = 1 << log2(target_len) as usize;
-        }
-        let m = target_len;
+        let m = W;
         let n = r1cs.A.ncols();
 
         CCS {
@@ -139,6 +134,11 @@ impl<R: Ring> CCS<R> {
             B: self.M[1].clone(),
             C: self.M[2].clone(),
         }
+    }
+    pub fn pad_rows_to_the_next_pow_of_2(&mut self) {
+        let target_len = self.m.next_power_of_two();
+        self.m = target_len;
+        self.s = log2(target_len) as usize;
     }
 }
 
@@ -213,13 +213,8 @@ impl<NTT: SuitableRing> Witness<NTT> {
     /// The hat matrix `Vec<Vec<NTT>>`.
     ///
     fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<Vec<NTT>> {
-        let mut target_len = f.len();
-        if target_len & (target_len - 1) != 0 {
-            // If not, we increase it to the next power of 2
-            target_len = 1 << log2(target_len) as usize;
-        }
         let mut fhat = vec![
-            vec![NTT::zero(); target_len];
+            vec![NTT::zero(); f.len().next_power_of_two()];
             NTT::CoefficientRepresentation::dimension() / NTT::dimension()
         ];
 
@@ -358,7 +353,9 @@ pub mod tests {
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
-        CCS::<R>::from_r1cs(r1cs, W)
+        let mut ccs = CCS::<R>::from_r1cs(r1cs, W);
+        ccs.pad_rows_to_the_next_pow_of_2();
+        ccs
     }
 
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {

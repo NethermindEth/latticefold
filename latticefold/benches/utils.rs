@@ -60,5 +60,7 @@ pub fn get_test_dummy_ccs<
     r1cs_rows: usize,
 ) -> CCS<R> {
     let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(r1cs_rows);
-    CCS::<R>::from_r1cs(r1cs, W)
+    let mut ccs = CCS::<R>::from_r1cs(r1cs, W);
+    ccs.pad_rows_to_the_next_pow_of_2();
+    ccs
 }
