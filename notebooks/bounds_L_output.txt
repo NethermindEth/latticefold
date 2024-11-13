@@ -1,0 +1,52 @@
+
+--- Goldilocks prime modulus (d = 24) ---
+	Maximum kappa for which bound_2 < p/2: 16
+	kappa = 4, n = 512: B = 12
+	kappa = 4, n = 1024: B = 8
+	kappa = 4, n = 2048: B = 4
+	kappa = 5, n = 512: B = 44
+	kappa = 5, n = 1024: B = 30
+	kappa = 5, n = 2048: B = 20
+	kappa = 5, n = 4096: B = 12
+	kappa = 5, n = 8192: B = 8
+	kappa = 5, n = 16384: B = 4
+	kappa = 6, n = 512: B = 134
+		(b, k) = (2, 7), B = 128, L = 9
+	kappa = 6, n = 1024: B = 90
+	kappa = 6, n = 2048: B = 60
+	kappa = 6, n = 4096: B = 40
+	kappa = 6, n = 8192: B = 26
+	kappa = 6, n = 16384: B = 16
+	kappa = 7, n = 512: B = 336
+		(b, k) = (2, 8), B = 256, L = 8
+		(b, k) = (4, 4), B = 256, L = 8
+		(b, k) = (16, 2), B = 256, L = 8
+	kappa = 7, n = 1024: B = 238
+	kappa = 7, n = 2048: B = 158
+	kappa = 7, n = 4096: B = 106
+	kappa = 7, n = 8192: B = 70
+	kappa = 7, n = 16384: B = 48
+	kappa = 8, n = 512: B = 800
+		(b, k) = (2, 9), B = 512, L = 7
+		(b, k) = (8, 3), B = 512, L = 7
+	kappa = 8, n = 1024: B = 566
+		(b, k) = (2, 9), B = 512, L = 7
+		(b, k) = (8, 3), B = 512, L = 7
+	kappa = 8, n = 2048: B = 374
+		(b, k) = (2, 8), B = 256, L = 8
+		(b, k) = (4, 4), B = 256, L = 8
+		(b, k) = (16, 2), B = 256, L = 8
+	kappa = 8, n = 4096: B = 264
+	kappa = 8, n = 8192: B = 176
+	kappa = 8, n = 16384: B = 118
+	kappa = 9, n = 512: B = 1832
+	kappa = 9, n = 1024: B = 1200
+		(b, k) = (2, 10), B = 1024, L = 7
+		(b, k) = (4, 5), B = 1024, L = 7
+		(b, k) = (32, 2), B = 1024, L = 7
+		(b, k) = (2, 9), B = 512, L = 7
+		(b, k) = (8, 3), B = 512, L = 7
+	kappa = 9, n = 2048: B = 848
+		(b, k) = (2, 9), B = 512, L = 7
+		(b, k) = (8, 3), B = 512, L = 7
+	kappa = 9, n = 4096: B = 600

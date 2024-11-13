@@ -4,35 +4,18 @@ from sage.all import *
 def bound_2(d, kappa, p):
     return (2**(2 * sqrt(log(1.0045, 2) * d * kappa * log(p, 2)))).n()
 
-# Define bound_inf function
-def bound_inf(d, kappa, p, n):
-    L = 1
-    bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
+# Define bound_inf function without L
+def bound_inf_no_L(d, kappa, p, n):
+    bound_value = floor(bound_2(d, kappa, p) / sqrt(d * n).n())
     
-    # Ensure bound_value is a power of two
-    bound_value = 2**(bound_value.bit_length() - 1)
+    # Adjust bound_value to be even
+    if bound_value % 2 == 1:
+        bound_value -= 1
     
-    # Iterate until bound_value^L > p/2 or L exceeds 50
-    while bound_value^L <= p / 2:
-        if L > 50:
-            return "unpractical", "unpractical"
-        L += 1
-        bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
-        if bound_value % 2 == 1:
-            bound_value -= 1
-            if find_smallest_L_log(bound_value, p) != L:
-                continue
-    
-    return bound_value, L
-
-# Function to find the smallest L such that B^L > p/2 using logarithms
-def find_smallest_L_log(B, p):
-    if B <= 0:
-        return "unpractical"
-    return ceil(log(p / 2) / log(B))
+    return bound_value
 
 # Function to find all (b, k) pairs such that b^k = B
-def find_b_k_pairs(B, original_L, target_pairs=10):
+def find_b_k_pairs_no_L(B, target_pairs=3):
     pairs = []
     
     # Check if B is "unpractical"
@@ -44,20 +27,18 @@ def find_b_k_pairs(B, original_L, target_pairs=10):
     
     # Start from the target B and decrement until finding the required number of pairs
     while len(pairs) < target_pairs and B > 1:
-        # Iterate over even values of b only
+        # Iterate over powers of two for b
         b = 2
         while b <= B:
             if b > 64:
-                break
+                break  # Ensure b does not exceed 64
             k = 1
             power = b
             while power <= B:
-                L = find_smallest_L_log(b**k, p)
-                if L == original_L:
-                    pairs.append((b, k, B))  # Add B to the pair if L matches
+                pairs.append((b, k, B))  # Add B to the pair
                 k += 1
                 power *= b
-            b *= 2 # Move to the next power of two
+            b *= 2  # Move to the next power of two
         
         # Sort pairs by how close b^k is to B, in descending order
         pairs.sort(key=lambda pair: abs(pair[0]**pair[1] - B))
@@ -66,8 +47,8 @@ def find_b_k_pairs(B, original_L, target_pairs=10):
         if len(pairs) >= target_pairs:
             break
         
-        # Otherwise, decrement B by 2 to ensure it remains even
-        B -= 2
+        # Otherwise, decrement B to the next lower power of two
+        B //= 2
     
     # Use a dictionary to track the maximum B for each k
     max_b_for_k = {}
@@ -84,15 +65,15 @@ def find_b_k_pairs(B, original_L, target_pairs=10):
 
 # Primes with their corresponding d values
 params = {
-#    "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
+    #"BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
     "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
-#    "Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
-#    "Frog": {"p": 159120925213255836417, "d": 16},
-#    "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
+    #"Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
+    #"Frog": {"p": 159120925213255836417, "d": 16},
+    #"Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
 }
 
 # Range of num_cols values
-num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13, 2^14]
+num_cols_values = [2^15, 2^16, 2^17, 2^18, 2^19, 2^20]
 
 # Iterate over each prime and calculate the maximum kappa and perform bound calculations
 for prime_name, param in params.items():
@@ -120,21 +101,16 @@ for prime_name, param in params.items():
     for kappa in kappa_values:
         for n in num_cols_values:
             # Calculate bound_inf for the current kappa and n
-            current_bound_inf, L = bound_inf(d, kappa, p, n)
+            current_bound_inf = bound_inf_no_L(d, kappa, p, n)
             
             # If the current bound is "unpractical", skip to the next kappa
             if current_bound_inf == "unpractical":
                 continue
             
             # Find the pairs (b, k) such that b^k = B
-            pairs = find_b_k_pairs(current_bound_inf, L)
+            pairs = find_b_k_pairs_no_L(current_bound_inf)
             
             # Display the results
             print(f"\tkappa = {kappa}, n = {n}: B = {current_bound_inf}")
             for b, k, B in pairs:
-                # Recalculate L for each pair
-                L = find_smallest_L_log(b**k, p)
-                
-                # Discard any L equal to 1 or less and where L*n > 2^14
-                if L > 1 and L * n <= 2^14:
-                    print(f"\t\t(b, k) = ({b}, {k}), B = {b**k}, L = {L}")
+                print(f"\t\t(b, k) = ({b}, {k}), B = {b**k}") 
