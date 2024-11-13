@@ -208,8 +208,14 @@ impl<NTT: SuitableRing> Witness<NTT> {
     /// The hat matrix `Vec<Vec<NTT>>`.
     ///
     fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<Vec<NTT>> {
+        // Check if f.len() is a power of 2;
+        let mut target_len = f.len();
+        if target_len & (target_len - 1) != 0 {
+            // If not, we increase it to the next power of 2
+            target_len = 1 << log2(target_len) as usize;
+        }
         let mut fhat = vec![
-            vec![NTT::zero(); f.len()];
+            vec![NTT::zero(); target_len];
             NTT::CoefficientRepresentation::dimension() / NTT::dimension()
         ];
 
