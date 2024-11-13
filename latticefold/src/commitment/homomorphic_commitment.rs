@@ -1,3 +1,4 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
     ops::{Add, Mul, Sub},
     Zero,
@@ -14,9 +15,9 @@ use crate::{
 /// Enforced to have the length `C`.
 /// Since Ajtai commitment is bounded-additively homomorphic
 /// one can add commitments and multiply them by a scalar.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Commitment<const C: usize, R: Ring> {
-    val: Vec<R>,
+#[derive(Clone, Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
+pub struct Commitment<const C: usize, R1: Ring> {
+    val: Vec<R1>,
 }
 
 impl<const C: usize, R: Ring> Commitment<C, R> {
