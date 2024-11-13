@@ -1,6 +1,9 @@
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::ops::Transpose;
-use lattirust_ring::balanced_decomposition::{decompose_balanced_vec, recompose};
+use lattirust_ring::{
+    balanced_decomposition::{decompose_balanced_vec, recompose},
+    cyclotomic_ring::CRT,
+};
 
 use crate::decomposition_parameters::DecompositionParams;
 
@@ -12,7 +15,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 >(
     x: &[NTT],
 ) -> Vec<Vec<NTT>> {
-    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
+    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.icrt()).collect();
 
     // radix-B
     let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =
@@ -31,7 +34,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
                         chunk,
                         <NTT as SuitableRing>::CoefficientRepresentation::from(DP::B),
                     )
-                    .into()
+                    .crt()
                 })
                 .collect()
         })

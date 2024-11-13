@@ -9,6 +9,7 @@ use cyclotomic_rings::rings::{
     BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
+use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use rand::thread_rng;
 use std::fmt::Debug;
 
@@ -44,7 +45,7 @@ fn ajtai_benchmark<
             b.iter(|| {
                 let _ = witness
                     .iter()
-                    .map(|&x| x.into())
+                    .map(|&x| x.icrt())
                     .collect::<Vec<R::CoefficientRepresentation>>();
             })
         },
@@ -53,14 +54,14 @@ fn ajtai_benchmark<
     // INTT -> NTT
     let coeff = witness_3
         .iter()
-        .map(|&x| x.into())
+        .map(|&x| x.icrt())
         .collect::<Vec<R::CoefficientRepresentation>>();
     group.bench_with_input(
         BenchmarkId::new("INTT->NTT", format!("C={}, W={}", C, W)),
         &(coeff),
         |b, coeff| {
             b.iter(|| {
-                let _: Vec<R> = coeff.iter().map(|&x| R::from(x)).collect();
+                let _: Vec<R> = coeff.iter().map(|&x| x.crt()).collect();
             })
         },
     );

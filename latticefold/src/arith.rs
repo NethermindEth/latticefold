@@ -5,6 +5,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, recompose},
+    cyclotomic_ring::CRT,
     PolyRing, Ring,
 };
 
@@ -164,7 +165,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
     pub fn from_w_ccs<P: DecompositionParams>(w_ccs: &[NTT]) -> Self {
         // iNTT
         let w_coeff: Vec<NTT::CoefficientRepresentation> =
-            w_ccs.iter().map(|&x| x.into()).collect();
+            w_ccs.iter().map(|&x| x.icrt()).collect();
 
         // decompose radix-B
         let f_coeff: Vec<NTT::CoefficientRepresentation> =
@@ -174,7 +175,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
                 .collect();
 
         // NTT(coef_repr_decomposed)
-        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.into()).collect();
+        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.crt()).collect();
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
@@ -230,7 +231,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.into()).collect();
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.icrt()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
         let w_ccs = f
@@ -253,7 +254,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
     pub fn from_f_coeff<P: DecompositionParams>(
         f_coeff: Vec<NTT::CoefficientRepresentation>,
     ) -> Self {
-        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.into()).collect();
+        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.crt()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
         let w_ccs = f
