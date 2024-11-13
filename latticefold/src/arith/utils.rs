@@ -53,8 +53,10 @@ pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Erro
     }
     let mut res = vec![R::zero(); M.nrows()];
 
-    for (col, row, val) in M.triplet_iter() {
-        res[col] += *val * z[row];
+    for (row, row_coeffs) in M.coeffs.iter().enumerate() {
+        for (val, col) in row_coeffs {
+            res[row] += *val * z[*col];
+        }
     }
 
     Ok(res)
@@ -134,8 +136,23 @@ mod tests {
             vec![Fq::zero(), Fq::from(2u64), Fq::from(1u64)], // Row 1
             vec![Fq::zero(), Fq::zero(), Fq::from(3u64)], // Row 2
         ];
+        // Convert dense matrix to sparse format by only keeping non-zero elements
+        let sparse_coeffs: Vec<Vec<(Fq, usize)>> = dense_matrix
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .enumerate()
+                    .filter(|(_, &val)| !val.is_zero())
+                    .map(|(col_idx, val)| (val.clone(), col_idx))
+                    .collect()
+            })
+            .collect();
 
-        let M = SparseMatrix::from(dense_matrix.as_slice());
+        let M = SparseMatrix {
+            n_rows: dense_matrix.len(),
+            n_cols: dense_matrix[0].len(),
+            coeffs: sparse_coeffs,
+        };
 
         let z = [Fq::from(1u64), Fq::from(1u64), Fq::from(1u64)];
         let result = mat_vec_mul(&M, &z);

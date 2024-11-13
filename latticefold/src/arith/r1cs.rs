@@ -76,7 +76,23 @@ impl<R: Ring> RelaxedR1CS<R> {
 }
 
 pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-    to_F_dense_matrix::<R>(M).as_slice().into()
+    let n_rows = M.len();
+    let n_cols = M[0].len();
+    let mut coeffs = Vec::with_capacity(n_rows);
+    for row in M.iter() {
+        let mut row_coeffs = Vec::with_capacity(n_cols);
+        for (col_i, &val) in row.iter().enumerate() {
+            if val != 0 {
+                row_coeffs.push((R::from(val as u64), col_i));
+            }
+        }
+        coeffs.push(row_coeffs);
+    }
+    SparseMatrix {
+        n_rows,
+        n_cols,
+        coeffs,
+    }
 }
 
 pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
