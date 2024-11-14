@@ -57,7 +57,7 @@ fn wit_and_ccs_gen<
 
     let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
+    let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
     let cm_i: CCCS<C, R> = CCCS {
         cm: wit.commit::<C, W, P>(&scheme).unwrap(),
         x_ccs,

@@ -2,7 +2,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::ops::Transpose;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, gadget_decompose, recompose},
-    cyclotomic_ring::CRT,
+    cyclotomic_ring::{CRT, ICRT},
 };
 
 use crate::decomposition_parameters::DecompositionParams;
@@ -13,10 +13,10 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
     NTT: SuitableRing,
     DP: DecompositionParams,
 >(
-    x: &[NTT],
+    x: Vec<NTT>,
 ) -> Vec<Vec<NTT>> {
     // Allow x to have length m
-    let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.icrt()).collect();
+    let coeff_repr: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(x);
 
     // radix-B
     let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =

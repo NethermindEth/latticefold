@@ -50,7 +50,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let mut cm_i_x_w = cm_i.x_w.clone();
         cm_i_x_w.push(cm_i.h);
-        let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(&cm_i_x_w);
+        let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(cm_i_x_w);
 
         let y_s: Vec<Commitment<C, NTT>> = cfg_iter!(wit_s)
             .map(|wit| wit.commit::<C, W, P>(scheme))

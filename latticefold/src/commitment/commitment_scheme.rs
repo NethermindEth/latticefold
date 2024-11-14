@@ -1,5 +1,7 @@
 use lattirust_ring::{
-    balanced_decomposition::decompose_balanced_vec, cyclotomic_ring::CRT, OverField,
+    balanced_decomposition::decompose_balanced_vec,
+    cyclotomic_ring::{CRT, ICRT},
+    OverField,
 };
 
 use super::homomorphic_commitment::Commitment;
@@ -86,13 +88,13 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
     /// Performs NTT on each component of the witness and then does Ajtai commitment.
     pub fn commit_coeff<P: DecompositionParams>(
         &self,
-        f: &[NTT::CoefficientRepresentation],
+        f: Vec<NTT::CoefficientRepresentation>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
         if f.len() != W {
             return Err(CommitmentError::WrongWitnessLength(f.len(), W));
         }
 
-        self.commit_ntt(&f.iter().map(|&x| x.crt()).collect::<Vec<NTT>>())
+        self.commit_ntt(&CRT::from_vec(f))
     }
 
     /// Takes a coefficient form witness, decomposes it vertically in radix-B,
@@ -106,7 +108,7 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
             .flatten()
             .collect::<Vec<_>>();
 
-        self.commit_coeff::<P>(&f)
+        self.commit_coeff::<P>(f)
     }
 
     /// Takes an NTT form witness, transforms it into the coefficient form,
@@ -114,9 +116,9 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
     /// computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
     pub fn decompose_and_commit_ntt<P: DecompositionParams>(
         &self,
-        w: &[NTT],
+        w: Vec<NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let coeff: Vec<NTT::CoefficientRepresentation> = w.iter().map(|&x| x.icrt()).collect();
+        let coeff: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(w);
 
         self.decompose_and_commit_coeff::<P>(&coeff)
     }

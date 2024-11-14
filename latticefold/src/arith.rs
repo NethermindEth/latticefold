@@ -163,10 +163,9 @@ pub struct Witness<NTT: SuitableRing> {
 }
 
 impl<NTT: SuitableRing> Witness<NTT> {
-    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: &[NTT]) -> Self {
+    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: Vec<NTT>) -> Self {
         // iNTT
-        let w_coeff: Vec<NTT::CoefficientRepresentation> =
-            w_ccs.iter().map(|&x| x.icrt()).collect();
+        let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(w_ccs.clone());
 
         // decompose radix-B
         let f_coeff: Vec<NTT::CoefficientRepresentation> =
@@ -184,7 +183,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
             f,
             f_coeff,
             f_hat,
-            w_ccs: w_ccs.to_vec(),
+            w_ccs,
         }
     }
 

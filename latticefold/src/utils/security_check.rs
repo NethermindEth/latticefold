@@ -5,8 +5,6 @@ use lattirust_ring::{cyclotomic_ring::ICRT, PolyRing};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
-use crate::arith::Witness;
-
 fn calculate_bound_l2(degree: usize, kappa: usize, ring_modulus_log2: f64) -> BigUint {
     // The current security parameter use log2(delta)
     let delta = 1.0045_f64;
@@ -49,9 +47,8 @@ pub fn check_ring_modulus_128_bits_security(
     bound_l2_check && b_check && b_pow_l_check
 }
 
-pub fn check_witness_bound<NTT: SuitableRing>(witness: &Witness<NTT>, b: u128) -> bool {
-    let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
-        ICRT::from_vec(witness.f.clone());
+pub fn check_witness_bound<NTT: SuitableRing>(witness_f: Vec<NTT>, b: u128) -> bool {
+    let coeffs_repr: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(witness_f);
 
     // linf_norm should be used in CyclotomicGeneral not in specific ring
     let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);
