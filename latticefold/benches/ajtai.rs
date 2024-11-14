@@ -9,7 +9,7 @@ use cyclotomic_rings::rings::{
     BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
-use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
+use lattirust_ring::cyclotomic_ring::CRT;
 use rand::thread_rng;
 use std::fmt::Debug;
 
