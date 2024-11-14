@@ -1,3 +1,5 @@
+use ark_std::cfg_iter;
+
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
@@ -43,21 +45,18 @@ pub fn hadamard<R: Ring>(a: &[R], b: &[R]) -> Result<Vec<R>, Error> {
 }
 
 pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Error> {
-    if M.ncols() != z.len() {
+    if M.n_cols != z.len() {
         return Err(Error::LengthsNotEqual(
             "M".to_string(),
             "z".to_string(),
-            M.ncols(),
+            M.n_cols,
             z.len(),
         ));
     }
-    let mut res = vec![R::zero(); M.nrows()];
-
-    for (col, row, val) in M.triplet_iter() {
-        res[col] += *val * z[row];
-    }
-
-    Ok(res)
+    
+    Ok(cfg_iter!(M.coeffs)
+        .map(|row| row.iter().map(|(value, col_i)| *value * z[*col_i]).sum())
+        .collect())
 }
 
 #[cfg(test)]
