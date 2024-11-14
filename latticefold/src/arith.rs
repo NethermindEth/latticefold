@@ -1,21 +1,21 @@
 #![allow(non_snake_case)]
 
-use crate::{
-    ark_base::*,
-    commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
-    decomposition_parameters::DecompositionParams,
-};
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
-use error::CSError as Error;
-use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{gadget_decompose, gadget_recompose},
     cyclotomic_ring::{CRT, ICRT},
     PolyRing, Ring,
 };
+
+use crate::{
+    ark_base::*,
+    commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
+    decomposition_parameters::DecompositionParams,
+};
+use error::CSError as Error;
 use r1cs::R1CS;
 use utils::{hadamard, mat_vec_mul, vec_add, vec_scalar_mul};
 
@@ -136,17 +136,13 @@ impl<R: Ring> CCS<R> {
         }
     }
     pub fn pad_rows_to_the_next_pow_of_2(&mut self) {
-        let old_length = self.m;
-        let diff = self.m.next_power_of_two() - old_length;
         let target_len = self.m.next_power_of_two();
         self.m = target_len;
         self.s = log2(target_len) as usize;
 
         // Update matrices
         self.M.iter_mut().for_each(|mat| {
-            let mut dense = mat.to_dense();
-            dense.extend(ark_std::iter::repeat(vec![R::ZERO; dense[0].len()]).take(diff));
-            *mat = dense_matrix_to_sparse(dense);
+            mat.n_rows = target_len;
         });
     }
 }
