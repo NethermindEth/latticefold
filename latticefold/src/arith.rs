@@ -136,13 +136,14 @@ impl<R: Ring> CCS<R> {
         }
     }
     pub fn pad_rows_to_the_next_pow_of_2(&mut self) {
+        let old_length = self.m;
+        let diff = self.m.next_power_of_two() - old_length;
         let target_len = self.m.next_power_of_two();
-        let diff = target_len - self.m;
         self.m = target_len;
         self.s = log2(target_len) as usize;
 
         // Update matrices
-        let _ = self.M.iter_mut().map(|mat| {
+        self.M.iter_mut().for_each(|mat| {
             let mut dense = mat.to_dense();
             dense.extend(ark_std::iter::repeat(vec![R::ZERO; dense[0].len()]).take(diff));
             *mat = dense_matrix_to_sparse(dense);

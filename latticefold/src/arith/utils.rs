@@ -66,6 +66,7 @@ mod tests {
     use super::*;
     use ark_ff::Zero;
     use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
+
     use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
 
     #[test]
