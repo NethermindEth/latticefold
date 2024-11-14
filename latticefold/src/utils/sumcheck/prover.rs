@@ -112,9 +112,8 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
 
         // generate sum
-        let fold_result = cfg_into_iter!(0..1 << (nv - i), 1 << 10).fold(
-            zeros,
-            |(mut products_sum, mut product), b| {
+        let fold_result =
+            cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
                 // In effect, this fold is essentially doing simply:
                 // for b in 0..1 << (nv - i) {
                 for (coefficient, products) in &prover_state.list_of_products {
@@ -133,8 +132,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                     }
                 }
                 (products_sum, product)
-            },
-        );
+            });
 
         #[cfg(not(feature = "parallel"))]
         let products_sum = fold_result.0;
