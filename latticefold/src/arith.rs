@@ -234,7 +234,9 @@ impl<NTT: SuitableRing> Witness<NTT> {
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
         let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.icrt()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
-
+        // Reconstruct the original CCS witness from the Ajtai witness
+        // Ajtai witness has bound B
+        // WE multiply by the base B gadget matrix to reconstruct w_ccs
         let w_ccs = f.chunks(P::L).map(|chunk| recompose(chunk, P::B)).collect();
 
         Self {
@@ -252,6 +254,9 @@ impl<NTT: SuitableRing> Witness<NTT> {
     pub fn from_f_coeff<P: DecompositionParams>(
         f_coeff: Vec<NTT::CoefficientRepresentation>,
     ) -> Self {
+        // Reconstruct the original CCS witness from the Ajtai witness
+        // Ajtai witness has bound B
+        // WE multiply by the base B gadget matrix to reconstruct w_ccs
         let f: Vec<NTT> = f_coeff.iter().map(|&x| x.crt()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 

@@ -15,6 +15,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 >(
     x: &[NTT],
 ) -> Vec<Vec<NTT>> {
+    // Allow x to have length m
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.icrt()).collect();
 
     // radix-B
@@ -23,10 +24,16 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
             .into_iter()
             .flatten()
             .collect();
+    // We now have a m * l length vector
+    // Each element from original vector is mapped to l-length chunk
 
     decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, Some(DP::K))
+        // We have a k by (m*l) matrix
         .transpose()
+        // We have a (m*l) by k matrix
         .into_iter()
+        // We recompose to a m * k matrix
+        // Where could recompose basis b horizontally to recreate the original vector
         .map(|vec| {
             vec.chunks(DP::L)
                 .map(|chunk| recompose(chunk, DP::B).crt())
