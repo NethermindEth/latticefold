@@ -146,7 +146,7 @@ impl<R: Ring> CCS<R> {
         self.M.iter_mut().map(|mat| {
             let mut dense = mat.to_dense();
             dense.extend(std::iter::repeat(vec![R::ZERO; dense[0].len()]).take(diff));
-            dense_matrix_to_sparse(dense)
+            *mat = dense_matrix_to_sparse(dense);
         });
     }
 }
