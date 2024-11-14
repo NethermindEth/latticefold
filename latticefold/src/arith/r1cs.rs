@@ -1,6 +1,5 @@
 use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
 use lattirust_linear_algebra::SparseMatrix;
-use lattirust_ring::Ring;
 
 use super::{
     error::CSError as Error,
@@ -8,6 +7,7 @@ use super::{
 };
 use crate::arith::hadamard;
 use crate::ark_base::*;
+use lattirust_ring::Ring;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct R1CS<R: Ring> {

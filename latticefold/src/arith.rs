@@ -139,6 +139,9 @@ impl<R: Ring> CCS<R> {
         let target_len = self.m.next_power_of_two();
         self.m = target_len;
         self.s = log2(target_len) as usize;
+
+        // Update matrices
+        // TODO
     }
 }
 
