@@ -19,7 +19,7 @@ macro_rules! generate_decomposition_tests {
             transcript::poseidon::PoseidonTranscript,
         };
         use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-        use ark_std::io::Cursor;
+        use ark_std::{io::Cursor, ops::MulAssign};
         use cyclotomic_rings::rings::SuitableRing;
         use lattirust_ring::{
             balanced_decomposition::{decompose_balanced_vec, recompose},
@@ -125,10 +125,7 @@ macro_rules! generate_decomposition_tests {
             // Check that the decomposition is correct
             for i in 0..N {
                 let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
-                assert_eq!(
-                    test_vector[i],
-                    recompose(&decomp_i, RqPoly::from(PP::B_SMALL as u128))
-                );
+                assert_eq!(test_vector[i], recompose(&decomp_i, PP::B_SMALL as u128));
             }
         }
 
@@ -160,7 +157,10 @@ macro_rules! generate_decomposition_tests {
 
         fn recompose_from_k_vec_to_big_vec<NTT: SuitableRing, DP: DecompositionParams>(
             k_vecs: &[Vec<NTT>],
-        ) -> Vec<NTT::CoefficientRepresentation> {
+        ) -> Vec<NTT::CoefficientRepresentation>
+        where
+            for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
+        {
             let decomposed_in_b: Vec<Vec<NTT::CoefficientRepresentation>> = k_vecs
                 .iter()
                 .map(|vec| {
@@ -183,15 +183,10 @@ macro_rules! generate_decomposition_tests {
             // Recompose first with B_SMALL, then with B
             transposed
                 .iter()
-                .map(|vec| {
-                    recompose(
-                        vec,
-                        NTT::CoefficientRepresentation::from(DP::B_SMALL as u128),
-                    )
-                })
+                .map(|vec| recompose(vec, DP::B_SMALL as u128))
                 .collect::<Vec<_>>()
                 .chunks(DP::L)
-                .map(|chunk| recompose(chunk, NTT::CoefficientRepresentation::from(DP::B)))
+                .map(|chunk| recompose(chunk, DP::B))
                 .collect()
         }
 

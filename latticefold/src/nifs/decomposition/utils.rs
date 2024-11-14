@@ -30,7 +30,7 @@ where
         .into_iter()
         .map(|vec| {
             vec.chunks(DP::L)
-                .map(|chunk| recompose::<_, u128>(chunk, DP::B).into())
+                .map(|chunk| recompose(chunk, DP::B).into())
                 .collect()
         })
         .collect()
