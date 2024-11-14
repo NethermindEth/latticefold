@@ -20,6 +20,8 @@ use rayon::prelude::*;
 
 pub use structs::*;
 mod structs;
+
+#[cfg(test)]
 mod tests;
 mod utils;
 
