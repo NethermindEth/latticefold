@@ -6,7 +6,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, gadget_recompose},
-    cyclotomic_ring::{ICRT, CRT},
+    cyclotomic_ring::{CRT, ICRT},
     PolyRing, Ring,
 };
 
@@ -165,7 +165,7 @@ pub struct Witness<NTT: SuitableRing> {
 impl<NTT: SuitableRing> Witness<NTT> {
     pub fn from_w_ccs<P: DecompositionParams>(w_ccs: Vec<NTT>) -> Self {
         // iNTT
-        let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(w_ccs.clone());
+        let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w_ccs.clone());
 
         // decompose radix-B
         let f_coeff: Vec<NTT::CoefficientRepresentation> =
@@ -175,7 +175,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
                 .collect();
 
         // NTT(coef_repr_decomposed)
-        let f: Vec<NTT> = CRT::from_vec(f_coeff.clone());
+        let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
@@ -231,7 +231,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(f.clone());
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(f.clone());
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
         // Reconstruct the original CCS witness from the Ajtai witness
         // Ajtai witness has bound B
@@ -277,7 +277,10 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn within_bound(&self, b: u128) -> bool {
-        let coeffs_repr: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(self.f.clone());
+        // TODO consider using signed representatives instead
+
+        let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
+            ICRT::elementwise_icrt(self.f.clone());
 
         // linf_norm should be used in CyclotomicGeneral not in specific ring
         let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);

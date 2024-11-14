@@ -94,7 +94,7 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
             return Err(CommitmentError::WrongWitnessLength(f.len(), W));
         }
 
-        self.commit_ntt(&CRT::from_vec(f))
+        self.commit_ntt(&CRT::elementwise_crt(f))
     }
 
     /// Takes a coefficient form witness, decomposes it vertically in radix-B,
@@ -118,7 +118,7 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
         &self,
         w: Vec<NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let coeff: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(w);
+        let coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w);
 
         self.decompose_and_commit_coeff::<P>(&coeff)
     }

@@ -43,19 +43,19 @@ fn ajtai_benchmark<
         &(witness_2),
         |b, witness| {
             b.iter(|| {
-                let _ = ICRT::from_vec(witness.clone());
+                let _ = ICRT::elementwise_icrt(witness.clone());
             })
         },
     );
 
     // INTT -> NTT
-    let coeff = ICRT::from_vec(witness_3);
+    let coeff = ICRT::elementwise_icrt(witness_3);
     group.bench_with_input(
         BenchmarkId::new("INTT->NTT", format!("C={}, W={}", C, W)),
         &(coeff),
         |b, coeff| {
             b.iter(|| {
-                let _: Vec<R> = CRT::from_vec(coeff.clone());
+                let _: Vec<R> = CRT::elementwise_crt(coeff.clone());
             })
         },
     );
