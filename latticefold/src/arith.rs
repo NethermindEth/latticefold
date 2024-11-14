@@ -5,7 +5,7 @@ use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, recompose},
+    balanced_decomposition::{decompose_balanced_vec, gadget_recompose},
     cyclotomic_ring::CRT,
     PolyRing, Ring,
 };
@@ -237,7 +237,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // Reconstruct the original CCS witness from the Ajtai witness
         // Ajtai witness has bound B
         // WE multiply by the base B gadget matrix to reconstruct w_ccs
-        let w_ccs = f.chunks(P::L).map(|chunk| recompose(chunk, P::B)).collect();
+        let w_ccs = gadget_recompose(&f, P::B, P::L);
 
         Self {
             f,
@@ -260,7 +260,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         let f: Vec<NTT> = f_coeff.iter().map(|&x| x.crt()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
-        let w_ccs = f.chunks(P::L).map(|chunk| recompose(chunk, P::B)).collect();
+        let w_ccs = gadget_recompose(&f, P::B, P::L);
 
         Self {
             f,

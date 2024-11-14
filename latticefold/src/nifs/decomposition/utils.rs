@@ -1,7 +1,7 @@
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::ops::Transpose;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, recompose},
+    balanced_decomposition::{decompose_balanced_vec, gadget_decompose, recompose},
     cyclotomic_ring::CRT,
 };
 
@@ -20,10 +20,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 
     // radix-B
     let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =
-        decompose_balanced_vec(&coeff_repr, DP::B, DP::L)
-            .into_iter()
-            .flatten()
-            .collect();
+        gadget_decompose(&coeff_repr, DP::B, DP::L);
     // We now have a m * l length vector
     // Each element from original vector is mapped to l-length chunk
 
