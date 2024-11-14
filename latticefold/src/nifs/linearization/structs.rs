@@ -1,5 +1,6 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
+use cyclotomic_rings::rings::SuitableRing;
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
@@ -18,7 +19,7 @@ pub struct LinearizationProof<NTT: OverField> {
     pub u: Vec<NTT>,
 }
 
-pub trait LinearizationProver<NTT: OverField, T: Transcript<NTT>> {
+pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
     fn prove<const C: usize>(
         cm_i: &CCCS<C, NTT>,
         wit: &Witness<NTT>,

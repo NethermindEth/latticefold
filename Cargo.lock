@@ -219,6 +219,7 @@ checksum = "94893f1e0c6eeab764ade8dc4c0db24caf4fe7cbbaafc0eba0a9030f447b5185"
 dependencies = [
  "num-traits",
  "rand",
+ "rayon",
 ]
 
 [[package]]
@@ -298,9 +299,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.2.0"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aeb932158bd710538c73702db6945cb68a8fb08c519e6e12706b94263b36db8"
+checksum = "fd9de9f2205d5ef3fd67e685b0df337994ddd4495e2a28d185500d0e1edfea47"
 dependencies = [
  "shlex",
 ]
@@ -353,18 +354,18 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.20"
+version = "4.5.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b97f376d85a664d5837dbae44bf546e6477a679ff6610010f17276f686d867e8"
+checksum = "fb3b4b9e5a7c7514dfa52869339ee98b3156b0bfb4e8a77c4ff4babb64b1604f"
 dependencies = [
  "clap_builder",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.20"
+version = "4.5.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19bc80abd44e4bed93ca373a0704ccbd1b710dc5749406201bb018272808dc54"
+checksum = "b17a95aa67cc7b5ebd32aa5370189aa0d79069ef1c64ce893bd30fb24bff20ec"
 dependencies = [
  "anstyle",
  "clap_lex",
@@ -372,9 +373,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "0.7.2"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1462739cb27611015575c0c11df5df7601141071f07518d56fcc1be504cbec97"
+checksum = "afb84c814227b90d6895e01398aee0d8033c00e7466aca416fb6a8e0eb19d8a7"
 
 [[package]]
 name = "convert_case"
@@ -799,13 +800,14 @@ dependencies = [
  "num-traits",
  "paste",
  "rand",
+ "rayon",
  "thiserror",
 ]
 
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#96e95c8d05eda3744cd87e4fa04c314ad10e88a8"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#0810b6175346883f39a35532dba14b776cb29c31"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -823,7 +825,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#96e95c8d05eda3744cd87e4fa04c314ad10e88a8"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#0810b6175346883f39a35532dba14b776cb29c31"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -839,7 +841,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#96e95c8d05eda3744cd87e4fa04c314ad10e88a8"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#0810b6175346883f39a35532dba14b776cb29c31"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",

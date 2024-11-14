@@ -1,5 +1,5 @@
 #[macro_export]
-macro_rules! generate_tests {
+macro_rules! generate_linearization_tests {
     ( $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         use ark_std::sync::Arc;
 
@@ -209,7 +209,7 @@ mod tests_pow2 {
     const N: usize = 8;
     type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
     type CS = BinarySmallSet<Q, N>;
-    generate_tests!(1024, 2, 2, 10);
+    generate_linearization_tests!(1024, 2, 2, 10);
 }
 
 #[cfg(test)]
@@ -224,7 +224,7 @@ mod tests_stark {
         utils::security_check::{check_ring_modulus_128_bits_security, check_witness_bound},
     };
     type CS = StarkChallengeSet;
-    generate_tests!(1024, 2, 2, 10);
+    generate_linearization_tests!(1024, 2, 2, 10);
 
     #[test]
     fn test_dummy_linearization() {
@@ -303,7 +303,7 @@ mod tests_goldilocks {
     use cyclotomic_rings::rings::GoldilocksChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
     type CS = GoldilocksChallengeSet;
-    generate_tests!(1024, 2, 2, 10);
+    generate_linearization_tests!(1024, 2, 2, 10);
 }
 
 #[cfg(test)]
@@ -311,7 +311,7 @@ mod tests_frog {
     use cyclotomic_rings::rings::FrogChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
     type CS = FrogChallengeSet;
-    generate_tests!(1024, 2, 2, 10);
+    generate_linearization_tests!(1024, 2, 2, 10);
 }
 
 #[cfg(test)]
@@ -321,5 +321,5 @@ mod tests_babybear {
     use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
     type CS = BabyBearChallengeSet;
 
-    generate_tests!(1024, 2, 2, 10);
+    generate_linearization_tests!(1024, 2, 2, 10);
 }
