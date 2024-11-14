@@ -1,5 +1,5 @@
-use lattirust_linear_algebra::SparseMatrix;
 use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
+use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
 use super::{

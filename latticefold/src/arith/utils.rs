@@ -1,4 +1,6 @@
 use ark_std::cfg_iter;
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
@@ -53,7 +55,7 @@ pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Erro
             z.len(),
         ));
     }
-    
+
     Ok(cfg_iter!(M.coeffs)
         .map(|row| row.iter().map(|(value, col_i)| *value * z[*col_i]).sum())
         .collect())
@@ -63,7 +65,8 @@ pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Erro
 mod tests {
     use super::*;
     use ark_ff::Zero;
-    use lattirust_linear_algebra::SparseMatrix;
+    use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
+
     use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
 
     #[test]
@@ -134,7 +137,7 @@ mod tests {
             vec![Fq::zero(), Fq::zero(), Fq::from(3u64)], // Row 2
         ];
 
-        let M = SparseMatrix::from(dense_matrix.as_slice());
+        let M = dense_matrix_to_sparse(dense_matrix);
 
         let z = [Fq::from(1u64), Fq::from(1u64), Fq::from(1u64)];
         let result = mat_vec_mul(&M, &z);
