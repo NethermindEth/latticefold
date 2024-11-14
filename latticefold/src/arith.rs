@@ -1,4 +1,6 @@
 #![allow(non_snake_case)]
+use std::ops::MulAssign;
+
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
@@ -229,13 +231,16 @@ impl<NTT: SuitableRing> Witness<NTT> {
         fhat
     }
 
-    pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
+    pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self
+    where
+        for<'a> NTT: MulAssign<&'a u128>,
+    {
         let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.into()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
         let w_ccs = f
             .chunks(P::L)
-            .map(|chunk| recompose(chunk, P::B.into()))
+            .map(|chunk| recompose::<_, u128>(chunk, P::B))
             .collect();
 
         Self {
@@ -246,20 +251,23 @@ impl<NTT: SuitableRing> Witness<NTT> {
         }
     }
 
-    pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
+    pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self
+    where
+        for<'a> NTT: MulAssign<&'a u128>,
+    {
         Self::from_f::<P>(f.into())
     }
 
     pub fn from_f_coeff<P: DecompositionParams>(
         f_coeff: Vec<NTT::CoefficientRepresentation>,
-    ) -> Self {
+    ) -> Self
+    where
+        for<'a> NTT: MulAssign<&'a u128>,
+    {
         let f: Vec<NTT> = f_coeff.iter().map(|&x| x.into()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
-        let w_ccs = f
-            .chunks(P::L)
-            .map(|chunk| recompose(chunk, P::B.into()))
-            .collect();
+        let w_ccs = f.chunks(P::L).map(|chunk| recompose(chunk, P::B)).collect();
 
         Self {
             f,

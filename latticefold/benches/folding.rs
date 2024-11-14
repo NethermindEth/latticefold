@@ -16,7 +16,7 @@ use latticefold::nifs::folding::{
 use rand::thread_rng;
 use std::{fmt::Debug, time::Duration};
 mod utils;
-use ark_std::UniformRand;
+use ark_std::{ops::MulAssign, UniformRand};
 use utils::get_test_dummy_ccs;
 
 use latticefold::{
@@ -70,7 +70,12 @@ fn prover_folding_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone
+        + UniformRand
+        + Debug
+        + SuitableRing
+        + for<'a> std::ops::AddAssign<&'a R>
+        + for<'a> MulAssign<&'a u128>,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -80,7 +85,7 @@ fn prover_folding_benchmark<
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) where
     for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        std::ops::MulAssign<&'a u128>,
+        MulAssign<&'a u128>,
 {
     println!("prove folding");
     println!("transcript");
@@ -168,7 +173,12 @@ fn verifier_folding_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone
+        + UniformRand
+        + Debug
+        + SuitableRing
+        + for<'a> std::ops::AddAssign<&'a R>
+        + for<'a> MulAssign<&'a u128>,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -178,7 +188,7 @@ fn verifier_folding_benchmark<
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) where
     for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        std::ops::MulAssign<&'a u128>,
+        MulAssign<&'a u128>,
 {
     println!("verify folding");
     println!("transcript");
@@ -263,13 +273,13 @@ fn linearization_benchmarks<
     const WIT_LEN: usize,
     const W: usize,
     CS: LatticefoldChallengeSet<R>,
-    R: SuitableRing,
+    R: SuitableRing + for<'a> MulAssign<&'a u128>,
     P: DecompositionParams,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) where
     for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        std::ops::MulAssign<&'a u128>,
+        MulAssign<&'a u128>,
 {
     let r1cs_rows = 5; // This makes a square matrix but is too much memory
     println!("Witness generation");

@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use ark_std::ops::MulAssign;
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
@@ -40,7 +42,9 @@ pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>
         w_s: &[Witness<NTT>],
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
+    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>
+    where
+        for<'a> NTT: MulAssign<&'a u128>;
 }
 
 pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
@@ -70,7 +74,10 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         w_s: &[Witness<NTT>],
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
+    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>
+    where
+        for<'a> NTT: MulAssign<&'a u128>,
+    {
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }

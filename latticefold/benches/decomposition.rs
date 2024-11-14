@@ -1,5 +1,6 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
+use ark_std::ops::MulAssign;
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
@@ -72,7 +73,12 @@ fn prover_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone
+        + UniformRand
+        + Debug
+        + SuitableRing
+        + for<'a> std::ops::AddAssign<&'a R>
+        + for<'a> MulAssign<&'a u128>,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -82,7 +88,7 @@ fn prover_decomposition_benchmark<
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) where
     for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        std::ops::MulAssign<&'a u128>,
+        MulAssign<&'a u128>,
 {
     println!("Proving decomposition");
     println!("transcript");
@@ -138,7 +144,12 @@ fn verifier_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone
+        + UniformRand
+        + Debug
+        + SuitableRing
+        + for<'a> std::ops::AddAssign<&'a R>
+        + for<'a> MulAssign<&'a u128>,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -148,7 +159,7 @@ fn verifier_decomposition_benchmark<
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) where
     for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        std::ops::MulAssign<&'a u128>,
+        MulAssign<&'a u128>,
 {
     println!("verify decomposition");
     println!("transcript");
@@ -218,13 +229,18 @@ fn decomposition_benchmarks<
     const WIT_LEN: usize,
     const W: usize,
     CS: LatticefoldChallengeSet<R>,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone
+        + UniformRand
+        + Debug
+        + SuitableRing
+        + for<'a> std::ops::AddAssign<&'a R>
+        + for<'a> MulAssign<&'a u128>,
     P: DecompositionParams + Clone,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) where
     for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        std::ops::MulAssign<&'a u128>,
+        MulAssign<&'a u128>,
 {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
     println!("Witness generation");

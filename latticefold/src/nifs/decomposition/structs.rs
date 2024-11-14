@@ -37,7 +37,8 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
         DecompositionError,
     >
     where
-        for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>;
+        for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
+        for<'a> NTT: MulAssign<&'a u128>;
 }
 
 pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {

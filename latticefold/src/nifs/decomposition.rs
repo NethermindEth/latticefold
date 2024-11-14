@@ -42,6 +42,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     >
     where
         for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
+        for<'a> NTT: MulAssign<&'a u128>,
     {
         let log_m = ccs.s;
 
