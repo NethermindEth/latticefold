@@ -36,3 +36,17 @@ impl Display for DecompositionParamData {
         write!(f, "B={}, l={}", self.b, self.l,)
     }
 }
+
+/// Used in decomposition and linearization tests
+#[cfg(test)]
+#[derive(Clone)]
+pub struct PP;
+
+#[cfg(test)]
+impl DecompositionParams for PP {
+    // Already used in
+    const B: u128 = 1024;
+    const L: usize = 2;
+    const B_SMALL: usize = 2;
+    const K: usize = 10;
+}
