@@ -1,16 +1,15 @@
 [package]
 name = "cyclotomic-rings"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 ark-ff = { workspace = true }
 ark-std = { workspace = true } 
-ark-crypto-primitives = { version = "0.4.0", default-features = false, features = [
-    "sponge",
-] }
-num-bigint = "0.4.5"
-rand = "0.8.5"
+ark-crypto-primitives = { workspace = true }
+num-bigint = { workspace = true }
+rand = { workspace = true }
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
