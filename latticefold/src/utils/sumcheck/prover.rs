@@ -57,9 +57,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         }
 
         // create a deep copy of all unique MLExtensions
-        let flattened_ml_extensions = polynomial
-            .flattened_ml_extensions
-            .iter()
+        let flattened_ml_extensions = ark_std::cfg_iter!(polynomial.flattened_ml_extensions)
             .map(|x| x.as_ref().clone())
             .collect();
 
@@ -116,19 +114,20 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
                 // In effect, this fold is essentially doing simply:
                 // for b in 0..1 << (nv - i) {
+                let index = b << 1;
                 for (coefficient, products) in &prover_state.list_of_products {
                     product.fill(*coefficient);
                     for &jth_product in products {
                         let table = &prover_state.flattened_ml_extensions[jth_product];
-                        let mut start = table[b << 1];
-                        let step = table[(b << 1) + 1] - start;
+                        let mut start = table[index];
+                        let step = table[index + 1] - start;
                         for p in product.iter_mut() {
                             *p *= start;
                             start += step;
                         }
                     }
-                    for t in 0..degree + 1 {
-                        products_sum[t] += product[t];
+                    for (sum, prod) in products_sum.iter_mut().zip(product.iter()) {
+                        *sum += prod;
                     }
                 }
                 (products_sum, product)
