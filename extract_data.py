@@ -1,44 +1,55 @@
 import re
 import csv
 
+        #r'(Linearization|Decomposition|Folding) Godlilocks/(Linearization|Decomposition|Folding) '
+        #r'(Prover|Verifier)/Param\. Kappa=(\d+),\s*Cols=(\d+),\s*B=(\d+),\s*L=(\d+),\s*B_small=(\d+),\s*K=(\d+)\s+'
+        #r'(\d+\.\d+)\s+(\d+\.\d+±\d+\.\d+)(ms|s)'
 def parse_line(line):
-    # Updated pattern to capture the time unit (s or ms)
-    pattern = r'(?:Linearization|Decomposition|Folding) \w+ with decompose witness/(?:(?:Linearization|Decomposition|Folding) (?:Prover|Verifier))/Param\. Kappa=(\d+),\s*Cols=(\d+),\s*B=(\d+),\s*L=(\d+),\s*B_small=(\d+),\s*K=(\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)±\d+\.\d+(m?s)'
+    # Updated pattern to match the provided lines
+    pattern = (
+             r'(Linearization|Decomposition|Folding) Godlilocks/(Linearization|Decomposition|Folding) '
+             r'(Prover|Verifier)/Param\. Kappa=(\d+),\s*Cols=(\d+),\s*B=(\d+),\s*L=(\d+),\s*B_small=(\d+),\s*K=(\d+)\s+'
+             r'(\d+\.\d+)\s+(\d+\.\d+±\d+\.\d+)(ms|s)'
+    )
+
     match = re.search(pattern, line)
-    
+
     if match:
-        component = re.search(r'with decompose witness/(.*?)/', line).group(1)
-        kappa = int(match.group(1))
-        cols = int(match.group(2))
-        B = int(match.group(3))
-        L = int(match.group(4))
-        B_small = int(match.group(5))
-        K = int(match.group(6))
-        base = float(match.group(8))
-        time_unit = match.group(9)  # 's' or 'ms'
-        
-        # Convert to milliseconds if the unit is seconds // Beware of other units
+        # Extract components from the match
+        component = match.group(2)  # Second occurrence
+        prover_or_verifier = match.group(3)  # Prover or Verifier
+        kappa = int(match.group(4))
+        cols = int(match.group(5))
+        B = int(match.group(6))
+        L = int(match.group(7))
+        B_small = int(match.group(8))
+        K = int(match.group(9))
+        base = float(match.group(11).split('±')[0])
+        time_measurement = match.group(11)  # Time with uncertainty (e.g., 6.3±0.19)
+        time_unit = match.group(12)  # 's' or 'ms'
+
+        # Convert to ms if unit is seconds
         if time_unit == 's':
             base *= 1000
-        
+
         result = [kappa, cols, B, L, B_small, K, "?", "?", "?", "?", "?", "?"]
-        
-        # Update the appropriate column based on which component we found
-        if component == "Linearization Prover":
+        if component == "Linearization" and prover_or_verifier == "Prover":
             result[6] = base
-        elif component == "Linearization Verifier":
+        elif component == "Linearization" and prover_or_verifier == "Verifier":
             result[7] = base
-        elif component == "Decomposition Prover":
+        elif component == "Decomposition" and prover_or_verifier == "Prover":
             result[8] = base
-        elif component == "Decomposition Verifier":
+        elif component == "Decomposition" and prover_or_verifier == "Verifier":
             result[9] = base
-        elif component == "Folding Prover":
+        elif component == "Folding" and prover_or_verifier == "Prover":
             result[10] = base
-        elif component == "Folding Verifier":
+        elif component == "Folding" and prover_or_verifier == "Verifier":
             result[11] = base
-            
+
         return result
+
     return None
+
 
 def process_file(input_file, output_file):
     results = {}
