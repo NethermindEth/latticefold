@@ -1,7 +1,4 @@
-use ark_ff::Field;
 use ark_std::f64;
-use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::{cyclotomic_ring::ICRT, PolyRing};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
@@ -45,17 +42,4 @@ pub fn check_ring_modulus_128_bits_security(
 
     // Return the result of the condition
     bound_l2_check && b_check && b_pow_l_check
-}
-
-pub fn check_witness_bound<NTT: SuitableRing>(witness_f: Vec<NTT>, b: u128) -> bool {
-    let coeffs_repr: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(witness_f);
-
-    // linf_norm should be used in CyclotomicGeneral not in specific ring
-    let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);
-    let all_under_bound = coeffs_repr.iter().all(|ele| {
-        let coeffs = ele.coeffs();
-        coeffs.iter().all(|x| x < &b)
-    });
-
-    all_under_bound
 }

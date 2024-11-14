@@ -269,7 +269,7 @@ mod tests_stark {
 
     use crate::{
         arith::{r1cs::get_test_dummy_z_split, tests::get_test_dummy_ccs},
-        utils::security_check::{check_ring_modulus_128_bits_security, check_witness_bound},
+        utils::security_check::check_ring_modulus_128_bits_security,
     };
     type CS = StarkChallengeSet;
     generate_decomposition_tests!(1024, 2, 2, 10);
@@ -302,7 +302,7 @@ mod tests_stark {
         let wit = Witness::from_w_ccs::<PP>(w_ccs);
 
         // Make bound and securitty checks
-        let witness_within_bound = check_witness_bound(wit.f.clone(), PP::B);
+        let witness_within_bound = wit.within_bound(PP::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,

@@ -841,7 +841,6 @@ mod tests_stark {
             folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
             linearization::LinearizationProver,
         },
-        utils::security_check::check_witness_bound,
     };
     use crate::{
         arith::tests::get_test_dummy_ccs,
@@ -893,7 +892,7 @@ mod tests_stark {
         let wit = Witness::from_w_ccs::<PP>(w_ccs);
 
         // Make bound and securitty checks
-        let witness_within_bound = check_witness_bound(wit.f.clone(), PP::B);
+        let witness_within_bound = wit.within_bound(PP::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
@@ -1013,8 +1012,8 @@ mod tests_stark {
 
         let wit = Witness::from_w_ccs::<PP>(w_ccs);
 
-        // Make bound and securitty checks
-        let witness_within_bound = check_witness_bound(wit.f.clone(), PP::B);
+        // Make bound and security checks
+        let witness_within_bound = wit.within_bound(PP::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,

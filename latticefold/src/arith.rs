@@ -275,6 +275,19 @@ impl<NTT: SuitableRing> Witness<NTT> {
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
         ajtai.commit_ntt(&self.f)
     }
+
+    pub fn within_bound(&self, b: u128) -> bool {
+        let coeffs_repr: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(self.f.clone());
+
+        // linf_norm should be used in CyclotomicGeneral not in specific ring
+        let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);
+        let all_under_bound = coeffs_repr.iter().all(|ele| {
+            let coeffs = ele.coeffs();
+            coeffs.iter().all(|x| x < &b)
+        });
+
+        all_under_bound
+    }
 }
 
 pub trait Instance<R: Ring> {
