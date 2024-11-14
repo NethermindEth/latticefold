@@ -32,7 +32,7 @@ fn wit_and_ccs_gen<
     const WIT_LEN: usize,
     const W: usize, // columns
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
 >(
     r1cs_rows: usize,
 ) -> (

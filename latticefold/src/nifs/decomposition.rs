@@ -7,7 +7,6 @@ use crate::{
     nifs::error::DecompositionError,
     transcript::Transcript,
 };
-use ark_std::ops::MulAssign;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::polynomials::DenseMultilinearExtension;
 use lattirust_ring::OverField;
@@ -39,11 +38,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
             DecompositionProof<C, NTT>,
         ),
         DecompositionError,
-    >
-    where
-        for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
-        for<'a> NTT: MulAssign<&'a u128>,
-    {
+    > {
         let log_m = ccs.s;
 
         let wit_s: Vec<Witness<NTT>> = {

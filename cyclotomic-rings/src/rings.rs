@@ -5,6 +5,7 @@
 use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
+use ark_std::ops::{AddAssign, MulAssign};
 use lattirust_ring::{
     balanced_decomposition::Decompose,
     cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
@@ -53,14 +54,19 @@ pub use stark::*;
 ///
 /// In addition to the data above a suitable ring has to provide Poseidon hash parameters for its base prime field (i.e. $\mathbb{Z}\_p$).
 pub trait SuitableRing:
-    OverField + From<Self::CoefficientRepresentation> + Into<Self::CoefficientRepresentation>
+    OverField
+    + From<Self::CoefficientRepresentation>
+    + Into<Self::CoefficientRepresentation>
+    + for<'a> MulAssign<&'a u128>
+    + for<'a> AddAssign<&'a Self>
 where
     <<Self as PolyRing>::BaseRing as Field>::BasePrimeField: Absorb,
 {
     /// The coefficient form version of the ring.
     type CoefficientRepresentation: OverField<BaseRing = <<Self as PolyRing>::BaseRing as Field>::BasePrimeField>
         + Decompose
-        + Cyclotomic;
+        + Cyclotomic
+        + for<'a> MulAssign<&'a u128>;
 
     /// Poseidon sponge parameters for the base prime field.
     type PoseidonParams: GetPoseidonParams<<<Self as PolyRing>::BaseRing as Field>::BasePrimeField>;

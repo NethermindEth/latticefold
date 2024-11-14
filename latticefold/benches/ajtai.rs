@@ -15,7 +15,7 @@ use std::fmt::Debug;
 fn ajtai_benchmark<
     const C: usize, // rows
     const W: usize, // columns
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {

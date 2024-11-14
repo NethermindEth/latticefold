@@ -19,7 +19,7 @@ macro_rules! generate_decomposition_tests {
             transcript::poseidon::PoseidonTranscript,
         };
         use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-        use ark_std::{io::Cursor, ops::MulAssign};
+        use ark_std::io::Cursor;
         use cyclotomic_rings::rings::SuitableRing;
         use lattirust_ring::{
             balanced_decomposition::{decompose_balanced_vec, recompose},
@@ -157,10 +157,7 @@ macro_rules! generate_decomposition_tests {
 
         fn recompose_from_k_vec_to_big_vec<NTT: SuitableRing, DP: DecompositionParams>(
             k_vecs: &[Vec<NTT>],
-        ) -> Vec<NTT::CoefficientRepresentation>
-        where
-            for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
-        {
+        ) -> Vec<NTT::CoefficientRepresentation> {
             let decomposed_in_b: Vec<Vec<NTT::CoefficientRepresentation>> = k_vecs
                 .iter()
                 .map(|vec| {

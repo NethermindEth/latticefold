@@ -1,5 +1,4 @@
 #![allow(non_snake_case)]
-use std::ops::MulAssign;
 
 use ark_ff::Field;
 use ark_std::log2;
@@ -231,10 +230,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         fhat
     }
 
-    pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self
-    where
-        for<'a> NTT: MulAssign<&'a u128>,
-    {
+    pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
         let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.into()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
@@ -251,19 +247,13 @@ impl<NTT: SuitableRing> Witness<NTT> {
         }
     }
 
-    pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self
-    where
-        for<'a> NTT: MulAssign<&'a u128>,
-    {
+    pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
         Self::from_f::<P>(f.into())
     }
 
     pub fn from_f_coeff<P: DecompositionParams>(
         f_coeff: Vec<NTT::CoefficientRepresentation>,
-    ) -> Self
-    where
-        for<'a> NTT: MulAssign<&'a u128>,
-    {
+    ) -> Self {
         let f: Vec<NTT> = f_coeff.iter().map(|&x| x.into()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 

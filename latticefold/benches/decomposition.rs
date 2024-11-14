@@ -1,6 +1,5 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
-use ark_std::ops::MulAssign;
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
@@ -38,7 +37,7 @@ fn wit_and_ccs_gen<
     const WIT_LEN: usize,
     const W: usize, // columns
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
 >(
     r1cs_rows: usize,
 ) -> (
@@ -73,12 +72,7 @@ fn prover_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone
-        + UniformRand
-        + Debug
-        + SuitableRing
-        + for<'a> std::ops::AddAssign<&'a R>
-        + for<'a> MulAssign<&'a u128>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -86,10 +80,7 @@ fn prover_decomposition_benchmark<
     wit: &Witness<R>,
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
-) where
-    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        MulAssign<&'a u128>,
-{
+) {
     println!("Proving decomposition");
     println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
@@ -144,12 +135,7 @@ fn verifier_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone
-        + UniformRand
-        + Debug
-        + SuitableRing
-        + for<'a> std::ops::AddAssign<&'a R>
-        + for<'a> MulAssign<&'a u128>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -157,10 +143,7 @@ fn verifier_decomposition_benchmark<
     wit: &Witness<R>,
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
-) where
-    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        MulAssign<&'a u128>,
-{
+) {
     println!("verify decomposition");
     println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
@@ -229,19 +212,11 @@ fn decomposition_benchmarks<
     const WIT_LEN: usize,
     const W: usize,
     CS: LatticefoldChallengeSet<R>,
-    R: Clone
-        + UniformRand
-        + Debug
-        + SuitableRing
-        + for<'a> std::ops::AddAssign<&'a R>
-        + for<'a> MulAssign<&'a u128>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     P: DecompositionParams + Clone,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
-) where
-    for<'a> <R as cyclotomic_rings::rings::SuitableRing>::CoefficientRepresentation:
-        MulAssign<&'a u128>,
-{
+) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
     println!("Witness generation");
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);

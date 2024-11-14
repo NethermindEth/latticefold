@@ -4,7 +4,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use latticefold::arith::{r1cs::get_test_dummy_r1cs, CCS};
 
 pub fn get_test_dummy_ccs<
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     const X_LEN: usize,
     const WIT_LEN: usize,
     const W: usize,

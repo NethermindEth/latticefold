@@ -4,7 +4,6 @@ use lattirust_ring::balanced_decomposition::{decompose_balanced_vec, recompose};
 
 use crate::decomposition_parameters::DecompositionParams;
 
-use ark_std::ops::MulAssign;
 /// Decompose a vector of arbitrary norm in its NTT form into DP::K vectors
 /// and applies the gadget-B matrix again.
 pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
@@ -12,10 +11,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
     DP: DecompositionParams,
 >(
     x: &[NTT],
-) -> Vec<Vec<NTT>>
-where
-    for<'a> <NTT as SuitableRing>::CoefficientRepresentation: MulAssign<&'a u128>,
-{
+) -> Vec<Vec<NTT>> {
     let coeff_repr: Vec<NTT::CoefficientRepresentation> = x.iter().map(|&x| x.into()).collect();
 
     // radix-B
