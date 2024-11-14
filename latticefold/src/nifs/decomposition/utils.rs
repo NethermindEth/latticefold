@@ -20,14 +20,14 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 
     // radix-B
     let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =
-        decompose_balanced_vec(&coeff_repr, DP::B, Some(DP::L))
+        decompose_balanced_vec(&coeff_repr, DP::B, DP::L)
             .into_iter()
             .flatten()
             .collect();
     // We now have a m * l length vector
     // Each element from original vector is mapped to l-length chunk
 
-    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, Some(DP::K))
+    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, DP::K)
         // We have a k by (m*l) matrix
         .transpose()
         // We have a (m*l) by k matrix
@@ -46,5 +46,5 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 pub(super) fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT::CoefficientRepresentation],
 ) -> Vec<Vec<NTT::CoefficientRepresentation>> {
-    decompose_balanced_vec(x, DP::B_SMALL as u128, Some(DP::K)).transpose()
+    decompose_balanced_vec(x, DP::B_SMALL as u128, DP::K).transpose()
 }

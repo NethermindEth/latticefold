@@ -163,7 +163,7 @@ macro_rules! generate_decomposition_tests {
                 .iter()
                 .map(|vec| {
                     vec.iter()
-                        .map(|&x| decompose_balanced_vec(&[x.icrt()], DP::B, Some(DP::L)))
+                        .map(|&x| decompose_balanced_vec(&[x.icrt()], DP::B, DP::L))
                         .flatten()
                         .flatten()
                         .collect()

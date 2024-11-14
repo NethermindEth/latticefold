@@ -170,7 +170,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
 
         // decompose radix-B
         let f_coeff: Vec<NTT::CoefficientRepresentation> =
-            decompose_balanced_vec(&w_coeff, P::B, Some(P::L))
+            decompose_balanced_vec(&w_coeff, P::B, P::L)
                 .into_iter()
                 .flatten()
                 .collect();
