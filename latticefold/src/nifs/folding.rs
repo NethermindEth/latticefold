@@ -588,9 +588,13 @@ mod tests {
 mod tests_goldilocks {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
+    use num_bigint::BigUint;
     use rand::thread_rng;
 
+    use crate::arith::r1cs::get_test_dummy_z_split;
+    use crate::arith::tests::get_test_dummy_ccs;
     use crate::nifs::folding::FoldingProof;
+    use crate::utils::security_check::{check_ring_modulus_128_bits_security, check_witness_bound};
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
@@ -827,6 +831,132 @@ mod tests_goldilocks {
                 .expect("Failed to deserialize proof")
         );
     }
+
+    #[test]
+    fn test_dummy_goldilocks_folding() {
+        #[cfg(feature = "dhat-heap")]
+        #[global_allocator]
+        static ALLOC: dhat::Alloc = dhat::Alloc;
+
+        type T = PoseidonTranscript<R, CS>;
+
+        #[derive(Clone)]
+        struct PP;
+        impl DecompositionParams for PP {
+            const B: u128 = 8192;
+            const L: usize = 5;
+            const B_SMALL: usize = 2;
+            const K: usize = 13;
+        }
+
+        const C: usize = 13;
+        const X_LEN: usize = 1;
+        const WIT_LEN: usize = 2048;
+        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
+
+
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+        let wit = Witness::from_w_ccs::<PP>(&w_ccs);
+
+        // Make bound and securitty checks
+        let witness_within_bound = check_witness_bound(&wit, PP::B);
+        let stark_modulus = BigUint::parse_bytes(
+            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+            10,
+        )
+        .expect("Failed to parse stark_modulus");
+
+        if check_ring_modulus_128_bits_security(
+            &stark_modulus,
+            C,
+            16,
+            W,
+            PP::B,
+            PP::L,
+            witness_within_bound,
+        ) {
+            println!(" Bound condition satisfied for 128 bits security");
+        } else {
+            println!("Bound condition not satisfied for 128 bits security");
+        }
+
+        let cm_i = CCCS {
+            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+
+        let linearization_proof =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
+
+        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
+
+        let linearization_verification = LFLinearizationVerifier::<_, T>::verify(
+            &cm_i,
+            &linearization_proof
+                .expect("Linearization proof generation error")
+                .1,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .expect("Linearization Verification error");
+    println!("Linearization Verification passed");
+
+        let lcccs = linearization_verification;
+
+        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        );
+
+        let decomposition_proof =
+            decomposition_prover.expect("Decomposition proof generation error");
+
+        let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
+            &lcccs,
+            &decomposition_proof.2,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        let lcccs = decomposition_verification.expect("Decomposition Verification error");
+        println!("Decomposition Verification passed");
+
+        #[cfg(feature = "dhat-heap")]
+        let _profiler = dhat::Profiler::new_heap();
+        let (lcccs, wit_s) = {
+            let mut lcccs = lcccs.clone();
+            let mut lcccs_r = lcccs.clone();
+            lcccs.append(&mut lcccs_r);
+
+            let mut wit_s = decomposition_proof.1.clone();
+            let mut wit_s_r = decomposition_proof.1;
+            wit_s.append(&mut wit_s_r);
+
+            (lcccs, wit_s)
+        };
+        let folding_prover =
+            LFFoldingProver::<_, T>::prove::<C, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs);
+
+        let folding_proof = folding_prover.expect("Folding proof generation error");
+
+        let folding_verification = LFFoldingVerifier::<_, T>::verify::<C, PP>(
+            &lcccs,
+            &folding_proof.2,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        folding_verification.expect("Folding Verification error");
+    }
 }
 
 #[cfg(test)]
@@ -867,10 +997,6 @@ mod tests_stark {
 
     #[test]
     fn test_dummy_folding() {
-        #[cfg(feature = "dhat-heap")]
-        #[global_allocator]
-        static ALLOC: dhat::Alloc = dhat::Alloc;
-
         type R = RqNTT;
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
@@ -878,15 +1004,24 @@ mod tests_stark {
         #[derive(Clone)]
         struct PP;
         impl DecompositionParams for PP {
-            const B: u128 = 3010936384;
-            const L: usize = 8;
-            const B_SMALL: usize = 38;
-            const K: usize = 6;
+            const B: u128 = 8192;
+            const L: usize = 5;
+            const B_SMALL: usize = 2;
+            const K: usize = 13;
         }
 
-        const C: usize = 15;
+        const C: usize = 13;
         const X_LEN: usize = 1;
-        const WIT_LEN: usize = 512;
+        const WIT_LEN: usize = 2048;
+
+        println!("Parameters:");
+        println!("B = {}", PP::B);
+        println!("L = {}", PP::L); 
+        println!("B_SMALL = {}", PP::B_SMALL);
+        println!("K = {}", PP::K);
+        println!("C = {}", C);
+        println!("X_LEN = {}", X_LEN);
+        println!("WIT_LEN = {}", WIT_LEN);
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
 
