@@ -6,7 +6,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, gadget_recompose},
-    cyclotomic_ring::CRT,
+    cyclotomic_ring::{ICRT, CRT},
     PolyRing, Ring,
 };
 
@@ -176,7 +176,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
                 .collect();
 
         // NTT(coef_repr_decomposed)
-        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.crt()).collect();
+        let f: Vec<NTT> = CRT::from_vec(f_coeff.clone());
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
@@ -232,7 +232,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.icrt()).collect();
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::from_vec(f.clone());
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
         // Reconstruct the original CCS witness from the Ajtai witness
         // Ajtai witness has bound B
@@ -257,7 +257,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // Reconstruct the original CCS witness from the Ajtai witness
         // Ajtai witness has bound B
         // WE multiply by the base B gadget matrix to reconstruct w_ccs
-        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.crt()).collect();
+        let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
         let w_ccs = gadget_recompose(&f, P::B, P::L);
