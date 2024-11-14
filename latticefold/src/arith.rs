@@ -3,6 +3,7 @@
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
+use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
     balanced_decomposition::{gadget_decompose, gadget_recompose},
@@ -137,11 +138,16 @@ impl<R: Ring> CCS<R> {
     }
     pub fn pad_rows_to_the_next_pow_of_2(&mut self) {
         let target_len = self.m.next_power_of_two();
+        let diff = target_len - self.m;
         self.m = target_len;
         self.s = log2(target_len) as usize;
 
         // Update matrices
-        // TODO
+        self.M.iter_mut().map(|mat| {
+            let mut dense = mat.to_dense();
+            dense.extend(std::iter::repeat(vec![R::ZERO; dense[0].len()]).take(diff));
+            dense_matrix_to_sparse(dense)
+        });
     }
 }
 
