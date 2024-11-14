@@ -235,10 +235,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.icrt()).collect();
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
-        let w_ccs = f
-            .chunks(P::L)
-            .map(|chunk| recompose::<_, u128>(chunk, P::B))
-            .collect();
+        let w_ccs = f.chunks(P::L).map(|chunk| recompose(chunk, P::B)).collect();
 
         Self {
             f,
