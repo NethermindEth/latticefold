@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::cfg_iter;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::marker::PhantomData;
@@ -22,6 +23,9 @@ use lattirust_poly::{
     polynomials::{eq_eval, VPAuxInfo},
 };
 use utils::*;
+
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 mod utils;
 
@@ -140,8 +144,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             .collect::<Vec<NTT>>();
 
         // Step 3: Evaluate thetas and etas
-        let theta_s: Vec<Vec<NTT>> = f_hat_mles
-            .iter()
+        let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
             .map(|f_hat_row| {
                 f_hat_row
                     .iter()
@@ -154,8 +157,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let eta_s: Vec<Vec<NTT>> = Mz_mles_vec
-            .iter()
+        let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
             .map(|Mz_mles| {
                 Mz_mles
                     .iter()
