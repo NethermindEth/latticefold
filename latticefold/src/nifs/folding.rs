@@ -5,7 +5,7 @@ use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::OverField;
+use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
@@ -194,7 +194,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                 .iter()
                 .zip(w_s)
                 .fold(vec![NTT::ZERO; w_s[0].f.len()], |acc, (&rho_i, w_i)| {
-                    let rho_i: NTT = rho_i.into();
+                    let rho_i: NTT = rho_i.crt();
 
                     acc.into_iter()
                         .zip(w_i.f.iter())

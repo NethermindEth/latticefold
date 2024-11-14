@@ -51,7 +51,7 @@ pub fn check_ring_modulus_128_bits_security(
 
 pub fn check_witness_bound<NTT: SuitableRing>(witness: &Witness<NTT>, b: u128) -> bool {
     let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
-        witness.f.clone().into_iter().map(|x| x.into()).collect();
+        witness.f.clone().into_iter().map(|x| x.icrt()).collect();
 
     // linf_norm should be used in CyclotomicGeneral not in specific ring
     let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);

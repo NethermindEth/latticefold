@@ -5,7 +5,7 @@ use ark_std::iterable::Iterable;
 use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use lattirust_poly::polynomials::ArithErrors;
-use lattirust_ring::Ring;
+use lattirust_ring::{cyclotomic_ring::CRT, Ring};
 
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
@@ -188,7 +188,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()
         .zip(cm_i_s.iter())
-        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * NTT::from(rho_i))
+        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i.crt())
         .sum();
 
     let u_0: Vec<NTT> = rho_s
@@ -197,7 +197,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .map(|(&rho_i, etas_i)| {
             etas_i
                 .iter()
-                .map(|etas_i_j| NTT::from(rho_i) * etas_i_j)
+                .map(|etas_i_j| rho_i.crt() * etas_i_j)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
@@ -216,7 +216,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .map(|(&rho_i, cm_i)| {
             cm_i.x_w
                 .iter()
-                .map(|x_w_i| NTT::from(rho_i) * x_w_i)
+                .map(|x_w_i| rho_i.crt() * x_w_i)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {

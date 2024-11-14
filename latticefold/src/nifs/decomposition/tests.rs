@@ -23,6 +23,7 @@ macro_rules! generate_decomposition_tests {
         use cyclotomic_rings::rings::SuitableRing;
         use lattirust_ring::{
             balanced_decomposition::{decompose_balanced_vec, recompose},
+            cyclotomic_ring::{CRT, ICRT},
             PolyRing,
         };
         use rand::thread_rng;
@@ -135,7 +136,7 @@ macro_rules! generate_decomposition_tests {
             const N: usize = 32;
             let mut rng = thread_rng();
             let test_vector: Vec<RqNTT> = (0..N)
-                .map(|_| draw_ring_bellow_bound::<{ PP::B }>(&mut rng).into())
+                .map(|_| draw_ring_bellow_bound::<{ PP::B }>(&mut rng).crt())
                 .collect();
             let decomposed_and_composed_back =
                 decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(&test_vector);
@@ -146,11 +147,11 @@ macro_rules! generate_decomposition_tests {
             for i in 0..N {
                 assert_eq!(
                     restore_decomposed[i],
-                    test_vector[i].into(),
+                    test_vector[i].icrt(),
                     "Mismatch at index {}: decomposed_and_composed_back={}, test_vector={}",
                     i,
                     restore_decomposed[i],
-                    RqPoly::from(test_vector[i])
+                    test_vector[i].icrt()
                 );
             }
         }
@@ -162,7 +163,7 @@ macro_rules! generate_decomposition_tests {
                 .iter()
                 .map(|vec| {
                     vec.iter()
-                        .map(|&x| decompose_balanced_vec(&[x.into()], DP::B, Some(DP::L)))
+                        .map(|&x| decompose_balanced_vec(&[x.icrt()], DP::B, Some(DP::L)))
                         .flatten()
                         .flatten()
                         .collect()

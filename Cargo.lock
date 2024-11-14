@@ -807,7 +807,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#0810b6175346883f39a35532dba14b776cb29c31"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#ae3a69602b252532ef986c556ad1a5032fe88857"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -825,7 +825,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#0810b6175346883f39a35532dba14b776cb29c31"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#ae3a69602b252532ef986c556ad1a5032fe88857"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -841,7 +841,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein/recompose-with-unsigned-int#0810b6175346883f39a35532dba14b776cb29c31"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#ae3a69602b252532ef986c556ad1a5032fe88857"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",

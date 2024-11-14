@@ -1,4 +1,6 @@
-use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField};
+use lattirust_ring::{
+    balanced_decomposition::decompose_balanced_vec, cyclotomic_ring::CRT, OverField,
+};
 
 use super::homomorphic_commitment::Commitment;
 use crate::{commitment::CommitmentError, decomposition_parameters::DecompositionParams};
@@ -90,7 +92,7 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
             return Err(CommitmentError::WrongWitnessLength(f.len(), W));
         }
 
-        self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<NTT>>())
+        self.commit_ntt(&f.iter().map(|&x| x.crt()).collect::<Vec<NTT>>())
     }
 
     /// Takes a coefficient form witness, decomposes it vertically in radix-B,
@@ -114,7 +116,7 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
         &self,
         w: &[NTT],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let coeff: Vec<NTT::CoefficientRepresentation> = w.iter().map(|&x| x.into()).collect();
+        let coeff: Vec<NTT::CoefficientRepresentation> = w.iter().map(|&x| x.icrt()).collect();
 
         self.decompose_and_commit_coeff::<P>(&coeff)
     }
