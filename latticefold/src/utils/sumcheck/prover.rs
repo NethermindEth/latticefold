@@ -73,9 +73,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         }
     }
 
-    /// receive message from verifier, generate prover message, and proceed to next round
-    ///
-    /// Main algorithm used is from section 3.2 of [XZZPS19](https://eprint.iacr.org/2019/317.pdf#subsection.3.2).
     pub fn prove_round(
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
@@ -104,53 +101,99 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
 
         let i = prover_state.round;
         let nv = prover_state.num_vars;
-        let degree = prover_state.max_multiplicands; // the degree of univariate polynomial sent by prover at this round
+        let degree = prover_state.max_multiplicands;
 
-        #[cfg(not(feature = "parallel"))]
-        let zeros = (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
+        // Pre-allocate result array since degree is small (4)
+        let mut products_sum = vec![R::zero(); degree + 1];
+
+        // Pre-allocate scratch space for intermediate products
+        let product_scratch = vec![R::zero(); degree + 1];
+
+        // Calculate number of iterations
+        let num_iterations = 1 << (nv - i);
+
         #[cfg(feature = "parallel")]
-        let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
+        {
+            // Process chunks of iterations in parallel
+            let chunk_size = (num_iterations + 7) / 8; // Divide work into 8 chunks or less
+            products_sum = (0..num_iterations)
+                .into_par_iter()
+                .chunks(chunk_size)
+                .map(|chunk_iter| {
+                    let mut chunk_sum = vec![R::zero(); degree + 1];
+                    let mut product = vec![R::zero(); degree + 1];
+                    for b in chunk_iter {
+                        // Process each product term
+                        for (coefficient, products) in &prover_state.list_of_products {
+                            for p in &mut product {
+                                *p = *coefficient;
+                            }
 
-        // generate sum
-        let fold_result = cfg_into_iter!(0..1 << (nv - i), 1 << 10).fold(
-            zeros,
-            |(mut products_sum, mut product), b| {
-                // In effect, this fold is essentially doing simply:
-                // for b in 0..1 << (nv - i) {
-                for (coefficient, products) in &prover_state.list_of_products {
-                    product.fill(*coefficient);
-                    for &jth_product in products {
-                        let table = &prover_state.flattened_ml_extensions[jth_product];
-                        let mut start = table[b << 1];
-                        let step = table[(b << 1) + 1] - start;
-                        for p in product.iter_mut() {
-                            *p *= start;
-                            start += step;
+                            // Multiply by each factor
+                            for &jth_product in products {
+                                let table = &prover_state.flattened_ml_extensions[jth_product];
+                                let start = table[b << 1];
+                                let step = table[(b << 1) + 1] - start;
+
+                                // Unrolled multiplication since degree is 4
+                                let mut val = start;
+                                for p in product.iter_mut() {
+                                    *p *= val;
+                                    val += step;
+                                }
+                            }
+
+                            // Add to chunk sum
+                            for (sum, term) in chunk_sum.iter_mut().zip(product.iter()) {
+                                *sum += term;
+                            }
                         }
                     }
-                    for t in 0..degree + 1 {
-                        products_sum[t] += product[t];
-                    }
-                }
-                (products_sum, product)
-            },
-        );
+                    chunk_sum
+                })
+                .reduce(
+                    || vec![R::zero(); degree + 1],
+                    |mut a, b| {
+                        for (x, y) in a.iter_mut().zip(b.iter()) {
+                            *x += y;
+                        }
+                        a
+                    },
+                );
+        }
 
         #[cfg(not(feature = "parallel"))]
-        let products_sum = fold_result.0;
+        {
+            let mut product = vec![R::zero(); degree + 1];
+            for b in 0..num_iterations {
+                for (coefficient, products) in &prover_state.list_of_products {
+                    // Initialize product array with coefficient
+                    product.copy_from_slice(&product_scratch);
+                    for p in &mut product {
+                        *p = *coefficient;
+                    }
 
-        // When rayon is used, the `fold` operation results in a iterator of `Vec<F>` rather than a single `Vec<F>`. In this case, we simply need to sum them.
-        #[cfg(feature = "parallel")]
-        let products_sum = fold_result.map(|scratch| scratch.0).reduce(
-            || vec![R::zero(); degree + 1],
-            |mut overall_products_sum, sublist_sum| {
-                overall_products_sum
-                    .iter_mut()
-                    .zip(sublist_sum.iter())
-                    .for_each(|(f, s)| *f += s);
-                overall_products_sum
-            },
-        );
+                    // Multiply by each factor
+                    for &jth_product in products {
+                        let table = &prover_state.flattened_ml_extensions[jth_product];
+                        let start = table[b << 1];
+                        let step = table[(b << 1) + 1] - start;
+
+                        // Unrolled multiplication since degree is 4
+                        let mut val = start;
+                        for p in product.iter_mut() {
+                            *p *= val;
+                            val += step;
+                        }
+                    }
+
+                    // Add to total sum
+                    for (sum, term) in products_sum.iter_mut().zip(product.iter()) {
+                        *sum += term;
+                    }
+                }
+            }
+        }
 
         ProverMsg {
             evaluations: products_sum,
