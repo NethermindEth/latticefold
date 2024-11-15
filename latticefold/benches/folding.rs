@@ -299,7 +299,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // Godlilocks
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Godlilocks");
+        let mut group = c.benchmark_group("Folding Godlilocks");
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
