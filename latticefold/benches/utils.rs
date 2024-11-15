@@ -13,7 +13,7 @@ pub fn wit_and_ccs_gen<
     const WIT_LEN: usize,
     const W: usize, // columns
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
 >(
     r1cs_rows: usize,
 ) -> (
@@ -38,7 +38,7 @@ pub fn wit_and_ccs_gen<
     }
 
     let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut thread_rng());
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(&w_ccs);
+    let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
 
     let cm_i: CCCS<C, R> = CCCS {
         cm: wit.commit::<C, W, P>(&scheme).unwrap(),
