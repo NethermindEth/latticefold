@@ -1,10 +1,12 @@
 #![allow(non_snake_case)]
+
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, recompose},
+    balanced_decomposition::{decompose_balanced_vec, gadget_recompose},
+    cyclotomic_ring::{CRT, ICRT},
     PolyRing, Ring,
 };
 
@@ -151,36 +153,37 @@ pub struct LCCCS<const C: usize, R: Ring> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Witness<NTT: Ring> {
-    // F is B-decomposed ccs witness
+pub struct Witness<NTT: SuitableRing> {
+    /// f is B-decomposed CCS witness
     pub f: Vec<NTT>,
-    // NTT(f_hat) = Coeff(coefficient representation of f)
+    pub f_coeff: Vec<NTT::CoefficientRepresentation>,
+    /// NTT(f_hat) = Coeff(coefficient representation of f)
     pub f_hat: Vec<Vec<NTT>>,
     pub w_ccs: Vec<NTT>,
 }
 
 impl<NTT: SuitableRing> Witness<NTT> {
-    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: &[NTT]) -> Self {
+    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: Vec<NTT>) -> Self {
         // iNTT
-        let coef_repr: Vec<NTT::CoefficientRepresentation> =
-            w_ccs.iter().map(|&x| x.into()).collect();
+        let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w_ccs.clone());
 
         // decompose radix-B
-        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-            decompose_balanced_vec(&coef_repr, P::B, Some(P::L))
+        let f_coeff: Vec<NTT::CoefficientRepresentation> =
+            decompose_balanced_vec(&w_coeff, P::B, P::L)
                 .into_iter()
                 .flatten()
                 .collect();
 
         // NTT(coef_repr_decomposed)
-        let f: Vec<NTT> = coef_repr_decomposed.iter().map(|&x| x.into()).collect();
+        let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
-        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&coef_repr_decomposed);
+        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
         Self {
             f,
+            f_coeff,
             f_hat,
-            w_ccs: w_ccs.to_vec(),
+            w_ccs,
         }
     }
 
@@ -228,20 +231,42 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        let coef_repr_decomposed: Vec<NTT::CoefficientRepresentation> =
-            f.iter().map(|&x| x.into()).collect();
-        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&coef_repr_decomposed);
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(f.clone());
+        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
+        // Reconstruct the original CCS witness from the Ajtai witness
+        // Ajtai witness has bound B
+        // WE multiply by the base B gadget matrix to reconstruct w_ccs
+        let w_ccs = gadget_recompose(&f, P::B, P::L);
 
-        let w_ccs = f
-            .chunks(P::L)
-            .map(|chunk| recompose(chunk, NTT::from(P::B)))
-            .collect();
-
-        Self { f, f_hat, w_ccs }
+        Self {
+            f,
+            f_coeff,
+            f_hat,
+            w_ccs,
+        }
     }
 
     pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
         Self::from_f::<P>(f.into())
+    }
+
+    pub fn from_f_coeff<P: DecompositionParams>(
+        f_coeff: Vec<NTT::CoefficientRepresentation>,
+    ) -> Self {
+        // Reconstruct the original CCS witness from the Ajtai witness
+        // Ajtai witness has bound B
+        // WE multiply by the base B gadget matrix to reconstruct w_ccs
+        let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
+        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
+
+        let w_ccs = gadget_recompose(&f, P::B, P::L);
+
+        Self {
+            f,
+            f_coeff,
+            f_hat,
+            w_ccs,
+        }
     }
 
     pub fn commit<const C: usize, const W: usize, P: DecompositionParams>(
@@ -249,6 +274,22 @@ impl<NTT: SuitableRing> Witness<NTT> {
         ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
         ajtai.commit_ntt(&self.f)
+    }
+
+    pub fn within_bound(&self, b: u128) -> bool {
+        // TODO consider using signed representatives instead
+
+        let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
+            ICRT::elementwise_icrt(self.f.clone());
+
+        // linf_norm should be used in CyclotomicGeneral not in specific ring
+        let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);
+        let all_under_bound = coeffs_repr.iter().all(|ele| {
+            let coeffs = ele.coeffs();
+            coeffs.iter().all(|x| x < &b)
+        });
+
+        all_under_bound
     }
 }
 

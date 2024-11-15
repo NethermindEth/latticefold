@@ -1,5 +1,7 @@
 //! Prover
-use ark_std::{cfg_iter_mut, vec::Vec};
+
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
 use lattirust_poly::{
     mle::MultilinearExtension,
     polynomials::{DenseMultilinearExtension, VirtualPolynomial},
@@ -8,11 +10,14 @@ use lattirust_ring::{OverField, Ring};
 
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 /// Prover Message
-#[derive(Clone)]
-pub struct ProverMsg<R: Ring> {
+#[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
+pub struct ProverMsg<R1: Ring> {
     /// evaluations on P(0), P(1), P(2), ...
-    pub(crate) evaluations: Vec<R>,
+    pub(crate) evaluations: Vec<R1>,
 }
 
 /// Prover State
@@ -101,13 +106,13 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let nv = prover_state.num_vars;
         let degree = prover_state.max_multiplicands; // the degree of univariate polynomial sent by prover at this round
 
-        // #[cfg(not(feature = "parallel"))]
+        #[cfg(not(feature = "parallel"))]
         let zeros = (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
-        // #[cfg(feature = "parallel")]
-        // let zeros = || (vec![F::zero(); degree + 1], vec![F::zero(); degree + 1]);
+        #[cfg(feature = "parallel")]
+        let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
 
         // generate sum
-        let fold_result = ark_std::cfg_into_iter!(0..1 << (nv - i), 1 << 10).fold(
+        let fold_result = cfg_into_iter!(0..1 << (nv - i), 1 << 10).fold(
             zeros,
             |(mut products_sum, mut product), b| {
                 // In effect, this fold is essentially doing simply:
@@ -131,21 +136,21 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             },
         );
 
-        // #[cfg(not(feature = "parallel"))]
+        #[cfg(not(feature = "parallel"))]
         let products_sum = fold_result.0;
 
         // When rayon is used, the `fold` operation results in a iterator of `Vec<F>` rather than a single `Vec<F>`. In this case, we simply need to sum them.
-        // #[cfg(feature = "parallel")]
-        // let products_sum = fold_result.map(|scratch| scratch.0).reduce(
-        //     || vec![F::zero(); degree + 1],
-        //     |mut overall_products_sum, sublist_sum| {
-        //         overall_products_sum
-        //             .iter_mut()
-        //             .zip(sublist_sum.iter())
-        //             .for_each(|(f, s)| *f += s);
-        //         overall_products_sum
-        //     },
-        // );
+        #[cfg(feature = "parallel")]
+        let products_sum = fold_result.map(|scratch| scratch.0).reduce(
+            || vec![R::zero(); degree + 1],
+            |mut overall_products_sum, sublist_sum| {
+                overall_products_sum
+                    .iter_mut()
+                    .zip(sublist_sum.iter())
+                    .for_each(|(f, s)| *f += s);
+                overall_products_sum
+            },
+        );
 
         ProverMsg {
             evaluations: products_sum,

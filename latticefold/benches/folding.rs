@@ -34,7 +34,7 @@ fn prover_folding_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -123,7 +123,7 @@ fn verifier_folding_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,

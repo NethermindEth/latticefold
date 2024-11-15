@@ -1,10 +1,13 @@
-use ark_std::sync::Arc;
+use ark_std::{cfg_iter, sync::Arc};
 
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VirtualPolynomial},
 };
 use lattirust_ring::OverField;
+
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 use crate::nifs::error::LinearizationError;
 
@@ -13,8 +16,7 @@ pub fn compute_u<NTT: OverField>(
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     r: &[NTT],
 ) -> Result<Vec<NTT>, LinearizationError<NTT>> {
-    Mz_mles
-        .iter()
+    cfg_iter!(Mz_mles)
         .map(|M_i_mle| {
             M_i_mle
                 .evaluate(r)

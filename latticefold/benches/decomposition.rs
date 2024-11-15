@@ -34,7 +34,7 @@ fn prover_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -97,7 +97,7 @@ fn verifier_decomposition_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     CS: LatticefoldChallengeSet<R>,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -174,7 +174,7 @@ fn decomposition_benchmarks<
     const WIT_LEN: usize,
     const W: usize,
     CS: LatticefoldChallengeSet<R>,
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
     P: DecompositionParams + Clone,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -193,6 +193,7 @@ fn decomposition_benchmarks<
 macro_rules! define_params {
     ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         paste::paste! {
+
             #[derive(Clone)]
             struct [<DecompParamsWithB $b W $w b $b_small K $k>];
 
@@ -205,6 +206,7 @@ macro_rules! define_params {
         }
     };
 }
+
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
@@ -217,7 +219,7 @@ macro_rules! run_single_starkprime_benchmark {
 #[macro_export]
 macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
+         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             decomposition_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
 

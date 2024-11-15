@@ -5,9 +5,13 @@
 use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
+use ark_std::ops::MulAssign;
 use lattirust_ring::{
     balanced_decomposition::Decompose,
-    cyclotomic_ring::models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
+    cyclotomic_ring::{
+        models::pow2_debug::{Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT},
+        CRT, ICRT,
+    },
     zn::z_q::Zq,
     Cyclotomic, OverField, PolyRing,
 };
@@ -52,15 +56,18 @@ pub use stark::*;
 ///   * `R::CoefficientRepresentation` is radix-$B$ decomposable and exhibits cyclotomic structure (`R::CoefficientRepresentation: Decompose + Cyclotomic`).
 ///
 /// In addition to the data above a suitable ring has to provide Poseidon hash parameters for its base prime field (i.e. $\mathbb{Z}\_p$).
+
 pub trait SuitableRing:
-    OverField + From<Self::CoefficientRepresentation> + Into<Self::CoefficientRepresentation>
+    OverField + ICRT<ICRTForm = Self::CoefficientRepresentation> + for<'a> MulAssign<&'a u128>
 where
     <<Self as PolyRing>::BaseRing as Field>::BasePrimeField: Absorb,
 {
     /// The coefficient form version of the ring.
     type CoefficientRepresentation: OverField<BaseRing = <<Self as PolyRing>::BaseRing as Field>::BasePrimeField>
         + Decompose
-        + Cyclotomic;
+        + Cyclotomic
+        + for<'a> MulAssign<&'a u128>
+        + CRT<CRTForm = Self>;
 
     /// Poseidon sponge parameters for the base prime field.
     type PoseidonParams: GetPoseidonParams<<<Self as PolyRing>::BaseRing as Field>::BasePrimeField>;
@@ -88,11 +95,7 @@ impl<const Q: u64, const N: usize> GetPoseidonParams<Zq<Q>> for Pow2Params<Q, N>
     }
 }
 
-impl<const Q: u64, const N: usize> SuitableRing for Pow2CyclotomicPolyRingNTT<Q, N>
-where
-    Pow2CyclotomicPolyRingNTT<Q, N>: From<Pow2CyclotomicPolyRing<Q, N>>,
-    Pow2CyclotomicPolyRing<Q, N>: From<Pow2CyclotomicPolyRingNTT<Q, N>>,
-{
+impl<const Q: u64, const N: usize> SuitableRing for Pow2CyclotomicPolyRingNTT<Q, N> {
     type CoefficientRepresentation = Pow2CyclotomicPolyRing<Q, N>;
     type PoseidonParams = Pow2Params<Q, N>;
 }

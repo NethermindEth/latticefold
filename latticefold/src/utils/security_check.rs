@@ -1,11 +1,6 @@
-use ark_ff::Field;
 use ark_std::f64;
-use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::PolyRing;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-
-use crate::arith::Witness;
 
 fn calculate_bound_l2(degree: usize, kappa: usize, ring_modulus_log2: f64) -> BigUint {
     // The current security parameter use log2(delta)
@@ -47,18 +42,4 @@ pub fn check_ring_modulus_128_bits_security(
 
     // Return the result of the condition
     bound_l2_check && b_check && b_pow_l_check
-}
-
-pub fn check_witness_bound<NTT: SuitableRing>(witness: &Witness<NTT>, b: u128) -> bool {
-    let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
-        witness.f.clone().into_iter().map(|x| x.into()).collect();
-
-    // linf_norm should be used in CyclotomicGeneral not in specific ring
-    let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);
-    let all_under_bound = coeffs_repr.iter().all(|ele| {
-        let coeffs = ele.coeffs();
-        coeffs.iter().all(|x| x < &b)
-    });
-
-    all_under_bound
 }

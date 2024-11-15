@@ -1,5 +1,5 @@
 use ark_ff::{Field, PrimeField};
-
+use ark_std::cfg_iter;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
@@ -15,8 +15,13 @@ use crate::{
     utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 pub use structs::*;
 mod structs;
+
+#[cfg(test)]
 mod tests;
 mod utils;
 
@@ -70,7 +75,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             .collect::<Vec<NTT>>();
 
         // Step 3: Compute v, u_vector
-        let v: Vec<NTT> = wit.f_hat.iter().map(|f_hat_row| DenseMultilinearExtension::from_slice(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
+        let v: Vec<NTT> = cfg_iter!(wit.f_hat).map(|f_hat_row| DenseMultilinearExtension::from_slice(log_m, f_hat_row).evaluate(&r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
 
         let u = compute_u(&Mz_mles, &r)?;
 

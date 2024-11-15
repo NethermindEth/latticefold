@@ -9,13 +9,14 @@ use cyclotomic_rings::rings::{
     BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
+use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use rand::thread_rng;
 use std::fmt::Debug;
 
 fn ajtai_benchmark<
     const C: usize, // rows
     const W: usize, // columns
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
@@ -42,25 +43,19 @@ fn ajtai_benchmark<
         &(witness_2),
         |b, witness| {
             b.iter(|| {
-                let _ = witness
-                    .iter()
-                    .map(|&x| x.into())
-                    .collect::<Vec<R::CoefficientRepresentation>>();
+                let _ = ICRT::elementwise_icrt(witness.clone());
             })
         },
     );
 
     // INTT -> NTT
-    let coeff = witness_3
-        .iter()
-        .map(|&x| x.into())
-        .collect::<Vec<R::CoefficientRepresentation>>();
+    let coeff = ICRT::elementwise_icrt(witness_3);
     group.bench_with_input(
         BenchmarkId::new("INTT->NTT", format!("C={}, W={}", C, W)),
         &(coeff),
         |b, coeff| {
             b.iter(|| {
-                let _: Vec<R> = coeff.iter().map(|&x| R::from(x)).collect();
+                let _: Vec<R> = CRT::elementwise_crt(coeff.clone());
             })
         },
     );
