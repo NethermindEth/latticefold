@@ -36,6 +36,7 @@ impl Display for DecompositionParamData {
         write!(f, "B={}, l={}", self.b, self.l,)
     }
 }
+
 #[allow(non_camel_case_types)]
 #[cfg(test)]
 pub mod test_params {
