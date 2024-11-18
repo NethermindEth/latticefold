@@ -175,6 +175,7 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
+        
         run_single_goldilocks_benchmark!(&mut group, 1, 2, 512, 4, 1, 2, 2);
         run_single_goldilocks_benchmark!(&mut group, 1, 2, 512, 4, 1, 4, 1);
         run_single_goldilocks_benchmark!(&mut group, 1, 3, 512, 16, 1, 2, 4);
@@ -346,33 +347,34 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 4096, 125892, 1, 16, 4);
     }
 
-    // // Goldilocks
-    // {
-    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    //     let mut group = c.benchmark_group("Linearization Godlilocks");
-    //     group.plot_config(plot_config.clone());
+    // Goldilocks
+    {
+    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    let mut group = c.benchmark_group("Linearization Godlilocks");
+    group.plot_config(plot_config.clone());
 
-    //     // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
+    // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
 
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 128, 9, 2, 7);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 2, 8);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 8, 512, 512, 7, 2, 9);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 8, 1024, 512, 7, 2, 9);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 8, 2048, 256, 8, 2, 8);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 9, 1024, 1024, 7, 2, 10);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 9, 2048, 512, 7, 2, 9);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 10, 512, 2048, 6, 2, 11);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 10, 1024, 2048, 6, 2, 11);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 11, 1024, 4096, 6, 2, 12);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 11, 2048, 2048, 6, 2, 12);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 12, 1024, 8192, 6, 2, 13);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 13, 1024, 16384, 5, 2, 14);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 13, 2048, 8192, 5, 2, 13);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 14, 2048, 16384, 5, 2, 14);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 4, 2, 15);
-    //     run_single_goldilocks_benchmark!(&mut group, 1, 16, 2048, 65536, 4, 2, 16);
-    // }
+    run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 128, 9, 2, 7);
+    run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 120, 9, 2, 7);
+    run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 2, 8);
+    run_single_goldilocks_benchmark!(&mut group, 1, 8, 512, 512, 7, 2, 9);
+    run_single_goldilocks_benchmark!(&mut group, 1, 8, 1024, 512, 7, 2, 9);
+    run_single_goldilocks_benchmark!(&mut group, 1, 8, 2048, 256, 8, 2, 8);
+    run_single_goldilocks_benchmark!(&mut group, 1, 9, 1024, 1024, 7, 2, 10);
+    run_single_goldilocks_benchmark!(&mut group, 1, 9, 2048, 512, 7, 2, 9);
+    run_single_goldilocks_benchmark!(&mut group, 1, 10, 512, 2048, 6, 2, 11);
+    run_single_goldilocks_benchmark!(&mut group, 1, 10, 1024, 2048, 6, 2, 11);
+    run_single_goldilocks_benchmark!(&mut group, 1, 11, 1024, 4096, 6, 2, 12);
+    run_single_goldilocks_benchmark!(&mut group, 1, 11, 2048, 2048, 6, 2, 12);
+    run_single_goldilocks_benchmark!(&mut group, 1, 12, 1024, 8192, 6, 2, 13);
+    run_single_goldilocks_benchmark!(&mut group, 1, 13, 1024, 16384, 5, 2, 14);
+    run_single_goldilocks_benchmark!(&mut group, 1, 13, 2048, 8192, 5, 2, 13);
+    run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
+    run_single_goldilocks_benchmark!(&mut group, 1, 14, 2048, 16384, 5, 2, 14);
+    run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 4, 2, 15);
+    run_single_goldilocks_benchmark!(&mut group, 1, 16, 2048, 65536, 4, 2, 16);
+    }
 
     // // StarkPrime
     // {
