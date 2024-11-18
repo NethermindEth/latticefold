@@ -31,6 +31,8 @@ def parse_line(line):
         # Convert to ms if unit is seconds
         if time_unit == 's':
             base *= 1000
+        if time_unit == 'µs':
+            base /= 1000
 
         result = [kappa, cols, B, L, B_small, K, "?", "?", "?", "?", "?", "?"]
         if component == "Linearization" and prover_or_verifier == "Prover":
