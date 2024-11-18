@@ -1,40 +1,31 @@
+use std::sync::Arc;
+use super::*;
 use crate::{
-    arith::{r1cs::get_test_z_split, Witness, CCCS, CCS},
+    arith::{r1cs::get_test_z_split, tests::get_test_ccs},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::{test_params::PP, DecompositionParams},
-    nifs::linearization::{
-        utils::{compute_u, prepare_lin_sumcheck_polynomial},
-        LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
-        LinearizationVerifier,
-    },
     transcript::poseidon::PoseidonTranscript,
 };
-
-use crate::arith::tests::get_test_ccs;
-
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::io::Cursor;
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, VirtualPolynomial},
-};
+use lattirust_poly::polynomials::{build_eq_x_r, VirtualPolynomial};
 use lattirust_ring::OverField;
-use rand::thread_rng;
-use std::sync::Arc;
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
+use cyclotomic_rings::rings::{
+    BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet,
+};
 
-fn test_compute_ui<R: OverField>() {
+fn test_compute_ui<RqNTT: OverField>() {
     let mut mles = Vec::with_capacity(10);
     let mut rng = ark_std::test_rng();
 
     for _i in 0..10 {
-        let evals: Vec<R> = (0..8).map(|_| R::rand(&mut rng)).collect();
-
+        let evals: Vec<RqNTT> = (0..8).map(|_| RqNTT::rand(&mut rng)).collect();
         mles.push(DenseMultilinearExtension::from_evaluations_slice(3, &evals))
     }
 
     for b in 0..8_u8 {
-        let us: Vec<R> = compute_u(
+        let us: Vec<RqNTT> = compute_u(
             &mles,
             &[
                 (b & 0x01).into(),
@@ -42,7 +33,7 @@ fn test_compute_ui<R: OverField>() {
                 ((b & 0x4) >> 2).into(),
             ],
         )
-        .unwrap();
+            .unwrap();
 
         for (i, &u) in us.iter().enumerate() {
             assert_eq!(u, mles[i].evaluations[b.to_le() as usize]);
@@ -79,7 +70,6 @@ fn test_linearization_polynomial<RqNTT: OverField>() {
                 .sum::<RqNTT>();
             mle.push(row_z);
         }
-        //M_z_mles.push(dense_vec_to_dense_mle(log_m, &mle));
         M_z_mles.push(DenseMultilinearExtension::from_slice(log_m, &mle));
     }
 
@@ -99,68 +89,117 @@ fn test_linearization_polynomial<RqNTT: OverField>() {
     }
 }
 
-fn generate_linearization_proof<RqNTT, CS>() -> (
-    LinearizationProof<RqNTT>,
-    PoseidonTranscript<RqNTT, CS>,
-    CCCS<4, RqNTT>,
-    CCS<RqNTT>,
-)
-where
-    RqNTT: OverField + SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-{
-    const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-    const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+use rand::thread_rng;
+
+fn setup_test_environment<RqNTT: SuitableRing>() -> (Witness<RqNTT>, CCCS<4, RqNTT>, CCS<RqNTT>) {
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * PP::L;
 
     let ccs = get_test_ccs::<RqNTT>(W);
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
     let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let wit: Witness<RqNTT> = Witness::from_w_ccs::<PP>(w_ccs);
-    let cm_i: CCCS<4, RqNTT> = CCCS {
+    let wit = Witness::from_w_ccs::<PP>(w_ccs);
+    let cm_i = CCCS {
         cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
         x_ccs,
     };
 
+    (wit, cm_i, ccs)
+}
+
+fn test_prover_state<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>() {
+    let (wit, cm_i, ccs) = setup_test_environment::<RqNTT>();
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let res = LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
+    let state =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_prover_state(
+            &wit,
+            &cm_i,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+
+    // Verify state properties
+    assert_eq!(state.beta_s.len(), ccs.s);
+    assert!(!state.z_ccs.is_empty());
+    assert!(!state.Mz_mles.is_empty());
+
+    // Verify Mz_mles dimensions
+    for mle in &state.Mz_mles {
+        assert_eq!(mle.evaluations.len(), 1 << ccs.s);
+    }
+}
+
+fn test_sumcheck_generation<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>() {
+    let (wit, cm_i, ccs) = setup_test_environment::<RqNTT>();
+    let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
+
+    let state =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_prover_state(
+            &wit,
+            &cm_i,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+
+    let (_, point_r) =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
+            &state,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+
+    // Verify dimensions
+    assert_eq!(point_r.len(), ccs.s);
+}
+
+fn test_verifier_state<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>() {
+    let (wit, cm_i, ccs) = setup_test_environment::<RqNTT>();
+    let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+
+    let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
+        &cm_i,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+    )
+    .unwrap();
+
+    let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let state =
+        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_verifier_state(
+            &mut verifier_transcript,
+            &proof,
+            &ccs,
+        )
+        .unwrap();
+
+    assert_eq!(state.beta_s.len(), ccs.s);
+    assert_eq!(state.point_r.len(), ccs.s);
+}
+
+fn generate_test_proof<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>(
+) -> LinearizationProof<RqNTT> {
+    let (wit, cm_i, ccs) = setup_test_environment::<RqNTT>();
+    let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
+
+    let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
         &cm_i,
         &wit,
         &mut transcript,
         &ccs,
-    );
+    )
+    .unwrap();
 
-    let transcript = PoseidonTranscript::<RqNTT, CS>::default();
-
-    let linearization_proof = res.unwrap().1;
-
-    (linearization_proof, transcript, cm_i, ccs)
+    proof
 }
 
-fn test_linearization<RqNTT, CS>()
-where
-    RqNTT: OverField + SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-{
-    let (proof, mut transcript, cm_i, ccs) = generate_linearization_proof::<RqNTT, CS>();
-
-    let res = LFLinearizationVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify(
-        &cm_i,
-        &proof,
-        &mut transcript,
-        &ccs,
-    );
-
-    res.expect("Failed to verify linearization proof");
-}
-
-fn test_linearization_proof_serialization<RqNTT, CS>()
-where
-    RqNTT: OverField + SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-{
-    let proof = generate_linearization_proof::<RqNTT, CS>().0;
+fn test_proof_serialization<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>() {
+    let proof = generate_test_proof::<RqNTT, CS>();
 
     let mut serialized = Vec::new();
     proof
@@ -175,25 +214,67 @@ where
     );
 }
 
+fn test_evaluation_claim<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>() {
+    let (wit, cm_i, ccs) = setup_test_environment::<RqNTT>();
+    let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+
+    let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
+        &cm_i,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+    )
+    .unwrap();
+
+    let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let state =
+        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_verifier_state(
+            &mut verifier_transcript,
+            &proof,
+            &ccs,
+        )
+        .unwrap();
+
+    assert!(
+        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_evaluation_claim(
+            &state, &proof, &ccs,
+        )
+        .is_ok()
+    );
+}
+
 mod tests_stark {
-    use crate::arith::r1cs::get_test_dummy_z_split;
-    use crate::arith::tests::get_test_dummy_ccs;
-    use crate::arith::{Witness, CCCS};
-    use crate::commitment::AjtaiCommitmentScheme;
-    use crate::decomposition_parameters::{test_params::PP_STARK, DecompositionParams};
-    use crate::nifs::linearization::{
-        LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
-    };
-    use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::security_check::check_ring_modulus_128_bits_security;
-    use cyclotomic_rings::rings::StarkChallengeSet;
+    use super::*;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     use num_bigint::BigUint;
-    use rand::thread_rng;
+    use crate::arith::r1cs::get_test_dummy_z_split;
+    use crate::arith::tests::get_test_dummy_ccs;
+    use crate::decomposition_parameters::test_params::PP_STARK;
+    use crate::utils::security_check::check_ring_modulus_128_bits_security;
 
     #[test]
-    fn test_compute_ui() {
-        super::test_compute_ui::<RqNTT>();
+    fn test_prover_state() {
+        super::test_prover_state::<RqNTT, StarkChallengeSet>();
+    }
+
+    #[test]
+    fn test_sumcheck() {
+        super::test_sumcheck_generation::<RqNTT, StarkChallengeSet>();
+    }
+
+    #[test]
+    fn test_verifier_state() {
+        super::test_verifier_state::<RqNTT, StarkChallengeSet>();
+    }
+
+    #[test]
+    fn test_evaluation() {
+        test_evaluation_claim::<RqNTT, StarkChallengeSet>();
+    }
+
+    #[test]
+    fn test_serialization() {
+        test_proof_serialization::<RqNTT, StarkChallengeSet>();
     }
 
     #[test]
@@ -202,12 +283,8 @@ mod tests_stark {
     }
 
     #[test]
-    fn test_linearization() {
-        super::test_linearization::<RqNTT, StarkChallengeSet>();
-    }
-    #[test]
-    fn test_linearization_proof_serialization() {
-        super::test_linearization_proof_serialization::<RqNTT, StarkChallengeSet>();
+    fn test_compute_ui() {
+        super::test_compute_ui::<RqNTT>();
     }
 
     #[test]
@@ -234,7 +311,7 @@ mod tests_stark {
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
         )
-        .expect("Failed to parse stark_modulus");
+            .expect("Failed to parse stark_modulus");
 
         if check_ring_modulus_128_bits_security(
             &stark_modulus,
@@ -272,72 +349,123 @@ mod tests_stark {
     }
 }
 
+
 mod tests_goldilocks {
-    use cyclotomic_rings::rings::GoldilocksChallengeSet;
+    use super::*;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
+
     #[test]
-    fn test_compute_ui() {
-        super::test_compute_ui::<RqNTT>();
+    fn test_prover_state() {
+        super::test_prover_state::<RqNTT, GoldilocksChallengeSet>();
+    }
+
+    #[test]
+    fn test_sumcheck() {
+        super::test_sumcheck_generation::<RqNTT, GoldilocksChallengeSet>();
+    }
+
+    #[test]
+    fn test_verifier_state() {
+        super::test_verifier_state::<RqNTT, GoldilocksChallengeSet>();
+    }
+
+    #[test]
+    fn test_evaluation() {
+        super::test_evaluation_claim::<RqNTT, GoldilocksChallengeSet>();
+    }
+
+    #[test]
+    fn test_serialization() {
+        super::test_proof_serialization::<RqNTT, GoldilocksChallengeSet>();
     }
 
     #[test]
     fn test_linearization_polynomial() {
-        super::test_linearization_polynomial::<RqNTT>();
+        super::test_linearization_polynomial::<lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT>();
     }
 
     #[test]
-    fn test_linearization() {
-        super::test_linearization::<RqNTT, GoldilocksChallengeSet>();
-    }
-    #[test]
-    fn test_linearization_proof_serialization() {
-        super::test_linearization_proof_serialization::<RqNTT, GoldilocksChallengeSet>();
+    fn test_compute_ui() {
+        super::test_compute_ui::<RqNTT>();
     }
 }
 
 mod tests_frog {
-    use cyclotomic_rings::rings::FrogChallengeSet;
+    use super::*;
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
+
     #[test]
-    fn test_compute_ui() {
-        super::test_compute_ui::<RqNTT>();
+    fn test_prover_state() {
+        super::test_prover_state::<RqNTT, FrogChallengeSet>();
+    }
+
+    #[test]
+    fn test_sumcheck() {
+        super::test_sumcheck_generation::<RqNTT, FrogChallengeSet>();
+    }
+
+    #[test]
+    fn test_verifier_state() {
+        super::test_verifier_state::<RqNTT, FrogChallengeSet>();
+    }
+
+    #[test]
+    fn test_evaluation() {
+        super::test_evaluation_claim::<RqNTT, FrogChallengeSet>();
+    }
+
+    #[test]
+    fn test_serialization() {
+        super::test_proof_serialization::<RqNTT, FrogChallengeSet>();
     }
 
     #[test]
     fn test_linearization_polynomial() {
-        super::test_linearization_polynomial::<RqNTT>();
+        super::test_linearization_polynomial::<lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT>();
     }
 
     #[test]
-    fn test_linearization() {
-        super::test_linearization::<RqNTT, FrogChallengeSet>();
-    }
-    #[test]
-    fn test_linearization_proof_serialization() {
-        super::test_linearization_proof_serialization::<RqNTT, FrogChallengeSet>();
+    fn test_compute_ui() {
+        super::test_compute_ui::<RqNTT>();
     }
 }
 
 mod tests_babybear {
-    use cyclotomic_rings::rings::BabyBearChallengeSet;
+    use super::*;
     use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
+
     #[test]
-    fn test_compute_ui() {
-        super::test_compute_ui::<RqNTT>();
+    fn test_prover_state() {
+        super::test_prover_state::<RqNTT, BabyBearChallengeSet>();
+    }
+
+    #[test]
+    fn test_sumcheck() {
+        super::test_sumcheck_generation::<RqNTT, BabyBearChallengeSet>();
+    }
+
+    #[test]
+    fn test_verifier_state() {
+        super::test_verifier_state::<RqNTT, BabyBearChallengeSet>();
+    }
+
+    #[test]
+    fn test_evaluation() {
+        super::test_evaluation_claim::<RqNTT, BabyBearChallengeSet>();
+    }
+
+    #[test]
+    fn test_serialization() {
+        super::test_proof_serialization::<RqNTT, BabyBearChallengeSet>();
     }
 
     #[test]
     fn test_linearization_polynomial() {
-        super::test_linearization_polynomial::<RqNTT>();
+        super::test_linearization_polynomial::<lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT>();
     }
 
     #[test]
-    fn test_linearization() {
-        super::test_linearization::<RqNTT, BabyBearChallengeSet>();
-    }
-
-    #[test]
-    fn test_linearization_proof_serialization() {
-        super::test_linearization_proof_serialization::<RqNTT, BabyBearChallengeSet>();
+    fn test_compute_ui() {
+        super::test_compute_ui::<RqNTT>();
     }
 }
