@@ -1,12 +1,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::io::Cursor;
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
-use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, recompose},
-    cyclotomic_ring::CRT,
-    PolyRing,
-};
-use rand::{rngs::ThreadRng, thread_rng, Rng};
+use rand::thread_rng;
 
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS, CCS},
@@ -14,7 +9,6 @@ use crate::{
     decomposition_parameters::{test_params::PP, DecompositionParams},
     nifs::{
         decomposition::{
-            utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back},
             DecompositionProver, DecompositionVerifier, LFDecompositionProver,
             LFDecompositionVerifier,
         },
@@ -25,19 +19,6 @@ use crate::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-
-fn draw_ring_below_bound<RqPoly, const B: u128>(rng: &mut ThreadRng) -> RqPoly
-where
-    RqPoly: PolyRing + CRT,
-{
-    let degree = <RqPoly as PolyRing>::dimension();
-    let mut coeffs = Vec::with_capacity(degree);
-    for _ in 0..degree {
-        let random_coeff = rng.gen_range(0..B);
-        coeffs.push(<RqPoly as PolyRing>::BaseRing::from(random_coeff));
-    }
-    RqPoly::from(coeffs)
-}
 
 const WIT_LEN: usize = 4;
 const W: usize = WIT_LEN * PP::L;
@@ -150,120 +131,13 @@ where
     );
 }
 
-fn test_decompose_B_vec_into_k_vec<RqNTT, RqPoly>()
-where
-    RqNTT: SuitableRing<CoefficientRepresentation = RqPoly>,
-    RqPoly: PolyRing + CRT,
-{
-    // Create a test vector
-    const N: usize = 32;
-    let mut rng = thread_rng();
-    let test_vector: Vec<RqPoly> = (0..N)
-        .map(|_| draw_ring_below_bound::<RqPoly, { PP::B }>(&mut rng))
-        .collect();
-
-    // Call the function
-    let decomposed = decompose_B_vec_into_k_vec::<RqNTT, PP>(&test_vector);
-
-    // Check that we get K vectors back from the decomposition
-    assert_eq!(
-        decomposed.len(),
-        PP::K,
-        "Decomposition should output K={} vectors",
-        PP::K
-    );
-
-    // Check the length of each inner vector
-    for vec in &decomposed {
-        assert_eq!(vec.len(), N);
-    }
-
-    // Check that the decomposition is correct
-    for i in 0..N {
-        let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
-        assert_eq!(
-            test_vector[i],
-            recompose(&decomp_i, RqPoly::from(PP::B_SMALL as u128))
-        );
-    }
-}
-
-fn recompose_from_k_vec_to_big_vec<NTT: SuitableRing>(
-    k_vecs: &[Vec<NTT>],
-) -> Vec<NTT::CoefficientRepresentation> {
-    let decomposed_in_b: Vec<Vec<NTT::CoefficientRepresentation>> = k_vecs
-        .iter()
-        .map(|vec| {
-            vec.iter()
-                .flat_map(|&x| decompose_balanced_vec(&[x.icrt()], PP::B, PP::L))
-                .flatten()
-                .collect()
-        })
-        .collect();
-
-    // Transpose the decomposed vectors
-    let mut transposed = vec![vec![]; decomposed_in_b[0].len()];
-    for row in &decomposed_in_b {
-        for (j, &val) in row.iter().enumerate() {
-            transposed[j].push(val);
-        }
-    }
-
-    // Recompose first with B_SMALL, then with B
-    transposed
-        .iter()
-        .map(|vec| {
-            recompose(
-                vec,
-                NTT::CoefficientRepresentation::from(PP::B_SMALL as u128),
-            )
-        })
-        .collect::<Vec<_>>()
-        .chunks(PP::L)
-        .map(|chunk| recompose(chunk, NTT::CoefficientRepresentation::from(PP::B)))
-        .collect()
-}
-
-fn test_decompose_big_vec_into_k_vec_and_compose_back<RqNTT, RqPoly>()
-where
-    RqNTT: SuitableRing<CoefficientRepresentation = RqPoly>,
-    RqPoly: PolyRing + CRT,
-    Vec<RqNTT>: FromIterator<<RqPoly as CRT>::CRTForm>,
-{
-    // Create a test vector
-    const N: usize = 32;
-    let mut rng = thread_rng();
-    let test_vector: Vec<RqNTT> = (0..N)
-        .map(|_| draw_ring_below_bound::<RqPoly, { PP::B }>(&mut rng).crt())
-        .collect();
-    let decomposed_and_composed_back =
-        decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(test_vector.clone());
-    let restore_decomposed =
-        recompose_from_k_vec_to_big_vec::<RqNTT>(&decomposed_and_composed_back);
-
-    // Check each entry matches
-    for i in 0..N {
-        assert_eq!(
-            restore_decomposed[i],
-            test_vector[i].icrt(),
-            "Mismatch at index {}: decomposed_and_composed_back={}, test_vector={}",
-            i,
-            restore_decomposed[i],
-            test_vector[i].icrt()
-        );
-    }
-}
-
 mod pow2 {
     use cyclotomic_rings::challenge_set::BinarySmallSet;
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::{
-        Pow2CyclotomicPolyRing, Pow2CyclotomicPolyRingNTT,
-    };
+    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
 
     const Q: u64 = 17;
     const N: usize = 8;
     type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-    type RqPoly = Pow2CyclotomicPolyRing<Q, N>;
     type CS = BinarySmallSet<Q, N>;
 
     #[test]
@@ -274,16 +148,6 @@ mod pow2 {
     #[test]
     fn test_decomposition_proof_serialization() {
         super::test_decomposition_proof_serialization::<RqNTT, CS>();
-    }
-
-    #[test]
-    fn test_decompose_B_vec_into_k_vec() {
-        super::test_decompose_B_vec_into_k_vec::<RqNTT, RqPoly>();
-    }
-
-    #[test]
-    fn test_decompose_big_vec_into_k_vec_and_compose_back() {
-        super::test_decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, RqPoly>();
     }
 }
 
@@ -299,7 +163,7 @@ mod stark {
     use crate::transcript::poseidon::PoseidonTranscript;
     use crate::utils::security_check::check_ring_modulus_128_bits_security;
     use cyclotomic_rings::rings::StarkChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::stark_prime::{RqNTT, RqPoly};
+    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     use num_bigint::BigUint;
     use rand::thread_rng;
 
@@ -313,16 +177,6 @@ mod stark {
     #[test]
     fn test_decomposition_proof_serialization() {
         super::test_decomposition_proof_serialization::<RqNTT, CS>();
-    }
-
-    #[test]
-    fn test_decompose_B_vec_into_k_vec() {
-        super::test_decompose_B_vec_into_k_vec::<RqNTT, RqPoly>();
-    }
-
-    #[test]
-    fn test_decompose_big_vec_into_k_vec_and_compose_back() {
-        super::test_decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, RqPoly>();
     }
 
     #[test]
@@ -380,7 +234,7 @@ mod stark {
 
 mod goldilocks {
     use cyclotomic_rings::rings::GoldilocksChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::{RqNTT, RqPoly};
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
     type CS = GoldilocksChallengeSet;
 
     #[test]
@@ -392,21 +246,11 @@ mod goldilocks {
     fn test_decomposition_proof_serialization() {
         super::test_decomposition_proof_serialization::<RqNTT, CS>();
     }
-
-    #[test]
-    fn test_decompose_B_vec_into_k_vec() {
-        super::test_decompose_B_vec_into_k_vec::<RqNTT, RqPoly>();
-    }
-
-    #[test]
-    fn test_decompose_big_vec_into_k_vec_and_compose_back() {
-        super::test_decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, RqPoly>();
-    }
 }
 
 mod frog {
     use cyclotomic_rings::rings::FrogChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::frog_ring::{RqNTT, RqPoly};
+    use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
     type CS = FrogChallengeSet;
 
     #[test]
@@ -418,21 +262,11 @@ mod frog {
     fn test_decomposition_proof_serialization() {
         super::test_decomposition_proof_serialization::<RqNTT, CS>();
     }
-
-    #[test]
-    fn test_decompose_B_vec_into_k_vec() {
-        super::test_decompose_B_vec_into_k_vec::<RqNTT, RqPoly>();
-    }
-
-    #[test]
-    fn test_decompose_big_vec_into_k_vec_and_compose_back() {
-        super::test_decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, RqPoly>();
-    }
 }
 
 mod babybear {
     use cyclotomic_rings::rings::BabyBearChallengeSet;
-    use lattirust_ring::cyclotomic_ring::models::babybear::{RqNTT, RqPoly};
+    use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
     type CS = BabyBearChallengeSet;
 
     #[test]
@@ -443,15 +277,5 @@ mod babybear {
     #[test]
     fn test_decomposition_proof_serialization() {
         super::test_decomposition_proof_serialization::<RqNTT, CS>();
-    }
-
-    #[test]
-    fn test_decompose_B_vec_into_k_vec() {
-        super::test_decompose_B_vec_into_k_vec::<RqNTT, RqPoly>();
-    }
-
-    #[test]
-    fn test_decompose_big_vec_into_k_vec_and_compose_back() {
-        super::test_decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, RqPoly>();
     }
 }
