@@ -31,6 +31,7 @@ pub(crate) struct BetaChallengeGenerator<NTT> {
 
 pub(crate) struct ProverState<NTT: OverField> {
     pub beta_s: Vec<NTT>,
+    #[cfg(test)]
     pub z_ccs: Vec<NTT>,
     pub Mz_mles: Vec<DenseMultilinearExtension<NTT>>,
 }

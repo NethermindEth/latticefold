@@ -50,6 +50,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
         Ok(ProverState {
             beta_s,
+            #[cfg(test)]
             z_ccs,
             Mz_mles,
         })
