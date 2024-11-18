@@ -327,11 +327,8 @@ pub mod tests {
 
     use super::*;
     use crate::arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use cyclotomic_rings::rings::{GoldilocksRingNTT, GoldilocksRingPoly};
-    use lattirust_ring::cyclotomic_ring::models::{
-        goldilocks::{Fq, Fq3},
-        pow2_debug::Pow2CyclotomicPolyRingNTT,
-    };
+    use cyclotomic_rings::rings::{BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly};
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
@@ -352,7 +349,7 @@ pub mod tests {
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>(4);
+        let ccs = get_test_ccs::<BabyBearRingNTT>(4);
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();
