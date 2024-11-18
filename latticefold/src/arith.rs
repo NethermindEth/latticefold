@@ -269,6 +269,20 @@ impl<NTT: SuitableRing> Witness<NTT> {
         }
     }
 
+    /// Generates a random witness by firstly generating a random
+    /// vector of arbitrary norm and then computing the rest of the data
+    /// needed for a witness.
+    ///
+    /// # Arguments
+    /// * `rng` is a mutable reference to the random number generator.
+    /// * `w_ccs_len` is the length of the non-decomposed witness (a.k.a. the CCS witness).
+    pub fn rand<Rng: rand::Rng + ?Sized, P: DecompositionParams>(
+        rng: &mut Rng,
+        w_ccs_len: usize,
+    ) -> Self {
+        Self::from_w_ccs::<P>((0..w_ccs_len).map(|_| NTT::rand(rng)).collect())
+    }
+
     pub fn commit<const C: usize, const W: usize, P: DecompositionParams>(
         &self,
         ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
