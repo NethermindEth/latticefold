@@ -14,7 +14,7 @@ def bound_inf(d, kappa, p, n):
     
     # Iterate until bound_value^L > p/2 or L exceeds 50
     while bound_value^L <= p / 2:
-        if L > 50:
+        if L > 10:
             return "unpractical", "unpractical"
         L += 1
         bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
@@ -32,7 +32,7 @@ def find_smallest_L_log(B, p):
     return ceil(log(p / 2) / log(B))
 
 # Function to find all (b, k) pairs such that b^k = B
-def find_b_k_pairs(B, original_L, target_pairs=10):
+def find_b_k_pairs(B, original_L):
     pairs = []
     
     # Check if B is "unpractical"
@@ -42,45 +42,18 @@ def find_b_k_pairs(B, original_L, target_pairs=10):
     # Ensure B is a power of two
     B = 2**(B.bit_length() - 1)
     
-    # Start from the target B and decrement until finding the required number of pairs
-    while len(pairs) < target_pairs and B > 1:
-        # Iterate over even values of b only
+    # Special case handling based on log2(B)
+    log2_B = B.bit_length() - 1
+    if log2_B % 2 == 0:
+        b = 4
+        k = log2_B // 2
+        pairs.append((b, k, B))
+    else:
         b = 2
-        while b <= B:
-            if b > 64:
-                break
-            k = 1
-            power = b
-            while power <= B:
-                L = find_smallest_L_log(b**k, p)
-                if L == original_L:
-                    pairs.append((b, k, B))  # Add B to the pair if L matches
-                k += 1
-                power *= b
-            b *= 2 # Move to the next power of two
-        
-        # Sort pairs by how close b^k is to B, in descending order
-        pairs.sort(key=lambda pair: abs(pair[0]**pair[1] - B))
-        
-        # If we have enough pairs, break the loop
-        if len(pairs) >= target_pairs:
-            break
-        
-        # Otherwise, decrement B by 2 to ensure it remains even
-        B -= 2
+        k = log2_B
+        pairs.append((b, k, B))
     
-    # Use a dictionary to track the maximum B for each k
-    max_b_for_k = {}
-
-    for b, k, B in pairs:
-        if k not in max_b_for_k or B > max_b_for_k[k][2]:
-            max_b_for_k[k] = (b, k, B)
-
-    # Extract the pairs with the greatest B for each k
-    unique_pairs = list(max_b_for_k.values())
-
-    # Return the closest pairs found, limited to target_pairs
-    return unique_pairs[:target_pairs]
+    return pairs
 
 # Primes with their corresponding d values
 params = {
@@ -126,15 +99,22 @@ for prime_name, param in params.items():
             if current_bound_inf == "unpractical":
                 continue
             
-            # Find the pairs (b, k) such that b^k = B
-            pairs = find_b_k_pairs(current_bound_inf, L)
+            # Find all previous powers of two such that B^L > p/2
+            previous_powers_of_two = []
+            B = 2^(floor(log(current_bound_inf, 2)))  # Take previous power of 2 explicitly
+            while B > 1:
+                if B**L > p / 2:
+                    previous_powers_of_two.append(B)
+                B //= 2  # Move to the previous power of two
             
-            # Display the results
-            print(f"\tkappa = {kappa}, n = {n}: B = {current_bound_inf}")
-            for b, k, B in pairs:
-                # Recalculate L for each pair
-                L = find_smallest_L_log(b**k, p)
-                
-                # Discard any L equal to 1 or less and where L*n > 2^14
-                if L > 1 and L * n <= 2^14:
-                    print(f"run_single_{prime_name.lower()}_benchmark!(&mut group, 1, {kappa}, {n}, {current_bound_inf}, 1, {b}, {k});")
+            # Display the results for each valid power of two
+            for B_pow2 in previous_powers_of_two:
+                pairs = find_b_k_pairs(B_pow2, L)
+                print(f"\tkappa = {kappa}, n = {n}: B = {B_pow2}, L = {L}")
+                for b, k, B_pow2_in_pair in pairs:
+                    # Recalculate L for each pair
+                    L = find_smallest_L_log(b**k, p)
+                    
+                    # Discard any L equal to 1 or less
+                    if L > 1:
+                        print(f"run_single_{prime_name.lower()}_benchmark!(&mut group, 1, {kappa}, {n}, {B_pow2_in_pair}, {L}, {b}, {k});")
