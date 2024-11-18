@@ -79,4 +79,22 @@ pub mod test_params {
         const B_SMALL: usize = 38;
         const K: usize = 6;
     }
+
+    #[derive(Clone)]
+    pub struct GoldiclocksPP;
+    impl DecompositionParams for GoldiclocksPP {
+        const B: u128 = 1 << 15;
+        const L: usize = 5;
+        const B_SMALL: usize = 2;
+        const K: usize = 15;
+    }
+
+    #[derive(Clone)]
+    pub struct BabyBearPP;
+    impl DecompositionParams for BabyBearPP {
+        const B: u128 = 1 << 10;
+        const L: usize = 4;
+        const B_SMALL: usize = 2;
+        const K: usize = 10;
+    }
 }
