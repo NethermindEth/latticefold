@@ -3,7 +3,8 @@
 
 use ark_std::{time::Duration, UniformRand};
 use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+    criterion_group, criterion_main, AxisScale, BatchSize::SmallInput, BenchmarkId, Criterion,
+    PlotConfiguration,
 };
 use cyclotomic_rings::rings::{
     BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
@@ -42,9 +43,13 @@ fn ajtai_benchmark<
         BenchmarkId::new("NTT->INTT", format!("C={}, W={}", C, W)),
         &(witness_2),
         |b, witness| {
-            b.iter(|| {
-                let _ = ICRT::elementwise_icrt(witness.clone());
-            })
+            b.iter_batched(
+                || witness.clone(),
+                |witness| {
+                    let _ = ICRT::elementwise_icrt(witness);
+                },
+                SmallInput,
+            );
         },
     );
 
@@ -54,9 +59,13 @@ fn ajtai_benchmark<
         BenchmarkId::new("INTT->NTT", format!("C={}, W={}", C, W)),
         &(coeff),
         |b, coeff| {
-            b.iter(|| {
-                let _: Vec<R> = CRT::elementwise_crt(coeff.clone());
-            })
+            b.iter_batched(
+                || coeff.clone(),
+                |coeff| {
+                    let _: Vec<R> = CRT::elementwise_crt(coeff);
+                },
+                SmallInput,
+            );
         },
     );
 }
