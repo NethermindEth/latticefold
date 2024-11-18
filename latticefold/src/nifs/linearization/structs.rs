@@ -9,7 +9,9 @@ use crate::{
     utils::sumcheck,
 };
 
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
+
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
@@ -25,6 +27,18 @@ pub(crate) trait ChallengeGenerator<NTT: OverField> {
 
 pub(crate) struct BetaChallengeGenerator<NTT> {
     _ntt: PhantomData<NTT>,
+}
+
+pub(crate) struct ProverState<NTT: OverField> {
+    pub beta_s: Vec<NTT>,
+    pub z_ccs: Vec<NTT>,
+    pub Mz_mles: Vec<DenseMultilinearExtension<NTT>>,
+}
+
+pub(crate) struct VerifierState<NTT: OverField> {
+    pub beta_s: Vec<NTT>,
+    pub point_r: Vec<NTT>,
+    pub s: NTT,
 }
 
 pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
