@@ -10,7 +10,12 @@ ark-std = { workspace = true }
 ark-crypto-primitives = { workspace = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }
+rand_chacha = { workspace = true }
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
 thiserror = { workspace = true }
+
+[features]
+default = ["std"]
+std = []

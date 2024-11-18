@@ -4,6 +4,7 @@ use lattirust_poly::polynomials::{ArithErrors, VPAuxInfo, VirtualPolynomial};
 use lattirust_ring::{OverField, Ring};
 use thiserror::Error;
 
+use crate::ark_base::*;
 use crate::transcript::Transcript;
 use prover::{ProverMsg, ProverState};
 use verifier::SubClaim;
@@ -104,6 +105,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ark_base::*;
     use crate::transcript::poseidon::PoseidonTranscript;
     use crate::utils::sumcheck::{MLSumcheck, Proof};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};

@@ -9,6 +9,7 @@ use lattirust_poly::{
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
+use crate::ark_base::*;
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,

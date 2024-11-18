@@ -1,4 +1,5 @@
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
+use ark_std::convert::From;
 use lattirust_ring::cyclotomic_ring::models::babybear::Fq;
 
 use crate::rings::{BabyBearPoseidonConfig, GetPoseidonParams};

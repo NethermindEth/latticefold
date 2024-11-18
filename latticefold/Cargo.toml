@@ -9,21 +9,23 @@ ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
-cyclotomic-rings = { path = "../cyclotomic-rings"}
+cyclotomic-rings = { path = "../cyclotomic-rings", default-features = false }
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
+libm = "0.2.11"
 num-traits = { version = "0.2.19", default-features = false }
 paste = "1.0.15"
 rand = { workspace = true }
+rand_chacha = { workspace = true }
 thiserror = { workspace = true }
 num-bigint = { workspace = true }
-dhat = "0.3.2"
+dhat = { version = "0.3.2", optional = true }
 rayon = { version = "1.10.0", optional = true }
 
 [features]
 default = [ "std" ]
-std = [ "ark-std/std" ]
+std = [ "ark-std/std", "cyclotomic-rings/std", "rand/std" ]
 dhat-heap = []
 parallel = [ 
     "rayon",
@@ -31,7 +33,7 @@ parallel = [
     "ark-std/parallel",
     "lattirust-linear-algebra/parallel",
     "lattirust-poly/parallel",
-    "lattirust-ring/parallel"
+    "lattirust-ring/parallel",
  ]
 
 [profile.release]

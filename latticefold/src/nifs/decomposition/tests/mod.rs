@@ -1,9 +1,11 @@
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use lattirust_poly::mle::DenseMultilinearExtension;
-use rand::{thread_rng, Rng};
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 use crate::nifs::linearization::utils::compute_u;
 use crate::{
+    ark_base::*,
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::{AjtaiCommitmentScheme, Commitment},
     decomposition_parameters::DecompositionParams,
@@ -26,7 +28,7 @@ where
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
-    let mut rng = thread_rng();
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
     let input: usize = rng.gen_range(1..101);
     let ccs = get_test_ccs(W);
     let log_m = ccs.s;
@@ -122,7 +124,8 @@ mod stark {
     use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     use num_bigint::BigUint;
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     type CS = StarkChallengeSet;
     const WIT_LEN: usize = 4;
@@ -145,7 +148,8 @@ mod stark {
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit = Witness::from_w_ccs::<DP>(w_ccs);
 
         // Make bound and security checks
@@ -164,8 +168,10 @@ mod stark {
             DP::L,
             witness_within_bound,
         ) {
+            #[cfg(feature = "std")]
             println!(" Bound condition satisfied for 128 bits security");
         } else {
+            #[cfg(feature = "std")]
             println!("Bound condition not satisfied for 128 bits security");
         }
         let cm_i = CCCS {

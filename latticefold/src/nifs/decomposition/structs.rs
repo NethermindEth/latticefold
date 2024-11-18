@@ -5,6 +5,7 @@ use lattirust_ring::{OverField, Ring};
 
 use crate::{
     arith::{Witness, CCS, LCCCS},
+    ark_base::*,
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,

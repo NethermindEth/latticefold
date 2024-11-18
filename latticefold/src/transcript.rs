@@ -3,6 +3,8 @@ use lattirust_ring::OverField;
 
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 
+use crate::ark_base::*;
+
 pub mod poseidon;
 
 pub trait Transcript<R: OverField> {

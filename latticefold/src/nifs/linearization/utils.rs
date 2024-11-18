@@ -1,14 +1,13 @@
-use ark_std::{cfg_iter, sync::Arc};
-
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, VirtualPolynomial},
+    polynomials::{build_eq_x_r, RefCounter, VirtualPolynomial},
 };
 use lattirust_ring::OverField;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+use crate::ark_base::*;
 use crate::nifs::error::LinearizationError;
 
 /// Batch compute the values of mles at the point r.
@@ -40,10 +39,11 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     let mut g = VirtualPolynomial::new(log_m);
 
     for (i, coefficient) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
-        let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::with_capacity(S[i].len());
+        let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> =
+            Vec::with_capacity(S[i].len());
 
         for &j in &S[i] {
-            mle_list.push(Arc::new(M_mles[j].clone()));
+            mle_list.push(RefCounter::new(M_mles[j].clone()));
         }
 
         g.add_mle_list(mle_list, *coefficient)?;

@@ -1,6 +1,7 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
+    ark_base::*,
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,

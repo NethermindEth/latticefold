@@ -10,6 +10,7 @@ use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
+use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
@@ -338,8 +339,10 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 mod tests {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
+    use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -372,7 +375,8 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -443,7 +447,8 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -502,7 +507,8 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -573,8 +579,10 @@ mod tests {
 mod tests_goldilocks {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
+    use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -607,7 +615,8 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -678,7 +687,8 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -737,7 +747,8 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -810,8 +821,10 @@ mod tests_stark {
     use ark_std::io::Cursor;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
     use num_bigint::BigUint;
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
+    use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
         arith::r1cs::get_test_dummy_z_split,
@@ -860,7 +873,8 @@ mod tests_stark {
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
 
@@ -881,8 +895,10 @@ mod tests_stark {
             StarkFoldingDP::L,
             witness_within_bound,
         ) {
+            #[cfg(feature = "std")]
             println!(" Bound condition satisfied for 128 bits security");
         } else {
+            #[cfg(feature = "std")]
             println!("Bound condition not satisfied for 128 bits security");
         }
 
@@ -976,7 +992,8 @@ mod tests_stark {
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
 
@@ -997,8 +1014,10 @@ mod tests_stark {
             StarkFoldingDP::L,
             witness_within_bound,
         ) {
+            #[cfg(feature = "std")]
             println!(" Bound condition satisfied for 128 bits security");
         } else {
+            #[cfg(feature = "std")]
             println!("Bound condition not satisfied for 128 bits security");
         }
 

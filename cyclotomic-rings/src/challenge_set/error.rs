@@ -1,3 +1,4 @@
+use crate::ark_base::*;
 use thiserror::Error;
 
 /// Short challenge generation error.
