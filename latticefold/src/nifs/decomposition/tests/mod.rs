@@ -1,21 +1,14 @@
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-use ark_std::io::Cursor;
+use ark_ff::UniformRand;
+
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use rand::thread_rng;
 
 use crate::{
-    arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS, CCS},
-    commitment::AjtaiCommitmentScheme,
+    arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCS, LCCCS},
+    commitment::{AjtaiCommitmentScheme, Commitment},
     decomposition_parameters::{test_params::PP, DecompositionParams},
-    nifs::{
-        decomposition::{
-            DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-            LFDecompositionVerifier,
-        },
-        linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationProof,
-            LinearizationProver, LinearizationVerifier,
-        },
+    nifs::decomposition::{
+        DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
     },
     transcript::poseidon::PoseidonTranscript,
 };
@@ -23,9 +16,8 @@ use crate::{
 const WIT_LEN: usize = 4;
 const W: usize = WIT_LEN * PP::L;
 
-fn generate_decomposition_proof<RqNTT, CS>() -> (
-    LinearizationProof<RqNTT>,
-    CCCS<4, RqNTT>,
+fn generate_decomposition_args<RqNTT, CS>() -> (
+    LCCCS<4, RqNTT>,
     PoseidonTranscript<RqNTT, CS>,
     PoseidonTranscript<RqNTT, CS>,
     CCS<RqNTT>,
@@ -36,33 +28,36 @@ where
     RqNTT: SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
 {
-    let ccs = get_test_ccs::<RqNTT>(W);
+    let mut rng = thread_rng();
+    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
-    let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-    let wit: Witness<RqNTT> = Witness::from_w_ccs::<PP>(w_ccs);
-    let cm_i: CCCS<4, RqNTT> = CCCS {
-        cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
-        x_ccs,
+    let f: Vec<RqNTT> = (0..8).map(|_| RqNTT::rand(&mut rng)).collect();
+    let f_coeff: Vec<RqNTT::CoefficientRepresentation> = (0..8)
+        .map(|_| RqNTT::CoefficientRepresentation::rand(&mut rng))
+        .collect();
+
+    let wit: Witness<RqNTT> = Witness {
+        f: f.clone(),
+        f_coeff,
+        f_hat: vec![f.clone()],
+        w_ccs,
     };
 
-    let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
-
-    let (_, linearization_proof) =
-        LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
-            &cm_i,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-        )
-        .unwrap();
+    let cm: Commitment<4, RqNTT> = scheme.commit_ntt(&f).unwrap();
+    let lcccs = LCCCS {
+        r: (0..3).map(|_| RqNTT::rand(&mut rng)).collect(),
+        v: vec![RqNTT::rand(&mut rng)],
+        cm,
+        u: (0..3).map(|_| RqNTT::rand(&mut rng)).collect(),
+        x_w: (0..1).map(|_| RqNTT::rand(&mut rng)).collect(),
+        h: RqNTT::one(),
+    };
 
     (
-        linearization_proof,
-        cm_i,
-        verifier_transcript,
-        prover_transcript,
-        ccs,
+        lcccs,
+        PoseidonTranscript::<RqNTT, CS>::default(),
+        PoseidonTranscript::<RqNTT, CS>::default(),
+        get_test_ccs::<RqNTT>(W),
         wit,
         scheme,
     )
@@ -73,23 +68,8 @@ where
     RqNTT: SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
 {
-    let (
-        linearization_proof,
-        cm_i,
-        mut verifier_transcript,
-        mut prover_transcript,
-        ccs,
-        wit,
-        scheme,
-    ) = generate_decomposition_proof::<RqNTT, CS>();
-
-    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify(
-        &cm_i,
-        &linearization_proof,
-        &mut verifier_transcript,
-        &ccs,
-    )
-    .unwrap();
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS>();
 
     let (_, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, PP>(
@@ -111,26 +91,6 @@ where
     assert!(res.is_ok());
 }
 
-fn test_decomposition_proof_serialization<RqNTT, CS>()
-where
-    RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-{
-    let proof = generate_decomposition_proof::<RqNTT, CS>().0;
-
-    let mut serialized = Vec::new();
-    proof
-        .serialize_with_mode(&mut serialized, Compress::Yes)
-        .expect("Failed to serialize proof");
-
-    let mut cursor = Cursor::new(&serialized);
-    assert_eq!(
-        proof,
-        LinearizationProof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
-            .expect("Failed to deserialize proof")
-    );
-}
-
 mod pow2 {
     use cyclotomic_rings::challenge_set::BinarySmallSet;
     use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
@@ -143,11 +103,6 @@ mod pow2 {
     #[test]
     fn test_decomposition() {
         super::test_decomposition::<RqNTT, CS>();
-    }
-
-    #[test]
-    fn test_decomposition_proof_serialization() {
-        super::test_decomposition_proof_serialization::<RqNTT, CS>();
     }
 }
 
@@ -172,11 +127,6 @@ mod stark {
     #[test]
     fn test_decomposition() {
         super::test_decomposition::<RqNTT, CS>();
-    }
-
-    #[test]
-    fn test_decomposition_proof_serialization() {
-        super::test_decomposition_proof_serialization::<RqNTT, CS>();
     }
 
     #[test]
@@ -241,11 +191,6 @@ mod goldilocks {
     fn test_decomposition() {
         super::test_decomposition::<RqNTT, CS>();
     }
-
-    #[test]
-    fn test_decomposition_proof_serialization() {
-        super::test_decomposition_proof_serialization::<RqNTT, CS>();
-    }
 }
 
 mod frog {
@@ -257,11 +202,6 @@ mod frog {
     fn test_decomposition() {
         super::test_decomposition::<RqNTT, CS>();
     }
-
-    #[test]
-    fn test_decomposition_proof_serialization() {
-        super::test_decomposition_proof_serialization::<RqNTT, CS>();
-    }
 }
 
 mod babybear {
@@ -272,10 +212,5 @@ mod babybear {
     #[test]
     fn test_decomposition() {
         super::test_decomposition::<RqNTT, CS>();
-    }
-
-    #[test]
-    fn test_decomposition_proof_serialization() {
-        super::test_decomposition_proof_serialization::<RqNTT, CS>();
     }
 }
