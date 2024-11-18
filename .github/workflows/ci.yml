@@ -39,7 +39,6 @@ concurrency:
 
 jobs:
   test:
-    if: github.event.pull_request.draft == false
     name: Test
     runs-on: ubuntu-latest
     strategy:
@@ -73,7 +72,6 @@ jobs:
           cargo test --doc
 
   fmt:
-    if: github.event.pull_request.draft == false
     name: Rustfmt
     timeout-minutes: 30
     runs-on: ubuntu-latest
@@ -88,7 +86,6 @@ jobs:
           args: --all -- --check
 
   clippy:
-    if: github.event.pull_request.draft == false
     name: Clippy lint checks
     runs-on: ubuntu-latest
     steps:
@@ -113,7 +110,6 @@ jobs:
           args: --all-targets --all-features -- -D warnings
 
   audit:
-    if: github.event.pull_request.draft == false
     name: Cargo deny checks (licenses, vulnerabilities, unused dependencies)
     runs-on: ubuntu-latest
     steps:
@@ -135,7 +131,6 @@ jobs:
           cargo deny check
 
   typos:
-    if: github.event.pull_request.draft == false
     name: Spell Check with Typos
     runs-on: ubuntu-latest
     steps:
