@@ -36,17 +36,48 @@ impl Display for DecompositionParamData {
         write!(f, "B={}, l={}", self.b, self.l,)
     }
 }
-
-/// Used in decomposition and linearization tests
+#[allow(non_camel_case_types)]
 #[cfg(test)]
-#[derive(Clone)]
-pub struct PP;
+pub mod test_params {
+    use super::DecompositionParams;
 
-#[cfg(test)]
-impl DecompositionParams for PP {
-    // Already used in
-    const B: u128 = 1024;
-    const L: usize = 2;
-    const B_SMALL: usize = 2;
-    const K: usize = 10;
+    #[derive(Clone)]
+    pub struct PP;
+
+    #[cfg(test)]
+    impl DecompositionParams for PP {
+        // Already used in
+        const B: u128 = 1024;
+        const L: usize = 2;
+        const B_SMALL: usize = 2;
+        const K: usize = 10;
+    }
+
+    #[derive(Clone)]
+    pub struct PPL1;
+
+    #[cfg(test)]
+    impl DecompositionParams for PPL1 {
+        // Already used in
+        const B: u128 = 1024;
+        const L: usize = 1;
+        const B_SMALL: usize = 2;
+        const K: usize = 10;
+    }
+    #[derive(Clone)]
+    pub struct PP_STARK;
+    impl DecompositionParams for PP_STARK {
+        const B: u128 = 10485760000;
+        const L: usize = 8;
+        const B_SMALL: usize = 320;
+        const K: usize = 4;
+    }
+    #[derive(Clone)]
+    pub struct PP_STARK_FOLDING;
+    impl DecompositionParams for PP_STARK_FOLDING {
+        const B: u128 = 3010936384;
+        const L: usize = 8;
+        const B_SMALL: usize = 38;
+        const K: usize = 6;
+    }
 }

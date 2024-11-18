@@ -11,7 +11,7 @@ use rand::{rngs::ThreadRng, thread_rng, Rng};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
-    decomposition_parameters::{DecompositionParams, PP},
+    decomposition_parameters::{test_params::PP, DecompositionParams},
     nifs::{
         decomposition::{
             utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back},
@@ -292,7 +292,7 @@ mod stark {
     use crate::arith::tests::get_test_dummy_ccs;
     use crate::arith::{Witness, CCCS};
     use crate::commitment::AjtaiCommitmentScheme;
-    use crate::decomposition_parameters::DecompositionParams;
+    use crate::decomposition_parameters::{test_params::PP_STARK, DecompositionParams};
     use crate::nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
     };
@@ -330,26 +330,19 @@ mod stark {
         type R = RqNTT;
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
-        #[derive(Clone)]
-        struct PP;
-        impl DecompositionParams for PP {
-            const B: u128 = 10485760000;
-            const L: usize = 8;
-            const B_SMALL: usize = 320;
-            const K: usize = 4;
-        }
+
         const C: usize = 16;
         const X_LEN: usize = 1;
         const WIT_LEN: usize = 2048;
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PP_STARK::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit = Witness::from_w_ccs::<PP>(w_ccs);
+        let wit = Witness::from_w_ccs::<PP_STARK>(w_ccs);
 
         // Make bound and security checks
-        let witness_within_bound = wit.within_bound(PP::B);
+        let witness_within_bound = wit.within_bound(PP_STARK::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
@@ -360,8 +353,8 @@ mod stark {
             C,
             16,
             W,
-            PP::B,
-            PP::L,
+            PP_STARK::B,
+            PP_STARK::L,
             witness_within_bound,
         ) {
             println!(" Bound condition satisfied for 128 bits security");
@@ -369,7 +362,7 @@ mod stark {
             println!("Bound condition not satisfied for 128 bits security");
         }
         let cm_i = CCCS {
-            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            cm: wit.commit::<C, W, PP_STARK>(&scheme).unwrap(),
             x_ccs,
         };
         let mut transcript = PoseidonTranscript::<R, CS>::default();

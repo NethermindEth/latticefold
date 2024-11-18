@@ -342,7 +342,7 @@ mod tests {
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::DecompositionParams,
+        decomposition_parameters::{test_params::PPL1, DecompositionParams},
         nifs::{
             decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -363,27 +363,17 @@ mod tests {
     type CS = StarkChallengeSet;
     type T = PoseidonTranscript<StarkRingNTT, CS>;
 
-    #[derive(Clone)]
-    struct PP;
-
-    impl DecompositionParams for PP {
-        const B: u128 = 1_024;
-        const L: usize = 1;
-        const B_SMALL: usize = 2;
-        const K: usize = 10;
-    }
-
     #[test]
     fn test_folding() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PPL1::L; // the number of columns of the Ajtai matrix
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(w_ccs);
+        let wit: Witness<R> = Witness::from_w_ccs::<PPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PPL1>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -402,7 +392,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PPL1>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -411,7 +401,7 @@ mod tests {
         )
         .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -430,10 +420,10 @@ mod tests {
             (lcccs, wit_s)
         };
         let (lcccs_prover, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
+            LFFoldingProver::<_, T>::prove::<4, PPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, PP>(
+        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &folding_proof,
             &mut verifier_transcript,
@@ -447,14 +437,14 @@ mod tests {
     #[test]
     fn test_failing_folding_prover() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PPL1::L; // the number of columns of the Ajtai matrix
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(w_ccs.clone());
+        let wit: Witness<R> = Witness::from_w_ccs::<PPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PPL1>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -474,7 +464,7 @@ mod tests {
         .unwrap();
 
         let (_, mut vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+            LFDecompositionProver::<_, T>::prove::<4, 4, PPL1>(
                 &lcccs,
                 &wit,
                 &mut prover_transcript,
@@ -483,7 +473,7 @@ mod tests {
             )
             .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -491,9 +481,9 @@ mod tests {
         )
         .unwrap();
 
-        vec_wit[0] = Witness::<R>::from_w_ccs::<PP>(w_ccs);
+        vec_wit[0] = Witness::<R>::from_w_ccs::<PPL1>(w_ccs);
 
-        let res = LFFoldingProver::<_, T>::prove::<4, PP>(
+        let res = LFFoldingProver::<_, T>::prove::<4, PPL1>(
             &vec_lcccs,
             &vec_wit,
             &mut prover_transcript,
@@ -506,14 +496,14 @@ mod tests {
     #[test]
     fn test_folding_proof_serialization() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PPL1::L; // the number of columns of the Ajtai matrix
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(w_ccs);
+        let wit: Witness<R> = Witness::from_w_ccs::<PPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PPL1>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -532,7 +522,7 @@ mod tests {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PPL1>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -541,7 +531,7 @@ mod tests {
         )
         .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -560,7 +550,7 @@ mod tests {
             (lcccs, wit_s)
         };
         let (_, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
+            LFFoldingProver::<_, T>::prove::<4, PPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
                 .unwrap();
 
         let mut serialized = Vec::new();
@@ -587,7 +577,7 @@ mod tests_goldilocks {
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::DecompositionParams,
+        decomposition_parameters::{test_params::PPL1, DecompositionParams},
         nifs::{
             decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -608,27 +598,17 @@ mod tests_goldilocks {
     type CS = GoldilocksChallengeSet;
     type T = PoseidonTranscript<GoldilocksRingNTT, CS>;
 
-    #[derive(Clone)]
-    struct PP;
-
-    impl DecompositionParams for PP {
-        const B: u128 = 1_024;
-        const L: usize = 1;
-        const B_SMALL: usize = 2;
-        const K: usize = 10;
-    }
-
     #[test]
     fn test_folding() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PPL1::L; // the number of columns of the Ajtai matrix
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(w_ccs);
+        let wit: Witness<R> = Witness::from_w_ccs::<PPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PPL1>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -647,7 +627,7 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PPL1>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -656,7 +636,7 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -675,10 +655,10 @@ mod tests_goldilocks {
             (lcccs, wit_s)
         };
         let (lcccs_prover, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
+            LFFoldingProver::<_, T>::prove::<4, PPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, PP>(
+        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &folding_proof,
             &mut verifier_transcript,
@@ -692,14 +672,14 @@ mod tests_goldilocks {
     #[test]
     fn test_failing_folding_prover() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PPL1::L; // the number of columns of the Ajtai matrix
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(w_ccs.clone());
+        let wit: Witness<R> = Witness::from_w_ccs::<PPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PPL1>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -719,7 +699,7 @@ mod tests_goldilocks {
         .unwrap();
 
         let (_, mut vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+            LFDecompositionProver::<_, T>::prove::<4, 4, PPL1>(
                 &lcccs,
                 &wit,
                 &mut prover_transcript,
@@ -728,7 +708,7 @@ mod tests_goldilocks {
             )
             .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -736,9 +716,9 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        vec_wit[0] = Witness::<R>::from_w_ccs::<PP>(w_ccs);
+        vec_wit[0] = Witness::<R>::from_w_ccs::<PPL1>(w_ccs);
 
-        let res = LFFoldingProver::<_, T>::prove::<4, PP>(
+        let res = LFFoldingProver::<_, T>::prove::<4, PPL1>(
             &vec_lcccs,
             &vec_wit,
             &mut prover_transcript,
@@ -751,14 +731,14 @@ mod tests_goldilocks {
     #[test]
     fn test_folding_proof_serialization() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PPL1::L; // the number of columns of the Ajtai matrix
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit: Witness<R> = Witness::from_w_ccs::<PP>(w_ccs);
+        let wit: Witness<R> = Witness::from_w_ccs::<PPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, PP>(&scheme).unwrap(),
+            cm: wit.commit::<4, 4, PPL1>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -777,7 +757,7 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PP>(
+        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, PPL1>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -786,7 +766,7 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PP>(
+        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, PPL1>(
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -805,7 +785,7 @@ mod tests_goldilocks {
             (lcccs, wit_s)
         };
         let (_, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
+            LFFoldingProver::<_, T>::prove::<4, PPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
                 .unwrap();
 
         let mut serialized = Vec::new();
@@ -849,7 +829,7 @@ mod tests_stark {
     use crate::{
         arith::{Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::DecompositionParams,
+        decomposition_parameters::{test_params::PP_STARK_FOLDING, DecompositionParams},
         nifs::linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
         },
@@ -867,19 +847,10 @@ mod tests_stark {
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
 
-        #[derive(Clone)]
-        struct PP;
-        impl DecompositionParams for PP {
-            const B: u128 = 3010936384;
-            const L: usize = 8;
-            const B_SMALL: usize = 38;
-            const K: usize = 6;
-        }
-
         const C: usize = 15;
         const X_LEN: usize = 1;
         const WIT_LEN: usize = 512;
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PP_STARK_FOLDING::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
 
         #[cfg(feature = "dhat-heap")]
@@ -889,10 +860,10 @@ mod tests_stark {
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-        let wit = Witness::from_w_ccs::<PP>(w_ccs);
+        let wit = Witness::from_w_ccs::<PP_STARK_FOLDING>(w_ccs);
 
         // Make bound and securitty checks
-        let witness_within_bound = wit.within_bound(PP::B);
+        let witness_within_bound = wit.within_bound(PP_STARK_FOLDING::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
@@ -904,8 +875,8 @@ mod tests_stark {
             C,
             16,
             W,
-            PP::B,
-            PP::L,
+            PP_STARK_FOLDING::B,
+            PP_STARK_FOLDING::L,
             witness_within_bound,
         ) {
             println!(" Bound condition satisfied for 128 bits security");
@@ -914,7 +885,7 @@ mod tests_stark {
         }
 
         let cm_i = CCCS {
-            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            cm: wit.commit::<C, W, PP_STARK_FOLDING>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -937,7 +908,7 @@ mod tests_stark {
 
         let lcccs = linearization_verification;
 
-        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
+        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP_STARK_FOLDING>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -948,12 +919,13 @@ mod tests_stark {
         let decomposition_proof =
             decomposition_prover.expect("Decomposition proof generation error");
 
-        let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
-            &lcccs,
-            &decomposition_proof.2,
-            &mut verifier_transcript,
-            &ccs,
-        );
+        let decomposition_verification =
+            LFDecompositionVerifier::<_, T>::verify::<C, PP_STARK_FOLDING>(
+                &lcccs,
+                &decomposition_proof.2,
+                &mut verifier_transcript,
+                &ccs,
+            );
 
         let lcccs = decomposition_verification.expect("Decomposition Verification error");
 
@@ -970,12 +942,16 @@ mod tests_stark {
 
             (lcccs, wit_s)
         };
-        let folding_prover =
-            LFFoldingProver::<_, T>::prove::<C, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs);
+        let folding_prover = LFFoldingProver::<_, T>::prove::<C, PP_STARK_FOLDING>(
+            &lcccs,
+            &wit_s,
+            &mut prover_transcript,
+            &ccs,
+        );
 
         let folding_proof = folding_prover.expect("Folding proof generation error");
 
-        let folding_verification = LFFoldingVerifier::<_, T>::verify::<C, PP>(
+        let folding_verification = LFFoldingVerifier::<_, T>::verify::<C, PP_STARK_FOLDING>(
             &lcccs,
             &folding_proof.2,
             &mut verifier_transcript,
@@ -991,29 +967,20 @@ mod tests_stark {
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
 
-        #[derive(Clone)]
-        struct PP;
-        impl DecompositionParams for PP {
-            const B: u128 = 3010936384;
-            const L: usize = 8;
-            const B_SMALL: usize = 38;
-            const K: usize = 6;
-        }
-
         const C: usize = 15;
         const X_LEN: usize = 1;
         const WIT_LEN: usize = 512;
-        const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * PP_STARK_FOLDING::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-        let wit = Witness::from_w_ccs::<PP>(w_ccs);
+        let wit = Witness::from_w_ccs::<PP_STARK_FOLDING>(w_ccs);
 
         // Make bound and security checks
-        let witness_within_bound = wit.within_bound(PP::B);
+        let witness_within_bound = wit.within_bound(PP_STARK_FOLDING::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
@@ -1025,8 +992,8 @@ mod tests_stark {
             C,
             16,
             W,
-            PP::B,
-            PP::L,
+            PP_STARK_FOLDING::B,
+            PP_STARK_FOLDING::L,
             witness_within_bound,
         ) {
             println!(" Bound condition satisfied for 128 bits security");
@@ -1035,7 +1002,7 @@ mod tests_stark {
         }
 
         let cm_i = CCCS {
-            cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+            cm: wit.commit::<C, W, PP_STARK_FOLDING>(&scheme).unwrap(),
             x_ccs,
         };
 
@@ -1058,7 +1025,7 @@ mod tests_stark {
 
         let lcccs = linearization_verification;
 
-        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP>(
+        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, PP_STARK_FOLDING>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -1069,12 +1036,13 @@ mod tests_stark {
         let decomposition_proof =
             decomposition_prover.expect("Decomposition proof generation error");
 
-        let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, PP>(
-            &lcccs,
-            &decomposition_proof.2,
-            &mut verifier_transcript,
-            &ccs,
-        );
+        let decomposition_verification =
+            LFDecompositionVerifier::<_, T>::verify::<C, PP_STARK_FOLDING>(
+                &lcccs,
+                &decomposition_proof.2,
+                &mut verifier_transcript,
+                &ccs,
+            );
 
         let lcccs = decomposition_verification.expect("Decomposition Verification error");
 
@@ -1089,8 +1057,12 @@ mod tests_stark {
 
             (lcccs, wit_s)
         };
-        let folding_prover =
-            LFFoldingProver::<_, T>::prove::<C, PP>(&lcccs, &wit_s, &mut prover_transcript, &ccs);
+        let folding_prover = LFFoldingProver::<_, T>::prove::<C, PP_STARK_FOLDING>(
+            &lcccs,
+            &wit_s,
+            &mut prover_transcript,
+            &ccs,
+        );
 
         let folding_proof = folding_prover.expect("Folding proof generation error").2;
 
