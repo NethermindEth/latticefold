@@ -46,7 +46,6 @@ pub mod test_params {
 
     #[cfg(test)]
     impl DecompositionParams for PP {
-        // Already used in
         const B: u128 = 1024;
         const L: usize = 2;
         const B_SMALL: usize = 2;
@@ -58,7 +57,6 @@ pub mod test_params {
 
     #[cfg(test)]
     impl DecompositionParams for PPL1 {
-        // Already used in
         const B: u128 = 1024;
         const L: usize = 1;
         const B_SMALL: usize = 2;
