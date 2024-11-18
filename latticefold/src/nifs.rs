@@ -161,3 +161,204 @@ impl<
         )?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+    use rand::thread_rng;
+
+    use crate::nifs::decomposition::{DecompositionProver, DecompositionVerifier};
+    use crate::nifs::linearization::LinearizationProver;
+    use crate::{
+        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS, LCCCS},
+        commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::{DecompositionParams, PP},
+        nifs::{
+            decomposition::{LFDecompositionProver, LFDecompositionVerifier},
+            linearization::LFLinearizationProver,
+            LFProof, NIFSProver, NIFSVerifier,
+        },
+        transcript::poseidon::PoseidonTranscript,
+    };
+
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * PP::L;
+
+    fn nifs_prove<RqNTT, CS>() -> (LFProof<4, RqNTT>, LCCCS<4, RqNTT>, CCCS<4, RqNTT>)
+    where
+        RqNTT: SuitableRing,
+        CS: LatticefoldChallengeSet<RqNTT>,
+    {
+        let ccs = get_test_ccs::<RqNTT>(W);
+        let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
+        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+
+        let wit: Witness<RqNTT> = Witness::from_w_ccs::<PP>(w_ccs);
+        let cm_i: CCCS<4, RqNTT> = CCCS {
+            cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+
+        let (lcccs, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
+            &cm_i,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let (lcccs_vec, wit_vec, decomposition_proof) =
+            LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, PP>(
+                &lcccs,
+                &wit,
+                &mut prover_transcript,
+                &ccs,
+                &scheme,
+            )
+            .unwrap();
+
+        let verified_lcccs_vec =
+            LFDecompositionVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify::<4, PP>(
+                &lcccs,
+                &decomposition_proof,
+                &mut prover_transcript,
+                &ccs,
+            )
+            .unwrap();
+
+        let (_, _, proof) = NIFSProver::<4, W, RqNTT, PP, PoseidonTranscript<RqNTT, CS>>::prove(
+            &verified_lcccs_vec[0],
+            &wit_vec[0],
+            &cm_i,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
+
+        (proof, lcccs, cm_i)
+    }
+
+    fn nifs_verify<RqNTT, CS>(
+        proof: LFProof<4, RqNTT>,
+        lcccs: LCCCS<4, RqNTT>,
+        cm_i: CCCS<4, RqNTT>,
+    ) where
+        RqNTT: SuitableRing,
+        CS: LatticefoldChallengeSet<RqNTT>,
+    {
+        let ccs = get_test_ccs::<RqNTT>(W);
+        let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+
+        let res = NIFSVerifier::<4, RqNTT, PP, PoseidonTranscript<RqNTT, CS>>::verify(
+            &lcccs,
+            &cm_i,
+            &proof,
+            &mut verifier_transcript,
+            &ccs,
+        );
+
+        assert!(res.is_ok());
+    }
+
+    mod tests_pow2 {
+        use super::*;
+        use cyclotomic_rings::challenge_set::BinarySmallSet;
+        use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
+
+        const Q: u64 = 17;
+        const N: usize = 8;
+        type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
+        type CS = BinarySmallSet<Q, N>;
+
+        #[test]
+        fn test_nifs_eprove() {
+            nifs_prove::<RqNTT, CS>();
+        }
+
+        #[test]
+        fn test_nifs_verify() {
+            let (proof, lcccs, cm_i) = nifs_prove::<RqNTT, CS>();
+            nifs_verify::<RqNTT, CS>(proof, lcccs, cm_i);
+        }
+    }
+
+    mod tests_stark {
+        use super::*;
+        use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
+
+        type RqNTT = StarkRingNTT;
+        type CS = StarkChallengeSet;
+
+        #[test]
+        fn test_nifs_prove() {
+            nifs_prove::<RqNTT, CS>();
+        }
+
+        #[test]
+        fn test_nifs_verify() {
+            let (proof, lcccs, cm_i) = nifs_prove::<RqNTT, CS>();
+            nifs_verify::<RqNTT, CS>(proof, lcccs, cm_i);
+        }
+    }
+
+    mod tests_goldilocks {
+        use super::*;
+        use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
+
+        type RqNTT = GoldilocksRingNTT;
+        type CS = GoldilocksChallengeSet;
+
+        #[test]
+        fn test_nifs_prove() {
+            nifs_prove::<RqNTT, CS>();
+        }
+
+        #[test]
+        fn test_nifs_verify() {
+            let (proof, lcccs, cm_i) = nifs_prove::<RqNTT, CS>();
+            nifs_verify::<RqNTT, CS>(proof, lcccs, cm_i);
+        }
+    }
+
+    mod tests_frog {
+        use super::*;
+        use cyclotomic_rings::rings::{FrogChallengeSet, FrogRingNTT};
+
+        type RqNTT = FrogRingNTT;
+        type CS = FrogChallengeSet;
+
+        #[test]
+        fn test_nifs_prove() {
+            nifs_prove::<RqNTT, CS>();
+        }
+
+        #[test]
+        fn test_nifs_verify() {
+            let (proof, lcccs, cm_i) = nifs_prove::<RqNTT, CS>();
+            nifs_verify::<RqNTT, CS>(proof, lcccs, cm_i);
+        }
+    }
+
+    mod tests_babybear {
+        use super::*;
+        use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
+
+        type RqNTT = BabyBearRingNTT;
+        type CS = BabyBearChallengeSet;
+
+        #[test]
+        fn test_nifs_prove() {
+            nifs_prove::<RqNTT, CS>();
+        }
+
+        #[test]
+        fn test_nifs_verify() {
+            let (proof, lcccs, cm_i) = nifs_prove::<RqNTT, CS>();
+            nifs_verify::<RqNTT, CS>(proof, lcccs, cm_i);
+        }
+    }
+}
