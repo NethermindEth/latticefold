@@ -91,21 +91,6 @@ where
     assert!(res.is_ok());
 }
 
-mod pow2 {
-    use cyclotomic_rings::challenge_set::BinarySmallSet;
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
-
-    const Q: u64 = 17;
-    const N: usize = 8;
-    type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-    type CS = BinarySmallSet<Q, N>;
-
-    #[test]
-    fn test_decomposition() {
-        super::test_decomposition::<RqNTT, CS>();
-    }
-}
-
 mod stark {
     use crate::arith::r1cs::get_test_dummy_z_split;
     use crate::arith::tests::get_test_dummy_ccs;

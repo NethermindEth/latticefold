@@ -175,12 +175,13 @@ pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>
 
 #[cfg(test)]
 pub mod tests {
+    use cyclotomic_rings::rings::FrogRingNTT;
+
     use super::*;
 
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
     #[test]
     fn test_check_relation() {
-        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>>();
+        let r1cs = get_test_r1cs::<FrogRingNTT>();
         let z = get_test_z(5);
 
         r1cs.check_relation(&z).unwrap();

@@ -175,34 +175,6 @@ where
     );
 }
 
-mod tests_pow2 {
-    use cyclotomic_rings::challenge_set::BinarySmallSet;
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
-
-    const Q: u64 = 17; // Replace with an appropriate modulus
-    const N: usize = 8;
-
-    type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-    #[test]
-    fn test_compute_ui() {
-        super::test_compute_ui::<RqNTT>();
-    }
-
-    #[test]
-    fn test_linearization_polynomial() {
-        super::test_linearization_polynomial::<RqNTT>();
-    }
-
-    #[test]
-    fn test_linearization() {
-        super::test_linearization::<RqNTT, BinarySmallSet<Q, N>>();
-    }
-    #[test]
-    fn test_linearization_proof_serialization() {
-        super::test_linearization_proof_serialization::<RqNTT, BinarySmallSet<Q, N>>();
-    }
-}
-
 mod tests_stark {
     use crate::arith::r1cs::get_test_dummy_z_split;
     use crate::arith::tests::get_test_dummy_ccs;

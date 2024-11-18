@@ -190,33 +190,6 @@ mod tests {
         }
     }
 
-    mod pow2 {
-
-        use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
-
-        use cyclotomic_rings::challenge_set::BinarySmallSet;
-        const Q: u64 = 17;
-        const N: usize = 8;
-        type RqNTT = Pow2CyclotomicPolyRingNTT<Q, N>;
-
-        type CS = BinarySmallSet<Q, N>;
-
-        #[test]
-        fn test_sumcheck() {
-            super::test_sumcheck::<RqNTT, CS>();
-        }
-
-        #[test]
-        fn test_sumcheck_proof_serialization() {
-            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
-        }
-
-        #[test]
-        fn test_failing_sumcheck() {
-            super::test_failing_sumcheck::<RqNTT, CS>();
-        }
-    }
-
     mod stark {
         use cyclotomic_rings::rings::StarkChallengeSet;
         use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
