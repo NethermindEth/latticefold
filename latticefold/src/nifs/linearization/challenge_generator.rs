@@ -9,7 +9,7 @@ impl<NTT: OverField> ChallengeGenerator<NTT> for BetaChallengeGenerator<NTT> {
         transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
         ));
-        
+
         transcript
             .get_challenges(log_m)
             .into_iter()

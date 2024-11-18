@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use super::*;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs},
@@ -8,12 +7,13 @@ use crate::{
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::io::Cursor;
-use lattirust_poly::polynomials::{build_eq_x_r, VirtualPolynomial};
-use lattirust_ring::OverField;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
     BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet,
 };
+use lattirust_poly::polynomials::{build_eq_x_r, VirtualPolynomial};
+use lattirust_ring::OverField;
+use std::sync::Arc;
 
 fn test_compute_ui<RqNTT: OverField>() {
     let mut mles = Vec::with_capacity(10);
@@ -33,7 +33,7 @@ fn test_compute_ui<RqNTT: OverField>() {
                 ((b & 0x4) >> 2).into(),
             ],
         )
-            .unwrap();
+        .unwrap();
 
         for (i, &u) in us.iter().enumerate() {
             assert_eq!(u, mles[i].evaluations[b.to_le() as usize]);
@@ -245,12 +245,12 @@ fn test_evaluation_claim<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>
 
 mod tests_stark {
     use super::*;
-    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use num_bigint::BigUint;
     use crate::arith::r1cs::get_test_dummy_z_split;
     use crate::arith::tests::get_test_dummy_ccs;
     use crate::decomposition_parameters::test_params::PP_STARK;
     use crate::utils::security_check::check_ring_modulus_128_bits_security;
+    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
+    use num_bigint::BigUint;
 
     #[test]
     fn test_prover_state() {
@@ -259,7 +259,7 @@ mod tests_stark {
 
     #[test]
     fn test_sumcheck() {
-        super::test_sumcheck_generation::<RqNTT, StarkChallengeSet>();
+        test_sumcheck_generation::<RqNTT, StarkChallengeSet>();
     }
 
     #[test]
@@ -311,7 +311,7 @@ mod tests_stark {
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
         )
-            .expect("Failed to parse stark_modulus");
+        .expect("Failed to parse stark_modulus");
 
         if check_ring_modulus_128_bits_security(
             &stark_modulus,
@@ -349,7 +349,6 @@ mod tests_stark {
     }
 }
 
-
 mod tests_goldilocks {
     use super::*;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
@@ -361,7 +360,7 @@ mod tests_goldilocks {
 
     #[test]
     fn test_sumcheck() {
-        super::test_sumcheck_generation::<RqNTT, GoldilocksChallengeSet>();
+        test_sumcheck_generation::<RqNTT, GoldilocksChallengeSet>();
     }
 
     #[test]
@@ -371,17 +370,19 @@ mod tests_goldilocks {
 
     #[test]
     fn test_evaluation() {
-        super::test_evaluation_claim::<RqNTT, GoldilocksChallengeSet>();
+        test_evaluation_claim::<RqNTT, GoldilocksChallengeSet>();
     }
 
     #[test]
     fn test_serialization() {
-        super::test_proof_serialization::<RqNTT, GoldilocksChallengeSet>();
+        test_proof_serialization::<RqNTT, GoldilocksChallengeSet>();
     }
 
     #[test]
     fn test_linearization_polynomial() {
-        super::test_linearization_polynomial::<lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT>();
+        super::test_linearization_polynomial::<
+            lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT,
+        >();
     }
 
     #[test]
@@ -401,7 +402,7 @@ mod tests_frog {
 
     #[test]
     fn test_sumcheck() {
-        super::test_sumcheck_generation::<RqNTT, FrogChallengeSet>();
+        test_sumcheck_generation::<RqNTT, FrogChallengeSet>();
     }
 
     #[test]
@@ -411,17 +412,19 @@ mod tests_frog {
 
     #[test]
     fn test_evaluation() {
-        super::test_evaluation_claim::<RqNTT, FrogChallengeSet>();
+        test_evaluation_claim::<RqNTT, FrogChallengeSet>();
     }
 
     #[test]
     fn test_serialization() {
-        super::test_proof_serialization::<RqNTT, FrogChallengeSet>();
+        test_proof_serialization::<RqNTT, FrogChallengeSet>();
     }
 
     #[test]
     fn test_linearization_polynomial() {
-        super::test_linearization_polynomial::<lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT>();
+        super::test_linearization_polynomial::<
+            lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT,
+        >();
     }
 
     #[test]
@@ -441,7 +444,7 @@ mod tests_babybear {
 
     #[test]
     fn test_sumcheck() {
-        super::test_sumcheck_generation::<RqNTT, BabyBearChallengeSet>();
+        test_sumcheck_generation::<RqNTT, BabyBearChallengeSet>();
     }
 
     #[test]
@@ -451,17 +454,19 @@ mod tests_babybear {
 
     #[test]
     fn test_evaluation() {
-        super::test_evaluation_claim::<RqNTT, BabyBearChallengeSet>();
+        test_evaluation_claim::<RqNTT, BabyBearChallengeSet>();
     }
 
     #[test]
     fn test_serialization() {
-        super::test_proof_serialization::<RqNTT, BabyBearChallengeSet>();
+        test_proof_serialization::<RqNTT, BabyBearChallengeSet>();
     }
 
     #[test]
     fn test_linearization_polynomial() {
-        super::test_linearization_polynomial::<lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT>();
+        super::test_linearization_polynomial::<
+            lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT,
+        >();
     }
 
     #[test]

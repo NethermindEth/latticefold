@@ -1,4 +1,3 @@
-use ark_ff::Field;
 use ark_std::cfg_iter;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::{
