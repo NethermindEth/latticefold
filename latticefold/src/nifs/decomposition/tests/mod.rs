@@ -26,7 +26,7 @@ use crate::{
     transcript::poseidon::PoseidonTranscript,
 };
 
-fn draw_ring_bellow_bound<RqPoly, const B: u128>(rng: &mut ThreadRng) -> RqPoly
+fn draw_ring_below_bound<RqPoly, const B: u128>(rng: &mut ThreadRng) -> RqPoly
 where
     RqPoly: PolyRing + CRT,
 {
@@ -159,7 +159,7 @@ where
     const N: usize = 32;
     let mut rng = thread_rng();
     let test_vector: Vec<RqPoly> = (0..N)
-        .map(|_| draw_ring_bellow_bound::<RqPoly, { PP::B }>(&mut rng))
+        .map(|_| draw_ring_below_bound::<RqPoly, { PP::B }>(&mut rng))
         .collect();
 
     // Call the function
@@ -234,7 +234,7 @@ where
     const N: usize = 32;
     let mut rng = thread_rng();
     let test_vector: Vec<RqNTT> = (0..N)
-        .map(|_| draw_ring_bellow_bound::<RqPoly, { PP::B }>(&mut rng).crt())
+        .map(|_| draw_ring_below_bound::<RqPoly, { PP::B }>(&mut rng).crt())
         .collect();
     let decomposed_and_composed_back =
         decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(test_vector.clone());
