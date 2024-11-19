@@ -240,22 +240,6 @@ mod tests_stark {
         )
         .expect("Failed to parse stark_modulus");
 
-        if check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            StarkDP::B,
-            StarkDP::L,
-            witness_within_bound,
-        ) {
-            #[cfg(feature = "std")]
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            #[cfg(feature = "std")]
-            println!("Bound condition not satisfied for 128 bits security");
-        }
-
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkDP>(&scheme).unwrap(),
             x_ccs,

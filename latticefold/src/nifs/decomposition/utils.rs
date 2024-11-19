@@ -59,7 +59,7 @@ mod tests {
         },
         PolyRing,
     };
-    use rand::{SeedableRng, Rng};
+    use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
     use crate::{

@@ -5,8 +5,8 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::nifs::linearization::utils::compute_u;
 use crate::{
-    ark_base::*,
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
+    ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment},
     decomposition_parameters::DecompositionParams,
     nifs::decomposition::{
@@ -159,21 +159,6 @@ mod stark {
             10,
         )
         .expect("Failed to parse stark_modulus");
-        if check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            DP::B,
-            DP::L,
-            witness_within_bound,
-        ) {
-            #[cfg(feature = "std")]
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            #[cfg(feature = "std")]
-            println!("Bound condition not satisfied for 128 bits security");
-        }
         let cm_i = CCCS {
             cm: wit.commit::<C, W, DP>(&scheme).unwrap(),
             x_ccs,
