@@ -81,8 +81,8 @@ pub mod test_params {
     }
 
     #[derive(Clone)]
-    pub struct GoldiclocksDP;
-    impl DecompositionParams for GoldiclocksDP {
+    pub struct GoldilocksDP;
+    impl DecompositionParams for GoldilocksDP {
         const B: u128 = 1 << 15;
         const L: usize = 5;
         const B_SMALL: usize = 2;

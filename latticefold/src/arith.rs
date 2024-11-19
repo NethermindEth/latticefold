@@ -339,7 +339,7 @@ pub mod tests {
     use super::*;
     use crate::{
         arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z},
-        decomposition_parameters::test_params::{BabyBearDP, GoldiclocksDP, StarkDP},
+        decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP},
     };
     use cyclotomic_rings::rings::{
         BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
@@ -434,10 +434,10 @@ pub mod tests {
         let mut rng = thread_rng();
 
         let random_witness =
-            Witness::<GoldilocksRingNTT>::rand::<_, GoldiclocksDP>(&mut rng, WIT_LEN);
-        let recreated_witness = Witness::from_w_ccs::<GoldiclocksDP>(random_witness.w_ccs.clone());
+            Witness::<GoldilocksRingNTT>::rand::<_, GoldilocksDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_w_ccs::<GoldilocksDP>(random_witness.w_ccs.clone());
 
-        assert!(recreated_witness.check_data::<GoldiclocksDP>());
+        assert!(recreated_witness.check_data::<GoldilocksDP>());
         assert_eq!(recreated_witness, random_witness);
     }
 
