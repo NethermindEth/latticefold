@@ -26,9 +26,9 @@ rayon = { version = "1.10.0", optional = true }
 [features]
 default = [ "std" ]
 std = [ "ark-std/std", "cyclotomic-rings/std", "rand/std" ]
-dhat-heap = []
+dhat-heap = [ "dep:dhat" ]
 parallel = [ 
-    "rayon",
+    "dep:rayon",
     "std",
     "ark-std/parallel",
     "lattirust-linear-algebra/parallel",
