@@ -22,31 +22,34 @@ use lattirust_ring::OverField;
 /// * u - The MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$ evaluated at sumcheck challenge point
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinearizationProof<NTT: OverField> {
-    /// * linearization_sumcheck - A list of non-interactive sumcheck prover messages
-    /// * Sent in step 2 of linearization subprotocol
+    /// A list of non-interactive sumcheck prover messages.  
+    ///
+    /// Sent in step 2 of linearization subprotocol.  
     pub linearization_sumcheck: sumcheck::Proof<NTT>,
-    /// * The MLE of $\hat{\mathbf{f}}$ evaluated at the sumcheck challenge point
-    /// * Sent in the step 3 of linearization subprotocol.
+    /// The evaluations of MLE's of the rows of $\hat{\mathbf{f}}$-matrices of the witness at the sumcheck challenge point
+    ///
+    /// Sent in the step 3 of linearization subprotocol.
     pub v: Vec<NTT>,
-    /// * The MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$ evaluated at sumcheck challenge point.
-    /// * Sent in the step 3 of linearization subprotocol.
+    /// The evaluations of MLE's of ${ M_j \mathbf{z} \mid j = 1, 2, \dots, t }$ at evaluated at sumcheck challenge point.
+    ///
+    /// Sent in the step 3 of linearization subprotocol.
     pub u: Vec<NTT>,
 }
 
-///Prover for the linearization subprotocol
+/// Prover for the linearization subprotocol
 pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
     /// Generates a proof for the linearization subprotocol
     ///
     /// # Arguments
     ///
-    /// * `cm_i` - A reference to a `CCCS<C, NTT>`, which represents a CCS statement and a commitment to a witness.
-    /// * `wit` - A reference to a `Witness<NTT>` representing a CCS witness.
+    /// * `cm_i` - A reference to a committed CCS statement to be linearized, i.e. a CCCS<C, NTT>.
+    /// * `wit` - A reference to a CCS witness for the statement cm_i.
     /// * `transcript` - A mutable reference to a sponge for generating NI challenges.
-    /// * `ccs` - A reference to a Customizable Constraint System instance.
+    /// * `ccs` - A reference to a Customizable Constraint System circuit representation.
     ///
     /// # Returns
     ///
-    /// * `Ok((LCCCS<C, NTT>, LinearizationProof<NTT>))` - On success, returns a tuple where:
+    /// On success, returns a tuple `(LCCCS<C, NTT>, LinearizationProof<NTT>)` where:
     ///   * `LCCCS<C, NTT>` is a linearized version of the CCS witness commitment.
     ///   * `LinearizationProof<NTT>` is a proof that the linearization subprotocol was executed correctly.
 

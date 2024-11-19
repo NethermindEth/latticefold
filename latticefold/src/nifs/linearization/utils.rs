@@ -32,11 +32,25 @@ pub fn compute_u<NTT: OverField>(
 
 /// Prepare the main linearization polynomial.
 ///
+///  
+///  
+/// $$ g(\vec{\mathbf{x}}) := eq(\vec{\beta}, \vec{\mathbf{x}}) \cdot
+/// \left(
+/// \sum\_{i=1}^{n\_s} c\_i \cdot
+/// \left[
+/// \prod\_{j \in S\_i}
+/// \left(
+/// \sum\_{\vec{\mathbf{b}} \in \\{0,1\\}^{\log n\_c}}
+/// \text{mle}[M\_j](\vec{\mathbf{x}}, \vec{\mathbf{b}}) \cdot \text{mle}\[\mathbf{z}\_{ccs}\](\vec{b})
+/// \right)
+/// \right]
+/// \right) $$  
+///  
 /// # Parameters:
 ///
 /// * `log_m` (`usize`): The number of variables in the polynomial
 ///
-/// * `c` (`&[NTT]`): Polynomial is a linear comibination lists of MLEs, c is the coefficients of the lists
+/// * `c` (`&[NTT]`): The second multiplicand of the polynomial is a linear combination of products of lists of MLEs, c is the coefficients of the lists
 ///
 /// * `M_mles` (`&[DenseMultilinearExtension<NTT>]`): MLEs that the polynomial is constructed from
 ///
@@ -49,7 +63,7 @@ pub fn compute_u<NTT: OverField>(
 /// * `VirtualPolynomial<NTT>`: The linearization sumcheck polynomial
 ///
 /// # Errors:
-/// * Will return an error if na of the MLEs are of the wrong size
+/// * Will return an error if any of the MLEs are of the wrong size
 ///
 pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     log_m: usize,
