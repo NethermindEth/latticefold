@@ -92,9 +92,9 @@ pub mod test_params {
     #[derive(Clone)]
     pub struct BabyBearDP;
     impl DecompositionParams for BabyBearDP {
-        const B: u128 = 1 << 8;
+        const B: u128 = 1 << 10;
         const L: usize = 4;
         const B_SMALL: usize = 2;
-        const K: usize = 8;
+        const K: usize = 10;
     }
 }

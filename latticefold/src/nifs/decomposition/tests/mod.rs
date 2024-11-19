@@ -6,16 +6,14 @@ use crate::nifs::linearization::utils::compute_u;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::{AjtaiCommitmentScheme, Commitment},
-    decomposition_parameters::{test_params::GoldilocksDP as DP, DecompositionParams},
+    decomposition_parameters::DecompositionParams,
     nifs::decomposition::{
         DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
     },
     transcript::poseidon::PoseidonTranscript,
 };
-const WIT_LEN: usize = 4;
-const W: usize = WIT_LEN * DP::L;
 
-fn generate_decomposition_args<RqNTT, CS>() -> (
+fn generate_decomposition_args<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>() -> (
     LCCCS<4, RqNTT>,
     PoseidonTranscript<RqNTT, CS>,
     PoseidonTranscript<RqNTT, CS>,
@@ -26,6 +24,7 @@ fn generate_decomposition_args<RqNTT, CS>() -> (
 where
     RqNTT: SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
+    DP: DecompositionParams,
 {
     let mut rng = thread_rng();
     let input: usize = rng.gen_range(1..101);
@@ -82,13 +81,14 @@ where
     )
 }
 
-fn test_decomposition<RqNTT, CS>()
+fn test_decomposition<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>()
 where
     RqNTT: SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
+    DP: DecompositionParams,
 {
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS>();
+        generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
     let (_, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, DP>(
@@ -114,7 +114,7 @@ mod stark {
     use crate::arith::tests::get_test_dummy_ccs;
     use crate::arith::{Witness, CCCS};
     use crate::commitment::AjtaiCommitmentScheme;
-    use crate::decomposition_parameters::{test_params::StarkDP, DecompositionParams};
+    use crate::decomposition_parameters::{test_params::StarkDP as DP, DecompositionParams};
     use crate::nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
     };
@@ -126,10 +126,11 @@ mod stark {
     use rand::thread_rng;
 
     type CS = StarkChallengeSet;
-
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
     #[test]
     fn test_decomposition() {
-        super::test_decomposition::<RqNTT, CS>();
+        super::test_decomposition::<RqNTT, CS, DP, WIT_LEN, W>();
     }
 
     #[test]
@@ -141,15 +142,15 @@ mod stark {
         const C: usize = 16;
         const X_LEN: usize = 1;
         const WIT_LEN: usize = 2048;
-        const W: usize = WIT_LEN * StarkDP::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * DP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit = Witness::from_w_ccs::<StarkDP>(w_ccs);
+        let wit = Witness::from_w_ccs::<DP>(w_ccs);
 
         // Make bound and security checks
-        let witness_within_bound = wit.within_bound(StarkDP::B);
+        let witness_within_bound = wit.within_bound(DP::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
@@ -160,8 +161,8 @@ mod stark {
             C,
             16,
             W,
-            StarkDP::B,
-            StarkDP::L,
+            DP::B,
+            DP::L,
             witness_within_bound,
         ) {
             println!(" Bound condition satisfied for 128 bits security");
@@ -169,7 +170,7 @@ mod stark {
             println!("Bound condition not satisfied for 128 bits security");
         }
         let cm_i = CCCS {
-            cm: wit.commit::<C, W, StarkDP>(&scheme).unwrap(),
+            cm: wit.commit::<C, W, DP>(&scheme).unwrap(),
             x_ccs,
         };
         let mut transcript = PoseidonTranscript::<R, CS>::default();
@@ -186,34 +187,43 @@ mod stark {
 }
 
 mod goldilocks {
+    use crate::decomposition_parameters::{test_params::GoldilocksDP as DP, DecompositionParams};
     use cyclotomic_rings::rings::GoldilocksChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
     type CS = GoldilocksChallengeSet;
 
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
     #[test]
     fn test_decomposition() {
-        super::test_decomposition::<RqNTT, CS>();
+        super::test_decomposition::<RqNTT, CS, DP, WIT_LEN, W>();
     }
 }
 
 mod frog {
+    use crate::decomposition_parameters::{test_params::GoldilocksDP as DP, DecompositionParams};
     use cyclotomic_rings::rings::FrogChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
     type CS = FrogChallengeSet;
 
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
     #[test]
     fn test_decomposition() {
-        super::test_decomposition::<RqNTT, CS>();
+        super::test_decomposition::<RqNTT, CS, DP, WIT_LEN, W>();
     }
 }
 
 mod babybear {
+    use crate::decomposition_parameters::{test_params::BabyBearDP as DP, DecompositionParams};
     use cyclotomic_rings::rings::BabyBearChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
     type CS = BabyBearChallengeSet;
 
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
     #[test]
     fn test_decomposition() {
-        super::test_decomposition::<RqNTT, CS>();
+        super::test_decomposition::<RqNTT, CS, DP, WIT_LEN, W>();
     }
 }
