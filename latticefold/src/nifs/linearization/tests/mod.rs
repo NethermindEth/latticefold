@@ -1,19 +1,19 @@
 use super::*;
-use crate::decomposition_parameters::test_params::PP_STARK;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs},
     commitment::AjtaiCommitmentScheme,
-    decomposition_parameters::{test_params::PP, DecompositionParams},
+    decomposition_parameters::{DecompositionParams},
     transcript::poseidon::PoseidonTranscript,
 };
 use cyclotomic_rings::rings::StarkChallengeSet;
 use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
 use num_traits::One;
 use rand::thread_rng;
+use crate::decomposition_parameters::test_params::{DP, StarkDP};
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
-const W: usize = WIT_LEN * PP::L;
+const W: usize = WIT_LEN * DP::L;
 fn setup_test_environment<RqNTT: SuitableRing>() -> (
     Witness<RqNTT>,
     CCCS<4, RqNTT>,
@@ -24,9 +24,9 @@ fn setup_test_environment<RqNTT: SuitableRing>() -> (
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
     let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
 
-    let wit = Witness::from_w_ccs::<PP>(w_ccs);
+    let wit = Witness::from_w_ccs::<DP>(w_ccs);
     let cm_i = CCCS {
-        cm: wit.commit::<C, W, PP>(&scheme).unwrap(),
+        cm: wit.commit::<C, W, DP>(&scheme).unwrap(),
         x_ccs,
     };
 
@@ -44,7 +44,7 @@ fn test_compute_z_ccs() {
     assert_eq!(z_ccs[cm_i.x_ccs.len()], RqNTT::one());
 
     // Check commitment
-    assert_eq!(cm_i.cm, wit.commit::<C, W, PP_STARK>(&scheme).unwrap());
+    assert_eq!(cm_i.cm, wit.commit::<C, W, StarkDP>(&scheme).unwrap());
 }
 
 #[test]
