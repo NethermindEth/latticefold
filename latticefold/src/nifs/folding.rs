@@ -820,10 +820,10 @@ mod tests_stark {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use num_bigint::BigUint;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
+    use crate::arith::tests::get_test_dummy_ccs;
     use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
@@ -838,10 +838,6 @@ mod tests_stark {
         },
     };
     use crate::{
-        arith::tests::get_test_dummy_ccs,
-        utils::security_check::check_ring_modulus_128_bits_security,
-    };
-    use crate::{
         arith::{Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
         decomposition_parameters::{test_params::StarkFoldingDP, DecompositionParams},
@@ -851,6 +847,11 @@ mod tests_stark {
         transcript::poseidon::PoseidonTranscript,
     };
     use cyclotomic_rings::rings::StarkChallengeSet;
+
+    #[cfg(feature = "std")]
+    use crate::utils::security_check::check_ring_modulus_128_bits_security;
+    #[cfg(feature = "std")]
+    use num_bigint::BigUint;
 
     #[test]
     fn test_dummy_folding() {
@@ -879,22 +880,25 @@ mod tests_stark {
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
 
         // Make bound and securitty checks
-        let witness_within_bound = wit.within_bound(StarkFoldingDP::B);
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
+        #[cfg(feature = "std")]
+        {
+            let witness_within_bound = wit.within_bound(StarkFoldingDP::B);
+            let stark_modulus = BigUint::parse_bytes(
+                b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+                10,
+            )
+            .expect("Failed to parse stark_modulus");
 
-        assert!(check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            StarkFoldingDP::B,
-            StarkFoldingDP::L,
-            witness_within_bound,
-        ));
+            assert!(check_ring_modulus_128_bits_security(
+                &stark_modulus,
+                C,
+                16,
+                W,
+                StarkFoldingDP::B,
+                StarkFoldingDP::L,
+                witness_within_bound,
+            ));
+        }
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
@@ -992,28 +996,30 @@ mod tests_stark {
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
 
         // Make bound and security checks
-        let witness_within_bound = wit.within_bound(StarkFoldingDP::B);
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
+        #[cfg(feature = "std")]
+        {
+            let witness_within_bound = wit.within_bound(StarkFoldingDP::B);
+            let stark_modulus = BigUint::parse_bytes(
+                b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+                10,
+            )
+            .expect("Failed to parse stark_modulus");
+
+            assert!(check_ring_modulus_128_bits_security(
+                &stark_modulus,
+                C,
+                16,
+                W,
+                StarkFoldingDP::B,
+                StarkFoldingDP::L,
+                witness_within_bound,
+            ));
+        }
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
             x_ccs,
         };
-
-        #[cfg(feature = "std")]
-        assert!(check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            StarkFoldingDP::B,
-            StarkFoldingDP::L,
-            witness_within_bound,
-        ));
 
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
 

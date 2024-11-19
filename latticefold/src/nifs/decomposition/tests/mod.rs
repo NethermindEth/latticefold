@@ -120,12 +120,15 @@ mod stark {
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
     };
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::security_check::check_ring_modulus_128_bits_security;
     use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use num_bigint::BigUint;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
+
+    #[cfg(feature = "std")]
+    use crate::utils::security_check::check_ring_modulus_128_bits_security;
+    #[cfg(feature = "std")]
+    use num_bigint::BigUint;
 
     type CS = StarkChallengeSet;
     const WIT_LEN: usize = 4;
@@ -153,23 +156,25 @@ mod stark {
         let wit = Witness::from_w_ccs::<DP>(w_ccs);
 
         // Make bound and security checks
-        let witness_within_bound = wit.within_bound(DP::B);
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
-
         #[cfg(feature = "std")]
-        assert!(check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            DP::B,
-            DP::L,
-            witness_within_bound,
-        ));
+        {
+            let witness_within_bound = wit.within_bound(DP::B);
+            let stark_modulus = BigUint::parse_bytes(
+                b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
+                10,
+            )
+            .expect("Failed to parse stark_modulus");
+
+            assert!(check_ring_modulus_128_bits_security(
+                &stark_modulus,
+                C,
+                16,
+                W,
+                DP::B,
+                DP::L,
+                witness_within_bound,
+            ));
+        }
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, DP>(&scheme).unwrap(),
