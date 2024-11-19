@@ -37,10 +37,7 @@ fn setup_test_environment<RqNTT: SuitableRing>() -> (
 fn test_compute_z_ccs() {
     let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT>();
 
-    let z_ccs = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-        &wit,
-        &cm_i.x_ccs
-    ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     // Check z_ccs structure
     assert_eq!(z_ccs.len(), cm_i.x_ccs.len() + 1 + wit.w_ccs.len());
@@ -54,10 +51,7 @@ fn test_compute_z_ccs() {
 fn test_construct_polynomial() {
     let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
 
-    let z_ccs = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-        &wit,
-        &cm_i.x_ccs
-    ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
     let (_g, beta_s) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::construct_polynomial_g(
@@ -76,14 +70,11 @@ fn test_construct_polynomial() {
 fn test_generate_sumcheck() {
     let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
 
-    let z_state = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-        &wit,
-        &cm_i.x_ccs
-    ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
     let (g, beta_s) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::construct_polynomial_g(
-        &z_state,
+        &z_ccs,
         &mut transcript,
         &ccs
     ).unwrap();
@@ -101,10 +92,7 @@ fn test_generate_sumcheck() {
 fn test_compute_evaluation_vectors() {
     let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
 
-    let z_ccs = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-            &wit,
-            &cm_i.x_ccs
-        ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
     let (g, beta_s) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::construct_polynomial_g(

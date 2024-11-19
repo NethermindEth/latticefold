@@ -20,6 +20,7 @@ use crate::{
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+use crate::arith::Instance;
 use crate::utils::sumcheck::Proof;
 pub use structs::*;
 
@@ -30,18 +31,6 @@ mod tests;
 mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
-    fn compute_z_ccs<const C: usize>(
-        wit: &Witness<NTT>,
-        x_ccs: &[NTT],
-    ) -> Result<Vec<NTT>, LinearizationError<NTT>> {
-        let mut z_ccs = Vec::with_capacity(x_ccs.len() + 1 + wit.w_ccs.len());
-        z_ccs.extend_from_slice(x_ccs);
-        z_ccs.push(NTT::one());
-        z_ccs.extend_from_slice(&wit.w_ccs);
-
-        Ok(z_ccs)
-    }
-
     fn construct_polynomial_g(
         z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
@@ -120,12 +109,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
-        let z_state = Self::compute_z_ccs::<C>(wit, &cm_i.x_ccs)?;
-        let (g, beta_s) = Self::construct_polynomial_g(&z_state, transcript, ccs)?;
+        let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
+        let (g, beta_s) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
 
         let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, &beta_s, transcript)?;
 
-        let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, ccs, &z_state)?;
+        let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, ccs, &z_ccs)?;
 
         transcript.absorb_slice(&v);
         transcript.absorb_slice(&u);
