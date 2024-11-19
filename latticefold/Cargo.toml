@@ -13,7 +13,6 @@ cyclotomic-rings = { path = "../cyclotomic-rings", default-features = false }
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
-libm = "0.2.11"
 num-traits = { version = "0.2.19", default-features = false }
 paste = "1.0.15"
 rand = { workspace = true }

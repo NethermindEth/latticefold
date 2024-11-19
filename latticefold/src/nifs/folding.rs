@@ -886,6 +886,16 @@ mod tests_stark {
         )
         .expect("Failed to parse stark_modulus");
 
+        assert!(check_ring_modulus_128_bits_security(
+            &stark_modulus,
+            C,
+            16,
+            W,
+            StarkFoldingDP::B,
+            StarkFoldingDP::L,
+            witness_within_bound,
+        ));
+
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
             x_ccs,
@@ -993,6 +1003,17 @@ mod tests_stark {
             cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
             x_ccs,
         };
+
+        #[cfg(feature = "std")]
+        assert!(check_ring_modulus_128_bits_security(
+            &stark_modulus,
+            C,
+            16,
+            W,
+            StarkFoldingDP::B,
+            StarkFoldingDP::L,
+            witness_within_bound,
+        ));
 
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
 

@@ -240,6 +240,17 @@ mod tests_stark {
         )
         .expect("Failed to parse stark_modulus");
 
+        #[cfg(feature = "std")]
+        assert!(check_ring_modulus_128_bits_security(
+            &stark_modulus,
+            C,
+            16,
+            W,
+            StarkDP::B,
+            StarkDP::L,
+            witness_within_bound,
+        ));
+
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkDP>(&scheme).unwrap(),
             x_ccs,
