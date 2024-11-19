@@ -28,12 +28,11 @@ where
 {
     let mut rng = thread_rng();
     let input: usize = rng.gen_range(1..101);
-    let log_m = 5;
+    let ccs = get_test_ccs(W);
+    let log_m = ccs.s;
 
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
     let (_, x_ccs, _) = get_test_z_split::<RqNTT>(input);
-
-    let ccs = get_test_ccs(W);
 
     let wit = Witness::rand::<_, DP>(&mut rng, WIT_LEN);
 
