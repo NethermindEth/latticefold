@@ -339,7 +339,7 @@ pub mod tests {
     use super::*;
     use crate::{
         arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z},
-        decomposition_parameters::test_params::{BabyBearPP, GoldiclocksPP, PP_STARK},
+        decomposition_parameters::test_params::{BabyBearDP, GoldiclocksDP, StarkDP},
     };
     use cyclotomic_rings::rings::{
         BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
@@ -422,8 +422,8 @@ pub mod tests {
             let w_coeff = ICRT::elementwise_icrt(self.w_ccs.clone());
 
             (self.f_coeff == gadget_decompose(&w_coeff, P::B, P::L))
-                & (CRT::elementwise_crt(self.f_coeff.clone()) == self.f)
-                & (self.f_hat == Self::get_fhat(&self.f_coeff))
+                && (CRT::elementwise_crt(self.f_coeff.clone()) == self.f)
+                && (self.f_hat == Self::get_fhat(&self.f_coeff))
         }
     }
 
@@ -434,10 +434,10 @@ pub mod tests {
         let mut rng = thread_rng();
 
         let random_witness =
-            Witness::<GoldilocksRingNTT>::rand::<_, GoldiclocksPP>(&mut rng, WIT_LEN);
-        let recreated_witness = Witness::from_w_ccs::<GoldiclocksPP>(random_witness.w_ccs.clone());
+            Witness::<GoldilocksRingNTT>::rand::<_, GoldiclocksDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_w_ccs::<GoldiclocksDP>(random_witness.w_ccs.clone());
 
-        assert!(recreated_witness.check_data::<GoldiclocksPP>());
+        assert!(recreated_witness.check_data::<GoldiclocksDP>());
         assert_eq!(recreated_witness, random_witness);
     }
 
@@ -445,10 +445,10 @@ pub mod tests {
     fn test_from_f() {
         let mut rng = thread_rng();
 
-        let random_witness = Witness::<BabyBearRingNTT>::rand::<_, BabyBearPP>(&mut rng, WIT_LEN);
-        let recreated_witness = Witness::from_f::<BabyBearPP>(random_witness.f.clone());
+        let random_witness = Witness::<BabyBearRingNTT>::rand::<_, BabyBearDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_f::<BabyBearDP>(random_witness.f.clone());
 
-        assert!(recreated_witness.check_data::<BabyBearPP>());
+        assert!(recreated_witness.check_data::<BabyBearDP>());
         assert_eq!(recreated_witness, random_witness);
     }
 
@@ -456,10 +456,10 @@ pub mod tests {
     fn test_from_f_coeff() {
         let mut rng = thread_rng();
 
-        let random_witness = Witness::<StarkRingNTT>::rand::<_, PP_STARK>(&mut rng, WIT_LEN);
-        let recreated_witness = Witness::from_f_coeff::<PP_STARK>(random_witness.f_coeff.clone());
+        let random_witness = Witness::<StarkRingNTT>::rand::<_, StarkDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_f_coeff::<StarkDP>(random_witness.f_coeff.clone());
 
-        assert!(recreated_witness.check_data::<PP_STARK>());
+        assert!(recreated_witness.check_data::<StarkDP>());
         assert_eq!(recreated_witness, random_witness);
     }
 }

@@ -43,10 +43,10 @@ pub mod test_params {
     use super::DecompositionParams;
 
     #[derive(Clone)]
-    pub struct PP;
+    pub struct DP;
 
     #[cfg(test)]
-    impl DecompositionParams for PP {
+    impl DecompositionParams for DP {
         const B: u128 = 1024;
         const L: usize = 2;
         const B_SMALL: usize = 2;
@@ -54,26 +54,26 @@ pub mod test_params {
     }
 
     #[derive(Clone)]
-    pub struct PPL1;
+    pub struct DPL1;
 
     #[cfg(test)]
-    impl DecompositionParams for PPL1 {
+    impl DecompositionParams for DPL1 {
         const B: u128 = 1024;
         const L: usize = 1;
         const B_SMALL: usize = 2;
         const K: usize = 10;
     }
     #[derive(Clone)]
-    pub struct PP_STARK;
-    impl DecompositionParams for PP_STARK {
+    pub struct StarkDP;
+    impl DecompositionParams for StarkDP {
         const B: u128 = 10485760000;
         const L: usize = 8;
         const B_SMALL: usize = 320;
         const K: usize = 4;
     }
     #[derive(Clone)]
-    pub struct PP_STARK_FOLDING;
-    impl DecompositionParams for PP_STARK_FOLDING {
+    pub struct StarkFoldingDP;
+    impl DecompositionParams for StarkFoldingDP {
         const B: u128 = 3010936384;
         const L: usize = 8;
         const B_SMALL: usize = 38;
@@ -81,8 +81,8 @@ pub mod test_params {
     }
 
     #[derive(Clone)]
-    pub struct GoldiclocksPP;
-    impl DecompositionParams for GoldiclocksPP {
+    pub struct GoldiclocksDP;
+    impl DecompositionParams for GoldiclocksDP {
         const B: u128 = 1 << 15;
         const L: usize = 5;
         const B_SMALL: usize = 2;
@@ -90,11 +90,11 @@ pub mod test_params {
     }
 
     #[derive(Clone)]
-    pub struct BabyBearPP;
-    impl DecompositionParams for BabyBearPP {
-        const B: u128 = 1 << 10;
+    pub struct BabyBearDP;
+    impl DecompositionParams for BabyBearDP {
+        const B: u128 = 1 << 8;
         const L: usize = 4;
         const B_SMALL: usize = 2;
-        const K: usize = 10;
+        const K: usize = 8;
     }
 }
