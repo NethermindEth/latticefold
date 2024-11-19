@@ -81,13 +81,13 @@ for prime_name, param in params.items():
     max_kappa = kappa - 1  # The last kappa where bound_2 was less than p / 2
     
     # Limit kappa to 16 for a specific case study
-    if prime_name == "Goldilocks":  # Replace "Goldilocks" with your specific case
-        max_kappa = min(max_kappa, 16)
+    #if prime_name == "Goldilocks":  # Replace "Goldilocks" with your specific case
+    #    max_kappa = min(max_kappa, 16)
     
     print(f"\tMaximum kappa for which bound_2 < p/2: {max_kappa}")
     
     # Define kappa_values from 1 to min(50, max_kappa)
-    kappa_values = range(1, min(50, max_kappa) + 1)
+    kappa_values = range(1, max_kappa + 1)
 
     # Iterate over each kappa value
     for kappa in kappa_values:
@@ -110,11 +110,11 @@ for prime_name, param in params.items():
             # Display the results for each valid power of two
             for B_pow2 in previous_powers_of_two:
                 pairs = find_b_k_pairs(B_pow2, L)
-                print(f"\tkappa = {kappa}, n = {n}: B = {B_pow2}, L = {L}")
+                #print(f"\tkappa = {kappa}, n = {n}: B = {B_pow2}, L = {L}")
                 for b, k, B_pow2_in_pair in pairs:
                     # Recalculate L for each pair
                     L = find_smallest_L_log(b**k, p)
                     
                     # Discard any L equal to 1 or less
-                    if L > 1:
+                    if L > 0:
                         print(f"run_single_{prime_name.lower()}_benchmark!(&mut group, 1, {kappa}, {n}, {B_pow2_in_pair}, {L}, {b}, {k});")

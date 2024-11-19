@@ -855,7 +855,6 @@ mod tests_goldilocks {
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
 
-
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
@@ -905,7 +904,7 @@ mod tests_goldilocks {
             &ccs,
         )
         .expect("Linearization Verification error");
-    println!("Linearization Verification passed");
+        println!("Linearization Verification passed");
 
         let lcccs = linearization_verification;
 
@@ -1016,7 +1015,7 @@ mod tests_stark {
 
         println!("Parameters:");
         println!("B = {}", PP::B);
-        println!("L = {}", PP::L); 
+        println!("L = {}", PP::L);
         println!("B_SMALL = {}", PP::B_SMALL);
         println!("K = {}", PP::K);
         println!("C = {}", C);
