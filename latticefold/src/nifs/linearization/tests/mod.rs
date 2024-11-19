@@ -1,15 +1,15 @@
 use super::*;
+use crate::decomposition_parameters::test_params::{StarkDP, DP};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs},
     commitment::AjtaiCommitmentScheme,
-    decomposition_parameters::{DecompositionParams},
+    decomposition_parameters::DecompositionParams,
     transcript::poseidon::PoseidonTranscript,
 };
 use cyclotomic_rings::rings::StarkChallengeSet;
 use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
 use num_traits::One;
 use rand::thread_rng;
-use crate::decomposition_parameters::test_params::{DP, StarkDP};
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
@@ -134,12 +134,7 @@ fn test_compute_evaluation_vectors() {
     let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
         .M
         .iter()
-        .map(|M| {
-            DenseMultilinearExtension::from_slice(
-                ccs.s,
-                &mat_vec_mul(M, &z_ccs).unwrap(),
-            )
-        })
+        .map(|M| DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z_ccs).unwrap()))
         .collect();
 
     let new_u = compute_u(&Mz_mles, &point_r).unwrap();
