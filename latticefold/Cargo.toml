@@ -20,13 +20,11 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 thiserror = { workspace = true }
 num-bigint = { workspace = true }
-dhat = { version = "0.3.2", optional = true }
 rayon = { version = "1.10.0", optional = true }
 
 [features]
 default = [ "std" ]
 std = [ "ark-std/std", "cyclotomic-rings/std", "rand/std" ]
-dhat-heap = [ "dep:dhat" ]
 parallel = [ 
     "dep:rayon",
     "std",
@@ -35,6 +33,9 @@ parallel = [
     "lattirust-poly/parallel",
     "lattirust-ring/parallel",
  ]
+
+# dev-only
+dhat-heap = []
 
 [profile.release]
 debug = 1
@@ -54,8 +55,10 @@ match_ref_pats = "warn"
 match_bool = "warn"
 needless_bool = "warn"
 implicit_clone = "warn"
+
 [dev-dependencies]
 criterion = "0.5.1"
+dhat = "0.3.2"
 
 [[bench]]
 name = "ajtai"
