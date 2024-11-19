@@ -20,14 +20,6 @@ pub struct LinearizationProof<NTT: OverField> {
     pub u: Vec<NTT>,
 }
 
-pub(crate) trait ChallengeGenerator<NTT: OverField> {
-    fn generate_challenges(transcript: &mut impl Transcript<NTT>, log_m: usize) -> Vec<NTT>;
-}
-
-pub(crate) struct BetaChallengeGenerator<NTT> {
-    _ntt: PhantomData<NTT>,
-}
-
 pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
     fn prove<const C: usize>(
         cm_i: &CCCS<C, NTT>,

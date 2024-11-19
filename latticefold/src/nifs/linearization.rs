@@ -1,5 +1,3 @@
-use ark_ff::Field;
-use ark_ff::PrimeField;
 use ark_std::cfg_iter;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::polynomials::VirtualPolynomial;
@@ -7,7 +5,6 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{eq_eval, VPAuxInfo},
 };
-use lattirust_ring::OverField;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
@@ -21,6 +18,7 @@ use crate::{
 use rayon::prelude::*;
 
 use crate::arith::Instance;
+use crate::nifs::linearization::utils::SqueezeBeta;
 use crate::utils::sumcheck::Proof;
 pub use structs::*;
 
@@ -36,7 +34,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(VirtualPolynomial<NTT>, Vec<NTT>), LinearizationError<NTT>> {
-        let beta_s = BetaChallengeGenerator::generate_challenges(transcript, ccs.s);
+        let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 
         let Mz_mles = ccs
             .M
@@ -209,7 +207,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
-        let beta_s = BetaChallengeGenerator::generate_challenges(transcript, ccs.s);
+        let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 
         let (point_r, s) = Self::verify_sumcheck_proof(proof, transcript, ccs)?;
 
@@ -219,19 +217,5 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         transcript.absorb_slice(&proof.u);
 
         Ok(Self::prepare_final_state(cm_i, point_r, proof))
-    }
-}
-
-impl<NTT: OverField> ChallengeGenerator<NTT> for BetaChallengeGenerator<NTT> {
-    fn generate_challenges(transcript: &mut impl Transcript<NTT>, log_m: usize) -> Vec<NTT> {
-        transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
-            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
-        ));
-
-        transcript
-            .get_challenges(log_m)
-            .into_iter()
-            .map(|x| x.into())
-            .collect()
     }
 }

@@ -1,5 +1,6 @@
 use super::*;
 use crate::decomposition_parameters::test_params::{StarkDP, DP};
+use crate::nifs::linearization::utils::SqueezeBeta;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs},
     commitment::AjtaiCommitmentScheme,
@@ -179,7 +180,8 @@ fn test_verify_sumcheck_proof() {
     let mut verify_transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
 
     // Generate beta challenges to match prover's transcript state
-    let _beta_s = BetaChallengeGenerator::generate_challenges(&mut verify_transcript, ccs.s);
+    let _beta_s = verify_transcript.squeeze_beta_challenges(ccs.s);
+    // let _beta_s = BetaChallengeGenerator::generate_challenges(&mut verify_transcript, ccs.s);
 
     let result = LFLinearizationVerifier::<
     RqNTT,
@@ -214,7 +216,8 @@ fn test_verify_evaluation_claim() {
 
     // Reset transcript and generate verification data
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
-    let beta_s = BetaChallengeGenerator::generate_challenges(&mut transcript, ccs.s);
+    let beta_s = transcript.squeeze_beta_challenges(ccs.s);
+    // let beta_s = BetaChallengeGenerator::generate_challenges(&mut transcript, ccs.s);
 
     let (point_r, s) = LFLinearizationVerifier::<
     RqNTT,
