@@ -29,9 +29,7 @@ mod structs;
 mod tests;
 mod utils;
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
-    for LFLinearizationProver<NTT, T>
-{
+impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     fn compute_z_ccs<const C: usize>(
         wit: &Witness<NTT>,
         x_ccs: &[NTT],
@@ -111,7 +109,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         Ok((point_r.to_vec(), v, u))
     }
+}
 
+impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
+    for LFLinearizationProver<NTT, T>
+{
     fn prove<const C: usize>(
         cm_i: &CCCS<C, NTT>,
         wit: &Witness<NTT>,
@@ -147,9 +149,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
     }
 }
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
-    for LFLinearizationVerifier<NTT, T>
-{
+impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
     fn verify_sumcheck_proof(
         proof: &LinearizationProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
@@ -209,7 +209,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
             h: NTT::one(),
         }
     }
+}
 
+impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
+    for LFLinearizationVerifier<NTT, T>
+{
     fn verify<const C: usize>(
         cm_i: &CCCS<C, NTT>,
         proof: &LinearizationProof<NTT>,
