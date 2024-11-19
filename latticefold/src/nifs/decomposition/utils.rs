@@ -61,7 +61,7 @@ mod tests {
     use rand::{rngs::ThreadRng, thread_rng, Rng};
 
     use crate::{
-        decomposition_parameters::{test_params::PP, DecompositionParams},
+        decomposition_parameters::{test_params::DP, DecompositionParams},
         nifs::decomposition::utils::{
             decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back,
         },
@@ -88,18 +88,18 @@ mod tests {
         const N: usize = 32;
         let mut rng = thread_rng();
         let test_vector: Vec<RqPoly> = (0..N)
-            .map(|_| draw_ring_below_bound::<RqPoly, { PP::B }>(&mut rng))
+            .map(|_| draw_ring_below_bound::<RqPoly, { DP::B }>(&mut rng))
             .collect();
 
         // Call the function
-        let decomposed = decompose_B_vec_into_k_vec::<RqNTT, PP>(&test_vector);
+        let decomposed = decompose_B_vec_into_k_vec::<RqNTT, DP>(&test_vector);
 
         // Check that we get K vectors back from the decomposition
         assert_eq!(
             decomposed.len(),
-            PP::K,
+            DP::K,
             "Decomposition should output K={} vectors",
-            PP::K
+            DP::K
         );
 
         // Check the length of each inner vector
@@ -112,7 +112,7 @@ mod tests {
             let decomp_i = decomposed.iter().map(|d_j| d_j[i]).collect::<Vec<_>>();
             assert_eq!(
                 test_vector[i],
-                recompose(&decomp_i, RqPoly::from(PP::B_SMALL as u128))
+                recompose(&decomp_i, RqPoly::from(DP::B_SMALL as u128))
             );
         }
     }
@@ -124,7 +124,7 @@ mod tests {
             .iter()
             .map(|vec| {
                 vec.iter()
-                    .flat_map(|&x| decompose_balanced_vec(&[x.icrt()], PP::B, PP::L))
+                    .flat_map(|&x| decompose_balanced_vec(&[x.icrt()], DP::B, DP::L))
                     .flatten()
                     .collect()
             })
@@ -144,12 +144,12 @@ mod tests {
             .map(|vec| {
                 recompose(
                     vec,
-                    NTT::CoefficientRepresentation::from(PP::B_SMALL as u128),
+                    NTT::CoefficientRepresentation::from(DP::B_SMALL as u128),
                 )
             })
             .collect::<Vec<_>>()
-            .chunks(PP::L)
-            .map(|chunk| recompose(chunk, NTT::CoefficientRepresentation::from(PP::B)))
+            .chunks(DP::L)
+            .map(|chunk| recompose(chunk, NTT::CoefficientRepresentation::from(DP::B)))
             .collect()
     }
 
@@ -163,10 +163,10 @@ mod tests {
         const N: usize = 32;
         let mut rng = thread_rng();
         let test_vector: Vec<RqNTT> = (0..N)
-            .map(|_| draw_ring_below_bound::<RqPoly, { PP::B }>(&mut rng).crt())
+            .map(|_| draw_ring_below_bound::<RqPoly, { DP::B }>(&mut rng).crt())
             .collect();
         let decomposed_and_composed_back =
-            decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, PP>(test_vector.clone());
+            decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, DP>(test_vector.clone());
         let restore_decomposed =
             recompose_from_k_vec_to_big_vec::<RqNTT>(&decomposed_and_composed_back);
 

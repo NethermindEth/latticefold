@@ -5,7 +5,7 @@ use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, gadget_recompose},
+    balanced_decomposition::{gadget_decompose, gadget_recompose},
     cyclotomic_ring::{CRT, ICRT},
     PolyRing, Ring,
 };
@@ -168,11 +168,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w_ccs.clone());
 
         // decompose radix-B
-        let f_coeff: Vec<NTT::CoefficientRepresentation> =
-            decompose_balanced_vec(&w_coeff, P::B, P::L)
-                .into_iter()
-                .flatten()
-                .collect();
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = gadget_decompose(&w_coeff, P::B, P::L);
 
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
@@ -338,10 +334,16 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 #[cfg(test)]
 pub mod tests {
     use ark_ff::{One, Zero};
+    use rand::thread_rng;
 
     use super::*;
-    use crate::arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use cyclotomic_rings::rings::{BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly};
+    use crate::{
+        arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z},
+        decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP},
+    };
+    use cyclotomic_rings::rings::{
+        BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
+    };
     use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
@@ -413,5 +415,51 @@ pub mod tests {
                 vec![GoldilocksRingNTT::zero(), GoldilocksRingNTT::one()]
             ]
         );
+    }
+
+    impl<NTT: SuitableRing> Witness<NTT> {
+        fn check_data<P: DecompositionParams>(&self) -> bool {
+            let w_coeff = ICRT::elementwise_icrt(self.w_ccs.clone());
+
+            (self.f_coeff == gadget_decompose(&w_coeff, P::B, P::L))
+                && (CRT::elementwise_crt(self.f_coeff.clone()) == self.f)
+                && (self.f_hat == Self::get_fhat(&self.f_coeff))
+        }
+    }
+
+    const WIT_LEN: usize = 1024;
+
+    #[test]
+    fn test_from_w_ccs() {
+        let mut rng = thread_rng();
+
+        let random_witness =
+            Witness::<GoldilocksRingNTT>::rand::<_, GoldilocksDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_w_ccs::<GoldilocksDP>(random_witness.w_ccs.clone());
+
+        assert!(recreated_witness.check_data::<GoldilocksDP>());
+        assert_eq!(recreated_witness, random_witness);
+    }
+
+    #[test]
+    fn test_from_f() {
+        let mut rng = thread_rng();
+
+        let random_witness = Witness::<BabyBearRingNTT>::rand::<_, BabyBearDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_f::<BabyBearDP>(random_witness.f.clone());
+
+        assert!(recreated_witness.check_data::<BabyBearDP>());
+        assert_eq!(recreated_witness, random_witness);
+    }
+
+    #[test]
+    fn test_from_f_coeff() {
+        let mut rng = thread_rng();
+
+        let random_witness = Witness::<StarkRingNTT>::rand::<_, StarkDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_f_coeff::<StarkDP>(random_witness.f_coeff.clone());
+
+        assert!(recreated_witness.check_data::<StarkDP>());
+        assert_eq!(recreated_witness, random_witness);
     }
 }

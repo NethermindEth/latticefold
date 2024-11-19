@@ -72,12 +72,9 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
         let commitment: Vec<NTT> = cfg_iter!(self.matrix)
             .map(|row| {
-                let mut sum = NTT::zero();
-                #[allow(clippy::op_ref)]
-                for j in 0..W {
-                    sum += row[j] * &f[j];
-                }
-                sum
+                row.iter()
+                    .zip(f.iter())
+                    .fold(NTT::zero(), |acc, (row_j, f_j)| acc + *row_j * f_j)
             })
             .collect();
 

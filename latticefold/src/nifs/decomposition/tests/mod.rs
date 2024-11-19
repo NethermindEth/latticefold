@@ -6,14 +6,14 @@ use crate::nifs::linearization::utils::compute_u;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::{AjtaiCommitmentScheme, Commitment},
-    decomposition_parameters::{test_params::GoldilocksPP as PP, DecompositionParams},
+    decomposition_parameters::{test_params::GoldilocksDP as DP, DecompositionParams},
     nifs::decomposition::{
         DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
     },
     transcript::poseidon::PoseidonTranscript,
 };
 const WIT_LEN: usize = 4;
-const W: usize = WIT_LEN * PP::L;
+const W: usize = WIT_LEN * DP::L;
 
 fn generate_decomposition_args<RqNTT, CS>() -> (
     LCCCS<4, RqNTT>,
@@ -36,7 +36,7 @@ where
 
     let ccs = get_test_ccs(W);
 
-    let wit = Witness::rand::<_, PP>(&mut rng, WIT_LEN);
+    let wit = Witness::rand::<_, DP>(&mut rng, WIT_LEN);
 
     let mut z: Vec<RqNTT> = Vec::with_capacity(x_ccs.len() + WIT_LEN + 1);
 
@@ -91,7 +91,7 @@ where
         generate_decomposition_args::<RqNTT, CS>();
 
     let (_, _, decomposition_proof) =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, PP>(
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, DP>(
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -100,7 +100,7 @@ where
         )
         .unwrap();
 
-    let res = LFDecompositionVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify::<4, PP>(
+    let res = LFDecompositionVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify::<4, DP>(
         &lcccs,
         &decomposition_proof,
         &mut verifier_transcript,
@@ -114,7 +114,7 @@ mod stark {
     use crate::arith::tests::get_test_dummy_ccs;
     use crate::arith::{Witness, CCCS};
     use crate::commitment::AjtaiCommitmentScheme;
-    use crate::decomposition_parameters::{test_params::PP_STARK, DecompositionParams};
+    use crate::decomposition_parameters::{test_params::StarkDP, DecompositionParams};
     use crate::nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
     };
@@ -141,15 +141,15 @@ mod stark {
         const C: usize = 16;
         const X_LEN: usize = 1;
         const WIT_LEN: usize = 2048;
-        const W: usize = WIT_LEN * PP_STARK::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * StarkDP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
-        let wit = Witness::from_w_ccs::<PP_STARK>(w_ccs);
+        let wit = Witness::from_w_ccs::<StarkDP>(w_ccs);
 
         // Make bound and security checks
-        let witness_within_bound = wit.within_bound(PP_STARK::B);
+        let witness_within_bound = wit.within_bound(StarkDP::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
@@ -160,8 +160,8 @@ mod stark {
             C,
             16,
             W,
-            PP_STARK::B,
-            PP_STARK::L,
+            StarkDP::B,
+            StarkDP::L,
             witness_within_bound,
         ) {
             println!(" Bound condition satisfied for 128 bits security");
@@ -169,7 +169,7 @@ mod stark {
             println!("Bound condition not satisfied for 128 bits security");
         }
         let cm_i = CCCS {
-            cm: wit.commit::<C, W, PP_STARK>(&scheme).unwrap(),
+            cm: wit.commit::<C, W, StarkDP>(&scheme).unwrap(),
             x_ccs,
         };
         let mut transcript = PoseidonTranscript::<R, CS>::default();
