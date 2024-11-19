@@ -23,7 +23,7 @@ mod structs;
 
 #[cfg(test)]
 mod tests;
-mod utils;
+pub mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
     for LFLinearizationProver<NTT, T>

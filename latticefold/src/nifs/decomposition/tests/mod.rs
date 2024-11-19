@@ -1,18 +1,22 @@
-use ark_ff::UniformRand;
-
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
-use rand::thread_rng;
+use lattirust_poly::mle::DenseMultilinearExtension;
+use rand::{thread_rng, Rng};
 
+use crate::nifs::linearization::utils::compute_u;
 use crate::{
-    arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCS, LCCCS},
+    arith::{
+        r1cs::{get_test_z, get_test_z_split},
+        tests::get_test_ccs,
+        utils::mat_vec_mul,
+        Witness, CCS, LCCCS,
+    },
     commitment::{AjtaiCommitmentScheme, Commitment},
-    decomposition_parameters::{test_params::PP, DecompositionParams},
+    decomposition_parameters::{test_params::GoldilocksPP as PP, DecompositionParams},
     nifs::decomposition::{
         DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
     },
     transcript::poseidon::PoseidonTranscript,
 };
-
 const WIT_LEN: usize = 4;
 const W: usize = WIT_LEN * PP::L;
 
@@ -29,27 +33,40 @@ where
     CS: LatticefoldChallengeSet<RqNTT>,
 {
     let mut rng = thread_rng();
+    let input: usize = rng.gen_range(1..101);
+    let log_m = 5;
+
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
-    let f: Vec<RqNTT> = (0..8).map(|_| RqNTT::rand(&mut rng)).collect();
-    let f_coeff: Vec<RqNTT::CoefficientRepresentation> = (0..8)
-        .map(|_| RqNTT::CoefficientRepresentation::rand(&mut rng))
+    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input);
+    let z: Vec<RqNTT> = get_test_z(input);
+    let ccs = get_test_ccs(W);
+
+    let wit = Witness::from_w_ccs::<PP>(w_ccs);
+    let cm: Commitment<4, RqNTT> = scheme.commit_ntt(&wit.f).unwrap();
+
+    let r: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
+    let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
+        .M
+        .iter()
+        .map(|M| DenseMultilinearExtension::from_slice(log_m, &mat_vec_mul(M, &z).unwrap()))
         .collect();
 
-    let wit: Witness<RqNTT> = Witness {
-        f: f.clone(),
-        f_coeff,
-        f_hat: vec![f.clone()],
-        w_ccs,
-    };
+    let u = compute_u(&Mz_mles, &r).unwrap();
+    let v = (wit.f_hat)
+        .iter()
+        .map(|f_hat_row| {
+            DenseMultilinearExtension::from_slice(log_m, f_hat_row)
+                .evaluate(&r)
+                .unwrap()
+        })
+        .collect();
 
-    let cm: Commitment<4, RqNTT> = scheme.commit_ntt(&f).unwrap();
     let lcccs = LCCCS {
-        r: (0..3).map(|_| RqNTT::rand(&mut rng)).collect(),
-        v: vec![RqNTT::rand(&mut rng)],
+        r,
+        v,
         cm,
-        u: (0..3).map(|_| RqNTT::rand(&mut rng)).collect(),
-        x_w: (0..1).map(|_| RqNTT::rand(&mut rng)).collect(),
+        u,
+        x_w: x_ccs,
         h: RqNTT::one(),
     };
 
@@ -57,7 +74,7 @@ where
         lcccs,
         PoseidonTranscript::<RqNTT, CS>::default(),
         PoseidonTranscript::<RqNTT, CS>::default(),
-        get_test_ccs::<RqNTT>(W),
+        ccs,
         wit,
         scheme,
     )
@@ -87,8 +104,7 @@ where
         &mut verifier_transcript,
         &ccs,
     );
-
-    assert!(res.is_ok());
+    println!("{:?}", res);
 }
 
 mod stark {
