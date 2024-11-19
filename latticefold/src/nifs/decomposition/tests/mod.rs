@@ -4,12 +4,7 @@ use rand::{thread_rng, Rng};
 
 use crate::nifs::linearization::utils::compute_u;
 use crate::{
-    arith::{
-        r1cs::{get_test_z, get_test_z_split},
-        tests::get_test_ccs,
-        utils::mat_vec_mul,
-        Witness, CCS, LCCCS,
-    },
+    arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::{AjtaiCommitmentScheme, Commitment},
     decomposition_parameters::{test_params::GoldilocksPP as PP, DecompositionParams},
     nifs::decomposition::{
@@ -37,11 +32,18 @@ where
     let log_m = 5;
 
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input);
-    let z: Vec<RqNTT> = get_test_z(input);
+    let (_, x_ccs, _) = get_test_z_split::<RqNTT>(input);
+
     let ccs = get_test_ccs(W);
 
-    let wit = Witness::from_w_ccs::<PP>(w_ccs);
+    let wit = Witness::rand::<_, PP>(&mut rng, WIT_LEN);
+
+    let mut z: Vec<RqNTT> = Vec::with_capacity(x_ccs.len() + WIT_LEN + 1);
+
+    z.extend_from_slice(&x_ccs);
+    z.push(RqNTT::one());
+    z.extend_from_slice(&wit.w_ccs);
+
     let cm: Commitment<4, RqNTT> = scheme.commit_ntt(&wit.f).unwrap();
 
     let r: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
@@ -104,7 +106,7 @@ where
         &mut verifier_transcript,
         &ccs,
     );
-    println!("{:?}", res);
+    assert!(res.is_ok())
 }
 
 mod stark {
