@@ -151,7 +151,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                     .map(|f_hat_mle| {
                         f_hat_mle
                             .evaluate(&r_0)
-                            .ok_or(FoldingError::<NTT>::EvaluationError("f_hat".to_string()))
+                            .ok_or(FoldingError::<NTT>::EvaluationError(
+                                super::error::MleEvaluationError::IncorrectLength(
+                                    r_0.len(),
+                                    f_hat_mle.evaluations.len(),
+                                ),
+                            ))
                     })
                     .collect::<Result<Vec<_>, _>>()
             })
@@ -163,7 +168,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                     .iter()
                     .map(|mle| {
                         mle.evaluate(r_0.as_slice())
-                            .ok_or(FoldingError::<NTT>::EvaluationError("Mz".to_string()))
+                            .ok_or(FoldingError::<NTT>::EvaluationError(
+                                super::error::MleEvaluationError::IncorrectLength(
+                                    r_0.len(),
+                                    mle.evaluations.len(),
+                                ),
+                            ))
                     })
                     .collect::<Result<Vec<_>, _>>()
             })

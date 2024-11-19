@@ -16,6 +16,7 @@ use linearization::{
     LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
     LinearizationVerifier,
 };
+mod common_helpers;
 pub mod decomposition;
 pub mod error;
 pub mod folding;

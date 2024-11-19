@@ -63,7 +63,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                     .map(|f_hat_row| {
                         DenseMultilinearExtension::from_slice(log_m, f_hat_row)
                             .evaluate(&cm_i.r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)
+                            .ok_or(DecompositionError::EvaluationError(
+                                super::error::MleEvaluationError::IncorrectLength(
+                                    cm_i.r.len(),
+                                    f_hat_row.len(),
+                                ),
+                            ))
                     })
                     .collect::<Result<Vec<_>, _>>()
             })
@@ -87,7 +92,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                     u_s_for_i.push(
                         DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
                             .evaluate(&cm_i.r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)?,
+                            .ok_or(DecompositionError::EvaluationError(
+                                super::error::MleEvaluationError::IncorrectLength(ccs.s, 1),
+                            ))?,
                     );
                 }
 
