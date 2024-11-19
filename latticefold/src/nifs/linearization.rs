@@ -54,7 +54,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
     fn generate_sumcheck_proof(
         g: &VirtualPolynomial<NTT>,
-        _beta_s: &[NTT],
         transcript: &mut impl Transcript<NTT>,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, g);
@@ -108,9 +107,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
-        let (g, beta_s) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
+        let (g, _) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
 
-        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, &beta_s, transcript)?;
+        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, transcript)?;
 
         let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, ccs, &z_ccs)?;
 

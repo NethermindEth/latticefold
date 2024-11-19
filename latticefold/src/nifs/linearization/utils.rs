@@ -13,7 +13,6 @@ use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
-use std::marker::PhantomData;
 
 /// Batch compute the values of mles at the point r.
 pub fn compute_u<NTT: OverField>(
