@@ -37,10 +37,7 @@ fn setup_test_environment<RqNTT: SuitableRing>() -> (
 fn test_compute_z_ccs() {
     let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT>();
 
-    let z_ccs = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-        &wit,
-        &cm_i.x_ccs
-    ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     // Check z_ccs structure
     assert_eq!(z_ccs.len(), cm_i.x_ccs.len() + 1 + wit.w_ccs.len());
@@ -52,12 +49,9 @@ fn test_compute_z_ccs() {
 
 #[test]
 fn test_construct_polynomial() {
-    let (wit, cm_i, ccs, scheme) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
 
-    let z_ccs = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-        &wit,
-        &cm_i.x_ccs
-    ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
     let (g, beta_s) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::construct_polynomial_g(
@@ -75,21 +69,18 @@ fn test_construct_polynomial() {
 
 #[test]
 fn test_generate_sumcheck() {
-    let (wit, cm_i, ccs, scheme) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
 
-    let z_state = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-        &wit,
-        &cm_i.x_ccs
-    ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
     let (g, beta_s) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::construct_polynomial_g(
-        &z_state,
+        &z_ccs,
         &mut transcript,
         &ccs
     ).unwrap();
 
-    let (proof, point_r) = LFLinearizationProver::<
+    let (_proof, point_r) = LFLinearizationProver::<
         RqNTT,
         PoseidonTranscript<RqNTT, StarkChallengeSet>,
     >::generate_sumcheck_proof(&g, &beta_s, &mut transcript)
@@ -101,12 +92,9 @@ fn test_generate_sumcheck() {
 
 #[test]
 fn test_compute_evaluation_vectors() {
-    let (wit, cm_i, ccs, scheme) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
 
-    let z_ccs = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_z_ccs::<C>(
-            &wit,
-            &cm_i.x_ccs
-        ).unwrap();
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
     let (g, beta_s) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::construct_polynomial_g(
@@ -121,17 +109,16 @@ fn test_compute_evaluation_vectors() {
             &mut transcript
         ).unwrap();
 
-    let eval_state = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::compute_evaluation_vectors(
-            &wit,
-            &point_r,
-            &ccs,
-            &z_ccs
-        ).unwrap();
+    let (point_r, v, u) = LFLinearizationProver::<
+        RqNTT,
+        PoseidonTranscript<RqNTT, StarkChallengeSet>,
+    >::compute_evaluation_vectors(&wit, &point_r, &ccs, &z_ccs)
+    .unwrap();
 
     // Check lengths and non-empty values
-    assert_eq!(eval_state.point_r.len(), ccs.s);
-    assert!(!eval_state.v.is_empty());
-    assert!(!eval_state.u.is_empty());
+    assert_eq!(point_r.len(), ccs.s);
+    assert!(!v.is_empty());
+    assert!(!u.is_empty());
 
     // Check v evaluations
     let witness_f_hat: Vec<RqNTT> = cfg_iter!(wit.f_hat)
@@ -141,8 +128,8 @@ fn test_compute_evaluation_vectors() {
                 .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
         })
         .collect();
-    assert_eq!(eval_state.v, witness_f_hat);
-    
+    assert_eq!(v, witness_f_hat);
+
     // Check u evaluations
     let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
         .M
@@ -155,16 +142,13 @@ fn test_compute_evaluation_vectors() {
         })
         .collect();
 
-    let u = compute_u(&Mz_mles, &point_r).unwrap();
-    assert_eq!(eval_state.u, u);
-
-
-
+    let new_u = compute_u(&Mz_mles, &point_r).unwrap();
+    assert_eq!(u, new_u);
 }
 
 #[test]
 fn test_full_prove() {
-    let (wit, cm_i, ccs, scheme) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
     let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
 
     let (lcccs, proof) =
@@ -179,4 +163,138 @@ fn test_full_prove() {
     assert_eq!(lcccs.r.len(), ccs.s);
     assert_eq!(lcccs.v.len(), proof.v.len());
     assert_eq!(lcccs.u.len(), proof.u.len());
+}
+
+#[test]
+fn test_verify_sumcheck_proof() {
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
+    let mut prove_transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
+
+    // Generate proof
+    let (lcccs, proof) =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::prove(
+            &cm_i,
+            &wit,
+            &mut prove_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+    // We need to recreate the exact same transcript state
+    let mut verify_transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
+
+    // Generate beta challenges to match prover's transcript state
+    let _beta_s = BetaChallengeGenerator::generate_challenges(&mut verify_transcript, ccs.s);
+
+    let result = LFLinearizationVerifier::<
+    RqNTT,
+    PoseidonTranscript<RqNTT, StarkChallengeSet>,
+    >::verify_sumcheck_proof(&proof, &mut verify_transcript, &ccs);
+
+    // Instead of unwrapping, handle the result
+    match result {
+        Ok((point_r, _s)) => {
+            assert_eq!(point_r.len(), ccs.s);
+            // We know that point_r from lcccs is valid
+            assert_eq!(point_r, lcccs.r);
+        }
+        Err(e) => panic!("Sumcheck verification failed: {:?}", e),
+    }
+}
+
+#[test]
+fn test_verify_evaluation_claim() {
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
+    let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
+
+    // Generate proof
+    let (_, proof) =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::prove(
+            &cm_i,
+            &wit,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+
+    // Reset transcript and generate verification data
+    let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
+    let beta_s = BetaChallengeGenerator::generate_challenges(&mut transcript, ccs.s);
+
+    let (point_r, s) = LFLinearizationVerifier::<
+    RqNTT,
+    PoseidonTranscript<RqNTT, StarkChallengeSet>,
+    >::verify_sumcheck_proof(&proof, &mut transcript, &ccs)
+        .unwrap();
+
+    // Test the evaluation claim verification
+    let result = LFLinearizationVerifier::<
+    RqNTT,
+    PoseidonTranscript<RqNTT, StarkChallengeSet>,
+    >::verify_evaluation_claim(&beta_s, &point_r, s, &proof, &ccs);
+
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_prepare_final_state() {
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
+    let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
+
+    let (_, proof) =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::prove(
+            &cm_i,
+            &wit,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+
+    let point_r = vec![RqNTT::one(); ccs.s]; // Example point_r
+
+    let lcccs = LFLinearizationVerifier::<
+    RqNTT,
+    PoseidonTranscript<RqNTT, StarkChallengeSet>,
+    >::prepare_final_state::<C>(&cm_i, point_r.clone(), &proof);
+
+    // Verify final state structure
+    assert_eq!(lcccs.r, point_r);
+    assert_eq!(lcccs.v, proof.v);
+    assert_eq!(lcccs.u, proof.u);
+    assert_eq!(lcccs.cm, cm_i.cm);
+    assert_eq!(lcccs.x_w, cm_i.x_ccs);
+    assert_eq!(lcccs.h, RqNTT::one());
+}
+
+#[test]
+fn test_verify_invalid_proof() {
+    let (wit, cm_i, ccs, _scheme) = setup_test_environment::<RqNTT>();
+    let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
+
+    let (_, mut proof) =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::prove(
+            &cm_i,
+            &wit,
+            &mut transcript,
+            &ccs,
+        )
+        .unwrap();
+
+    // Corrupt the proof
+    if !proof.u.is_empty() {
+        proof.u[0] += RqNTT::one();
+    }
+
+    // Reset transcript for verification
+    let mut transcript = PoseidonTranscript::<RqNTT, StarkChallengeSet>::default();
+
+    let result =
+        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, StarkChallengeSet>>::verify::<C>(
+            &cm_i,
+            &proof,
+            &mut transcript,
+            &ccs,
+        );
+
+    assert!(result.is_err());
 }
