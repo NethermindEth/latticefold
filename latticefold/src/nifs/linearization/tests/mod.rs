@@ -68,8 +68,9 @@ fn test_construct_polynomial() {
 
     // Check dimensions
     assert_eq!(beta_s.len(), ccs.s);
+
     // Check degree of g
-    //assert!(g.aux_info.max_degree <=  )
+    assert!(g.aux_info.max_degree <= ccs.q + 1)
 }
 
 #[test]
@@ -94,6 +95,7 @@ fn test_generate_sumcheck() {
     >::generate_sumcheck_proof(&g, &beta_s, &mut transcript)
     .unwrap();
 
+    // Check dimensions
     assert_eq!(point_r.len(), ccs.s);
 }
 
@@ -126,9 +128,38 @@ fn test_compute_evaluation_vectors() {
             &z_ccs
         ).unwrap();
 
+    // Check lengths and non-empty values
     assert_eq!(eval_state.point_r.len(), ccs.s);
     assert!(!eval_state.v.is_empty());
     assert!(!eval_state.u.is_empty());
+
+    // Check v evaluations
+    let witness_f_hat: Vec<RqNTT> = cfg_iter!(wit.f_hat)
+        .map(|f_hat_row| {
+            DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
+                .evaluate(&point_r)
+                .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
+        })
+        .collect();
+    assert_eq!(eval_state.v, witness_f_hat);
+    
+    // Check u evaluations
+    let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
+        .M
+        .iter()
+        .map(|M| {
+            DenseMultilinearExtension::from_slice(
+                ccs.s,
+                &mat_vec_mul(M, &z_ccs).unwrap(),
+            )
+        })
+        .collect();
+
+    let u = compute_u(&Mz_mles, &point_r).unwrap();
+    assert_eq!(eval_state.u, u);
+
+
+
 }
 
 #[test]
