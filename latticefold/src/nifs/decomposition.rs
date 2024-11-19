@@ -72,7 +72,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let u_s = cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
-                let mut u_s_for_i = Vec::with_capacity(ccs.s);
+                let mut u_s_for_i = Vec::with_capacity(ccs.t);
 
                 let z: Vec<NTT> = {
                     let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
