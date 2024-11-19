@@ -1,15 +1,18 @@
+use ark_ff::PrimeField;
+use ark_ff::Field;
 use ark_std::cfg_iter;
 use cyclotomic_rings::rings::SuitableRing;
+use lattirust_poly::polynomials::VirtualPolynomial;
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{eq_eval, VPAuxInfo},
 };
-
+use lattirust_ring::OverField;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
 use crate::{
-    arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
+    arith::{utils::mat_vec_mul, Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
@@ -20,22 +23,33 @@ use rayon::prelude::*;
 use crate::utils::sumcheck::Proof;
 pub use structs::*;
 
-pub(crate) mod challenge_generator;
 mod structs;
 
 #[cfg(test)]
 mod tests;
 mod utils;
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
-    fn prepare_prover_state<const C: usize>(
+impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
+    for LFLinearizationProver<NTT, T>
+{
+    fn compute_z_ccs<const C: usize>(
         wit: &Witness<NTT>,
-        cm_i: &CCCS<C, NTT>,
+        x_ccs: &[NTT],
+    ) -> Result<Vec<NTT>, LinearizationError<NTT>> {
+        let mut z_ccs = Vec::with_capacity(x_ccs.len() + 1 + wit.w_ccs.len());
+        z_ccs.extend_from_slice(x_ccs);
+        z_ccs.push(NTT::one());
+        z_ccs.extend_from_slice(&wit.w_ccs);
+
+        Ok(z_ccs)
+    }
+
+    fn construct_polynomial_g(
+        z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<ProverState<NTT>, LinearizationError<NTT>> {
+    ) -> Result<(VirtualPolynomial<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         let beta_s = BetaChallengeGenerator::generate_challenges(transcript, ccs.s);
-        let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
         let Mz_mles = ccs
             .M
@@ -43,28 +57,22 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
             .map(|M| {
                 Ok(DenseMultilinearExtension::from_slice(
                     ccs.s,
-                    &mat_vec_mul(M, &z_ccs)?,
+                    &mat_vec_mul(M, z_ccs)?,
                 ))
             })
-            .collect::<Result<_, LinearizationError<_>>>()?;
+            .collect::<Result<Vec<_>, LinearizationError<_>>>()?;
 
-        Ok(ProverState {
-            beta_s,
-            #[cfg(test)]
-            z_ccs,
-            Mz_mles,
-        })
+        let g = prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+
+        Ok((g, beta_s))
     }
 
     fn generate_sumcheck_proof(
-        state: &ProverState<NTT>,
+        g: &VirtualPolynomial<NTT>,
+        beta_s: &[NTT],
         transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
-        let g =
-            prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, &state.Mz_mles, &ccs.S, &state.beta_s)?;
-
-        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, g);
         let point_r = prover_state
             .randomness
             .into_iter()
@@ -73,20 +81,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
         Ok((sum_check_proof, point_r))
     }
-}
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
-    for LFLinearizationProver<NTT, T>
-{
-    fn prove<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
+    fn compute_evaluation_vectors(
         wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
+        point_r: &[NTT],
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
-        let state = Self::prepare_prover_state(wit, cm_i, transcript, ccs)?;
-        let (sum_check_proof, point_r) = Self::generate_sumcheck_proof(&state, transcript, ccs)?;
-
+        z_ccs: &[NTT],
+    ) -> Result<EvaluationState<NTT>, LinearizationError<NTT>> {
         let v: Vec<NTT> = cfg_iter!(wit.f_hat)
             .map(|f_hat_row| {
                 DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
@@ -95,22 +96,53 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             })
             .collect();
 
-        let u = compute_u(&state.Mz_mles, &point_r)?;
+        let Mz_mles = ccs
+            .M
+            .iter()
+            .map(|M| {
+                Ok(DenseMultilinearExtension::from_slice(
+                    ccs.s,
+                    &mat_vec_mul(M, z_ccs)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, LinearizationError<_>>>()?;
 
-        transcript.absorb_slice(&v);
-        transcript.absorb_slice(&u);
+        let u = compute_u(&Mz_mles, point_r)?;
+
+        Ok(EvaluationState {
+            point_r: point_r.to_vec(),
+            v,
+            u,
+        })
+    }
+
+    fn prove<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
+        wit: &Witness<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
+        let z_state = Self::compute_z_ccs::<C>(wit, &cm_i.x_ccs)?;
+        let (g, beta_s) = Self::construct_polynomial_g(&z_state, transcript, ccs)?;
+
+        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, &beta_s, transcript)?;
+
+        let eval_state = Self::compute_evaluation_vectors(wit, &point_r, ccs, &z_state)?;
+
+        transcript.absorb_slice(&eval_state.v);
+        transcript.absorb_slice(&eval_state.u);
 
         let linearization_proof = LinearizationProof {
-            linearization_sumcheck: sum_check_proof,
-            v: v.clone(),
-            u: u.clone(),
+            linearization_sumcheck: sumcheck_proof,
+            v: eval_state.v.clone(),
+            u: eval_state.u.clone(),
         };
 
         let lcccs = LCCCS {
-            r: point_r,
-            v,
+            r: eval_state.point_r,
+            v: eval_state.v,
             cm: cm_i.cm.clone(),
-            u,
+            u: eval_state.u,
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         };
@@ -189,5 +221,19 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         })
+    }
+}
+
+impl<NTT: OverField> ChallengeGenerator<NTT> for BetaChallengeGenerator<NTT> {
+    fn generate_challenges(transcript: &mut impl Transcript<NTT>, log_m: usize) -> Vec<NTT> {
+        transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+        ));
+
+        transcript
+            .get_challenges(log_m)
+            .into_iter()
+            .map(|x| x.into())
+            .collect()
     }
 }

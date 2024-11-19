@@ -1,3 +1,5 @@
+use ark_ff::PrimeField;
+use ark_ff::Field;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
@@ -9,7 +11,9 @@ use crate::{
     utils::sumcheck,
 };
 
+use crate::utils::sumcheck::Proof;
 use lattirust_poly::mle::DenseMultilinearExtension;
+use lattirust_poly::polynomials::VirtualPolynomial;
 use lattirust_ring::OverField;
 
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
@@ -29,17 +33,16 @@ pub(crate) struct BetaChallengeGenerator<NTT> {
     _ntt: PhantomData<NTT>,
 }
 
-pub(crate) struct ProverState<NTT: OverField> {
-    pub beta_s: Vec<NTT>,
-    #[cfg(test)]
-    pub z_ccs: Vec<NTT>,
-    pub Mz_mles: Vec<DenseMultilinearExtension<NTT>>,
-}
-
 pub(crate) struct VerifierState<NTT: OverField> {
     pub beta_s: Vec<NTT>,
     pub point_r: Vec<NTT>,
     pub s: NTT,
+}
+
+pub(crate) struct EvaluationState<NTT: OverField> {
+    pub point_r: Vec<NTT>,
+    pub v: Vec<NTT>,
+    pub u: Vec<NTT>,
 }
 
 pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
@@ -49,6 +52,30 @@ pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
+
+    fn compute_z_ccs<const C: usize>(
+        wit: &Witness<NTT>,
+        x_ccs: &[NTT],
+    ) -> Result<Vec<NTT>, LinearizationError<NTT>>;
+
+    fn construct_polynomial_g(
+        z_state: &[NTT],
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(VirtualPolynomial<NTT>, Vec<NTT>), LinearizationError<NTT>>;
+
+    fn generate_sumcheck_proof(
+        g: &VirtualPolynomial<NTT>,
+        beta_s: &[NTT],
+        transcript: &mut impl Transcript<NTT>,
+    ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>>;
+
+    fn compute_evaluation_vectors(
+        wit: &Witness<NTT>,
+        point_r: &[NTT],
+        ccs: &CCS<NTT>,
+        z_state: &[NTT],
+    ) -> Result<EvaluationState<NTT>, LinearizationError<NTT>>;
 }
 
 pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
