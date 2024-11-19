@@ -1,5 +1,3 @@
-use ark_ff::PrimeField;
-use ark_ff::Field;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
@@ -12,7 +10,6 @@ use crate::{
 };
 
 use crate::utils::sumcheck::Proof;
-use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_poly::polynomials::VirtualPolynomial;
 use lattirust_ring::OverField;
 
@@ -31,18 +28,6 @@ pub(crate) trait ChallengeGenerator<NTT: OverField> {
 
 pub(crate) struct BetaChallengeGenerator<NTT> {
     _ntt: PhantomData<NTT>,
-}
-
-pub(crate) struct VerifierState<NTT: OverField> {
-    pub beta_s: Vec<NTT>,
-    pub point_r: Vec<NTT>,
-    pub s: NTT,
-}
-
-pub(crate) struct EvaluationState<NTT: OverField> {
-    pub point_r: Vec<NTT>,
-    pub v: Vec<NTT>,
-    pub u: Vec<NTT>,
 }
 
 pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
@@ -75,7 +60,7 @@ pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
         point_r: &[NTT],
         ccs: &CCS<NTT>,
         z_state: &[NTT],
-    ) -> Result<EvaluationState<NTT>, LinearizationError<NTT>>;
+    ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>), LinearizationError<NTT>>;
 }
 
 pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
@@ -85,6 +70,26 @@ pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
+
+    fn verify_sumcheck_proof(
+        proof: &LinearizationProof<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(Vec<NTT>, NTT), LinearizationError<NTT>>;
+
+    fn verify_evaluation_claim(
+        beta_s: &[NTT],
+        point_r: &[NTT],
+        s: NTT,
+        proof: &LinearizationProof<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(), LinearizationError<NTT>>;
+
+    fn prepare_final_state<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
+        point_r: Vec<NTT>,
+        proof: &LinearizationProof<NTT>,
+    ) -> LCCCS<C, NTT>;
 }
 
 pub struct LFLinearizationProver<NTT, T> {
