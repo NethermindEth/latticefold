@@ -254,7 +254,7 @@ fn test_verify_invalid_proof() {
 
     // Corrupt the proof
     if !proof.u.is_empty() {
-        proof.u[0] = proof.u[0] + RqNTT::one();
+        proof.u[0] += RqNTT::one();
     }
 
     // Reset transcript for verification

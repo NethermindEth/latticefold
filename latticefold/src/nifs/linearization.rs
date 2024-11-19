@@ -78,7 +78,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         let v: Vec<NTT> = cfg_iter!(wit.f_hat)
             .map(|f_hat_row| {
                 DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
-                    .evaluate(&point_r)
+                    .evaluate(point_r)
                     .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
             })
             .collect();
@@ -127,9 +127,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         let lcccs = LCCCS {
             r: point_r,
-            v: v,
+            v,
             cm: cm_i.cm.clone(),
-            u: u,
+            u,
             x_w: cm_i.x_ccs.clone(),
             h: NTT::one(),
         };
