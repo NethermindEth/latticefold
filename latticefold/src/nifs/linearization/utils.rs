@@ -1,3 +1,4 @@
+use crate::ark_base::Vec;
 use ark_ff::PrimeField;
 use ark_std::cfg_iter;
 

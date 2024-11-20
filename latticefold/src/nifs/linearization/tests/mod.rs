@@ -7,6 +7,7 @@ use crate::{
     decomposition_parameters::DecompositionParams,
     transcript::poseidon::PoseidonTranscript,
 };
+use ark_std::test_rng;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
     BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet,
@@ -16,7 +17,7 @@ use lattirust_ring::cyclotomic_ring::models::{
     goldilocks::RqNTT as GoldilocksRqNTT, stark_prime::RqNTT as StarkRqNTT,
 };
 use num_traits::One;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
@@ -30,7 +31,7 @@ fn setup_test_environment<RqNTT: SuitableRing>(
     AjtaiCommitmentScheme<C, W, RqNTT>,
 ) {
     let ccs = get_test_ccs::<RqNTT>(W);
-    let mut rng = thread_rng();
+    let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input.unwrap_or(rng.gen_range(0..64)));
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
