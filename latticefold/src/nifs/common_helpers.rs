@@ -83,23 +83,6 @@ where
         .collect::<Result<_, E>>()
 }
 
-#[allow(dead_code)]
-#[cfg(not(feature = "parallel"))]
-pub fn to_mles_owned<I, R, E>(
-    n_vars: usize,
-    mle_s: I,
-) -> Result<Vec<DenseMultilinearExtension<R>>, E>
-where
-    I: IntoIterator<Item = Vec<R>>,
-    R: Ring,
-    E: From<MleEvaluationError> + Sync + Send,
-{
-    mle_s
-        .into_iter()
-        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, &M)))
-        .collect::<Result<_, E>>()
-}
-
 #[cfg(not(feature = "parallel"))]
 pub fn to_mles_err<I, R, E, E1>(
     n_vars: usize,
@@ -130,23 +113,6 @@ where
     mle_s
         .into_par_iter()
         .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, M)))
-        .collect::<Result<_, E>>()
-}
-
-#[allow(dead_code)]
-#[cfg(feature = "parallel")]
-pub fn to_mles_owned<I, R, E>(
-    n_vars: usize,
-    mle_s: I,
-) -> Result<Vec<DenseMultilinearExtension<R>>, E>
-where
-    I: IntoParallelIterator<Item = Vec<R>>,
-    R: Ring,
-    E: From<MleEvaluationError> + Sync + Send,
-{
-    mle_s
-        .into_par_iter()
-        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, &M)))
         .collect::<Result<_, E>>()
 }
 
