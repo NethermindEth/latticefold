@@ -49,7 +49,7 @@ pub fn evaluate_mles<R, V, I, E>(mle_s: I, point: &[R]) -> Result<Vec<R>, E>
 where
     R: Ring,
     V: Evaluate<R>,
-    I: IntoIterator<Item = V>,
+    I: Iterator<Item = V>,
     E: From<MleEvaluationError>,
 {
     cfg_into_iter!(mle_s)
@@ -127,8 +127,7 @@ pub fn to_mles_err<I, R, E, E1>(
 where
     I: IntoParallelIterator<Item = Result<Vec<R>, E1>>,
     R: Ring,
-    E: From<MleEvaluationError> + Sync + Send,
-    E1: Into<E>,
+    E: From<MleEvaluationError> + Sync + Send + From<E1>,
 {
     mle_s
         .into_par_iter()

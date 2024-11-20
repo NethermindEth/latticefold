@@ -12,6 +12,7 @@ use crate::{
     transcript::Transcript,
 };
 use cyclotomic_rings::rings::SuitableRing;
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
@@ -63,10 +64,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
-                evaluate_mles::<NTT, _, _, DecompositionError>(
-                    to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat))?.iter(),
-                    &cm_i.r,
-                )
+                let mles = to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat))?;
+                evaluate_mles::<NTT, _, _, DecompositionError>(cfg_iter!(mles), &cm_i.r)
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -82,14 +81,16 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                     z
                 };
 
-                let u_s_for_i = evaluate_mles::<NTT, _, _, DecompositionError>(
-                    to_mles_err::<_, _, DecompositionError, _>(
-                        ccs.s,
-                        cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z)),
-                    )?
-                    .iter(),
-                    &cm_i.r,
+                let mles = to_mles_err::<_, _, DecompositionError, _>(
+                    ccs.s,
+                    cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z)),
                 )?;
+
+                let u_s_for_i =
+                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
+                        cfg_iter!(mles),
+                        &cm_i.r,
+                    )?;
 
                 Ok(u_s_for_i)
             })

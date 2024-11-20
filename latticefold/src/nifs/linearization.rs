@@ -75,7 +75,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         Mz_mles: &[DenseMultilinearExtension<NTT>],
     ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         // Compute v
-        let v: Vec<NTT> = cfg_iter!(wit.f_hat).map(|f_hat_row| DenseMultilinearExtension::from_slice(ccs.s, f_hat_row).evaluate(&point_r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
+        let v: Vec<NTT> = cfg_iter!(wit.f_hat).map(|f_hat_row| DenseMultilinearExtension::from_slice(ccs.s, f_hat_row).evaluate(point_r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
 
         // Compute u_j
         let u = compute_u(Mz_mles, point_r)?;
@@ -90,7 +90,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     ) -> Result<Vec<DenseMultilinearExtension<NTT>>, LinearizationError<NTT>> {
         to_mles_err::<_, _, LinearizationError<NTT>, _>(
             ccs.s,
-            cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z_ccs)),
+            cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, z_ccs)),
         )
     }
 }
