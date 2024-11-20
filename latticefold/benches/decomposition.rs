@@ -283,19 +283,19 @@ fn benchmarks_main(c: &mut Criterion) {
         // run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
         // run_single_goldilocks_benchmark!(&mut group, 1, 14, 2048, 16384, 5, 2, 14);
         // run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 4, 2, 15);
-        // run_single_goldilocks_benchmark!(&mut group, 1, 16, 2048, 65536, 4, 2, 16);
+        run_single_goldilocks_benchmark!(&mut group, 1, 16, 2048, 65536, 4, 2, 16);
     }
 
-    // // StarkPrime
-    // {
-    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    //     let mut group = c.benchmark_group("Decomposition StarkPrime");
-    //     group.plot_config(plot_config.clone());
+    // StarkPrime
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Decomposition StarkPrime");
+        group.plot_config(plot_config.clone());
 
-    //     // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-    //     #[allow(clippy::identity_op)]
-    //     {
-    //         run_single_starkprime_benchmark!(&mut group, 1, 15, 512, 8633754724, 1, 92918, 2);
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
+        #[allow(clippy::identity_op)]
+        {
+            run_single_starkprime_benchmark!(&mut group, 1, 15, 512, 8633754724, 1, 92918, 2);
     //         run_single_starkprime_benchmark!(&mut group, 1, 15, 512, 8615125000, 1, 2050, 3);
     //         run_single_starkprime_benchmark!(&mut group, 1, 15, 512, 8540717056, 1, 304, 4);
     //         run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 6104921956, 1, 78134, 2);
@@ -412,8 +412,8 @@ fn benchmarks_main(c: &mut Criterion) {
     //         );
     //         run_single_starkprime_benchmark!(&mut group, 1, 25, 2048, 12471027759000, 1, 23190, 3);
     //         run_single_starkprime_benchmark!(&mut group, 1, 25, 2048, 12438910749456, 1, 1878, 4);
-    //     }
-    // }
+        }
+    }
 
     // // Frog
     // {

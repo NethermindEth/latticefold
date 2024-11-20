@@ -6,7 +6,8 @@ use criterion::{
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{
-        GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
+        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
+        GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
 use latticefold::nifs::decomposition::{
@@ -332,31 +333,31 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        /*
-        run_single_babybear_benchmark!(&mut group, 1, 6, 1024, 512, 4, 2, 9);
-        run_single_babybear_benchmark!(&mut group, 1, 7, 1024, 2048, 3, 2, 11);
-        run_single_babybear_benchmark!(&mut group, 1, 8, 4096, 2048, 3, 2, 11);
-        run_single_babybear_benchmark!(&mut group, 1, 9, 2048, 8192, 3, 2, 13);
+        
+        // run_single_babybear_benchmark!(&mut group, 1, 6, 1024, 512, 4, 2, 9);
+        // run_single_babybear_benchmark!(&mut group, 1, 7, 1024, 2048, 3, 2, 11);
+        // run_single_babybear_benchmark!(&mut group, 1, 8, 4096, 2048, 3, 2, 11);
+        // run_single_babybear_benchmark!(&mut group, 1, 9, 2048, 8192, 3, 2, 13);
         run_single_babybear_benchmark!(&mut group, 1, 10, 4096, 16384, 3, 2, 14);
-        */
+        
     }
 
-    // // StarkPrime
-    // {
-    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    //     let mut group = c.benchmark_group("Folding StarkPrime");
-    //     group.plot_config(plot_config.clone());
+    // StarkPrime
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Folding StarkPrime");
+        group.plot_config(plot_config.clone());
 
-    //     // Parameters Criterion, X_LEN, C, W, B, L, B_small, K 3052596316
-    //     #[allow(clippy::identity_op)]
-    //     {
-    //         run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316u128, 1, 2, 30);
-    //         run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296u128, 1, 2, 32);
-    //         run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592u128, 1, 2, 33);
-    //         run_single_starkprime_benchmark!(&mut group, 1, 18, 2048, 20833367754u128, 1, 2, 34);
-    //         run_single_starkprime_benchmark!(&mut group, 1, 19, 2048, 34359738368u128, 1, 2, 35);
-    //     }
-    // }
+        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K 3052596316
+        #[allow(clippy::identity_op)]
+        {
+            run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316u128, 1, 2, 30);
+            // run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296u128, 1, 2, 32);
+            // run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592u128, 1, 2, 33);
+            // run_single_starkprime_benchmark!(&mut group, 1, 18, 2048, 20833367754u128, 1, 2, 34);
+            // run_single_starkprime_benchmark!(&mut group, 1, 19, 2048, 34359738368u128, 1, 2, 35);
+        }
+    }
 
     // Frog
     // TODO: Fix f_hat and account for field extensions.
@@ -366,13 +367,13 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        /*
-        run_single_frog_benchmark!(&mut group, 1, 5, 512, 8, 23, 2, 3);
-        run_single_frog_benchmark!(&mut group, 1, 9, 1024, 128, 10, 2, 7);
-        run_single_frog_benchmark!(&mut group, 1, 10, 1024, 256, 9, 2, 8);
-        run_single_frog_benchmark!(&mut group, 1, 12, 512, 1024, 7, 2, 10);
+        
+        // run_single_frog_benchmark!(&mut group, 1, 5, 512, 8, 23, 2, 3);
+        // run_single_frog_benchmark!(&mut group, 1, 9, 1024, 128, 10, 2, 7);
+        // run_single_frog_benchmark!(&mut group, 1, 10, 1024, 256, 9, 2, 8);
+        // run_single_frog_benchmark!(&mut group, 1, 12, 512, 1024, 7, 2, 10);
         run_single_frog_benchmark!(&mut group, 1, 15, 1024, 4096, 6, 2, 12);
-         */
+         
     }
 }
 

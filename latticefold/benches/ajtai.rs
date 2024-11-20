@@ -314,7 +314,7 @@ fn ajtai_benchmarks(c: &mut Criterion) {
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {
-    // ajtai_benchmarks(c);
+    ajtai_benchmarks(c);
 }
 
 criterion_group!(
