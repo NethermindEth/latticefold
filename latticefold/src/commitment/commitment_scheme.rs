@@ -5,10 +5,11 @@ use lattirust_ring::{
 };
 
 use super::homomorphic_commitment::Commitment;
-use crate::{commitment::CommitmentError, decomposition_parameters::DecompositionParams};
+use crate::{
+    ark_base::*, commitment::CommitmentError, decomposition_parameters::DecompositionParams,
+};
 use cyclotomic_rings::rings::SuitableRing;
 
-use ark_std::cfg_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -72,12 +73,9 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
         let commitment: Vec<NTT> = cfg_iter!(self.matrix)
             .map(|row| {
-                let mut sum = NTT::zero();
-                #[allow(clippy::op_ref)]
-                for j in 0..W {
-                    sum += row[j] * &f[j];
-                }
-                sum
+                row.iter()
+                    .zip(f.iter())
+                    .fold(NTT::zero(), |acc, (row_j, f_j)| acc + *row_j * f_j)
             })
             .collect();
 
@@ -129,6 +127,7 @@ mod tests {
     use lattirust_ring::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
+    use crate::ark_base::*;
     use cyclotomic_rings::rings::GoldilocksRingNTT;
 
     pub(crate) fn generate_ajtai<const C: usize, const W: usize, NTT: OverField>(

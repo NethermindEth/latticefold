@@ -7,6 +7,7 @@ use ark_std::marker::PhantomData;
 use lattirust_ring::OverField;
 
 use super::{Transcript, TranscriptWithShortChallenges};
+use crate::ark_base::*;
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{GetPoseidonParams, SuitableRing},

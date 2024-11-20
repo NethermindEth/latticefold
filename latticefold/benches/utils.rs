@@ -5,8 +5,8 @@ use latticefold::arith::r1cs::get_test_dummy_z_split;
 use latticefold::arith::{r1cs::get_test_dummy_r1cs, Arith, Witness, CCCS, CCS};
 use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::decomposition_parameters::DecompositionParams;
-use rand::thread_rng;
 
+#[allow(dead_code)]
 pub fn wit_and_ccs_gen<
     const X_LEN: usize,
     const C: usize, // rows
@@ -22,6 +22,8 @@ pub fn wit_and_ccs_gen<
     CCS<R>,
     AjtaiCommitmentScheme<C, W, R>,
 ) {
+    let mut rng = ark_std::test_rng();
+
     let new_r1cs_rows = if P::L == 1 && (WIT_LEN > 0 && (WIT_LEN & (WIT_LEN - 1)) == 0) {
         r1cs_rows - 2
     } else {
@@ -37,7 +39,7 @@ pub fn wit_and_ccs_gen<
         Err(e) => println!("R1CS invalid: {:?}", e),
     }
 
-    let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut thread_rng());
+    let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
     let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
 
     let cm_i: CCCS<C, R> = CCCS {
@@ -47,6 +49,8 @@ pub fn wit_and_ccs_gen<
 
     (cm_i, wit, ccs, scheme)
 }
+
+#[allow(dead_code)]
 pub fn get_test_dummy_ccs<
     R: Clone + UniformRand + Debug + SuitableRing,
     const X_LEN: usize,

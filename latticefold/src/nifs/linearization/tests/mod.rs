@@ -1,7 +1,8 @@
 use crate::{
     arith::{r1cs::get_test_z_split, Witness, CCCS, CCS},
+    ark_base::*,
     commitment::AjtaiCommitmentScheme,
-    decomposition_parameters::{test_params::PP, DecompositionParams},
+    decomposition_parameters::{test_params::DP, DecompositionParams},
     nifs::linearization::{
         utils::{compute_u, prepare_lin_sumcheck_polynomial},
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
@@ -17,15 +18,14 @@ use ark_std::io::Cursor;
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, VirtualPolynomial},
+    polynomials::{build_eq_x_r, RefCounter, VirtualPolynomial},
 };
 use lattirust_ring::OverField;
-use rand::thread_rng;
-use std::sync::Arc;
 
 fn test_compute_ui<R: OverField>() {
-    let mut mles = Vec::with_capacity(10);
     let mut rng = ark_std::test_rng();
+
+    let mut mles = Vec::with_capacity(10);
 
     for _i in 0..10 {
         let evals: Vec<R> = (0..8).map(|_| R::rand(&mut rng)).collect();
@@ -83,7 +83,7 @@ fn test_linearization_polynomial<RqNTT: OverField>() {
         M_z_mles.push(DenseMultilinearExtension::from_slice(log_m, &mle));
     }
 
-    let _ = g.add_mle_list(M_z_mles.clone().into_iter().map(Arc::new), c);
+    let _ = g.add_mle_list(M_z_mles.clone().into_iter().map(RefCounter::new), c);
     let eq_b_r = build_eq_x_r(&beta).unwrap();
     let _ = g.mul_by_mle(eq_b_r, RqNTT::one());
 
@@ -109,16 +109,18 @@ where
     RqNTT: OverField + SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
 {
+    let mut rng = ark_std::test_rng();
+
     const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-    const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
+    const W: usize = WIT_LEN * DP::L; // the number of columns of the Ajtai matrix
 
     let ccs = get_test_ccs::<RqNTT>(W);
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
-    let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
-    let wit: Witness<RqNTT> = Witness::from_w_ccs::<PP>(w_ccs);
+    let wit: Witness<RqNTT> = Witness::from_w_ccs::<DP>(w_ccs);
     let cm_i: CCCS<4, RqNTT> = CCCS {
-        cm: wit.commit::<4, W, PP>(&scheme).unwrap(),
+        cm: wit.commit::<4, W, DP>(&scheme).unwrap(),
         x_ccs,
     };
 
@@ -180,16 +182,13 @@ mod tests_stark {
     use crate::arith::tests::get_test_dummy_ccs;
     use crate::arith::{Witness, CCCS};
     use crate::commitment::AjtaiCommitmentScheme;
-    use crate::decomposition_parameters::{test_params::PP_STARK, DecompositionParams};
+    use crate::decomposition_parameters::{test_params::StarkDP, DecompositionParams};
     use crate::nifs::linearization::{
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
     };
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::security_check::check_ring_modulus_128_bits_security;
     use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use num_bigint::BigUint;
-    use rand::thread_rng;
 
     #[test]
     fn test_compute_ui() {
@@ -212,6 +211,8 @@ mod tests_stark {
 
     #[test]
     fn test_dummy_linearization() {
+        let mut rng = ark_std::test_rng();
+
         type R = RqNTT;
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
@@ -219,39 +220,17 @@ mod tests_stark {
         const C: usize = 16;
         const X_LEN: usize = 1;
         const WIT_LEN: usize = 2048;
-        const W: usize = WIT_LEN * PP_STARK::L; // the number of columns of the Ajtai matrix
+        const W: usize = WIT_LEN * StarkDP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
-        let wit = Witness::from_w_ccs::<PP_STARK>(w_ccs);
-
-        // Make bound and securitty checks
-        let witness_within_bound = wit.within_bound(PP_STARK::B);
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
-
-        if check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            PP_STARK::B,
-            PP_STARK::L,
-            witness_within_bound,
-        ) {
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            println!("Bound condition not satisfied for 128 bits security");
-        }
+        let wit = Witness::from_w_ccs::<StarkDP>(w_ccs);
 
         let cm_i = CCCS {
-            cm: wit.commit::<C, W, PP_STARK>(&scheme).unwrap(),
+            cm: wit.commit::<C, W, StarkDP>(&scheme).unwrap(),
             x_ccs,
         };
 

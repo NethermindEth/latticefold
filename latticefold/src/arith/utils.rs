@@ -1,4 +1,4 @@
-use ark_std::cfg_iter;
+use crate::ark_base::*;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 

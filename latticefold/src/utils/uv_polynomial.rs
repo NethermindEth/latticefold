@@ -1,3 +1,4 @@
+use crate::ark_base::*;
 use ark_std::ops::{AddAssign, Mul};
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
@@ -130,7 +131,7 @@ impl<R: Ring> AddAssign<&UVPolynomial<R>> for UVPolynomial<R> {
 
 #[cfg(test)]
 mod tests {
-    use ark_std::sync::Arc;
+    use lattirust_poly::polynomials::RefCounter;
 
     use super::*;
     use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::VirtualPolynomial};
@@ -147,7 +148,8 @@ mod tests {
     // Define a sample VirtualPolynomial for testing
     fn sample_virtual_polynomial() -> VirtualPolynomial<Fq> {
         let mut polynomial = VirtualPolynomial::new(1);
-        polynomial.flattened_ml_extensions = (0..2).map(|_| Arc::new(sample_mle())).collect();
+        polynomial.flattened_ml_extensions =
+            (0..2).map(|_| RefCounter::new(sample_mle())).collect();
         polynomial.products = vec![(Fq::from(1u128), vec![0, 1])];
         polynomial
     }
