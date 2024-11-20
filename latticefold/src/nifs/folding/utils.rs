@@ -2,11 +2,11 @@
 use ark_ff::{Field, PrimeField};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
-use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
-use lattirust_poly::polynomials::ArithErrors;
-use lattirust_ring::Ring;
+use lattirust_poly::polynomials::{ArithErrors, RefCounter};
+use lattirust_ring::{cyclotomic_ring::CRT, Ring};
 
+use crate::ark_base::*;
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
@@ -188,7 +188,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()
         .zip(cm_i_s.iter())
-        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * NTT::from(rho_i))
+        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i.crt())
         .sum();
 
     let u_0: Vec<NTT> = rho_s
@@ -197,7 +197,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .map(|(&rho_i, etas_i)| {
             etas_i
                 .iter()
-                .map(|etas_i_j| NTT::from(rho_i) * etas_i_j)
+                .map(|etas_i_j| rho_i.crt() * etas_i_j)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
@@ -216,7 +216,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .map(|(&rho_i, cm_i)| {
             cm_i.x_w
                 .iter()
-                .map(|x_w_i| NTT::from(rho_i) * x_w_i)
+                .map(|x_w_i| rho_i.crt() * x_w_i)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {
@@ -235,13 +235,16 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
-    r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
+    r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
     for (alpha, fi_hat_mle) in successors(Some(alpha_i), |alpha_power| Some(alpha_i * alpha_power))
         .zip(fi_hat_mle_s.iter())
     {
-        g.add_mle_list(vec![r_i_eq.clone(), Arc::from(fi_hat_mle.clone())], alpha)?;
+        g.add_mle_list(
+            vec![r_i_eq.clone(), RefCounter::from(fi_hat_mle.clone())],
+            alpha,
+        )?;
     }
 
     Ok(())
@@ -252,21 +255,21 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
     b: usize,
     mu_i: NTT,
-    beta_eq_x: Arc<DenseMultilinearExtension<NTT>>,
+    beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
-        let mut mle_list: Vec<Arc<DenseMultilinearExtension<NTT>>> = Vec::new();
+        let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> = Vec::new();
 
         for i in 1..b {
             let i_hat = NTT::from(i as u128);
 
-            mle_list.push(Arc::from(fi_hat_mle.clone() - i_hat));
-            mle_list.push(Arc::from(fi_hat_mle.clone() + i_hat));
+            mle_list.push(RefCounter::from(fi_hat_mle.clone() - i_hat));
+            mle_list.push(RefCounter::from(fi_hat_mle.clone() + i_hat));
         }
 
-        mle_list.push(Arc::from(fi_hat_mle));
+        mle_list.push(RefCounter::from(fi_hat_mle));
 
         mle_list.push(beta_eq_x.clone());
 
@@ -280,10 +283,10 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     zeta_i: NTT,
-    r_i_eq: Arc<DenseMultilinearExtension<NTT>>,
+    r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
-        g.add_mle_list(vec![Arc::from(M.clone()), r_i_eq.clone()], zeta)?;
+        g.add_mle_list(vec![RefCounter::from(M.clone()), r_i_eq.clone()], zeta)?;
     }
 
     Ok(())

@@ -1,3 +1,4 @@
+use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
@@ -6,6 +7,7 @@ use super::{
     utils::{mat_vec_mul, vec_add, vec_scalar_mul},
 };
 use crate::arith::hadamard;
+use crate::ark_base::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct R1CS<R: Ring> {
@@ -76,23 +78,7 @@ impl<R: Ring> RelaxedR1CS<R> {
 }
 
 pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-    let n_rows = M.len();
-    let n_cols = M[0].len();
-    let mut coeffs = Vec::with_capacity(n_rows);
-    for row in M.iter() {
-        let mut row_coeffs = Vec::with_capacity(n_cols);
-        for (col_i, &val) in row.iter().enumerate() {
-            if val != 0 {
-                row_coeffs.push((R::from(val as u64), col_i));
-            }
-        }
-        coeffs.push(row_coeffs);
-    }
-    SparseMatrix {
-        n_rows,
-        n_cols,
-        coeffs,
-    }
+    dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
 }
 
 pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
@@ -190,12 +176,13 @@ pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>
 
 #[cfg(test)]
 pub mod tests {
+    use cyclotomic_rings::rings::FrogRingNTT;
+
     use super::*;
 
-    use lattirust_ring::cyclotomic_ring::models::pow2_debug::Pow2CyclotomicPolyRingNTT;
     #[test]
     fn test_check_relation() {
-        let r1cs = get_test_r1cs::<Pow2CyclotomicPolyRingNTT<101, 16>>();
+        let r1cs = get_test_r1cs::<FrogRingNTT>();
         let z = get_test_z(5);
 
         r1cs.check_relation(&z).unwrap();

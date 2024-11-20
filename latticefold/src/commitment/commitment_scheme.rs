@@ -1,10 +1,15 @@
-use lattirust_ring::{balanced_decomposition::decompose_balanced_vec, OverField};
+use lattirust_ring::{
+    balanced_decomposition::decompose_balanced_vec,
+    cyclotomic_ring::{CRT, ICRT},
+    OverField,
+};
 
 use super::homomorphic_commitment::Commitment;
-use crate::{commitment::CommitmentError, decomposition_parameters::DecompositionParams};
+use crate::{
+    ark_base::*, commitment::CommitmentError, decomposition_parameters::DecompositionParams,
+};
 use cyclotomic_rings::rings::SuitableRing;
 
-use ark_std::cfg_iter;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -68,12 +73,9 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
         let commitment: Vec<NTT> = cfg_iter!(self.matrix)
             .map(|row| {
-                let mut sum = NTT::zero();
-                #[allow(clippy::op_ref)]
-                for j in 0..W {
-                    sum += row[j] * &f[j];
-                }
-                sum
+                row.iter()
+                    .zip(f.iter())
+                    .fold(NTT::zero(), |acc, (row_j, f_j)| acc + *row_j * f_j)
             })
             .collect();
 
@@ -84,13 +86,13 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
     /// Performs NTT on each component of the witness and then does Ajtai commitment.
     pub fn commit_coeff<P: DecompositionParams>(
         &self,
-        f: &[NTT::CoefficientRepresentation],
+        f: Vec<NTT::CoefficientRepresentation>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
         if f.len() != W {
             return Err(CommitmentError::WrongWitnessLength(f.len(), W));
         }
 
-        self.commit_ntt(&f.iter().map(|&x| x.into()).collect::<Vec<NTT>>())
+        self.commit_ntt(&CRT::elementwise_crt(f))
     }
 
     /// Takes a coefficient form witness, decomposes it vertically in radix-B,
@@ -99,12 +101,12 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
         &self,
         f: &[NTT::CoefficientRepresentation],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let f = decompose_balanced_vec(f, P::B, Some(P::L))
+        let f = decompose_balanced_vec(f, P::B, P::L)
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
 
-        self.commit_coeff::<P>(&f)
+        self.commit_coeff::<P>(f)
     }
 
     /// Takes an NTT form witness, transforms it into the coefficient form,
@@ -112,9 +114,9 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
     /// computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
     pub fn decompose_and_commit_ntt<P: DecompositionParams>(
         &self,
-        w: &[NTT],
+        w: Vec<NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let coeff: Vec<NTT::CoefficientRepresentation> = w.iter().map(|&x| x.into()).collect();
+        let coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w);
 
         self.decompose_and_commit_coeff::<P>(&coeff)
     }
@@ -125,6 +127,7 @@ mod tests {
     use lattirust_ring::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
+    use crate::ark_base::*;
     use cyclotomic_rings::rings::GoldilocksRingNTT;
 
     pub(crate) fn generate_ajtai<const C: usize, const W: usize, NTT: OverField>(

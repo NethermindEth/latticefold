@@ -1,14 +1,17 @@
 #![allow(non_snake_case)]
+
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::{
-    balanced_decomposition::{decompose_balanced_vec, recompose},
+    balanced_decomposition::{gadget_decompose, gadget_recompose},
+    cyclotomic_ring::{CRT, ICRT},
     PolyRing, Ring,
 };
 
 use crate::{
+    ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
     decomposition_parameters::DecompositionParams,
 };
@@ -161,20 +164,15 @@ pub struct Witness<NTT: SuitableRing> {
 }
 
 impl<NTT: SuitableRing> Witness<NTT> {
-    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: &[NTT]) -> Self {
+    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: Vec<NTT>) -> Self {
         // iNTT
-        let w_coeff: Vec<NTT::CoefficientRepresentation> =
-            w_ccs.iter().map(|&x| x.into()).collect();
+        let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w_ccs.clone());
 
         // decompose radix-B
-        let f_coeff: Vec<NTT::CoefficientRepresentation> =
-            decompose_balanced_vec(&w_coeff, P::B, Some(P::L))
-                .into_iter()
-                .flatten()
-                .collect();
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = gadget_decompose(&w_coeff, P::B, P::L);
 
         // NTT(coef_repr_decomposed)
-        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.into()).collect();
+        let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
@@ -182,7 +180,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
             f,
             f_coeff,
             f_hat,
-            w_ccs: w_ccs.to_vec(),
+            w_ccs,
         }
     }
 
@@ -230,13 +228,12 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
-        let f_coeff: Vec<NTT::CoefficientRepresentation> = f.iter().map(|&x| x.into()).collect();
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(f.clone());
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
-
-        let w_ccs = f
-            .chunks(P::L)
-            .map(|chunk| recompose(chunk, NTT::from(P::B)))
-            .collect();
+        // Reconstruct the original CCS witness from the Ajtai witness
+        // Ajtai witness has bound B
+        // WE multiply by the base B gadget matrix to reconstruct w_ccs
+        let w_ccs = gadget_recompose(&f, P::B, P::L);
 
         Self {
             f,
@@ -253,13 +250,13 @@ impl<NTT: SuitableRing> Witness<NTT> {
     pub fn from_f_coeff<P: DecompositionParams>(
         f_coeff: Vec<NTT::CoefficientRepresentation>,
     ) -> Self {
-        let f: Vec<NTT> = f_coeff.iter().map(|&x| x.into()).collect();
+        // Reconstruct the original CCS witness from the Ajtai witness
+        // Ajtai witness has bound B
+        // WE multiply by the base B gadget matrix to reconstruct w_ccs
+        let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
 
-        let w_ccs = f
-            .chunks(P::L)
-            .map(|chunk| recompose(chunk, NTT::from(P::B)))
-            .collect();
+        let w_ccs = gadget_recompose(&f, P::B, P::L);
 
         Self {
             f,
@@ -269,11 +266,41 @@ impl<NTT: SuitableRing> Witness<NTT> {
         }
     }
 
+    /// Generates a random witness by firstly generating a random
+    /// vector of arbitrary norm and then computing the rest of the data
+    /// needed for a witness.
+    ///
+    /// # Arguments
+    /// * `rng` is a mutable reference to the random number generator.
+    /// * `w_ccs_len` is the length of the non-decomposed witness (a.k.a. the CCS witness).
+    pub fn rand<Rng: rand::Rng + ?Sized, P: DecompositionParams>(
+        rng: &mut Rng,
+        w_ccs_len: usize,
+    ) -> Self {
+        Self::from_w_ccs::<P>((0..w_ccs_len).map(|_| NTT::rand(rng)).collect())
+    }
+
     pub fn commit<const C: usize, const W: usize, P: DecompositionParams>(
         &self,
         ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
         ajtai.commit_ntt(&self.f)
+    }
+
+    pub fn within_bound(&self, b: u128) -> bool {
+        // TODO consider using signed representatives instead
+
+        let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
+            ICRT::elementwise_icrt(self.f.clone());
+
+        // linf_norm should be used in CyclotomicGeneral not in specific ring
+        let b = <<NTT as PolyRing>::BaseRing as Field>::BasePrimeField::from(b);
+        let all_under_bound = coeffs_repr.iter().all(|ele| {
+            let coeffs = ele.coeffs();
+            coeffs.iter().all(|x| x < &b)
+        });
+
+        all_under_bound
     }
 }
 
@@ -310,12 +337,14 @@ pub mod tests {
     use ark_ff::{One, Zero};
 
     use super::*;
-    use crate::arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z};
-    use cyclotomic_rings::rings::{GoldilocksRingNTT, GoldilocksRingPoly};
-    use lattirust_ring::cyclotomic_ring::models::{
-        goldilocks::{Fq, Fq3},
-        pow2_debug::Pow2CyclotomicPolyRingNTT,
+    use crate::{
+        arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z},
+        decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP},
     };
+    use cyclotomic_rings::rings::{
+        BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
+    };
+    use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
@@ -336,7 +365,7 @@ pub mod tests {
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_ccs::<Pow2CyclotomicPolyRingNTT<101u64, 64>>(4);
+        let ccs = get_test_ccs::<BabyBearRingNTT>(4);
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();
@@ -386,5 +415,51 @@ pub mod tests {
                 vec![GoldilocksRingNTT::zero(), GoldilocksRingNTT::one()]
             ]
         );
+    }
+
+    impl<NTT: SuitableRing> Witness<NTT> {
+        fn check_data<P: DecompositionParams>(&self) -> bool {
+            let w_coeff = ICRT::elementwise_icrt(self.w_ccs.clone());
+
+            (self.f_coeff == gadget_decompose(&w_coeff, P::B, P::L))
+                && (CRT::elementwise_crt(self.f_coeff.clone()) == self.f)
+                && (self.f_hat == Self::get_fhat(&self.f_coeff))
+        }
+    }
+
+    const WIT_LEN: usize = 1024;
+
+    #[test]
+    fn test_from_w_ccs() {
+        let mut rng = ark_std::test_rng();
+
+        let random_witness =
+            Witness::<GoldilocksRingNTT>::rand::<_, GoldilocksDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_w_ccs::<GoldilocksDP>(random_witness.w_ccs.clone());
+
+        assert!(recreated_witness.check_data::<GoldilocksDP>());
+        assert_eq!(recreated_witness, random_witness);
+    }
+
+    #[test]
+    fn test_from_f() {
+        let mut rng = ark_std::test_rng();
+
+        let random_witness = Witness::<BabyBearRingNTT>::rand::<_, BabyBearDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_f::<BabyBearDP>(random_witness.f.clone());
+
+        assert!(recreated_witness.check_data::<BabyBearDP>());
+        assert_eq!(recreated_witness, random_witness);
+    }
+
+    #[test]
+    fn test_from_f_coeff() {
+        let mut rng = ark_std::test_rng();
+
+        let random_witness = Witness::<StarkRingNTT>::rand::<_, StarkDP>(&mut rng, WIT_LEN);
+        let recreated_witness = Witness::from_f_coeff::<StarkDP>(random_witness.f_coeff.clone());
+
+        assert!(recreated_witness.check_data::<StarkDP>());
+        assert_eq!(recreated_witness, random_witness);
     }
 }

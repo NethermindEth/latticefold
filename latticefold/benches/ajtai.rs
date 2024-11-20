@@ -3,24 +3,24 @@
 
 use ark_std::{time::Duration, UniformRand};
 use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+    criterion_group, criterion_main, AxisScale, BatchSize::SmallInput, BenchmarkId, Criterion,
+    PlotConfiguration,
 };
 use cyclotomic_rings::rings::{
     BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT, SuitableRing,
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
-use rand::thread_rng;
+use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use std::fmt::Debug;
 
 fn ajtai_benchmark<
     const C: usize, // rows
     const W: usize, // columns
-    R: Clone + UniformRand + Debug + SuitableRing + for<'a> std::ops::AddAssign<&'a R>,
+    R: Clone + UniformRand + Debug + SuitableRing,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let mut rng = thread_rng();
-
+    let mut rng = ark_std::test_rng();
     let witness: Vec<R> = (0..W).map(|_| R::rand(&mut rng)).collect();
     let witness_2 = witness.clone();
     let witness_3 = witness.clone();
@@ -41,27 +41,29 @@ fn ajtai_benchmark<
         BenchmarkId::new("NTT->INTT", format!("C={}, W={}", C, W)),
         &(witness_2),
         |b, witness| {
-            b.iter(|| {
-                let _ = witness
-                    .iter()
-                    .map(|&x| x.into())
-                    .collect::<Vec<R::CoefficientRepresentation>>();
-            })
+            b.iter_batched(
+                || witness.clone(),
+                |witness| {
+                    let _ = ICRT::elementwise_icrt(witness);
+                },
+                SmallInput,
+            );
         },
     );
 
     // INTT -> NTT
-    let coeff = witness_3
-        .iter()
-        .map(|&x| x.into())
-        .collect::<Vec<R::CoefficientRepresentation>>();
+    let coeff = ICRT::elementwise_icrt(witness_3);
     group.bench_with_input(
         BenchmarkId::new("INTT->NTT", format!("C={}, W={}", C, W)),
         &(coeff),
         |b, coeff| {
-            b.iter(|| {
-                let _: Vec<R> = coeff.iter().map(|&x| R::from(x)).collect();
-            })
+            b.iter_batched(
+                || coeff.clone(),
+                |coeff| {
+                    let _: Vec<R> = CRT::elementwise_crt(coeff);
+                },
+                SmallInput,
+            );
         },
     );
 }

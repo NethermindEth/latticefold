@@ -1,15 +1,18 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
+
 use cyclotomic_rings::rings::SuitableRing;
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
+    ark_base::*,
     nifs::error::LinearizationError,
     transcript::Transcript,
     utils::sumcheck,
 };
 
 use lattirust_ring::OverField;
+
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol

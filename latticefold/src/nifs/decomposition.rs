@@ -1,10 +1,7 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
-use lattirust_poly::polynomials::DenseMultilinearExtension;
-use lattirust_ring::OverField;
-use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
-
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
+    ark_base::*,
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,
@@ -12,6 +9,9 @@ use crate::{
     transcript::Transcript,
 };
 use cyclotomic_rings::rings::SuitableRing;
+use lattirust_poly::polynomials::DenseMultilinearExtension;
+use lattirust_ring::OverField;
+use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
 use ark_std::{cfg_into_iter, cfg_iter};
 #[cfg(feature = "parallel")]
@@ -51,7 +51,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let mut cm_i_x_w = cm_i.x_w.clone();
         cm_i_x_w.push(cm_i.h);
-        let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(&cm_i_x_w);
+        let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(cm_i_x_w);
 
         let y_s: Vec<Commitment<C, NTT>> = cfg_iter!(wit_s)
             .map(|wit| wit.commit::<C, W, P>(scheme))
@@ -73,7 +73,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let u_s = cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
-                let mut u_s_for_i = Vec::with_capacity(P::K);
+                let mut u_s_for_i = Vec::with_capacity(ccs.t);
 
                 let z: Vec<NTT> = {
                     let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
