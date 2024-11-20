@@ -11,7 +11,9 @@ use crate::{
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::polynomials::DenseMultilinearExtension;
 use lattirust_ring::OverField;
-use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
+use utils::{
+    decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back, linear_combination,
+};
 
 use ark_std::{cfg_into_iter, cfg_iter};
 #[cfg(feature = "parallel")]
@@ -195,12 +197,8 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
         }
 
         for (i, &cm_i_value) in cm_i.v.iter().enumerate() {
-            let should_equal_v0: NTT = proof
-                .v_s
-                .iter()
-                .zip(&b_s)
-                .map(|(v_i, b_i)| v_i[i] * b_i)
-                .sum();
+            let should_equal_v0: NTT =
+                linear_combination(cfg_iter!(proof.v_s).map(|v_i| v_i[i]), &b_s);
 
             if should_equal_v0 != cm_i_value {
                 return Err(DecompositionError::RecomposedError);

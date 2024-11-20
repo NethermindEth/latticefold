@@ -3,6 +3,7 @@ use lattirust_linear_algebra::ops::Transpose;
 use lattirust_ring::{
     balanced_decomposition::{decompose_balanced_vec, gadget_decompose, recompose},
     cyclotomic_ring::{CRT, ICRT},
+    OverField,
 };
 
 use crate::ark_base::*;
@@ -46,6 +47,16 @@ pub(super) fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionPar
     x: &[NTT::CoefficientRepresentation],
 ) -> Vec<Vec<NTT::CoefficientRepresentation>> {
     decompose_balanced_vec(x, DP::B_SMALL as u128, DP::K).transpose()
+}
+
+pub(super) fn linear_combination<I, NTT: OverField>(multiplicands: I, coefficients: &[NTT]) -> NTT
+where
+    I: Iterator<Item = NTT>,
+{
+    multiplicands
+        .zip(coefficients)
+        .map(|(mul, coeff)| mul * coeff)
+        .sum()
 }
 
 #[cfg(test)]
