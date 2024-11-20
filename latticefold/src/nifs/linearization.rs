@@ -33,23 +33,14 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(VirtualPolynomial<NTT>, Vec<NTT>), LinearizationError<NTT>> {
+    ) -> Result<(VirtualPolynomial<NTT>, Vec<DenseMultilinearExtension<NTT>>), LinearizationError<NTT>> {
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 
-        let Mz_mles = ccs
-            .M
-            .iter()
-            .map(|M| {
-                Ok(DenseMultilinearExtension::from_slice(
-                    ccs.s,
-                    &mat_vec_mul(M, z_ccs)?,
-                ))
-            })
-            .collect::<Result<Vec<_>, LinearizationError<_>>>()?;
+        let Mz_mles = Self::calculate_Mz_mles(ccs, &z_ccs)?;
 
         let g = prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
 
-        Ok((g, beta_s))
+        Ok((g, Mz_mles))
     }
 
     fn generate_sumcheck_proof(
@@ -70,7 +61,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         wit: &Witness<NTT>,
         point_r: &[NTT],
         ccs: &CCS<NTT>,
-        z_ccs: &[NTT],
+        Mz_mles: &[DenseMultilinearExtension<NTT>],
     ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         let v: Vec<NTT> = cfg_iter!(wit.f_hat)
             .map(|f_hat_row| {
@@ -80,7 +71,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
             })
             .collect();
 
-        let Mz_mles = ccs
+        let u = compute_u(Mz_mles, point_r)?;
+
+        Ok((point_r.to_vec(), v, u))
+    }
+
+    fn calculate_Mz_mles(ccs: &CCS<NTT>, z_ccs: &&[NTT]) -> Result<Vec<DenseMultilinearExtension<NTT>>, LinearizationError<NTT>> {
+        ccs
             .M
             .iter()
             .map(|M| {
@@ -89,11 +86,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
                     &mat_vec_mul(M, z_ccs)?,
                 ))
             })
-            .collect::<Result<Vec<_>, LinearizationError<_>>>()?;
-
-        let u = compute_u(&Mz_mles, point_r)?;
-
-        Ok((point_r.to_vec(), v, u))
+            .collect::<Result<Vec<_>, LinearizationError<_>>>()
     }
 }
 
@@ -107,11 +100,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
-        let (g, _) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
+        let (g, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
 
         let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, transcript)?;
 
-        let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, ccs, &z_ccs)?;
+        let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, ccs, &Mz_mles)?;
 
         transcript.absorb_slice(&v);
         transcript.absorb_slice(&u);
