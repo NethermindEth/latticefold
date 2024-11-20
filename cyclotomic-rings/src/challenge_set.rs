@@ -2,6 +2,7 @@
 //!  Short challenge set API.
 //!
 
+use crate::ark_base::*;
 use error::ChallengeSetError;
 
 use crate::rings::SuitableRing;

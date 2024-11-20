@@ -1,6 +1,7 @@
 use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly};
 
 use super::SuitableRing;
+use crate::ark_base::*;
 use crate::challenge_set::error;
 use crate::challenge_set::LatticefoldChallengeSet;
 

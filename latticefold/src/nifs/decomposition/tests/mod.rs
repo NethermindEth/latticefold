@@ -1,10 +1,11 @@
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use lattirust_poly::mle::DenseMultilinearExtension;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 
 use crate::nifs::linearization::utils::compute_u;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
+    ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment},
     decomposition_parameters::DecompositionParams,
     nifs::decomposition::{
@@ -26,7 +27,7 @@ where
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
-    let mut rng = thread_rng();
+    let mut rng = ark_std::test_rng();
     let input: usize = rng.gen_range(1..101);
     let ccs = get_test_ccs(W);
     let log_m = ccs.s;
@@ -118,11 +119,8 @@ mod stark {
         LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
     };
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::security_check::check_ring_modulus_128_bits_security;
     use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use num_bigint::BigUint;
-    use rand::thread_rng;
 
     type CS = StarkChallengeSet;
     const WIT_LEN: usize = 4;
@@ -145,29 +143,10 @@ mod stark {
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit = Witness::from_w_ccs::<DP>(w_ccs);
 
-        // Make bound and security checks
-        let witness_within_bound = wit.within_bound(DP::B);
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
-        if check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            DP::B,
-            DP::L,
-            witness_within_bound,
-        ) {
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            println!("Bound condition not satisfied for 128 bits security");
-        }
         let cm_i = CCCS {
             cm: wit.commit::<C, W, DP>(&scheme).unwrap(),
             x_ccs,

@@ -52,7 +52,6 @@ pub use stark::*;
 ///   * `R::CoefficientRepresentation` is radix-$B$ decomposable and exhibits cyclotomic structure (`R::CoefficientRepresentation: Decompose + Cyclotomic`).
 ///
 /// In addition to the data above a suitable ring has to provide Poseidon hash parameters for its base prime field (i.e. $\mathbb{Z}\_p$).
-
 pub trait SuitableRing:
     OverField + ICRT<ICRTForm = Self::CoefficientRepresentation> + for<'a> MulAssign<&'a u128>
 where

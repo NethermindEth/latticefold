@@ -7,6 +7,7 @@ use super::{
     utils::{mat_vec_mul, vec_add, vec_scalar_mul},
 };
 use crate::arith::hadamard;
+use crate::ark_base::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct R1CS<R: Ring> {

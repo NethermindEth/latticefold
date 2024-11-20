@@ -5,6 +5,7 @@ use lattirust_ring::{
     cyclotomic_ring::{CRT, ICRT},
 };
 
+use crate::ark_base::*;
 use crate::decomposition_parameters::DecompositionParams;
 
 /// Decompose a vector of arbitrary norm in its NTT form into DP::K vectors
@@ -58,16 +59,17 @@ mod tests {
         },
         PolyRing,
     };
-    use rand::{rngs::ThreadRng, thread_rng, Rng};
+    use rand::Rng;
 
     use crate::{
+        ark_base::*,
         decomposition_parameters::{test_params::DP, DecompositionParams},
         nifs::decomposition::utils::{
             decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back,
         },
     };
 
-    fn draw_ring_below_bound<RqPoly, const B: u128>(rng: &mut ThreadRng) -> RqPoly
+    fn draw_ring_below_bound<RqPoly, const B: u128>(rng: &mut impl Rng) -> RqPoly
     where
         RqPoly: PolyRing + CRT,
     {
@@ -86,7 +88,7 @@ mod tests {
     {
         // Create a test vector
         const N: usize = 32;
-        let mut rng = thread_rng();
+        let mut rng = ark_std::test_rng();
         let test_vector: Vec<RqPoly> = (0..N)
             .map(|_| draw_ring_below_bound::<RqPoly, { DP::B }>(&mut rng))
             .collect();
@@ -161,7 +163,7 @@ mod tests {
     {
         // Create a test vector
         const N: usize = 32;
-        let mut rng = thread_rng();
+        let mut rng = ark_std::test_rng();
         let test_vector: Vec<RqNTT> = (0..N)
             .map(|_| draw_ring_below_bound::<RqPoly, { DP::B }>(&mut rng).crt())
             .collect();
