@@ -16,11 +16,11 @@ use linearization::{
     LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
     LinearizationVerifier,
 };
-mod common_helpers;
 pub mod decomposition;
 pub mod error;
 pub mod folding;
 pub mod linearization;
+mod mle_helpers;
 
 /// `C` is the length of Ajtai commitment vectors.
 /// `NTT` is a cyclotomic ring in the NTT form.

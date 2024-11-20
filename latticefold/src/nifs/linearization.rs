@@ -10,7 +10,7 @@ use super::error::LinearizationError;
 use crate::ark_base::*;
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
-    nifs::common_helpers::to_mles_err,
+    nifs::mle_helpers::to_mles_err,
     transcript::Transcript,
     utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };

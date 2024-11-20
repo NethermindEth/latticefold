@@ -9,8 +9,8 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
-use super::common_helpers::{evaluate_mles, to_mles, to_mles_err};
 use super::error::FoldingError;
+use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
