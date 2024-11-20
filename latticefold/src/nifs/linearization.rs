@@ -6,14 +6,14 @@ use lattirust_poly::{
     polynomials::{eq_eval, VPAuxInfo},
 };
 
-use utils::{compute_u, prepare_lin_sumcheck_polynomial};
-
 use super::error::LinearizationError;
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCCS, CCS, LCCCS},
+    nifs::common_helpers::to_mles_err,
     transcript::Transcript,
     utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
+use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -49,18 +49,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs: Vec<NTT> = cm_i.get_z_vector(&wit.w_ccs);
 
-        // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
-        let Mz_mles: Vec<DenseMultilinearExtension<NTT>> = ccs
-            .M
-            .iter()
-            .map(|M| {
-                Ok(DenseMultilinearExtension::from_slice(
-                    log_m,
-                    &mat_vec_mul(M, &z_ccs)?,
-                ))
-            })
-            .collect::<Result<_, LinearizationError<_>>>()?;
-
+        let Mz_mles = to_mles_err::<_, _, LinearizationError<NTT>, _>(
+            log_m,
+            ccs.M.iter().map(|M| mat_vec_mul(&M, &z_ccs)),
+        )?;
         // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
 
