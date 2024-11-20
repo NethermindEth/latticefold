@@ -2,7 +2,7 @@
 //! Helper function used by all three subprotocols.
 //!  
 
-use ark_std::cfg_into_iter;
+use ark_std::{cfg_into_iter, vec::Vec};
 
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::Ring;
@@ -26,7 +26,7 @@ impl<R: Ring> Evaluate<R> for Vec<R> {
     }
 }
 
-impl<'a, R: Ring> Evaluate<R> for &'a [R] {
+impl<R: Ring> Evaluate<R> for &[R] {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
         let evals_len = self.len();
 
@@ -36,7 +36,7 @@ impl<'a, R: Ring> Evaluate<R> for &'a [R] {
     }
 }
 
-impl<'a, R: Ring> Evaluate<R> for &'a DenseMultilinearExtension<R> {
+impl<R: Ring> Evaluate<R> for &DenseMultilinearExtension<R> {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
         DenseMultilinearExtension::<R>::evaluate(self, point).ok_or(
             MleEvaluationError::IncorrectLength(point.len(), self.evaluations.len()),
