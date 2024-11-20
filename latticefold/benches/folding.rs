@@ -303,25 +303,25 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 120, 9, 2, 7);
-        run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 4, 4);
-        run_single_goldilocks_benchmark!(&mut group, 1, 8, 512, 512, 7, 2, 9);
-        run_single_goldilocks_benchmark!(&mut group, 1, 8, 1024, 512, 7, 2, 9);
-        run_single_goldilocks_benchmark!(&mut group, 1, 8, 2048, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut group, 1, 9, 1024, 1024, 7, 2, 10);
-        run_single_goldilocks_benchmark!(&mut group, 1, 9, 2048, 512, 7, 2, 9);
-        run_single_goldilocks_benchmark!(&mut group, 1, 10, 512, 2048, 6, 2, 11);
-        run_single_goldilocks_benchmark!(&mut group, 1, 10, 1024, 2048, 6, 2, 11);
-        run_single_goldilocks_benchmark!(&mut group, 1, 11, 1024, 4096, 6, 2, 12);
-        run_single_goldilocks_benchmark!(&mut group, 1, 11, 2048, 2048, 6, 2, 12);
-        run_single_goldilocks_benchmark!(&mut group, 1, 12, 1024, 8192, 6, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 13, 1024, 16384, 5, 2, 14);
-        run_single_goldilocks_benchmark!(&mut group, 1, 13, 2048, 8192, 5, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
-        run_single_goldilocks_benchmark!(&mut group, 1, 14, 2048, 16384, 5, 2, 14);
-        run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 4, 2, 15);
-        run_single_goldilocks_benchmark!(&mut group, 1, 16, 2048, 65536, 4, 2, 16);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 120, 9, 2, 7);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 2, 8);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 4, 4);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 8, 512, 512, 7, 2, 9);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 8, 1024, 512, 7, 2, 9);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 8, 2048, 256, 8, 2, 8);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 9, 1024, 1024, 7, 2, 10);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 9, 2048, 512, 7, 2, 9);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 10, 512, 2048, 6, 2, 11);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 10, 1024, 2048, 6, 2, 11);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 11, 1024, 4096, 6, 2, 12);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 11, 2048, 2048, 6, 2, 12);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 12, 1024, 8192, 6, 2, 13);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 13, 1024, 16384, 5, 2, 14);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 13, 2048, 8192, 5, 2, 13);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 14, 2048, 16384, 5, 2, 14);
+        // run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 4, 2, 15);
+        run_single_goldilocks_benchmark!(&mut group, 1, 16, 16384, 65536, 4, 2, 16);
     }
 
     // BabyBear
@@ -341,22 +341,22 @@ fn benchmarks_main(c: &mut Criterion) {
         */
     }
 
-    // StarkPrime
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding StarkPrime");
-        group.plot_config(plot_config.clone());
+    // // StarkPrime
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Folding StarkPrime");
+    //     group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K 3052596316
-        #[allow(clippy::identity_op)]
-        {
-            run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316u128, 1, 2, 30);
-            run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296u128, 1, 2, 32);
-            run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592u128, 1, 2, 33);
-            run_single_starkprime_benchmark!(&mut group, 1, 18, 2048, 20833367754u128, 1, 2, 34);
-            run_single_starkprime_benchmark!(&mut group, 1, 19, 2048, 34359738368u128, 1, 2, 35);
-        }
-    }
+    //     // Parameters Criterion, X_LEN, C, W, B, L, B_small, K 3052596316
+    //     #[allow(clippy::identity_op)]
+    //     {
+    //         run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316u128, 1, 2, 30);
+    //         run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296u128, 1, 2, 32);
+    //         run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592u128, 1, 2, 33);
+    //         run_single_starkprime_benchmark!(&mut group, 1, 18, 2048, 20833367754u128, 1, 2, 34);
+    //         run_single_starkprime_benchmark!(&mut group, 1, 19, 2048, 34359738368u128, 1, 2, 35);
+    //     }
+    // }
 
     // Frog
     // TODO: Fix f_hat and account for field extensions.
