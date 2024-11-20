@@ -9,7 +9,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
-use super::common_helpers::to_mles_err;
+use super::common_helpers::{to_mles, to_mles_err};
 use super::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
@@ -90,15 +90,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = w_s
             .iter()
-            .map(|w| {
-                w.f_hat
-                    .iter()
-                    .map(|f_hat_row| {
-                        DenseMultilinearExtension::from_evaluations_slice(log_m, f_hat_row)
-                    })
-                    .collect()
-            })
-            .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>();
+            .map(|w| to_mles::<_, _, FoldingError<_>>(log_m, w.f_hat.iter())) // propagate errors using `?`
+            .collect::<Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, _>>()?;
 
         let zis = cm_i_s
             .iter()
