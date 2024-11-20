@@ -13,7 +13,7 @@ ark-crypto-primitives = { version = "0.4.0", default-features = false, features 
 ark-ff = { version = "0.4.2", default-features = false }
 ark-serialize = { version = "0.4.2", features = ["derive"] }
 ark-std = { version = "0.4.0", default-features = false }
-lattirust-linear-algebra = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "main", default-features = false }
+lattirust-linear-algebra = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "Ivolkg/sparse-from-usize", default-features = false }
 lattirust-poly = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "main", default-features = false }
 lattirust-ring = { git = "ssh://git@github.com/NethermindEth/lattirust.git", branch = "main", default-features = false }
 num-bigint = { version = "0.4.5", default-features = false }

@@ -1,4 +1,6 @@
-use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
+use lattirust_linear_algebra::sparse_matrix::{
+    dense_matrix_to_sparse, dense_matrix_usize_to_sparse,
+};
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
@@ -78,7 +80,8 @@ impl<R: Ring> RelaxedR1CS<R> {
 }
 
 pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-    dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
+    // dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
+    dense_matrix_usize_to_sparse(M)
 }
 
 pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {

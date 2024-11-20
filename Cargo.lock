@@ -266,9 +266,9 @@ checksum = "79296716171880943b8470b5f8d03aa55eb2e645a4874bdbb28adb49162e012c"
 
 [[package]]
 name = "bytemuck"
-version = "1.19.0"
+version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8334215b81e418a0a7bdb8ef0849474f40bb10c8b71f1c4ed315cff49f32494d"
+checksum = "8b37c88a63ffd85d15b406896cc343916d7cf57838a847b3a6f2ca5d39a5695a"
 
 [[package]]
 name = "byteorder"
@@ -439,7 +439,7 @@ dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
  "ark-std",
- "lattirust-linear-algebra",
+ "lattirust-linear-algebra 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=Ivolkg%2Fsparse-from-usize)",
  "lattirust-poly",
  "lattirust-ring",
  "num-bigint",
@@ -623,9 +623,9 @@ dependencies = [
 
 [[package]]
 name = "itoa"
-version = "1.0.11"
+version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
+checksum = "540654e97a3f4470a492cd30ff187bc95d89557a903a2bbf112e2fae98104ef2"
 
 [[package]]
 name = "js-sys"
@@ -647,7 +647,7 @@ dependencies = [
  "criterion",
  "cyclotomic-rings",
  "dhat",
- "lattirust-linear-algebra",
+ "lattirust-linear-algebra 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=Ivolkg%2Fsparse-from-usize)",
  "lattirust-poly",
  "lattirust-ring",
  "num-bigint",
@@ -661,7 +661,24 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#164b40f2543dda5046f3f357227963a60005c8b0"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=Ivolkg%2Fsparse-from-usize#b4f7f63c3693889c75ec95b5c9111dd69340ffbb"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "delegate",
+ "derive_more",
+ "nalgebra",
+ "num-integer",
+ "rand",
+ "rayon",
+ "serde",
+]
+
+[[package]]
+name = "lattirust-linear-algebra"
+version = "0.0.1-alpha"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#d4a4314cd26219402ca672dde9c562fd0488e953"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -678,14 +695,14 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#164b40f2543dda5046f3f357227963a60005c8b0"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#d4a4314cd26219402ca672dde9c562fd0488e953"
 dependencies = [
  "ark-ff",
  "ark-serialize",
  "ark-std",
  "displaydoc",
  "hashbrown 0.15.1",
- "lattirust-linear-algebra",
+ "lattirust-linear-algebra 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main)",
  "lattirust-ring",
  "rand",
  "rayon",
@@ -695,7 +712,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#164b40f2543dda5046f3f357227963a60005c8b0"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#d4a4314cd26219402ca672dde9c562fd0488e953"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
@@ -704,7 +721,7 @@ dependencies = [
  "ark-std",
  "delegate",
  "derive_more",
- "lattirust-linear-algebra",
+ "lattirust-linear-algebra 0.0.1-alpha (git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main)",
  "num-bigint",
  "num-integer",
  "num-traits",
@@ -1261,9 +1278,9 @@ checksum = "42ff0bf0c66b8238c6f3b578df37d0b7848e55df8577b3f74f92a69acceeb825"
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.13"
+version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e91b56cd4cadaeb79bbf1a5645f6b4f8dc5bde8834ad5894a8db35fda9efa1fe"
+checksum = "adb9e6ca4f869e1180728b7950e35922a7fc6397f7b641499e8f3ef06e50dc83"
 
 [[package]]
 name = "version_check"
@@ -1354,9 +1371,9 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "0.7.28"
+version = "0.7.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b828f995bf1e9622031f8009f8481a85406ce1f4d4588ff746d872043e855690"
+checksum = "58e6db2670d2be78525979e9a5f9c69d296fd7d670549fe9ebf70f8708cb5019"
 dependencies = [
  "bytemuck",
  "safe_arch",
