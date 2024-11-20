@@ -96,9 +96,15 @@ where
 {
     mle_s
         .into_iter()
-        .map(|M| match M {
-            Ok(M) => Ok(DenseMultilinearExtension::from_slice(n_vars, &M)),
-            Err(M) => Err(M.into()),
+        .map(|m| match m {
+            Ok(m) => {
+                if n_vars << 1 < m.len() {
+                    Err(MleEvaluationError::IncorrectLength(n_vars << 1, m.len()).into())
+                } else {
+                    Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
+                }
+            }
+            Err(e) => Err(e.into()),
         })
         .collect::<Result<_, E>>()
 }
