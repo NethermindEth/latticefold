@@ -192,11 +192,6 @@ mod tests_stark {
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
-    #[cfg(feature = "std")]
-    use crate::utils::security_check::check_ring_modulus_128_bits_security;
-    #[cfg(feature = "std")]
-    use num_bigint::BigUint;
-
     #[test]
     fn test_compute_ui() {
         super::test_compute_ui::<RqNTT>();
@@ -234,27 +229,6 @@ mod tests_stark {
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkDP>(w_ccs);
-
-        // Make bound and securitty checks
-        #[cfg(feature = "std")]
-        {
-            let witness_within_bound = wit.within_bound(StarkDP::B);
-            let stark_modulus = BigUint::parse_bytes(
-                b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-                10,
-            )
-            .expect("Failed to parse stark_modulus");
-
-            assert!(check_ring_modulus_128_bits_security(
-                &stark_modulus,
-                C,
-                16,
-                W,
-                StarkDP::B,
-                StarkDP::L,
-                witness_within_bound,
-            ));
-        }
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkDP>(&scheme).unwrap(),

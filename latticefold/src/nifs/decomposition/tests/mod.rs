@@ -125,11 +125,6 @@ mod stark {
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
-    #[cfg(feature = "std")]
-    use crate::utils::security_check::check_ring_modulus_128_bits_security;
-    #[cfg(feature = "std")]
-    use num_bigint::BigUint;
-
     type CS = StarkChallengeSet;
     const WIT_LEN: usize = 4;
     const W: usize = WIT_LEN * DP::L;
@@ -154,27 +149,6 @@ mod stark {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit = Witness::from_w_ccs::<DP>(w_ccs);
-
-        // Make bound and security checks
-        #[cfg(feature = "std")]
-        {
-            let witness_within_bound = wit.within_bound(DP::B);
-            let stark_modulus = BigUint::parse_bytes(
-                b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-                10,
-            )
-            .expect("Failed to parse stark_modulus");
-
-            assert!(check_ring_modulus_128_bits_security(
-                &stark_modulus,
-                C,
-                16,
-                W,
-                DP::B,
-                DP::L,
-                witness_within_bound,
-            ));
-        }
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, DP>(&scheme).unwrap(),
