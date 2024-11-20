@@ -11,8 +11,6 @@ use cyclotomic_rings::rings::{
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
 use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
-mod utils;
-use crate::utils::rng;
 use std::fmt::Debug;
 
 fn ajtai_benchmark<
@@ -22,10 +20,11 @@ fn ajtai_benchmark<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let witness: Vec<R> = (0..W).map(|_| R::rand(&mut rng())).collect();
+    let mut rng = ark_std::test_rng();
+    let witness: Vec<R> = (0..W).map(|_| R::rand(&mut rng)).collect();
     let witness_2 = witness.clone();
     let witness_3 = witness.clone();
-    let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng());
+    let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
 
     group.bench_with_input(
         BenchmarkId::new("CommitNTT", format!("C={}, W={}", C, W)),

@@ -339,8 +339,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 mod tests {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
@@ -375,7 +373,7 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
@@ -447,7 +445,7 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
@@ -507,7 +505,7 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
@@ -579,8 +577,6 @@ mod tests {
 mod tests_goldilocks {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
@@ -615,7 +611,7 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
@@ -687,7 +683,7 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
@@ -747,7 +743,7 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
@@ -820,8 +816,6 @@ mod tests_stark {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use crate::arith::tests::get_test_dummy_ccs;
     use crate::ark_base::*;
@@ -869,7 +863,7 @@ mod tests_stark {
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
@@ -964,7 +958,7 @@ mod tests_stark {
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);

@@ -7,19 +7,6 @@ use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::decomposition_parameters::DecompositionParams;
 
 #[allow(dead_code)]
-pub fn rng() -> impl rand::Rng {
-    #[cfg(feature = "std")]
-    {
-        rand::thread_rng()
-    }
-    #[cfg(not(feature = "std"))]
-    {
-        use rand::SeedableRng;
-        rand_chacha::ChaCha8Rng::seed_from_u64(0)
-    }
-}
-
-#[allow(dead_code)]
 pub fn wit_and_ccs_gen<
     const X_LEN: usize,
     const C: usize, // rows
@@ -35,6 +22,8 @@ pub fn wit_and_ccs_gen<
     CCS<R>,
     AjtaiCommitmentScheme<C, W, R>,
 ) {
+    let mut rng = ark_std::test_rng();
+
     let new_r1cs_rows = if P::L == 1 && (WIT_LEN > 0 && (WIT_LEN & (WIT_LEN - 1)) == 0) {
         r1cs_rows - 2
     } else {
@@ -50,7 +39,7 @@ pub fn wit_and_ccs_gen<
         Err(e) => println!("R1CS invalid: {:?}", e),
     }
 
-    let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng());
+    let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
     let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
 
     let cm_i: CCCS<C, R> = CCCS {

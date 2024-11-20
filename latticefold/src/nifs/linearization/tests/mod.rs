@@ -21,12 +21,11 @@ use lattirust_poly::{
     polynomials::{build_eq_x_r, RefCounter, VirtualPolynomial},
 };
 use lattirust_ring::OverField;
-use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 fn test_compute_ui<R: OverField>() {
-    let mut mles = Vec::with_capacity(10);
     let mut rng = ark_std::test_rng();
+
+    let mut mles = Vec::with_capacity(10);
 
     for _i in 0..10 {
         let evals: Vec<R> = (0..8).map(|_| R::rand(&mut rng)).collect();
@@ -110,12 +109,13 @@ where
     RqNTT: OverField + SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
 {
+    let mut rng = ark_std::test_rng();
+
     const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
     const W: usize = WIT_LEN * DP::L; // the number of columns of the Ajtai matrix
 
     let ccs = get_test_ccs::<RqNTT>(W);
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
     let wit: Witness<RqNTT> = Witness::from_w_ccs::<DP>(w_ccs);
@@ -189,8 +189,6 @@ mod tests_stark {
     use crate::transcript::poseidon::PoseidonTranscript;
     use cyclotomic_rings::rings::StarkChallengeSet;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     #[test]
     fn test_compute_ui() {
@@ -213,6 +211,8 @@ mod tests_stark {
 
     #[test]
     fn test_dummy_linearization() {
+        let mut rng = ark_std::test_rng();
+
         type R = RqNTT;
         type CS = StarkChallengeSet;
         type T = PoseidonTranscript<R, CS>;
@@ -225,7 +225,6 @@ mod tests_stark {
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkDP>(w_ccs);

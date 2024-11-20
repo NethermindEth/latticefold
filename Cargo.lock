@@ -444,7 +444,6 @@ dependencies = [
  "lattirust-ring",
  "num-bigint",
  "rand",
- "rand_chacha",
  "thiserror",
 ]
 
@@ -655,7 +654,6 @@ dependencies = [
  "num-traits",
  "paste",
  "rand",
- "rand_chacha",
  "rayon",
  "thiserror",
 ]

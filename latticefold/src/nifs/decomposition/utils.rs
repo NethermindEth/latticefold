@@ -59,8 +59,7 @@ mod tests {
         },
         PolyRing,
     };
-    use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaCha8Rng;
+    use rand::Rng;
 
     use crate::{
         ark_base::*,
@@ -89,7 +88,7 @@ mod tests {
     {
         // Create a test vector
         const N: usize = 32;
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let test_vector: Vec<RqPoly> = (0..N)
             .map(|_| draw_ring_below_bound::<RqPoly, { DP::B }>(&mut rng))
             .collect();
@@ -164,7 +163,7 @@ mod tests {
     {
         // Create a test vector
         const N: usize = 32;
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let test_vector: Vec<RqNTT> = (0..N)
             .map(|_| draw_ring_below_bound::<RqPoly, { DP::B }>(&mut rng).crt())
             .collect();

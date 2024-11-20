@@ -108,15 +108,13 @@ pub fn rot_lin_combination<R: SuitableRing>(
 mod tests {
     use ark_ff::UniformRand;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::rings::{GoldilocksRingNTT, GoldilocksRingPoly};
 
     #[test]
     fn test_rot_sum_with_coeffs() {
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
         let a = GoldilocksRingPoly::rand(&mut rng);
         let b = GoldilocksRingPoly::rand(&mut rng);
 
@@ -139,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_rot_sum_with_ring_elems() {
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ark_std::test_rng();
 
         let a = GoldilocksRingPoly::rand(&mut rng);
         let b: Vec<GoldilocksRingPoly> = (0..Fq3::extension_degree())
