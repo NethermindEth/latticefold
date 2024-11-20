@@ -33,7 +33,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(VirtualPolynomial<NTT>, Vec<DenseMultilinearExtension<NTT>>), LinearizationError<NTT>> {
+    ) -> Result<
+        (VirtualPolynomial<NTT>, Vec<DenseMultilinearExtension<NTT>>),
+        LinearizationError<NTT>,
+    > {
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 
         let Mz_mles = Self::calculate_Mz_mles(ccs, &z_ccs)?;
@@ -76,9 +79,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         Ok((point_r.to_vec(), v, u))
     }
 
-    fn calculate_Mz_mles(ccs: &CCS<NTT>, z_ccs: &&[NTT]) -> Result<Vec<DenseMultilinearExtension<NTT>>, LinearizationError<NTT>> {
-        ccs
-            .M
+    fn calculate_Mz_mles(
+        ccs: &CCS<NTT>,
+        z_ccs: &&[NTT],
+    ) -> Result<Vec<DenseMultilinearExtension<NTT>>, LinearizationError<NTT>> {
+        ccs.M
             .iter()
             .map(|M| {
                 Ok(DenseMultilinearExtension::from_slice(

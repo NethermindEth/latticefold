@@ -7,6 +7,7 @@ use crate::{
     decomposition_parameters::DecompositionParams,
     transcript::poseidon::PoseidonTranscript,
 };
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
     BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet,
 };
@@ -16,12 +17,13 @@ use lattirust_ring::cyclotomic_ring::models::{
 };
 use num_traits::One;
 use rand::{thread_rng, Rng};
-use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
 const W: usize = WIT_LEN * DP::L;
-fn setup_test_environment<RqNTT: SuitableRing>(input: Option<usize>) -> (
+fn setup_test_environment<RqNTT: SuitableRing>(
+    input: Option<usize>,
+) -> (
     Witness<RqNTT>,
     CCCS<4, RqNTT>,
     CCS<RqNTT>,
@@ -120,16 +122,16 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
-            &ccs,
+            ccs,
         )
-            .unwrap();
+        .unwrap();
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &g,
             &mut transcript,
         )
-            .unwrap();
+        .unwrap();
 
     (point_r, Mz_mles)
 }
@@ -146,9 +148,9 @@ fn test_compute_v() {
     // Compute actual v vector
     let (point_r, v, _) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles
+            &wit, &point_r, &ccs, &Mz_mles,
         )
-            .unwrap();
+        .unwrap();
 
     // Compute expected v vector (witness evaluations)
     let expected_v: Vec<RqNTT> = cfg_iter!(wit.f_hat)
@@ -162,7 +164,10 @@ fn test_compute_v() {
     // Validate
     assert_eq!(point_r.len(), ccs.s, "point_r length mismatch");
     assert!(!v.is_empty(), "v vector should not be empty");
-    assert_eq!(v, expected_v, "v vector doesn't match expected witness evaluations");
+    assert_eq!(
+        v, expected_v,
+        "v vector doesn't match expected witness evaluations"
+    );
 }
 
 #[test]
@@ -177,9 +182,9 @@ fn test_compute_u() {
     // Compute actual u vector
     let (point_r, _, u) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles
+            &wit, &point_r, &ccs, &Mz_mles,
         )
-            .unwrap();
+        .unwrap();
 
     // Compute expected u vector
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
