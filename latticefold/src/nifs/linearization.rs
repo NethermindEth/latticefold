@@ -174,7 +174,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         Ok(())
     }
 
-    fn prepare_final_state<const C: usize>(
+    fn prepare_verifier_output<const C: usize>(
         cm_i: &CCCS<C, NTT>,
         point_r: Vec<NTT>,
         proof: &LinearizationProof<NTT>,

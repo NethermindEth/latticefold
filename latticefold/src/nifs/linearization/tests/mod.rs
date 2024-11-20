@@ -260,7 +260,7 @@ fn test_verify_evaluation_claim() {
 }
 
 #[test]
-fn test_prepare_final_state() {
+fn test_prepare_verifier_output() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
     let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
@@ -277,7 +277,7 @@ fn test_prepare_final_state() {
     let point_r = vec![RqNTT::one(); ccs.s]; // Example point_r
 
     let lcccs =
-        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_final_state::<C>(
+        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_verifier_output::<C>(
             &cm_i,
             point_r.clone(),
             &proof,
