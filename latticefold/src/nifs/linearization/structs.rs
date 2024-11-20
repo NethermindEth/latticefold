@@ -12,6 +12,7 @@ use crate::{
 };
 
 use lattirust_ring::OverField;
+
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinearizationProof<NTT: OverField> {
     // Sent in the step 2. of the linearization subprotocol
