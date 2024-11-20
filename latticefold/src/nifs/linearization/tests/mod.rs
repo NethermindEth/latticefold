@@ -16,19 +16,21 @@ use lattirust_ring::cyclotomic_ring::models::{
 };
 use num_traits::One;
 use rand::thread_rng;
+use rand::{thread_rng, Rng};
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
 const W: usize = WIT_LEN * DP::L;
-fn setup_test_environment<RqNTT: SuitableRing>() -> (
+fn setup_test_environment<RqNTT: SuitableRing>(input: Option<usize>) -> (
     Witness<RqNTT>,
     CCCS<4, RqNTT>,
     CCS<RqNTT>,
     AjtaiCommitmentScheme<C, W, RqNTT>,
 ) {
     let ccs = get_test_ccs::<RqNTT>(W);
-    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(3);
-    let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+    let mut rng = thread_rng();
+    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input.unwrap_or(rng.gen_range(0..64)));
+    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
     let wit = Witness::from_w_ccs::<DP>(w_ccs);
     let cm_i = CCCS {
@@ -42,7 +44,7 @@ fn setup_test_environment<RqNTT: SuitableRing>() -> (
 #[test]
 fn test_compute_z_ccs() {
     type RqNTT = StarkRqNTT;
-    let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT>(None);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -58,7 +60,7 @@ fn test_compute_z_ccs() {
 fn test_construct_polynomial() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -82,7 +84,7 @@ fn test_construct_polynomial() {
 fn test_generate_sumcheck() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -131,6 +133,7 @@ fn test_compute_evaluation_vectors() {
         .unwrap();
 
     let (point_r, v, u) =
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
             &wit, &point_r, &ccs, &z_ccs,
         )
@@ -150,6 +153,7 @@ fn test_compute_evaluation_vectors() {
         })
         .collect();
     assert_eq!(v, witness_f_hat);
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
 
     // Check u evaluations
     let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
@@ -166,7 +170,7 @@ fn test_compute_evaluation_vectors() {
 fn test_full_prove() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (lcccs, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
@@ -186,7 +190,7 @@ fn test_full_prove() {
 fn test_verify_sumcheck_proof() {
     type RqNTT = StarkRqNTT;
     type CS = StarkChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut prove_transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
@@ -226,7 +230,7 @@ fn test_verify_sumcheck_proof() {
 fn test_verify_evaluation_claim() {
     type RqNTT = BabyBearRqNTT;
     type CS = BabyBearChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
@@ -263,7 +267,7 @@ fn test_verify_evaluation_claim() {
 fn test_prepare_verifier_output() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
@@ -296,7 +300,7 @@ fn test_prepare_verifier_output() {
 fn test_verify_invalid_proof() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (_, mut proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
