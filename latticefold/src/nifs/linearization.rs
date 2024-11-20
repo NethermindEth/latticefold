@@ -7,7 +7,7 @@ use lattirust_poly::{
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
-use super::mle_helpers::{calculate_Mz_mles, evaluate_mles};
+use super::mle_helpers::{calculate_Mz_mles, calculate_f_hat_mle_evaluations, evaluate_mles};
 use crate::ark_base::*;
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
@@ -37,13 +37,20 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         LinearizationError<NTT>,
     > {
         // Generate beta challenges from Step 1
-        let beta_s = transcript.squeeze_beta_challenges(ccs.s);
+        let beta_s =
+            transcript.squeeze_beta_challenges(ccs.padded_length_of_decomposed_witness_log);
 
         // Prepare MLEs
         let Mz_mles = calculate_Mz_mles::<_, LinearizationError<_>>(ccs, z_ccs)?;
 
         // Construct the sumcheck polynomial g
-        let g = prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+        let g = prepare_lin_sumcheck_polynomial(
+            ccs.padded_length_of_decomposed_witness_log,
+            &ccs.c,
+            &Mz_mles,
+            &ccs.S,
+            &beta_s,
+        )?;
 
         Ok((g, Mz_mles))
     }
@@ -65,12 +72,14 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
     // Step 3: P sends V values
     fn compute_evaluation_vectors(
+        ccs: &CCS<NTT>,
         wit: &Witness<NTT>,
         point_r: &[NTT],
         Mz_mles: &[DenseMultilinearExtension<NTT>],
     ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         // Compute v
-        let v: Vec<NTT> = evaluate_mles::<_, _, _, LinearizationError<_>>(&wit.f_hat, point_r)?;
+        let v: Vec<NTT> =
+            calculate_f_hat_mle_evaluations::<_, LinearizationError<_>>(ccs, &wit.f_hat, point_r)?;
 
         // Compute u_j
         let u = compute_u(Mz_mles, point_r)?;
@@ -100,7 +109,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, transcript)?;
 
         // Step 3: Compute v, u_vector.
-        let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;
+        let (point_r, v, u) = Self::compute_evaluation_vectors(ccs, wit, &point_r, &Mz_mles)?;
 
         // Absorbing the prover's messages to the verifier.
         transcript.absorb_slice(&v);
@@ -133,7 +142,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         ccs: &CCS<NTT>,
     ) -> Result<(Vec<NTT>, NTT), LinearizationError<NTT>> {
         // The polynomial has degree <= ccs.d + 1 and log_m (ccs.s) vars.
-        let poly_info = VPAuxInfo::new(ccs.s, ccs.d + 1);
+        let poly_info = VPAuxInfo::new(ccs.padded_length_of_decomposed_witness_log, ccs.d + 1);
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,
@@ -200,14 +209,15 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
         // Step 1: Generate the beta challenges.
-        let beta_s = transcript.squeeze_beta_challenges(ccs.s);
+        let beta_s =
+            transcript.squeeze_beta_challenges(ccs.padded_length_of_decomposed_witness_log);
 
         //Step 2: The sumcheck.
         let (point_r, s) = Self::verify_sumcheck_proof(proof, transcript, ccs)?;
 
         Self::verify_evaluation_claim(&beta_s, &point_r, s, proof, ccs)?;
 
-        // Absorbing the prover's mmessages to the verifier.
+        // Absorbing the prover's messages to the verifier.
         transcript.absorb_slice(&proof.v);
         transcript.absorb_slice(&proof.u);
 

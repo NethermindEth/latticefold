@@ -18,7 +18,7 @@ use rayon::prelude::*;
 
 pub use structs::*;
 
-use super::mle_helpers::calculate_Mz_mles;
+use super::mle_helpers::{calculate_Mz_mles, calculate_f_hat_mle_evaluations};
 mod structs;
 #[cfg(test)]
 mod tests;
@@ -58,7 +58,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
-                evaluate_mles::<NTT, _, _, DecompositionError>(cfg_iter!(wit.f_hat), &cm_i.r)
+                calculate_f_hat_mle_evaluations::<_, DecompositionError>(ccs, &wit.f_hat, &cm_i.r)
             })
             .collect::<Result<Vec<_>, _>>()?;
 

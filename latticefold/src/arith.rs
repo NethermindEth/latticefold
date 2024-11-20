@@ -59,6 +59,10 @@ pub struct CCS<R: Ring> {
     pub S: Vec<Vec<usize>>,
     /// vector of coefficients
     pub c: Vec<R>,
+
+    ///
+    pub padded_length_of_decomposed_witness: usize,
+    pub padded_length_of_decomposed_witness_log: usize,
 }
 
 impl<R: Ring> Arith<R> for CCS<R> {
@@ -124,6 +128,8 @@ impl<R: Ring> CCS<R> {
             S: vec![vec![0, 1], vec![2]],
             c: vec![R::one(), R::one().neg()],
             M: vec![r1cs.A, r1cs.B, r1cs.C],
+            padded_length_of_decomposed_witness: n,
+            padded_length_of_decomposed_witness_log: log2(n) as usize,
         }
     }
 

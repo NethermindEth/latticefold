@@ -1,4 +1,5 @@
 use crate::ark_base::*;
+use ark_std::{cfg_iter, cfg_iter_mut};
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
@@ -44,6 +45,33 @@ pub fn hadamard<R: Ring>(a: &[R], b: &[R]) -> Result<Vec<R>, Error> {
         ));
     }
     Ok(a.iter().zip(b).map(|(a, b)| *a * b).collect())
+}
+
+pub fn mat_vec_mul_with_padding<R: Ring>(
+    M: &SparseMatrix<R>,
+    z: &[R],
+    padded_len: usize,
+) -> Result<Vec<R>, Error> {
+    if M.n_cols > padded_len {
+        return Err(Error::IncorrectPadding(M.n_cols, padded_len));
+    }
+
+    if M.n_cols != z.len() {
+        return Err(Error::LengthsNotEqual(
+            "M".to_string(),
+            "z".to_string(),
+            M.n_cols,
+            z.len(),
+        ));
+    }
+
+    let mut result: Vec<R> = vec![R::zero(); padded_len];
+
+    cfg_iter_mut!(result)
+        .zip(cfg_iter!(M.coeffs))
+        .for_each(|(res, row)| *res = row.iter().map(|(value, col_i)| *value * z[*col_i]).sum());
+
+    Ok(result)
 }
 
 pub fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Error> {

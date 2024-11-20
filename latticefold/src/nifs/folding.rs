@@ -10,7 +10,9 @@ use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
-use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
+use super::mle_helpers::{
+    calculate_Mz_mles, calculate_f_hat_mle_evaluations, evaluate_mles, prepare_f_hat_mle, to_mles,
+};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
@@ -81,18 +83,16 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             return Err(FoldingError::IncorrectLength);
         }
 
-        let log_m = ccs.s;
-
         // Step 1: Generate alpha, zeta, mu, beta challenges
-        let (alpha_s, beta_s, zeta_s, mu_s) =
-            get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
+        let (alpha_s, beta_s, zeta_s, mu_s) = get_alphas_betas_zetas_mus::<_, _, P>(
+            ccs.padded_length_of_decomposed_witness_log,
+            transcript,
+        );
 
         // Step 2: Compute g polynomial and sumcheck on it
         // Setup f_hat_mle for later evaluation of thetas
-        let f_hat_mles = w_s
-            .iter()
-            .map(|w| to_mles::<_, _, FoldingError<_>>(log_m, cfg_iter!(w.f_hat))) // propagate errors using `?`
-            .collect::<Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, _>>()?;
+        let f_hat_mles = cfg_iter!(w_s).map(|w_i| prepare_f_hat_mle::<_, FoldingError<NTT>>(ccs, &w_i.f_hat))
+            .collect::<Result<Vec<_>, _>>()?;
 
         let zis = cm_i_s
             .iter()
@@ -106,7 +106,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             .collect::<Result<_, FoldingError<_>>>()?;
 
         let g = create_sumcheck_polynomial::<_, P>(
-            log_m,
+            ccs.padded_length_of_decomposed_witness_log,
             &f_hat_mles,
             &alpha_s,
             &Mz_mles_vec,
