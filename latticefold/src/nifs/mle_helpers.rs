@@ -8,6 +8,7 @@ use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::Ring;
 
 use super::error::MleEvaluationError;
+use crate::arith::{error::CSError, utils::mat_vec_mul, CCS};
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -18,21 +19,31 @@ pub trait Evaluate<R: Ring> {
 
 impl<R: Ring> Evaluate<R> for Vec<R> {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
-        let evals_len = self.len();
+        if self.len() != 1 << point.len() {
+            return Err(MleEvaluationError::IncorrectLength(point.len(), self.len()));
+        }
 
-        DenseMultilinearExtension::from_evaluations_vec(point.len(), self)
-            .evaluate(point)
-            .ok_or(MleEvaluationError::IncorrectLength(point.len(), evals_len))
+        DenseMultilinearExtension::from_evaluations_vec(point.len(), self).evaluate(point)
     }
 }
 
 impl<R: Ring> Evaluate<R> for &[R] {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
-        let evals_len = self.len();
+        if self.len() != 1 << point.len() {
+            return Err(MleEvaluationError::IncorrectLength(point.len(), self.len()));
+        }
 
-        DenseMultilinearExtension::from_evaluations_slice(point.len(), self)
-            .evaluate(point)
-            .ok_or(MleEvaluationError::IncorrectLength(point.len(), evals_len))
+        DenseMultilinearExtension::from_evaluations_slice(point.len(), self).evaluate(point)
+    }
+}
+
+impl<R: Ring> Evaluate<R> for &Vec<R> {
+    fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
+        if self.len() != 1 << point.len() {
+            return Err(MleEvaluationError::IncorrectLength(point.len(), self.len()));
+        }
+
+        DenseMultilinearExtension::from_evaluations_slice(point.len(), self).evaluate(point)
     }
 }
 
@@ -44,12 +55,20 @@ impl<R: Ring> Evaluate<R> for &DenseMultilinearExtension<R> {
     }
 }
 
+impl<R: Ring> Evaluate<R> for DenseMultilinearExtension<R> {
+    fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
+        DenseMultilinearExtension::<R>::evaluate(&self, point).ok_or(
+            MleEvaluationError::IncorrectLength(point.len(), self.evaluations.len()),
+        )
+    }
+}
+
 #[cfg(not(feature = "parallel"))]
 pub fn evaluate_mles<R, V, I, E>(mle_s: I, point: &[R]) -> Result<Vec<R>, E>
 where
     R: Ring,
     V: Evaluate<R>,
-    I: Iterator<Item = V>,
+    I: IntoIterator<Item = V>,
     E: From<MleEvaluationError>,
 {
     cfg_into_iter!(mle_s)
@@ -140,4 +159,11 @@ where
             }
         })
         .collect::<Result<_, E>>()
+}
+
+pub fn calculate_Mz_mles<R: Ring, E: From<CSError> + From<MleEvaluationError>>(
+    ccs: &CCS<R>,
+    z_ccs: &[R],
+) -> Result<Vec<DenseMultilinearExtension<R>>, E> {
+    to_mles_err::<_, _, E, _>(ccs.s, cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, z_ccs)))
 }

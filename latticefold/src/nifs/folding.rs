@@ -10,12 +10,12 @@ use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
-use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
+use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
-    arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
+    arith::{Instance, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
     utils::sumcheck,
 };
@@ -102,13 +102,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
 
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = cfg_iter!(zis)
-            .map(|zi| {
-                let Mz_mle = to_mles_err::<_, _, FoldingError<NTT>, _>(
-                    log_m,
-                    cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, zi)),
-                )?;
-                Ok(Mz_mle)
-            })
+            .map(|zi| calculate_Mz_mles(ccs, zi))
             .collect::<Result<_, FoldingError<_>>>()?;
 
         let g = create_sumcheck_polynomial::<_, P>(

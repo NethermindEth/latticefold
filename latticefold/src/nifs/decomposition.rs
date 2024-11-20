@@ -1,18 +1,14 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use crate::{
-    arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
+    arith::{Witness, CCS, LCCCS},
     ark_base::*,
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,
-    nifs::{
-        error::DecompositionError,
-        mle_helpers::{evaluate_mles, to_mles_err},
-    },
+    nifs::{error::DecompositionError, mle_helpers::evaluate_mles},
     transcript::Transcript,
 };
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
@@ -22,7 +18,7 @@ use rayon::prelude::*;
 
 pub use structs::*;
 
-use super::mle_helpers::to_mles;
+use super::mle_helpers::calculate_Mz_mles;
 mod structs;
 #[cfg(test)]
 mod tests;
@@ -45,8 +41,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         ),
         DecompositionError,
     > {
-        let log_m = ccs.s;
-
         let wit_s: Vec<Witness<NTT>> = {
             let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
             cfg_into_iter!(f_s)
@@ -64,8 +58,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
-                let mles = to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat))?;
-                evaluate_mles::<NTT, _, _, DecompositionError>(cfg_iter!(mles), &cm_i.r)
+                evaluate_mles::<NTT, _, _, DecompositionError>(cfg_iter!(wit.f_hat), &cm_i.r)
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -81,18 +74,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                     z
                 };
 
-                let mles = to_mles_err::<_, _, DecompositionError, _>(
-                    ccs.s,
-                    cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z)),
-                )?;
+                let u_s_for_i = calculate_Mz_mles::<_, DecompositionError>(ccs, &z)?;
 
-                let u_s_for_i =
-                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
-                        cfg_iter!(mles),
-                        &cm_i.r,
-                    )?;
-
-                Ok(u_s_for_i)
+                evaluate_mles::<_, _, _, DecompositionError>(u_s_for_i, &cm_i.r)
             })
             .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()?;
 
