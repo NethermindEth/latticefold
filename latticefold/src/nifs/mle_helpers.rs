@@ -91,20 +91,17 @@ pub fn to_mles_err<I, R, E, E1>(
 where
     I: IntoIterator<Item = Result<Vec<R>, E1>>,
     R: Ring,
-    E: From<MleEvaluationError>,
-    E1: Into<E>,
+    E: From<MleEvaluationError> + From<E1>,
 {
     mle_s
         .into_iter()
-        .map(|m| match m {
-            Ok(m) => {
-                if n_vars << 1 < m.len() {
-                    Err(MleEvaluationError::IncorrectLength(n_vars << 1, m.len()).into())
-                } else {
-                    Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
-                }
+        .map(|m| {
+            let m = m?;
+            if 1 << n_vars < m.len() {
+                Err(MleEvaluationError::IncorrectLength(n_vars << 1, m.len()).into())
+            } else {
+                Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
             }
-            Err(e) => Err(e.into()),
         })
         .collect::<Result<_, E>>()
 }
@@ -135,9 +132,13 @@ where
 {
     mle_s
         .into_par_iter()
-        .map(|M| match M {
-            Ok(M) => Ok(DenseMultilinearExtension::from_slice(n_vars, &M)),
-            Err(M) => Err(M.into()),
+        .map(|m| {
+            let m = m?;
+            if 1 << n_vars < m.len() {
+                Err(MleEvaluationError::IncorrectLength(n_vars << 1, m.len()).into())
+            } else {
+                Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
+            }
         })
         .collect::<Result<_, E>>()
 }
