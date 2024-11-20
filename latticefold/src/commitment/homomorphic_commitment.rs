@@ -6,8 +6,8 @@ use ark_std::{
 use lattirust_ring::Ring;
 
 use crate::{
-    commitment::CommitmentError, impl_additive_ops_from_ref, impl_multiplicative_ops_from_ref,
-    impl_subtractive_ops_from_ref,
+    ark_base::*, commitment::CommitmentError, impl_additive_ops_from_ref,
+    impl_multiplicative_ops_from_ref, impl_subtractive_ops_from_ref,
 };
 
 /// The Ajtai commitment type. Meant to contain the output of the
@@ -56,7 +56,7 @@ impl<const C: usize, R: Ring> AsRef<[R]> for Commitment<C, R> {
     }
 }
 
-impl<'a, 'b, const C: usize, R: Ring> Add<&'a Commitment<C, R>> for &'b Commitment<C, R> {
+impl<'a, const C: usize, R: Ring> Add<&'a Commitment<C, R>> for &Commitment<C, R> {
     type Output = Commitment<C, R>;
 
     fn add(self, rhs: &'a Commitment<C, R>) -> Self::Output {
@@ -72,7 +72,7 @@ impl<'a, 'b, const C: usize, R: Ring> Add<&'a Commitment<C, R>> for &'b Commitme
     }
 }
 
-impl<'a, 'b, const C: usize, R: Ring> Sub<&'a Commitment<C, R>> for &'b Commitment<C, R> {
+impl<'a, const C: usize, R: Ring> Sub<&'a Commitment<C, R>> for &Commitment<C, R> {
     type Output = Commitment<C, R>;
 
     fn sub(self, rhs: &'a Commitment<C, R>) -> Self::Output {
@@ -88,7 +88,7 @@ impl<'a, 'b, const C: usize, R: Ring> Sub<&'a Commitment<C, R>> for &'b Commitme
     }
 }
 
-impl<'a, 'b, const C: usize, R: Ring> Mul<&'a R> for &'b Commitment<C, R> {
+impl<'a, const C: usize, R: Ring> Mul<&'a R> for &Commitment<C, R> {
     type Output = Commitment<C, R>;
 
     fn mul(self, rhs: &'a R) -> Self::Output {

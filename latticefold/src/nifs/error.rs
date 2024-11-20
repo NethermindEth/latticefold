@@ -2,7 +2,9 @@ use lattirust_poly::polynomials::ArithErrors;
 use lattirust_ring::Ring;
 use thiserror::Error;
 
-use crate::{arith::error::CSError, commitment::CommitmentError, utils::sumcheck::SumCheckError};
+use crate::{
+    arith::error::CSError, ark_base::*, commitment::CommitmentError, utils::sumcheck::SumCheckError,
+};
 
 #[derive(Debug, Error)]
 pub enum LatticefoldError<R: Ring> {

@@ -8,6 +8,7 @@ use lattirust_poly::{
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
+use crate::ark_base::*;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
@@ -26,7 +27,7 @@ mod structs;
 
 #[cfg(test)]
 mod tests;
-mod utils;
+pub mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     fn construct_polynomial_g(

@@ -1,6 +1,7 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
+    ark_base::*,
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,
@@ -72,7 +73,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let u_s = cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
-                let mut u_s_for_i = Vec::with_capacity(P::K);
+                let mut u_s_for_i = Vec::with_capacity(ccs.t);
 
                 let z: Vec<NTT> = {
                     let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());

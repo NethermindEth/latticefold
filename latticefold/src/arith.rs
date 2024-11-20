@@ -11,6 +11,7 @@ use lattirust_ring::{
 };
 
 use crate::{
+    ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
     decomposition_parameters::DecompositionParams,
 };
@@ -334,7 +335,6 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 #[cfg(test)]
 pub mod tests {
     use ark_ff::{One, Zero};
-    use rand::thread_rng;
 
     use super::*;
     use crate::{
@@ -431,7 +431,7 @@ pub mod tests {
 
     #[test]
     fn test_from_w_ccs() {
-        let mut rng = thread_rng();
+        let mut rng = ark_std::test_rng();
 
         let random_witness =
             Witness::<GoldilocksRingNTT>::rand::<_, GoldilocksDP>(&mut rng, WIT_LEN);
@@ -443,7 +443,7 @@ pub mod tests {
 
     #[test]
     fn test_from_f() {
-        let mut rng = thread_rng();
+        let mut rng = ark_std::test_rng();
 
         let random_witness = Witness::<BabyBearRingNTT>::rand::<_, BabyBearDP>(&mut rng, WIT_LEN);
         let recreated_witness = Witness::from_f::<BabyBearDP>(random_witness.f.clone());
@@ -454,7 +454,7 @@ pub mod tests {
 
     #[test]
     fn test_from_f_coeff() {
-        let mut rng = thread_rng();
+        let mut rng = ark_std::test_rng();
 
         let random_witness = Witness::<StarkRingNTT>::rand::<_, StarkDP>(&mut rng, WIT_LEN);
         let recreated_witness = Witness::from_f_coeff::<StarkDP>(random_witness.f_coeff.clone());

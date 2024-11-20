@@ -1,9 +1,11 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
+
 use cyclotomic_rings::rings::SuitableRing;
 
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
+    ark_base::*,
     nifs::error::LinearizationError,
     transcript::Transcript,
     utils::sumcheck,

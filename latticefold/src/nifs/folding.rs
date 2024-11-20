@@ -10,6 +10,7 @@ use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
+use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
@@ -338,8 +339,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 mod tests {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use rand::thread_rng;
 
+    use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -372,7 +373,8 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -443,7 +445,8 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -502,7 +505,8 @@ mod tests {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -573,8 +577,8 @@ mod tests {
 mod tests_goldilocks {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use rand::thread_rng;
 
+    use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -607,7 +611,8 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -678,7 +683,8 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -737,7 +743,8 @@ mod tests_goldilocks {
 
         let ccs = get_test_ccs::<R>(W);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
         let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
         let cm_i: CCCS<4, R> = CCCS {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
@@ -809,9 +816,9 @@ mod tests_stark {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
     use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-    use num_bigint::BigUint;
-    use rand::thread_rng;
 
+    use crate::arith::tests::get_test_dummy_ccs;
+    use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
         arith::r1cs::get_test_dummy_z_split,
@@ -823,10 +830,6 @@ mod tests_stark {
             folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
             linearization::LinearizationProver,
         },
-    };
-    use crate::{
-        arith::tests::get_test_dummy_ccs,
-        utils::security_check::check_ring_modulus_128_bits_security,
     };
     use crate::{
         arith::{Witness, CCCS},
@@ -860,31 +863,10 @@ mod tests_stark {
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
-
-        // Make bound and securitty checks
-        let witness_within_bound = wit.within_bound(StarkFoldingDP::B);
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
-
-        if check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            StarkFoldingDP::B,
-            StarkFoldingDP::L,
-            witness_within_bound,
-        ) {
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            println!("Bound condition not satisfied for 128 bits security");
-        }
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
@@ -976,31 +958,10 @@ mod tests_stark {
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
         let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
-
-        // Make bound and security checks
-        let witness_within_bound = wit.within_bound(StarkFoldingDP::B);
-        let stark_modulus = BigUint::parse_bytes(
-            b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
-            10,
-        )
-        .expect("Failed to parse stark_modulus");
-
-        if check_ring_modulus_128_bits_security(
-            &stark_modulus,
-            C,
-            16,
-            W,
-            StarkFoldingDP::B,
-            StarkFoldingDP::L,
-            witness_within_bound,
-        ) {
-            println!(" Bound condition satisfied for 128 bits security");
-        } else {
-            println!("Bound condition not satisfied for 128 bits security");
-        }
 
         let cm_i = CCCS {
             cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
