@@ -1,5 +1,5 @@
 use ark_ff::PrimeField;
-use ark_std::{cfg_iter, sync::Arc};
+use ark_std::cfg_iter;
 
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
