@@ -78,7 +78,7 @@ impl<R: Ring> RelaxedR1CS<R> {
 }
 
 pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-    dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
+    dense_matrix_to_sparse(to_F_dense_matrix(M))
 }
 
 pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
@@ -118,9 +118,14 @@ pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
 pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     rows: usize,
 ) -> R1CS<R> {
-    let R1CS_A = to_F_matrix::<R>(create_dummy_identity_matrix(rows, X_LEN + WIT_LEN + 1));
+    let identity_matrix = create_dummy_identity_matrix(rows, X_LEN + WIT_LEN + 1);
+    println!("Generated identity matrix");
+    let R1CS_A = to_F_matrix::<R>(identity_matrix);
+    println!("Generated R1CS_A matrix");
     let R1CS_B = R1CS_A.clone();
+    println!("Generated R1CS_B matrix by cloning R1CS_A");
     let R1CS_C = R1CS_A.clone();
+    println!("Generated R1CS_C matrix by cloning R1CS_A");
 
     R1CS::<R> {
         l: 1,

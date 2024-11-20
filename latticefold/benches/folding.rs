@@ -482,7 +482,7 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-    
+
         run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 128, 9, 2, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 4, 4);
         run_single_goldilocks_benchmark!(&mut group, 1, 7, 2048, 128, 9, 2, 7);
@@ -552,9 +552,7 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 8192, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 16384, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 16384, 8192, 5, 2, 13);
-
     }
-
 
     // // BabyBear
     // // TODO: Fix f_hat and account for field extensions.

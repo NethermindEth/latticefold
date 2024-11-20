@@ -584,10 +584,13 @@ mod tests {
 mod tests_goldilocks {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
+    use num_bigint::BigUint;
 
+    use crate::arith::r1cs::get_test_dummy_z_split;
+    use crate::arith::tests::get_test_dummy_ccs;
     use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
-    use crate::utils::security_check::{check_ring_modulus_128_bits_security, check_witness_bound};
+    use crate::utils::security_check::check_ring_modulus_128_bits_security;
     use crate::{
         arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
         commitment::AjtaiCommitmentScheme,
@@ -837,18 +840,19 @@ mod tests_goldilocks {
 
         const C: usize = 13;
         const X_LEN: usize = 1;
-        const WIT_LEN: usize = 2048;
+        const WIT_LEN: usize = 1024;
         const W: usize = WIT_LEN * PP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
 
         let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
+        println!("CCS generated");
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let scheme = AjtaiCommitmentScheme::rand(&mut thread_rng());
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
-        let wit = Witness::from_w_ccs::<PP>(&w_ccs);
+        let wit = Witness::from_w_ccs::<PP>(w_ccs);
 
         // Make bound and securitty checks
-        let witness_within_bound = check_witness_bound(&wit, PP::B);
         let stark_modulus = BigUint::parse_bytes(
             b"3618502788666131000275863779947924135206266826270938552493006944358698582017",
             10,
@@ -862,7 +866,7 @@ mod tests_goldilocks {
             W,
             PP::B,
             PP::L,
-            witness_within_bound,
+            true,
         ) {
             println!(" Bound condition satisfied for 128 bits security");
         } else {

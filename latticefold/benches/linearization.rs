@@ -424,7 +424,6 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 8192, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 16384, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 16384, 8192, 5, 2, 13);
-
     }
 
     // // StarkPrime
