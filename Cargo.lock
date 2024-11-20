@@ -661,7 +661,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=Ivolkg%2Fsparse-from-usize#b4f7f63c3693889c75ec95b5c9111dd69340ffbb"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=Ivolkg%2Fsparse-from-usize#1554e80f3c03a51fc26bf4c8299c8d07655e072a"
 dependencies = [
  "ark-ff",
  "ark-serialize",
