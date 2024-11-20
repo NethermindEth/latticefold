@@ -123,7 +123,7 @@ where
 #[cfg(feature = "parallel")]
 pub fn to_mles<'a, I, R, E>(n_vars: usize, mle_s: I) -> Result<Vec<DenseMultilinearExtension<R>>, E>
 where
-    I: Iterator<Item = &'a Vec<R>>,
+    I: IntoParallelIterator<Item = &'a Vec<R>>,
     R: Ring,
     E: From<MleEvaluationError> + Sync + Send,
 {
@@ -136,7 +136,7 @@ where
 #[allow(dead_code)]
 #[cfg(feature = "parallel")]
 pub fn to_mles_owned<I, R, E>(
-    num_vars: usize,
+    n_vars: usize,
     mle_s: I,
 ) -> Result<Vec<DenseMultilinearExtension<R>>, E>
 where
@@ -158,7 +158,7 @@ pub fn to_mles_err<I, R, E, E1>(
 where
     I: IntoParallelIterator<Item = Result<Vec<R>, E1>>,
     R: Ring,
-    E: From<MleEvaluationError>,
+    E: From<MleEvaluationError> + Sync + Send,
     E1: Into<E>,
 {
     mle_s

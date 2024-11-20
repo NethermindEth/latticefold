@@ -51,7 +51,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         let Mz_mles = to_mles_err::<_, _, LinearizationError<NTT>, _>(
             log_m,
-            ccs.M.iter().map(|M| mat_vec_mul(M, &z_ccs)),
+            cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z_ccs)),
         )?;
         // The sumcheck polynomial
         let g = prepare_lin_sumcheck_polynomial(log_m, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
