@@ -6,8 +6,8 @@ use criterion::{
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{
-        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
-        GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
+        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT,
+        GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
 use latticefold::nifs::decomposition::{
@@ -333,13 +333,12 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        
+
         // run_single_babybear_benchmark!(&mut group, 1, 6, 1024, 512, 4, 2, 9);
         // run_single_babybear_benchmark!(&mut group, 1, 7, 1024, 2048, 3, 2, 11);
         // run_single_babybear_benchmark!(&mut group, 1, 8, 4096, 2048, 3, 2, 11);
         // run_single_babybear_benchmark!(&mut group, 1, 9, 2048, 8192, 3, 2, 13);
         run_single_babybear_benchmark!(&mut group, 1, 10, 4096, 16384, 3, 2, 14);
-        
     }
 
     // StarkPrime
@@ -367,13 +366,12 @@ fn benchmarks_main(c: &mut Criterion) {
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        
+
         // run_single_frog_benchmark!(&mut group, 1, 5, 512, 8, 23, 2, 3);
         // run_single_frog_benchmark!(&mut group, 1, 9, 1024, 128, 10, 2, 7);
         // run_single_frog_benchmark!(&mut group, 1, 10, 1024, 256, 9, 2, 8);
         // run_single_frog_benchmark!(&mut group, 1, 12, 512, 1024, 7, 2, 10);
         run_single_frog_benchmark!(&mut group, 1, 15, 1024, 4096, 6, 2, 12);
-         
     }
 }
 
