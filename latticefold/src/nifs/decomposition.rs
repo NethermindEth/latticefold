@@ -5,7 +5,10 @@ use crate::{
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,
-    nifs::error::DecompositionError,
+    nifs::{
+        error::DecompositionError,
+        mle_helpers::{evaluate_mles, to_mles_err},
+    },
     transcript::Transcript,
 };
 use cyclotomic_rings::rings::SuitableRing;
@@ -78,9 +81,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let u_s = cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
-                let mut u_s_for_i = Vec::with_capacity(ccs.t);
-
-                let z: Vec<NTT> = {
+                let z: Vec<_> = {
                     let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
 
                     z.extend_from_slice(&x_s[i]);
@@ -89,15 +90,14 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                     z
                 };
 
-                for M in &ccs.M {
-                    u_s_for_i.push(
-                        DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
-                            .evaluate(&cm_i.r)
-                            .ok_or(DecompositionError::EvaluationError(
-                                super::error::MleEvaluationError::IncorrectLength(ccs.s, 1),
-                            ))?,
-                    );
-                }
+                let u_s_for_i = evaluate_mles::<NTT, _, _, DecompositionError>(
+                    to_mles_err::<_, _, DecompositionError, _>(
+                        ccs.s,
+                        cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z)),
+                    )?
+                    .iter(),
+                    &cm_i.r,
+                )?;
 
                 Ok(u_s_for_i)
             })
