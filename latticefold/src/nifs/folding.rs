@@ -9,7 +9,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::{cyclotomic_ring::CRT, OverField};
 use utils::get_alphas_betas_zetas_mus;
 
-use super::common_helpers::{to_mles, to_mles_err};
+use super::common_helpers::{evaluate_mles, to_mles, to_mles_err};
 use super::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
@@ -134,37 +134,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Step 3: Evaluate thetas and etas
         let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
             .map(|f_hat_row| {
-                f_hat_row
-                    .iter()
-                    .map(|f_hat_mle| {
-                        f_hat_mle
-                            .evaluate(&r_0)
-                            .ok_or(FoldingError::<NTT>::EvaluationError(
-                                super::error::MleEvaluationError::IncorrectLength(
-                                    r_0.len(),
-                                    f_hat_mle.evaluations.len(),
-                                ),
-                            ))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
+                evaluate_mles::<_, _, _, FoldingError<NTT>>(f_hat_row.into_iter(), &r_0)
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
-            .map(|Mz_mles| {
-                Mz_mles
-                    .iter()
-                    .map(|mle| {
-                        mle.evaluate(r_0.as_slice())
-                            .ok_or(FoldingError::<NTT>::EvaluationError(
-                                super::error::MleEvaluationError::IncorrectLength(
-                                    r_0.len(),
-                                    mle.evaluations.len(),
-                                ),
-                            ))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
+            .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(Mz_mles.into_iter(), &r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
         theta_s
