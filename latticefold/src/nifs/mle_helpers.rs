@@ -11,7 +11,7 @@ use super::error::MleEvaluationError;
 use crate::arith::{error::CSError, utils::mat_vec_mul, CCS};
 
 #[cfg(feature = "parallel")]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 pub trait Evaluate<R: Ring> {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError>;
@@ -161,7 +161,7 @@ where
         .collect::<Result<_, E>>()
 }
 
-pub fn calculate_Mz_mles<R: Ring, E: From<CSError> + From<MleEvaluationError>>(
+pub fn calculate_Mz_mles<R: Ring, E: From<CSError> + From<MleEvaluationError> + Send + Sync>(
     ccs: &CCS<R>,
     z_ccs: &[R],
 ) -> Result<Vec<DenseMultilinearExtension<R>>, E> {

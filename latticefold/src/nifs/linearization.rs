@@ -15,9 +15,6 @@ use crate::{
     utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
 
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
-
 use crate::arith::Instance;
 use crate::nifs::linearization::utils::SqueezeBeta;
 use crate::utils::sumcheck::Proof;

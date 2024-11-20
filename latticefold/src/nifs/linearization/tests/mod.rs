@@ -19,6 +19,9 @@ use lattirust_ring::cyclotomic_ring::models::{
 use num_traits::One;
 use rand::Rng;
 
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 const C: usize = 4;
 const WIT_LEN: usize = 4;
 const W: usize = WIT_LEN * DP::L;
