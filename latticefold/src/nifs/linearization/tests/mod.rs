@@ -15,8 +15,8 @@ use lattirust_ring::cyclotomic_ring::models::{
     goldilocks::RqNTT as GoldilocksRqNTT, stark_prime::RqNTT as StarkRqNTT,
 };
 use num_traits::One;
-use rand::thread_rng;
 use rand::{thread_rng, Rng};
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
@@ -108,62 +108,92 @@ fn test_generate_sumcheck() {
     assert_eq!(point_r.len(), ccs.s);
 }
 
-#[test]
-fn test_compute_evaluation_vectors() {
-    type RqNTT = BabyBearRqNTT;
-    type CS = BabyBearChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>();
-
+fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>(
+    wit: &Witness<RqNTT>,
+    cm_i: &CCCS<C, RqNTT>,
+    ccs: &CCS<RqNTT>,
+) -> (Vec<RqNTT>, Vec<DenseMultilinearExtension<RqNTT>>) {
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let (g, _) =
+    let (g, Mz_mles) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
             &ccs,
         )
-        .unwrap();
+            .unwrap();
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &g,
             &mut transcript,
         )
-        .unwrap();
+            .unwrap();
 
-    let (point_r, v, u) =
+    (point_r, Mz_mles)
+}
+
+#[test]
+fn test_compute_v() {
+    type RqNTT = BabyBearRqNTT;
+    type CS = BabyBearChallengeSet;
+
+    // Setup shared test state
     let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    let (point_r, Mz_mles) = prepare_test_vectors::<RqNTT, CS>(&wit, &cm_i, &ccs);
+
+    // Compute actual v vector
+    let (point_r, v, _) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &z_ccs,
+            &wit, &point_r, &ccs, &Mz_mles
         )
-        .unwrap();
+            .unwrap();
 
-    // Check lengths and non-empty values
-    assert_eq!(point_r.len(), ccs.s);
-    assert!(!v.is_empty());
-    assert!(!u.is_empty());
-
-    // Check v evaluations
-    let witness_f_hat: Vec<RqNTT> = cfg_iter!(wit.f_hat)
+    // Compute expected v vector (witness evaluations)
+    let expected_v: Vec<RqNTT> = cfg_iter!(wit.f_hat)
         .map(|f_hat_row| {
             DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
                 .evaluate(&point_r)
                 .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
         })
         .collect();
-    assert_eq!(v, witness_f_hat);
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
 
-    // Check u evaluations
-    let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
+    // Validate
+    assert_eq!(point_r.len(), ccs.s, "point_r length mismatch");
+    assert!(!v.is_empty(), "v vector should not be empty");
+    assert_eq!(v, expected_v, "v vector doesn't match expected witness evaluations");
+}
+
+#[test]
+fn test_compute_u() {
+    type RqNTT = FrogRqNTT;
+    type CS = FrogChallengeSet;
+
+    // Setup shared test state
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    let (point_r, Mz_mles) = prepare_test_vectors::<RqNTT, CS>(&wit, &cm_i, &ccs);
+
+    // Compute actual u vector
+    let (point_r, _, u) =
+        LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
+            &wit, &point_r, &ccs, &Mz_mles
+        )
+            .unwrap();
+
+    // Compute expected u vector
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
+    let expected_Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
         .M
         .iter()
         .map(|M| DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z_ccs).unwrap()))
         .collect();
+    let expected_u = compute_u(&expected_Mz_mles, &point_r).unwrap();
 
-    let new_u = compute_u(&Mz_mles, &point_r).unwrap();
-    assert_eq!(u, new_u);
+    // Validate
+    assert_eq!(point_r.len(), ccs.s, "point_r length mismatch");
+    assert!(!u.is_empty(), "u vector should not be empty");
+    assert_eq!(u, expected_u, "u vector doesn't match expected evaluations");
 }
 
 #[test]

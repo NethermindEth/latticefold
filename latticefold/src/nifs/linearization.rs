@@ -208,6 +208,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         transcript.absorb_slice(&proof.v);
         transcript.absorb_slice(&proof.u);
 
-        Ok(Self::prepare_final_state(cm_i, point_r, proof))
+        Ok(Self::prepare_verifier_output(cm_i, point_r, proof))
     }
 }
