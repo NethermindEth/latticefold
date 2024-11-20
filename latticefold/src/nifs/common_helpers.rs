@@ -79,10 +79,11 @@ where
 {
     mle_s
         .into_iter()
-        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, &M)))
+        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, M)))
         .collect::<Result<_, E>>()
 }
 
+#[allow(dead_code)]
 #[cfg(not(feature = "parallel"))]
 pub fn to_mles_owned<I, R, E>(
     n_vars: usize,
@@ -128,9 +129,11 @@ where
 {
     mle_s
         .into_par_iter()
-        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, &M)))
+        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, M)))
         .collect::<Result<_, E>>()
 }
+
+#[allow(dead_code)]
 #[cfg(feature = "parallel")]
 pub fn to_mles_owned<I, R, E>(
     num_vars: usize,

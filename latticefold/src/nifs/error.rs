@@ -58,6 +58,6 @@ pub enum FoldingError<R: Ring> {
 
 #[derive(Debug, Error)]
 pub enum MleEvaluationError {
-    #[error("lengths of evaluation point and evaluations are not consitent: 1 << {0} != {1}")]
+    #[error("lengths of evaluation point and evaluations are not consistent: 1 << {0} != {1}")]
     IncorrectLength(usize, usize),
 }
