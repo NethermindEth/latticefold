@@ -3,11 +3,11 @@ use ark_std::cfg_iter;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::{cyclotomic_ring::CRT};
+use lattirust_ring::cyclotomic_ring::CRT;
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
-use crate::transcript::{TranscriptWithShortChallenges};
+use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
@@ -65,7 +65,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
     }
     fn calculate_Mz_mles(
         ccs: &CCS<NTT>,
-        zis: Vec<Vec<NTT>>,
+        zis: &Vec<Vec<NTT>>,
     ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, FoldingError<NTT>> {
         zis.iter()
             .map(|zi| {
@@ -93,8 +93,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
     }
 
     fn get_thetas_etas(
-        f_hat_mles: Vec<Vec<DenseMultilinearExtension<NTT>>>,
-        Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>>,
+        f_hat_mles: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
+        Mz_mles_vec: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
         r_0: &Vec<NTT>,
     ) -> Result<(Vec<Vec<NTT>>, Vec<Vec<NTT>>), FoldingError<NTT>> {
         let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
@@ -143,10 +143,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         }
     }
 
-    fn compute_f_0(
-        rho_s: Vec<NTT::CoefficientRepresentation>,
-        w_s: &[Witness<NTT>],
-    ) -> Vec<NTT>{
+    fn compute_f_0(rho_s: &Vec<NTT::CoefficientRepresentation>, w_s: &[Witness<NTT>]) -> Vec<NTT> {
         rho_s
             .iter()
             .zip(w_s)
@@ -185,7 +182,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         let (zis, ris) = Self::get_zis_ris(cm_i_s, w_s);
 
-        let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = Self::calculate_Mz_mles(ccs, zis)?;
+        let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> =
+            Self::calculate_Mz_mles(ccs, &zis)?;
 
         let g = create_sumcheck_polynomial::<_, P>(
             log_m,
@@ -204,7 +202,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let r_0 = Self::sample_randomness(prover_state);
 
         // Step 3: Evaluate thetas and etas
-        let (theta_s, eta_s) = Self::get_thetas_etas(f_hat_mles, Mz_mles_vec, &r_0)?;
+        let (theta_s, eta_s) = Self::get_thetas_etas(&f_hat_mles, &Mz_mles_vec, &r_0)?;
 
         // Absorb them into the transcript
         theta_s
@@ -223,7 +221,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         let lcccs = Self::prepare_lccs(r_0, v_0, cm_0, u_0, x_0, h);
 
-        let f_0: Vec<NTT> = Self::compute_f_0(rho_s, w_s);
+        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, w_s);
 
         let w_0 = Witness::from_f::<P>(f_0);
 

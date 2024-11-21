@@ -1,12 +1,12 @@
-use std::marker::PhantomData;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use lattirust_ring::OverField;
-use cyclotomic_rings::rings::SuitableRing;
 use crate::arith::{Witness, CCS, LCCCS};
 use crate::decomposition_parameters::DecompositionParams;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck;
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use cyclotomic_rings::rings::SuitableRing;
+use lattirust_ring::OverField;
+use std::marker::PhantomData;
 
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct FoldingProof<NTT: OverField> {
