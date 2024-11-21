@@ -2,8 +2,7 @@
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCS, LCCCS},
     ark_base::*,
-    commitment::AjtaiCommitmentScheme,
-    commitment::Commitment,
+    commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
     decomposition_parameters::DecompositionParams,
     nifs::error::DecompositionError,
     transcript::Transcript,
@@ -25,6 +24,23 @@ mod structs;
 mod tests;
 mod utils;
 
+impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
+    fn decompose_witness<P: DecompositionParams>(wit: &Witness<NTT>) -> Vec<Witness<NTT>> {
+        let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
+        cfg_into_iter!(f_s)
+            .map(|f| Witness::from_f_coeff::<P>(f))
+            .collect()
+    }
+
+    fn commit_from_witnesses<const C: usize, const W: usize, P: DecompositionParams>(
+        wit_s: &Vec<Witness<NTT>>,
+        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
+    ) -> Result<Vec<Commitment<C, NTT>>, CommitmentError> {
+        cfg_iter!(wit_s)
+            .map(|wit| wit.commit::<C, W, P>(scheme))
+            .collect::<Result<Vec<_>, _>>()
+    }
+}
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {
@@ -44,20 +60,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     > {
         let log_m = ccs.s;
 
-        let wit_s: Vec<Witness<NTT>> = {
-            let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
-            cfg_into_iter!(f_s)
-                .map(|f| Witness::from_f_coeff::<P>(f))
-                .collect()
-        };
+        let wit_s: Vec<Witness<NTT>> = Self::decompose_witness::<P>(wit);
 
         let mut cm_i_x_w = cm_i.x_w.clone();
         cm_i_x_w.push(cm_i.h);
         let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(cm_i_x_w);
 
-        let y_s: Vec<Commitment<C, NTT>> = cfg_iter!(wit_s)
-            .map(|wit| wit.commit::<C, W, P>(scheme))
-            .collect::<Result<Vec<_>, _>>()?;
+        let y_s: Vec<Commitment<C, NTT>> = Self::commit_from_witnesses::<C, W, P>(&wit_s, scheme)?;
 
         let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
@@ -126,6 +135,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     }
 }
 
+impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {}
 impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
     for LFDecompositionVerifier<NTT, T>
 {
