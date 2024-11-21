@@ -64,8 +64,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
-                let mles = to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat))?;
-                evaluate_mles::<NTT, _, _, DecompositionError>(cfg_iter!(mles), &cm_i.r)
+                evaluate_mles::<NTT, _, _, DecompositionError>(
+                    &to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat))?,
+                    &cm_i.r,
+                )
             })
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -88,8 +90,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
                 let u_s_for_i =
                     evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
-                        cfg_iter!(mles),
-                        &cm_i.r,
+                        &mles, &cm_i.r,
                     )?;
 
                 Ok(u_s_for_i)

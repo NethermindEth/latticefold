@@ -133,13 +133,11 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         // Step 3: Evaluate thetas and etas
         let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
-            .map(|f_hat_row| {
-                evaluate_mles::<_, _, _, FoldingError<NTT>>(cfg_iter!(f_hat_row), &r_0)
-            })
+            .map(|f_hat_row| evaluate_mles::<_, _, _, FoldingError<NTT>>(f_hat_row, &r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
         let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
-            .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(cfg_iter!(Mz_mles), &r_0))
+            .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(Mz_mles, &r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
         theta_s

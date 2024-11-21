@@ -44,12 +44,24 @@ impl<R: Ring> Evaluate<R> for &DenseMultilinearExtension<R> {
     }
 }
 
+impl<R: Ring> Evaluate<R> for &Vec<R> {
+    fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
+        if self.len() != 1 << point.len() {
+            return Err(MleEvaluationError::IncorrectLength(point.len(), self.len()));
+        }
+
+        DenseMultilinearExtension::from_evaluations_slice(point.len(), self)
+            .evaluate(point)
+            .ok_or(MleEvaluationError::IncorrectLength(point.len(), self.len()))
+    }
+}
+
 #[cfg(not(feature = "parallel"))]
 pub fn evaluate_mles<R, V, I, E>(mle_s: I, point: &[R]) -> Result<Vec<R>, E>
 where
     R: Ring,
     V: Evaluate<R>,
-    I: Iterator<Item = V>,
+    I: IntoIterator<Item = V>,
     E: From<MleEvaluationError>,
 {
     cfg_into_iter!(mle_s)
@@ -98,7 +110,7 @@ where
         .map(|m| {
             let m = m?;
             if 1 << n_vars < m.len() {
-                Err(MleEvaluationError::IncorrectLength(n_vars << 1, m.len()).into())
+                Err(MleEvaluationError::IncorrectLength(1 << n_vars, m.len()).into())
             } else {
                 Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
             }
@@ -134,7 +146,7 @@ where
         .map(|m| {
             let m = m?;
             if 1 << n_vars < m.len() {
-                Err(MleEvaluationError::IncorrectLength(n_vars << 1, m.len()).into())
+                Err(MleEvaluationError::IncorrectLength(1 << n_vars, m.len()).into())
             } else {
                 Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
             }

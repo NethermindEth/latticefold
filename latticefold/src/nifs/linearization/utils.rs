@@ -1,6 +1,5 @@
 use crate::{ark_base::Vec, nifs::mle_helpers::evaluate_mles};
 use ark_ff::PrimeField;
-use ark_std::cfg_iter;
 
 use lattirust_poly::{
     mle::DenseMultilinearExtension,
@@ -12,15 +11,13 @@ use crate::nifs::error::LinearizationError;
 use crate::transcript::Transcript;
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 
 /// Batch compute the values of mles at the point r.
 pub fn compute_u<NTT: OverField>(
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     r: &[NTT],
 ) -> Result<Vec<NTT>, LinearizationError<NTT>> {
-    evaluate_mles::<NTT, _, _, LinearizationError<NTT>>(cfg_iter!(Mz_mles), r)
+    evaluate_mles::<NTT, _, _, LinearizationError<NTT>>(Mz_mles, r)
 }
 
 /// Prepare the main linearization polynomial.

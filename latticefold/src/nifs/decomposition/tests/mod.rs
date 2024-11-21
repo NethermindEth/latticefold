@@ -59,9 +59,8 @@ where
 
     let u = compute_u(&Mz_mles, &r).unwrap();
 
-    let f_hat_mles = to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat)).unwrap();
     let v = evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, DecompositionError>(
-        cfg_iter!(f_hat_mles),
+        &to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat)).unwrap(),
         &r,
     )
     .unwrap();

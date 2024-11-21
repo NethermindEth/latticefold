@@ -154,15 +154,8 @@ fn test_compute_v() {
         .unwrap();
 
     // Compute expected v vector (witness evaluations)
-    let f_hat_mles =
-        to_mles::<_, _, LinearizationError<RqNTT>>(ccs.s, cfg_iter!(wit.f_hat)).unwrap();
-
     let expected_v =
-        evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, LinearizationError<RqNTT>>(
-            cfg_iter!(f_hat_mles),
-            &point_r,
-        )
-        .unwrap();
+        evaluate_mles::<RqNTT, _, _, LinearizationError<RqNTT>>(&wit.f_hat, &point_r).unwrap();
 
     // Validate
     assert_eq!(point_r.len(), ccs.s, "point_r length mismatch");
