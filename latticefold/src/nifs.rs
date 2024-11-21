@@ -57,21 +57,19 @@ impl<
         cm_i: &CCCS<C, NTT>,
         w_i: &Witness<NTT>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
-        mut ccs: CCS<NTT>,
+        ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
-        // Pad CCS instance
-        ccs.pad_rows_to_the_next_pow_of_2();
         let (linearized_cm_i, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, &ccs)?;
+            LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, &ccs, scheme)?;
+            LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(
                 &linearized_cm_i,
                 w_i,
                 transcript,
-                &ccs,
+                ccs,
                 scheme,
             )?;
 
@@ -88,7 +86,7 @@ impl<
         };
 
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, &ccs)?;
+            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs)?;
 
         Ok((
             folded_lcccs,
