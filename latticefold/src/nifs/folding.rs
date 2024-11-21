@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+
 use ark_std::cfg_iter;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
@@ -34,6 +35,24 @@ mod utils;
 pub use structs::*;
 
 mod structs;
+
+fn prepare_lccs<const C: usize, NTT: SuitableRing>(
+    r_0: Vec<NTT>,
+    v_0: Vec<NTT>,
+    cm_0: Commitment<C, NTT>,
+    u_0: Vec<NTT>,
+    x_0: Vec<NTT>,
+    h: NTT,
+) -> LCCCS<C, NTT> {
+    LCCCS {
+        r: r_0,
+        v: v_0,
+        cm: cm_0,
+        u: u_0,
+        x_w: x_0[0..x_0.len() - 1].to_vec(),
+        h,
+    }
+}
 
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<NTT, T> {
     fn setup_f_hat_mles(
@@ -105,24 +124,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         Ok((theta_s, eta_s))
     }
 
-    fn prepare_lccs<const C: usize>(
-        r_0: Vec<NTT>,
-        v_0: Vec<NTT>,
-        cm_0: Commitment<C, NTT>,
-        u_0: Vec<NTT>,
-        x_0: Vec<NTT>,
-        h: NTT,
-    ) -> LCCCS<C, NTT> {
-        LCCCS {
-            r: r_0,
-            v: v_0,
-            cm: cm_0,
-            u: u_0,
-            x_w: x_0[0..x_0.len() - 1].to_vec(),
-            h,
-        }
-    }
-
     fn compute_f_0(rho_s: &Vec<NTT::CoefficientRepresentation>, w_s: &[Witness<NTT>]) -> Vec<NTT> {
         rho_s
             .iter()
@@ -137,6 +138,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             })
     }
 }
+
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT, T>
     for LFFoldingProver<NTT, T>
 {
@@ -199,7 +201,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
 
-        let lcccs = Self::prepare_lccs(r_0, v_0, cm_0, u_0, x_0, h);
+        let lcccs = prepare_lccs(r_0, v_0, cm_0, u_0, x_0, h);
 
         let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, w_s);
 
@@ -370,14 +372,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         // Step 7: Compute f0 and Witness_0
 
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
-
-        Ok(LCCCS {
-            r: r_0,
-            v: v_0,
-            cm: cm_0,
-            u: u_0,
-            x_w: x_0[0..x_0.len() - 1].to_vec(),
-            h,
-        })
+        Ok(prepare_lccs(r_0, v_0, cm_0, u_0, x_0, h))
     }
 }

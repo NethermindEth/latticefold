@@ -3,10 +3,11 @@ use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
 use crate::decomposition_parameters::test_params::{BabyBearDP, StarkFoldingDP, DP};
 use crate::nifs::folding::{
+    prepare_lccs,
     utils::{
         compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos,
     },
-    FoldingProver, LFFoldingProver, LFFoldingVerifier,
+    FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
 use crate::nifs::FoldingProof;
 use crate::transcript::{Transcript, TranscriptWithShortChallenges};
@@ -28,6 +29,8 @@ use crate::{
     transcript::poseidon::PoseidonTranscript,
 };
 use ark_ff::{Field, PrimeField};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+use ark_std::io::Cursor;
 use ark_std::test_rng;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
@@ -572,7 +575,7 @@ fn test_prepare_lccs() {
     let expected_x_0 = x_0[0..x_0.len() - 1].to_vec();
     let h = x_0.last().copied().unwrap();
 
-    let lcccs = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_lccs(
+    let lcccs = prepare_lccs(
         r_0.clone(),
         v_0.clone(),
         cm_0.clone(),
@@ -675,7 +678,77 @@ fn test_full_prove() {
         &wit_s,
         &mut transcript,
         &ccs,
-    );
+    )
+    .unwrap();
+}
+
+#[test]
+fn test_proof_serialization() {
+    type RqNTT = GoldilocksRqNTT;
+    type CS = GoldilocksChallengeSet;
+    const W: usize = WIT_LEN * DP::L;
+
+    let (_, _, _, _, proof) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
+
+    let proof = proof.unwrap();
+
+    let mut serialized_data = Vec::new();
+
+    proof
+        .serialize_with_mode(&mut serialized_data, Compress::Yes)
+        .expect("Failed to serialize folding proof");
+
+    let mut cursor = Cursor::new(serialized_data);
+
+    let deserialized_proof =
+        FoldingProof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
+            .expect("Failed to deserialize folding proof");
+
+    assert_eq!(proof, deserialized_proof);
+}
+
+#[test]
+fn test_verify_evaluation() {
+    type RqNTT = GoldilocksRqNTT;
+    type CS = GoldilocksChallengeSet;
+    const W: usize = WIT_LEN * DP::L;
+
+    let (lccs_vec, _, mut transcript, ccs, proof) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
+    let proof = proof.unwrap();
+
+    let (alpha_s, beta_s, zeta_s, mu_s) =
+        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+
+    let poly_info = VPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
+
+    let (claim_g1, claim_g3) =
+        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
+            &alpha_s, &zeta_s, &lccs_vec,
+        );
+
+    let (r_0, expected_evaluation) =
+        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_sumcheck_proof(
+            &mut transcript,
+            &poly_info,
+            claim_g1 + claim_g3,
+            &proof,
+        )
+        .unwrap();
+
+    let result =
+        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_evaluation::<C, DP>(
+            &alpha_s,
+            &beta_s,
+            &mu_s,
+            &zeta_s,
+            &r_0,
+            expected_evaluation,
+            &proof,
+            &lccs_vec,
+        );
+
+    assert!(result.is_ok());
 }
 
 #[test]
@@ -744,4 +817,25 @@ fn test_verify_sumcheck_proof() {
         }
         Err(e) => panic!("Sumcheck verification failed: {:?}", e),
     }
+}
+
+#[test]
+fn test_full_verify() {
+    type RqNTT = GoldilocksRqNTT;
+    type CS = GoldilocksChallengeSet;
+
+    const W: usize = WIT_LEN * DP::L;
+
+    let (lccs_vec, _, mut transcript, ccs, proof) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
+    let proof = proof.unwrap();
+
+    let result = LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify::<C, DP>(
+        &lccs_vec,
+        &proof,
+        &mut transcript,
+        &ccs,
+    );
+
+    assert!(result.is_ok());
 }
