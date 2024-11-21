@@ -8,6 +8,7 @@ use crate::{
     transcript::Transcript,
 };
 use cyclotomic_rings::rings::SuitableRing;
+use lattirust_linear_algebra::SparseMatrix;
 use lattirust_poly::polynomials::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 use utils::{
@@ -40,6 +41,60 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
             .map(|wit| wit.commit::<C, W, P>(scheme))
             .collect::<Result<Vec<_>, _>>()
     }
+
+    fn compute_v_s(
+        wit_s: &Vec<Witness<NTT>>,
+        mle_length: usize,
+        point_r: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+        cfg_iter!(wit_s)
+            .map(|wit| {
+                wit.f_hat
+                    .iter()
+                    .map(|f_hat_row| {
+                        DenseMultilinearExtension::from_slice(mle_length, f_hat_row)
+                            .evaluate(point_r)
+                            .ok_or(DecompositionError::WitnessMleEvalFail)
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    fn compute_u_s(
+        wit_s: &Vec<Witness<NTT>>,
+        M: &[SparseMatrix<NTT>],
+        decomposed_statements: &[Vec<NTT>],
+        point_r: &[NTT],
+        mle_length: usize,
+    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+        cfg_iter!(wit_s)
+            .enumerate()
+            .map(|(i, wit)| {
+                let mut u_s_for_i = Vec::with_capacity(M.len());
+
+                let z: Vec<NTT> = {
+                    let mut z =
+                        Vec::with_capacity(decomposed_statements[i].len() + wit.w_ccs.len());
+
+                    z.extend_from_slice(&decomposed_statements[i]);
+                    z.extend_from_slice(&wit.w_ccs);
+
+                    z
+                };
+
+                for M in M {
+                    u_s_for_i.push(
+                        DenseMultilinearExtension::from_slice(mle_length, &mat_vec_mul(M, &z)?)
+                            .evaluate(point_r)
+                            .ok_or(DecompositionError::WitnessMleEvalFail)?,
+                    );
+                }
+
+                Ok(u_s_for_i)
+            })
+            .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()
+    }
 }
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
@@ -68,44 +123,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let y_s: Vec<Commitment<C, NTT>> = Self::commit_from_witnesses::<C, W, P>(&wit_s, scheme)?;
 
-        let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
-            .map(|wit| {
-                wit.f_hat
-                    .iter()
-                    .map(|f_hat_row| {
-                        DenseMultilinearExtension::from_slice(log_m, f_hat_row)
-                            .evaluate(&cm_i.r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &cm_i.r)?;
 
-        let u_s = cfg_iter!(wit_s)
-            .enumerate()
-            .map(|(i, wit)| {
-                let mut u_s_for_i = Vec::with_capacity(ccs.t);
-
-                let z: Vec<NTT> = {
-                    let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
-
-                    z.extend_from_slice(&x_s[i]);
-                    z.extend_from_slice(&wit.w_ccs);
-
-                    z
-                };
-
-                for M in &ccs.M {
-                    u_s_for_i.push(
-                        DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
-                            .evaluate(&cm_i.r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)?,
-                    );
-                }
-
-                Ok(u_s_for_i)
-            })
-            .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()?;
+        let u_s = Self::compute_u_s(&wit_s, &ccs.M, &x_s, &cm_i.r, log_m)?;
 
         let mut lcccs_s = Vec::with_capacity(P::K);
 
