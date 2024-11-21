@@ -236,6 +236,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 }
 
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier<NTT, T> {
+    #[allow(clippy::too_many_arguments)]
     fn verify_evaluation<const C: usize, P: DecompositionParams>(
         alpha_s: &[NTT],
         beta_s: &[NTT],
@@ -284,8 +285,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
-
-        let log_m = log_m;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
         let (alpha_s, beta_s, zeta_s, mu_s) =

@@ -1,10 +1,16 @@
+use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Instance, CCS, LCCCS};
+use crate::ark_base::Vec;
 use crate::decomposition_parameters::test_params::{StarkFoldingDP, DP};
 use crate::nifs::folding::{
+    utils::{
+        compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos,
+    },
     FoldingProver, LFFoldingProver, LFFoldingVerifier,
-    utils::{compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos},
 };
 use crate::nifs::FoldingProof;
+use crate::transcript::Transcript;
+use crate::utils::sumcheck::MLSumcheck;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
@@ -22,20 +28,19 @@ use crate::{
     transcript::poseidon::PoseidonTranscript,
 };
 use ark_std::test_rng;
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::cyclotomic_ring::CRT;
-use rand::Rng;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{StarkChallengeSet, GoldilocksChallengeSet, FrogChallengeSet, SuitableRing};
-use lattirust_ring::cyclotomic_ring::models::{
-    stark_prime::RqNTT as StarkRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
-    frog_ring::RqNTT as FrogRqNTT
+use cyclotomic_rings::rings::{
+    FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet, SuitableRing,
 };
+use lattirust_poly::mle::DenseMultilinearExtension;
+use lattirust_ring::cyclotomic_ring::models::{
+    frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
+    stark_prime::RqNTT as StarkRqNTT,
+};
+use lattirust_ring::cyclotomic_ring::CRT;
 use lattirust_ring::Ring;
 use num_traits::{One, Zero};
-use crate::arith::utils::mat_vec_mul;
-use crate::transcript::Transcript;
-use crate::utils::sumcheck::MLSumcheck;
+use rand::Rng;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
@@ -132,8 +137,8 @@ where
 fn generate_folding_proof<RqNTT, CS, const C: usize>(
     ccs: &CCS<RqNTT>,
     prover_transcript: &mut PoseidonTranscript<RqNTT, CS>,
-    lcccs: &Vec<LCCCS<C, RqNTT>>,
-    wit_s: &Vec<Witness<RqNTT>>,
+    lcccs: &[LCCCS<C, RqNTT>],
+    wit_s: &[Witness<RqNTT>],
 ) -> FoldingProof<RqNTT>
 where
     RqNTT: SuitableRing,
@@ -142,7 +147,7 @@ where
     let (_, _, folding_proof) = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<
         C,
         DP,
-    >(lcccs, &wit_s, prover_transcript, &ccs)
+    >(lcccs, wit_s, prover_transcript, ccs)
     .unwrap();
     folding_proof
 }
@@ -284,7 +289,8 @@ fn test_create_sumcheck_polynomial() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, mut transcript, ccs, _) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
 
     let (alpha_s, beta_s, zeta_s, mu_s) =
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
@@ -310,7 +316,7 @@ fn test_create_sumcheck_polynomial() {
         &beta_s,
         &mu_s,
     )
-        .unwrap();
+    .unwrap();
 
     // Validate - Check degree of g
     assert!(
@@ -327,7 +333,8 @@ fn test_sample_randomness() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, mut transcript, ccs, _) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
     let (alpha_s, beta_s, zeta_s, mu_s) =
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
@@ -347,7 +354,7 @@ fn test_sample_randomness() {
         &beta_s,
         &mu_s,
     )
-        .unwrap();
+    .unwrap();
 
     // Compute sumcheck proof
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
@@ -371,7 +378,8 @@ fn test_get_thetas() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, mut transcript, ccs, _) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
     let (alpha_s, beta_s, zeta_s, mu_s) =
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
@@ -391,7 +399,7 @@ fn test_get_thetas() {
         &beta_s,
         &mu_s,
     )
-        .unwrap();
+    .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -401,9 +409,10 @@ fn test_get_thetas() {
         &Mz_mles,
         &r_0,
     )
-        .unwrap();
+    .unwrap();
 
-    let expected_thetas: Vec<Vec<RqNTT>> = cfg_iter!(f_hat_mles)
+    let expected_thetas: Vec<Vec<RqNTT>> = f_hat_mles
+        .iter()
         .map(|f_hat_row| {
             f_hat_row
                 .iter()
@@ -429,7 +438,8 @@ fn test_get_etas() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, mut transcript, ccs, _) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
     let (alpha_s, beta_s, zeta_s, mu_s) =
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
@@ -449,7 +459,7 @@ fn test_get_etas() {
         &beta_s,
         &mu_s,
     )
-        .unwrap();
+    .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -459,9 +469,10 @@ fn test_get_etas() {
         &Mz_mles,
         &r_0,
     )
-        .unwrap();
+    .unwrap();
 
-    let expected_eta_s: Vec<Vec<RqNTT>> = cfg_iter!(Mz_mles)
+    let expected_eta_s: Vec<Vec<RqNTT>> = Mz_mles
+        .iter()
         .map(|Mz_mles| {
             Mz_mles
                 .iter()
@@ -502,14 +513,15 @@ fn test_get_rhos() {
 */
 
 #[test]
-fn test_prepate_lccs() {
+fn test_prepare_lccs() {
     type RqNTT = StarkRqNTT;
     type CS = StarkChallengeSet;
     type DP = StarkFoldingDP;
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, mut transcript, ccs, _) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
     let (alpha_s, beta_s, zeta_s, mu_s) =
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
@@ -529,7 +541,7 @@ fn test_prepate_lccs() {
         &beta_s,
         &mu_s,
     )
-        .unwrap();
+    .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -539,7 +551,7 @@ fn test_prepate_lccs() {
             &Mz_mles,
             &r_0,
         )
-            .unwrap();
+        .unwrap();
     theta_s
         .iter()
         .for_each(|thetas| transcript.absorb_slice(thetas));
@@ -556,7 +568,7 @@ fn test_prepate_lccs() {
         cm_0.clone(),
         u_0.clone(),
         x_0.clone(),
-        h.clone(),
+        h,
     );
 
     assert_eq!(lcccs.r, r_0, "Wrong r in LCCCS");
@@ -575,7 +587,8 @@ fn test_compute_f_0() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, mut transcript, ccs, _) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
     let (alpha_s, beta_s, zeta_s, mu_s) =
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
@@ -595,7 +608,7 @@ fn test_compute_f_0() {
         &beta_s,
         &mu_s,
     )
-        .unwrap();
+    .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -605,7 +618,7 @@ fn test_compute_f_0() {
             &Mz_mles,
             &r_0,
         )
-            .unwrap();
+        .unwrap();
     theta_s
         .iter()
         .for_each(|thetas| transcript.absorb_slice(thetas));
@@ -645,7 +658,8 @@ fn test_full_prove() {
     type DP = StarkFoldingDP;
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, mut transcript, ccs, _) =
+        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
     let _ = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<C, DP>(
         &lccs,
         &wit_s,
