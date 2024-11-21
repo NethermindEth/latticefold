@@ -34,15 +34,10 @@ allow = [
     "BSD-3-Clause",
     "BSD-2-Clause",
     "Unicode-DFS-2016",
+    "Unicode-3.0",
     "Zlib",
 ]
 confidence-threshold = 0.8
-# TODO remove this license clarifications after the lattirust status and license are clarified
-clarify = [
-    {crate = "lattirust-linear-algebra", expression = "MIT", license-files = []},
-    {crate = "lattirust-poly", expression = "MIT", license-files = []},
-    {crate = "lattirust-ring", expression = "MIT", license-files = []}
-]
 
 [licenses.private]
 ignore = false
@@ -60,10 +55,6 @@ unused = 'deny'
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-# TODO remove this git dependency after the lattirust status is clarified
-allow-git = [
-    "ssh://git@github.com/NethermindEth/lattirust.git",
-]
 
 [sources.allow-org]
 github = []
