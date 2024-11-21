@@ -153,7 +153,59 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     }
 }
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {}
+impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
+    pub fn recompose_commitment<const C: usize>(
+        y_s: &[Commitment<C, NTT>],
+        coeffs: &[NTT],
+    ) -> Result<Commitment<C, NTT>, DecompositionError> {
+        y_s.iter()
+            .zip(coeffs)
+            .map(|(y_i, b_i)| y_i * b_i)
+            .reduce(|acc, bi_part| acc + bi_part)
+            .ok_or(DecompositionError::RecomposedError)
+    }
+
+    pub fn recompose_u(u_s: &[Vec<NTT>], coeffs: &[NTT]) -> Result<Vec<NTT>, DecompositionError> {
+        u_s.iter()
+            .zip(coeffs)
+            .map(|(u_i, b_i)| u_i.iter().map(|&u| u * b_i).collect())
+            .reduce(|acc, u_i_times_b_i: Vec<NTT>| {
+                acc.into_iter()
+                    .zip(&u_i_times_b_i)
+                    .map(|(u0, ui)| u0 + ui)
+                    .collect()
+            })
+            .ok_or(DecompositionError::RecomposedError)
+    }
+
+    pub fn recompose_v(v_s: &[Vec<NTT>], coeffs: &[NTT], i: usize) -> NTT {
+        v_s.iter().zip(coeffs).map(|(v_i, b_i)| v_i[i] * b_i).sum()
+    }
+
+    pub fn recompose_xw_and_h(
+        x_s: &[Vec<NTT>],
+        coeffs: &[NTT],
+    ) -> Result<(Vec<NTT>, NTT), DecompositionError> {
+        let mut should_equal_xw = x_s
+            .iter()
+            .zip(coeffs)
+            .map(|(x_i, b_i)| x_i.iter().map(|&x| x * b_i).collect())
+            .reduce(|acc, x_i_times_b_i: Vec<NTT>| {
+                acc.into_iter()
+                    .zip(&x_i_times_b_i)
+                    .map(|(x0, xi)| x0 + xi)
+                    .collect()
+            })
+            .ok_or(DecompositionError::RecomposedError)?;
+
+        let should_equal_h = should_equal_xw
+            .pop()
+            .ok_or(DecompositionError::RecomposedError)?;
+
+        Ok((should_equal_xw, should_equal_h))
+    }
+}
+
 impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
     for LFDecompositionVerifier<NTT, T>
 {
@@ -195,64 +247,27 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
             .collect();
 
-        let should_equal_y0 = proof
-            .y_s
-            .iter()
-            .zip(&b_s)
-            .map(|(y_i, b_i)| y_i * b_i)
-            .reduce(|acc, bi_part| acc + bi_part)
-            .ok_or(DecompositionError::RecomposedError)?;
+        let should_equal_y0 = Self::recompose_commitment::<C>(&proof.y_s, &b_s)?;
 
         if should_equal_y0 != cm_i.cm {
             return Err(DecompositionError::RecomposedError);
         }
 
-        let should_equal_u0: Vec<NTT> = proof
-            .u_s
-            .iter()
-            .zip(&b_s)
-            .map(|(u_i, b_i)| u_i.iter().map(|&u| u * b_i).collect())
-            .reduce(|acc, u_i_times_b_i: Vec<NTT>| {
-                acc.into_iter()
-                    .zip(&u_i_times_b_i)
-                    .map(|(u0, ui)| u0 + ui)
-                    .collect()
-            })
-            .ok_or(DecompositionError::RecomposedError)?;
+        let should_equal_u0: Vec<NTT> = Self::recompose_u(&proof.u_s, &b_s)?;
 
         if should_equal_u0 != cm_i.u {
             return Err(DecompositionError::RecomposedError);
         }
 
         for (i, &cm_i_value) in cm_i.v.iter().enumerate() {
-            let should_equal_v0: NTT = proof
-                .v_s
-                .iter()
-                .zip(&b_s)
-                .map(|(v_i, b_i)| v_i[i] * b_i)
-                .sum();
+            let should_equal_v0: NTT = Self::recompose_v(&proof.v_s, &b_s, i);
 
             if should_equal_v0 != cm_i_value {
                 return Err(DecompositionError::RecomposedError);
             }
         }
 
-        let mut should_equal_xw: Vec<NTT> = proof
-            .x_s
-            .iter()
-            .zip(&b_s)
-            .map(|(x_i, b_i)| x_i.iter().map(|&x| x * b_i).collect())
-            .reduce(|acc, x_i_times_b_i: Vec<NTT>| {
-                acc.into_iter()
-                    .zip(&x_i_times_b_i)
-                    .map(|(x0, xi)| x0 + xi)
-                    .collect()
-            })
-            .ok_or(DecompositionError::RecomposedError)?;
-
-        let should_equal_h = should_equal_xw
-            .pop()
-            .ok_or(DecompositionError::RecomposedError)?;
+        let (should_equal_xw, should_equal_h) = Self::recompose_xw_and_h(&proof.x_s, &b_s)?;
 
         if should_equal_h != cm_i.h {
             return Err(DecompositionError::RecomposedError);
