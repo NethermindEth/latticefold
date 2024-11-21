@@ -149,7 +149,7 @@ fn test_compute_v() {
     // Compute actual v vector
     let (point_r, v, _) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles,
+            &wit, &point_r, &Mz_mles,
         )
         .unwrap();
 
@@ -178,7 +178,7 @@ fn test_compute_u() {
     // Compute actual u vector
     let (point_r, _, u) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles,
+            &wit, &point_r, &Mz_mles,
         )
         .unwrap();
 
