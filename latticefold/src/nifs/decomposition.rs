@@ -5,11 +5,14 @@ use crate::{
     commitment::AjtaiCommitmentScheme,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,
-    nifs::error::DecompositionError,
+    nifs::{
+        error::DecompositionError,
+        mle_helpers::{evaluate_mles, to_mles_err},
+    },
     transcript::Transcript,
 };
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::polynomials::DenseMultilinearExtension;
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
@@ -18,6 +21,8 @@ use ark_std::{cfg_into_iter, cfg_iter};
 use rayon::prelude::*;
 
 pub use structs::*;
+
+use super::mle_helpers::to_mles;
 mod structs;
 #[cfg(test)]
 mod tests;
@@ -59,23 +64,17 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
-                wit.f_hat
-                    .iter()
-                    .map(|f_hat_row| {
-                        DenseMultilinearExtension::from_slice(log_m, f_hat_row)
-                            .evaluate(&cm_i.r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)
-                    })
-                    .collect::<Result<Vec<_>, _>>()
+                evaluate_mles::<NTT, _, _, DecompositionError>(
+                    &to_mles::<_, _, DecompositionError>(log_m, &wit.f_hat)?,
+                    &cm_i.r,
+                )
             })
             .collect::<Result<Vec<_>, _>>()?;
 
         let u_s = cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
-                let mut u_s_for_i = Vec::with_capacity(ccs.t);
-
-                let z: Vec<NTT> = {
+                let z: Vec<_> = {
                     let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
 
                     z.extend_from_slice(&x_s[i]);
@@ -84,13 +83,15 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                     z
                 };
 
-                for M in &ccs.M {
-                    u_s_for_i.push(
-                        DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z)?)
-                            .evaluate(&cm_i.r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)?,
-                    );
-                }
+                let mles = to_mles_err::<_, _, DecompositionError, _>(
+                    ccs.s,
+                    cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z)),
+                )?;
+
+                let u_s_for_i =
+                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
+                        &mles, &cm_i.r,
+                    )?;
 
                 Ok(u_s_for_i)
             })

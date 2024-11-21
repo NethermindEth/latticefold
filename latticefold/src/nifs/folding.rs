@@ -7,6 +7,8 @@ use lattirust_ring::cyclotomic_ring::CRT;
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
+use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
+use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
@@ -67,21 +69,15 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         ccs: &CCS<NTT>,
         zis: &Vec<Vec<NTT>>,
     ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, FoldingError<NTT>> {
-        zis.iter()
+        cfg_iter!(zis)
             .map(|zi| {
-                let Mz_mle = ccs
-                    .M
-                    .iter()
-                    .map(|M| {
-                        Ok(DenseMultilinearExtension::from_slice(
-                            ccs.s,
-                            &mat_vec_mul(M, zi)?,
-                        ))
-                    })
-                    .collect::<Result<_, FoldingError<_>>>()?;
+                let Mz_mle = to_mles_err::<_, _, FoldingError<NTT>, _>(
+                    log_m,
+                    cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, zi)),
+                )?;
                 Ok(Mz_mle)
             })
-            .collect::<Result<_, FoldingError<_>>>()
+            .collect::<Result<_, FoldingError<_>>>()?;
     }
 
     fn sample_randomness(state: ProverState<NTT>) -> Vec<NTT> {
@@ -98,29 +94,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         r_0: &Vec<NTT>,
     ) -> Result<(Vec<Vec<NTT>>, Vec<Vec<NTT>>), FoldingError<NTT>> {
         let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
-            .map(|f_hat_row| {
-                f_hat_row
-                    .iter()
-                    .map(|f_hat_mle| {
-                        f_hat_mle
-                            .evaluate(r_0)
-                            .ok_or(FoldingError::<NTT>::EvaluationError("f_hat".to_string()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
+            .map(|f_hat_row| evaluate_mles::<_, _, _, FoldingError<NTT>>(f_hat_row, &r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
         let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
-            .map(|Mz_mles| {
-                Mz_mles
-                    .iter()
-                    .map(|mle| {
-                        mle.evaluate(r_0.as_slice())
-                            .ok_or(FoldingError::<NTT>::EvaluationError("Mz".to_string()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
+            .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(Mz_mles, &r_0))
             .collect::<Result<Vec<_>, _>>()?;
+
 
         Ok((theta_s, eta_s))
     }
