@@ -127,7 +127,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Run cargo deny
         run: |
-          cargo install --version 0.16.1 cargo-deny
+          cargo install cargo-deny
           cargo deny check
 
   typos:
