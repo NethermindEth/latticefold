@@ -235,20 +235,57 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
-    for LFFoldingVerifier<NTT, T>
-{
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier<NTT, T> {
+    fn verify_evaluation<const C: usize, P: DecompositionParams>(
+        alpha_s: &[NTT],
+        beta_s: &[NTT],
+        mu_s: &[NTT],
+        zeta_s: &[NTT],
+        r_0: &[NTT],
+        expected_evaluation: NTT,
         proof: &FoldingProof<NTT>,
+        cm_i_s: &[LCCCS<C, NTT>],
+    ) -> Result<(), FoldingError<NTT>> {
+        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+
+        let e_asterisk = eq_eval(beta_s, r_0)?;
+        let e_s: Vec<NTT> = ris
+            .iter()
+            .map(|r_i: &Vec<NTT>| eq_eval(r_i, r_0))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let should_equal_s: NTT = compute_sumcheck_claim_expected_value::<NTT, P>(
+            alpha_s,
+            mu_s,
+            &proof.theta_s,
+            e_asterisk,
+            &e_s,
+            zeta_s,
+            &proof.eta_s,
+        );
+
+        if should_equal_s != expected_evaluation {
+            return Err(FoldingError::SumCheckError(SumCheckFailed(
+                should_equal_s,
+                expected_evaluation,
+            )));
+        }
+
+        Ok(())
+    }
+
+    // Previously refactored methods stay the same
+    fn get_alphas_betas_zetas_mus<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        log_m: usize,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
+    ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>, VPAuxInfo<NTT>), FoldingError<NTT>> {
+        // Validate input length
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
 
-        let log_m = ccs.s;
+        let log_m = log_m;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
         let (alpha_s, beta_s, zeta_s, mu_s) =
@@ -256,13 +293,21 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 
         let poly_info = VPAuxInfo::new(log_m, 2 * P::B_SMALL);
 
-        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+        Ok((alpha_s, beta_s, zeta_s, mu_s, poly_info))
+    }
+
+    fn calculate_claims<const C: usize>(
+        alpha_s: &[NTT],
+        zeta_s: &[NTT],
+        cm_i_s: &[LCCCS<C, NTT>],
+    ) -> (NTT, NTT) {
         let vs = cm_i_s
             .iter()
             .map(|cm_i| cm_i.v.clone())
             .collect::<Vec<Vec<NTT>>>();
         let us = cm_i_s.iter().map(|cm_i| cm_i.u.clone()).collect::<Vec<_>>();
 
+        // Calculate claim_g1
         let claim_g1: NTT = alpha_s
             .iter()
             .zip(vs.iter())
@@ -273,6 +318,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
                     .sum::<NTT>()
             })
             .sum();
+
+        // Calculate claim_g3
         let claim_g3: NTT = zeta_s
             .iter()
             .zip(us.iter())
@@ -284,13 +331,21 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             })
             .sum();
 
-        //Step 2: The sumcheck.
+        (claim_g1, claim_g3)
+    }
 
+    fn verify_sumcheck_proof(
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        poly_info: &VPAuxInfo<NTT>,
+        total_claim: NTT,
+        proof: &FoldingProof<NTT>,
+    ) -> Result<(Vec<NTT>, NTT), FoldingError<NTT>> {
+        //Step 2: The sumcheck.
         // Verify the sumcheck proof.
         let sub_claim = MLSumcheck::verify_as_subprotocol(
             transcript,
-            &poly_info,
-            claim_g1 + claim_g3,
+            poly_info,
+            total_claim,
             &proof.pointshift_sumcheck_proof,
         )?;
 
@@ -300,28 +355,41 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
 
-        let e_asterisk = eq_eval(&beta_s, &r_0)?;
-        let e_s: Vec<NTT> = ris
-            .iter()
-            .map(|r_i: &Vec<NTT>| eq_eval(r_i, &r_0))
-            .collect::<Result<Vec<_>, _>>()?;
+        Ok((r_0, sub_claim.expected_evaluation))
+    }
+}
 
-        let should_equal_s: NTT = compute_sumcheck_claim_expected_value::<NTT, P>(
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
+    for LFFoldingVerifier<NTT, T>
+{
+    fn verify<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        proof: &FoldingProof<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
+        // Step 1: Generate alpha, zeta, mu, beta challenges and validate input
+        let (alpha_s, beta_s, zeta_s, mu_s, poly_info) =
+            Self::get_alphas_betas_zetas_mus::<C, P>(cm_i_s, ccs.s, transcript)?;
+
+        // Calculate claims for sumcheck verification
+        let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
+
+        //Step 2: The sumcheck.
+        let (r_0, expected_evaluation) =
+            Self::verify_sumcheck_proof(transcript, &poly_info, claim_g1 + claim_g3, proof)?;
+
+        // Verify evaluation claim
+        Self::verify_evaluation::<C, P>(
             &alpha_s,
+            &beta_s,
             &mu_s,
-            &proof.theta_s,
-            e_asterisk,
-            &e_s,
             &zeta_s,
-            &proof.eta_s,
-        );
-
-        if should_equal_s != sub_claim.expected_evaluation {
-            return Err(FoldingError::SumCheckError(SumCheckFailed(
-                should_equal_s,
-                sub_claim.expected_evaluation,
-            )));
-        }
+            &r_0,
+            expected_evaluation,
+            proof,
+            cm_i_s,
+        )?;
 
         // Step 5
         proof

@@ -1,12 +1,7 @@
-use crate::arith::utils::mat_vec_mul;
-use crate::arith::{Instance, CCS, LCCCS};
-use crate::decomposition_parameters::test_params::StarkFoldingDP;
-use crate::nifs::folding::utils::{
-    compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos,
-};
-use crate::nifs::folding::{FoldingProver, LFFoldingProver};
-use crate::transcript::Transcript;
-use crate::utils::sumcheck::MLSumcheck;
+use crate::arith::{CCS, LCCCS};
+use crate::decomposition_parameters::test_params::DP;
+use crate::nifs::folding::{FoldingProver, LFFoldingProver, LFFoldingVerifier};
+use crate::nifs::FoldingProof;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
@@ -25,23 +20,28 @@ use crate::{
 };
 use ark_std::test_rng;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{StarkChallengeSet, SuitableRing};
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT as StarkRqNTT;
-use lattirust_ring::cyclotomic_ring::CRT;
-use lattirust_ring::Ring;
+use cyclotomic_rings::rings::{SuitableRing};
+use lattirust_ring::cyclotomic_ring::models::{stark_prime::RqNTT as StarkRqNTT,
+};
 use rand::Rng;
+
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
+use cyclotomic_rings::rings::{StarkChallengeSet, SuitableRing};
+use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT as StarkRqNTT;
+
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
 
 fn setup_test_environment<RqNTT, CS, DP, const C: usize, const W: usize>(
     input: Option<usize>,
+    generate_proof: bool,
 ) -> (
     Vec<LCCCS<C, RqNTT>>,
     Vec<Witness<RqNTT>>,
     PoseidonTranscript<RqNTT, CS>,
     CCS<RqNTT>,
+    Option<FoldingProof<RqNTT>>,
 )
 where
     RqNTT: SuitableRing,
@@ -108,7 +108,36 @@ where
         (lcccs, wit_s)
     };
 
-    (lcccs, wit_s, prover_transcript, ccs)
+    let folding_proof = if generate_proof {
+        Some(generate_folding_proof(
+            &ccs,
+            &mut prover_transcript,
+            &lcccs,
+            &wit_s,
+        ))
+    } else {
+        None
+    };
+
+    (lcccs, wit_s, verifier_transcript, ccs, folding_proof)
+}
+
+fn generate_folding_proof<RqNTT, CS>(
+    ccs: &CCS<RqNTT>,
+    mut prover_transcript: &mut PoseidonTranscript<RqNTT, CS>,
+    lcccs: &Vec<LCCCS<4, RqNTT>>,
+    wit_s: &Vec<Witness<RqNTT>>,
+) -> FoldingProof<RqNTT>
+where
+    RqNTT: SuitableRing,
+    CS: LatticefoldChallengeSet<RqNTT>,
+{
+    let (_, _, folding_proof) = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<
+        C,
+        DP,
+    >(&lcccs, &wit_s, prover_transcript, &ccs)
+    .unwrap();
+    folding_proof
 }
 
 #[test]
@@ -274,7 +303,7 @@ fn test_create_sumcheck_polynomial() {
         &beta_s,
         &mu_s,
     )
-    .unwrap();
+        .unwrap();
 
     // Validate - Check degree of g
     assert!(
@@ -311,7 +340,7 @@ fn test_sample_randomness() {
         &beta_s,
         &mu_s,
     )
-    .unwrap();
+        .unwrap();
 
     // Compute sumcheck proof
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
@@ -355,7 +384,7 @@ fn test_get_thetas() {
         &beta_s,
         &mu_s,
     )
-    .unwrap();
+        .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -365,7 +394,7 @@ fn test_get_thetas() {
         &Mz_mles,
         &r_0,
     )
-    .unwrap();
+        .unwrap();
 
     let expected_thetas: Vec<Vec<RqNTT>> = cfg_iter!(f_hat_mles)
         .map(|f_hat_row| {
@@ -413,7 +442,7 @@ fn test_get_etas() {
         &beta_s,
         &mu_s,
     )
-    .unwrap();
+        .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -423,7 +452,7 @@ fn test_get_etas() {
         &Mz_mles,
         &r_0,
     )
-    .unwrap();
+        .unwrap();
 
     let expected_eta_s: Vec<Vec<RqNTT>> = cfg_iter!(Mz_mles)
         .map(|Mz_mles| {
@@ -493,7 +522,7 @@ fn test_prepate_lccs() {
         &beta_s,
         &mu_s,
     )
-    .unwrap();
+        .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -503,7 +532,7 @@ fn test_prepate_lccs() {
             &Mz_mles,
             &r_0,
         )
-        .unwrap();
+            .unwrap();
     theta_s
         .iter()
         .for_each(|thetas| transcript.absorb_slice(thetas));
@@ -559,7 +588,7 @@ fn test_compute_f_0() {
         &beta_s,
         &mu_s,
     )
-    .unwrap();
+        .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
@@ -569,7 +598,7 @@ fn test_compute_f_0() {
             &Mz_mles,
             &r_0,
         )
-        .unwrap();
+            .unwrap();
     theta_s
         .iter()
         .for_each(|thetas| transcript.absorb_slice(thetas));
@@ -616,4 +645,73 @@ fn test_full_prove() {
         &mut transcript,
         &ccs,
     );
+}
+
+#[test]
+fn test_calculate_claims() {
+    type RqNTT = GoldilocksRqNTT;
+    type CS = GoldilocksChallengeSet;
+
+    let (lcccs_vec, _, _, _, _) = setup_test_environment::<RqNTT, CS, DP>(None, false);
+
+    let alpha_s = vec![RqNTT::one(); 2 * DP::K];
+    let zeta_s = vec![RqNTT::one(); 2 * DP::K];
+
+    let (claim_g1, claim_g3) =
+        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
+            &alpha_s, &zeta_s, &lcccs_vec,
+        );
+
+    assert_ne!(claim_g1, RqNTT::zero());
+    assert_ne!(claim_g3, RqNTT::zero());
+
+    let zero_alphas = vec![RqNTT::zero(); 2 * DP::K];
+    let zero_zetas = vec![RqNTT::zero(); 2 * DP::K];
+
+    let (zero_claim_g1, zero_claim_g3) =
+        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
+            &zero_alphas,
+            &zero_zetas,
+            &lcccs_vec,
+        );
+
+    assert_eq!(zero_claim_g1, RqNTT::zero());
+    assert_eq!(zero_claim_g3, RqNTT::zero());
+}
+
+#[test]
+fn test_verify_sumcheck_proof() {
+    type RqNTT = FrogRqNTT;
+    type CS = FrogChallengeSet;
+
+    let (lcccs_vec, _, mut transcript, ccs, proof) =
+        setup_test_environment::<RqNTT, CS, DP>(None, true);
+    let proof = proof.unwrap();
+
+    let (alpha_s, beta_s, zeta_s, mu_s, poly_info) =
+        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_alphas_betas_zetas_mus::<
+            C,
+            DP,
+        >(&lcccs_vec, ccs.s, &mut transcript)
+        .unwrap();
+
+    let (claim_g1, claim_g3) =
+        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
+            &alpha_s, &zeta_s, &lcccs_vec,
+        );
+
+    let result = LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_sumcheck_proof(
+        &mut transcript,
+        &poly_info,
+        claim_g1 + claim_g3,
+        &proof,
+    );
+
+    match result {
+        Ok((r_0, expected_eval)) => {
+            assert_eq!(r_0.len(), ccs.s);
+            // We can add more assertions here if needed
+        }
+        Err(e) => panic!("Sumcheck verification failed: {:?}", e),
+    }
 }
