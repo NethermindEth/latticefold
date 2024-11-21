@@ -111,7 +111,7 @@ impl<R: Ring> CCS<R> {
         let m = W;
         let n = r1cs.A.ncols();
 
-        CCS {
+        let mut ccs = CCS {
             m,
             n,
             l: r1cs.l,
@@ -124,7 +124,9 @@ impl<R: Ring> CCS<R> {
             S: vec![vec![0, 1], vec![2]],
             c: vec![R::one(), R::one().neg()],
             M: vec![r1cs.A, r1cs.B, r1cs.C],
-        }
+        };
+        ccs.pad_rows_to_the_next_pow_of_2();
+        ccs
     }
 
     pub fn to_r1cs(self) -> R1CS<R> {
@@ -136,7 +138,7 @@ impl<R: Ring> CCS<R> {
         }
     }
 
-    pub fn pad_rows_to_the_next_pow_of_2(&mut self) {
+    fn pad_rows_to_the_next_pow_of_2(&mut self) {
         let target_len = self.m.next_power_of_two();
         self.m = target_len;
         self.s = log2(target_len) as usize;
@@ -357,9 +359,7 @@ pub mod tests {
 
     pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
-        let mut ccs = CCS::<R>::from_r1cs(r1cs, W);
-        ccs.pad_rows_to_the_next_pow_of_2();
-        ccs
+        CCS::<R>::from_r1cs(r1cs, W)
     }
 
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
@@ -370,9 +370,7 @@ pub mod tests {
         rows_size: usize,
     ) -> CCS<R> {
         let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(rows_size);
-        let mut ccs = CCS::<R>::from_r1cs(r1cs, W);
-        ccs.pad_rows_to_the_next_pow_of_2();
-        ccs
+        CCS::<R>::from_r1cs(r1cs, W)
     }
 
     /// Test that a basic CCS relation can be satisfied
