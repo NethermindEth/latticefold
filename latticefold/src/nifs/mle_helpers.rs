@@ -85,7 +85,7 @@ where
 #[cfg(not(feature = "parallel"))]
 pub fn to_mles<'a, I, R, E>(n_vars: usize, mle_s: I) -> Result<Vec<DenseMultilinearExtension<R>>, E>
 where
-    I: Iterator<Item = &'a Vec<R>>,
+    I: IntoIterator<Item = &'a Vec<R>>,
     R: Ring,
     E: From<MleEvaluationError> + Sync + Send,
 {

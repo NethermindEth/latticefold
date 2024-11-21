@@ -16,9 +16,6 @@ use crate::{
     transcript::poseidon::PoseidonTranscript,
 };
 
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
-
 fn generate_decomposition_args<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>() -> (
     LCCCS<4, RqNTT>,
     PoseidonTranscript<RqNTT, CS>,
@@ -60,7 +57,7 @@ where
     let u = compute_u(&Mz_mles, &r).unwrap();
 
     let v = evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, DecompositionError>(
-        &to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat)).unwrap(),
+        &to_mles::<_, _, DecompositionError>(log_m, &wit.f_hat).unwrap(),
         &r,
     )
     .unwrap();

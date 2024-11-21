@@ -65,7 +65,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let v_s: Vec<Vec<NTT>> = cfg_iter!(wit_s)
             .map(|wit| {
                 evaluate_mles::<NTT, _, _, DecompositionError>(
-                    &to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat))?,
+                    &to_mles::<_, _, DecompositionError>(log_m, &wit.f_hat)?,
                     &cm_i.r,
                 )
             })

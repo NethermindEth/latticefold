@@ -78,7 +78,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         // Compute v
 
         let v: Vec<NTT> = evaluate_mles::<NTT, _, _, LinearizationError<NTT>>(
-            &to_mles::<_, _, LinearizationError<NTT>>(ccs.s, cfg_iter!(wit.f_hat))?,
+            &to_mles::<_, _, LinearizationError<NTT>>(ccs.s, &wit.f_hat)?,
             point_r,
         )?;
 

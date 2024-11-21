@@ -91,7 +91,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = w_s
             .iter()
-            .map(|w| to_mles::<_, _, FoldingError<_>>(log_m, cfg_iter!(w.f_hat))) // propagate errors using `?`
+            .map(|w| to_mles::<_, _, FoldingError<_>>(log_m, &w.f_hat)) // propagate errors using `?`
             .collect::<Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, _>>()?;
 
         let zis = cm_i_s
