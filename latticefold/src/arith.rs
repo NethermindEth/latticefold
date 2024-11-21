@@ -142,9 +142,7 @@ impl<R: Ring> CCS<R> {
         self.s = log2(target_len) as usize;
 
         // Update matrices
-        self.M.iter_mut().for_each(|mat| {
-            mat.n_rows = target_len;
-        });
+        self.M.iter_mut().for_each(|mat| mat.pad_rows(target_len));
     }
 }
 
