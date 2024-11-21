@@ -497,33 +497,26 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 1, 9, 2048, 512, 7, 2, 9);
         run_single_goldilocks_benchmark!(&mut group, 1, 9, 4096, 512, 7, 2, 9);
         run_single_goldilocks_benchmark!(&mut group, 1, 9, 8192, 256, 8, 4, 4);
-        run_single_goldilocks_benchmark!(&mut group, 1, 9, 16384, 256, 8, 4, 4);
         run_single_goldilocks_benchmark!(&mut group, 1, 10, 512, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut group, 1, 10, 1024, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut group, 1, 10, 4096, 1024, 7, 4, 5);
         run_single_goldilocks_benchmark!(&mut group, 1, 10, 4096, 512, 7, 2, 9);
         run_single_goldilocks_benchmark!(&mut group, 1, 10, 8192, 512, 7, 2, 9);
-        run_single_goldilocks_benchmark!(&mut group, 1, 10, 16384, 512, 7, 2, 9);
         run_single_goldilocks_benchmark!(&mut group, 1, 11, 1024, 4096, 6, 4, 6);
         run_single_goldilocks_benchmark!(&mut group, 1, 11, 1024, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut group, 1, 11, 2048, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut group, 1, 11, 4096, 2048, 6, 2, 11);
-        run_single_goldilocks_benchmark!(&mut group, 1, 11, 16384, 1024, 7, 4, 5);
-        run_single_goldilocks_benchmark!(&mut group, 1, 11, 16384, 512, 7, 2, 9);
         run_single_goldilocks_benchmark!(&mut group, 1, 12, 512, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 12, 1024, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 12, 4096, 4096, 6, 4, 6);
         run_single_goldilocks_benchmark!(&mut group, 1, 12, 4096, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut group, 1, 12, 8192, 2048, 6, 2, 11);
-        run_single_goldilocks_benchmark!(&mut group, 1, 12, 16384, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut group, 1, 13, 512, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 13, 512, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 13, 1024, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 13, 1024, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 13, 2048, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 13, 4096, 8192, 5, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 13, 16384, 4096, 6, 4, 6);
-        run_single_goldilocks_benchmark!(&mut group, 1, 13, 16384, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
         run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 8192, 5, 2, 13);
@@ -532,7 +525,6 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 1, 14, 4096, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 14, 4096, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 14, 8192, 8192, 5, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 14, 16384, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 15, 512, 65536, 4, 4, 8);
         run_single_goldilocks_benchmark!(&mut group, 1, 15, 1024, 65536, 4, 4, 8);
         run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 5, 2, 15);
@@ -542,7 +534,6 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 1, 15, 4096, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 15, 8192, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 15, 8192, 8192, 5, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 15, 16384, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 512, 131072, 4, 2, 17);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 512, 65536, 4, 4, 8);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 1024, 65536, 4, 4, 8);
@@ -550,8 +541,6 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 8192, 32768, 5, 2, 15);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 8192, 16384, 5, 4, 7);
         run_single_goldilocks_benchmark!(&mut group, 1, 16, 8192, 8192, 5, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 16, 16384, 16384, 5, 4, 7);
-        run_single_goldilocks_benchmark!(&mut group, 1, 16, 16384, 8192, 5, 2, 13);
     }
 
     // // BabyBear
