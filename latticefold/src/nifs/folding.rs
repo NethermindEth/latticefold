@@ -551,9 +551,16 @@ mod tests_goldilocks {
     use crate::ark_base::*;
     use crate::nifs::folding::FoldingProof;
     use crate::{
-        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+        arith::{
+            r1cs::{get_test_dummy_z_split, get_test_z_split},
+            tests::{get_test_ccs, get_test_dummy_ccs},
+            Witness, CCCS,
+        },
         commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::{test_params::DPL1, DecompositionParams},
+        decomposition_parameters::{
+            test_params::{GoldilocksDP, DPL1},
+            DecompositionParams,
+        },
         nifs::{
             decomposition::{
                 DecompositionProver, DecompositionVerifier, LFDecompositionProver,
@@ -647,7 +654,7 @@ mod tests_goldilocks {
     }
 
     #[test]
-    fn test_failing_folding_prover() {
+    fn test_failing_folding_prover_1() {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
 
@@ -704,6 +711,85 @@ mod tests_goldilocks {
         );
 
         assert!(res.is_err())
+    }
+
+    #[test]
+    fn test_failing_folding_prover_2() {
+        const X_LEN: usize = 1;
+        const C: usize = 8;
+        const WIT_LEN: usize = 256;
+        const W: usize = WIT_LEN * GoldilocksDP::L;
+
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(X_LEN + WIT_LEN + 1);
+        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
+        let mut rng = ark_std::test_rng();
+        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
+        let wit: Witness<R> = Witness::from_w_ccs::<GoldilocksDP>(w_ccs);
+        let cm_i = CCCS {
+            cm: wit.commit::<C, W, GoldilocksDP>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
+
+        let (_, linearization_proof) =
+            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
+                .unwrap();
+
+        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+            &cm_i,
+            &linearization_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let (_, vec_wit, decomposition_proof) =
+            LFDecompositionProver::<_, T>::prove::<W, C, GoldilocksDP>(
+                &lcccs,
+                &wit,
+                &mut prover_transcript,
+                &ccs,
+                &scheme,
+            )
+            .unwrap();
+
+        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<C, GoldilocksDP>(
+            &lcccs,
+            &decomposition_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+        let (lcccs, wit_s) = {
+            let mut lcccs = vec_lcccs.clone();
+            let mut lcccs_r = vec_lcccs;
+            lcccs.append(&mut lcccs_r);
+
+            let mut wit_s = vec_wit.clone();
+            let mut wit_s_r = vec_wit;
+            wit_s.append(&mut wit_s_r);
+
+            (lcccs, wit_s)
+        };
+        let (lcccs_prover, _, folding_proof) = LFFoldingProver::<_, T>::prove::<C, GoldilocksDP>(
+            &lcccs,
+            &wit_s,
+            &mut prover_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<C, GoldilocksDP>(
+            &lcccs,
+            &folding_proof,
+            &mut verifier_transcript,
+            &ccs,
+        )
+        .unwrap();
+
+        assert_eq!(lcccs_prover, lcccs_verifier);
     }
 
     #[test]
