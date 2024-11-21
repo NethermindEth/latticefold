@@ -7,7 +7,7 @@ use lattirust_ring::cyclotomic_ring::CRT;
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
-use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
+use super::mle_helpers::{evaluate_mles, to_mles_err};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
@@ -72,12 +72,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         cfg_iter!(zis)
             .map(|zi| {
                 let Mz_mle = to_mles_err::<_, _, FoldingError<NTT>, _>(
-                    log_m,
+                    ccs.s,
                     cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, zi)),
                 )?;
                 Ok(Mz_mle)
             })
-            .collect::<Result<_, FoldingError<_>>>()?;
+            .collect::<Result<_, FoldingError<_>>>()
     }
 
     fn sample_randomness(state: ProverState<NTT>) -> Vec<NTT> {
@@ -91,16 +91,15 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
     fn get_thetas_etas(
         f_hat_mles: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
         Mz_mles_vec: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
-        r_0: &Vec<NTT>,
+        r_0: &[NTT],
     ) -> Result<(Vec<Vec<NTT>>, Vec<Vec<NTT>>), FoldingError<NTT>> {
         let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
-            .map(|f_hat_row| evaluate_mles::<_, _, _, FoldingError<NTT>>(f_hat_row, &r_0))
+            .map(|f_hat_row| evaluate_mles::<_, _, _, FoldingError<NTT>>(f_hat_row, r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
         let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
-            .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(Mz_mles, &r_0))
+            .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(Mz_mles, r_0))
             .collect::<Result<Vec<_>, _>>()?;
-
 
         Ok((theta_s, eta_s))
     }

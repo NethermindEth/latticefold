@@ -1,7 +1,7 @@
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
-use crate::decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkFoldingDP, DP};
+use crate::decomposition_parameters::test_params::{BabyBearDP, StarkFoldingDP, DP};
 use crate::nifs::folding::{
     utils::{
         compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos,
@@ -195,9 +195,9 @@ fn test_setup_f_hat_mles() {
 
 #[test]
 fn test_get_zis() {
-    type RqNTT = GoldilocksRqNTT;
-    type CS = GoldilocksChallengeSet;
-    type DP = GoldilocksDP;
+    type RqNTT = StarkRqNTT;
+    type CS = StarkChallengeSet;
+    type DP = StarkFoldingDP;
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
