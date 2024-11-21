@@ -1,8 +1,7 @@
-use ark_ff::{Field, PrimeField};
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
-use crate::decomposition_parameters::test_params::{StarkFoldingDP, DP};
+use crate::decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkFoldingDP, DP};
 use crate::nifs::folding::{
     utils::{
         compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos,
@@ -28,10 +27,12 @@ use crate::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use ark_ff::{Field, PrimeField};
 use ark_std::test_rng;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
-    FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet, SuitableRing,
+    BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
+    StarkChallengeSet, SuitableRing,
 };
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::cyclotomic_ring::models::{
@@ -194,9 +195,9 @@ fn test_setup_f_hat_mles() {
 
 #[test]
 fn test_get_zis() {
-    type RqNTT = StarkRqNTT;
-    type CS = StarkChallengeSet;
-    type DP = StarkFoldingDP;
+    type RqNTT = GoldilocksRqNTT;
+    type CS = GoldilocksChallengeSet;
+    type DP = GoldilocksDP;
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
@@ -222,9 +223,9 @@ fn test_get_zis() {
 
 #[test]
 fn test_get_ris() {
-    type RqNTT = StarkRqNTT;
-    type CS = StarkChallengeSet;
-    type DP = StarkFoldingDP;
+    type RqNTT = BabyBearRingNTT;
+    type CS = BabyBearChallengeSet;
+    type DP = BabyBearDP;
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
@@ -328,9 +329,9 @@ fn test_create_sumcheck_polynomial() {
 
 #[test]
 fn test_sample_randomness() {
-    type RqNTT = StarkRqNTT;
-    type CS = StarkChallengeSet;
-    type DP = StarkFoldingDP;
+    type RqNTT = BabyBearRingNTT;
+    type CS = BabyBearChallengeSet;
+    type DP = BabyBearDP;
 
     const W: usize = WIT_LEN * DP::L;
 
@@ -493,17 +494,17 @@ fn test_get_etas() {
 
 #[test]
 fn test_get_rhos() {
-    type RqNTT = StarkRqNTT;
-    type CS = StarkChallengeSet;
-    type DP = StarkFoldingDP;
+    type RqNTT = BabyBearRingNTT;
+    type CS = BabyBearChallengeSet;
+    type DP = BabyBearDP;
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (_, _, mut transcript, _, _) = setup_test_environment::<RqNTT, CS, DP,  C, W>(None, false);
+    let (_, _, mut transcript, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
     let mut transcript_clone = transcript.clone();
-    
+
     let rho_s = get_rhos::<_, _, DP>(&mut transcript);
-    
+
     // Compute expected result
     transcript_clone.absorb_field_element(&<_>::from_base_prime_field(
         <_>::from_be_bytes_mod_order(b"rho_s"),
@@ -514,9 +515,11 @@ fn test_get_rhos() {
     // Validate
     assert!(!rho_s.is_empty(), "Rhos vector should not be empty");
     assert_eq!(rho_s.len(), 2 * DP::K, "Mismatch in Rhos length");
-    assert_eq!(rho_s, expected_rhos, "Rhosvector does not match expected evaluations");
+    assert_eq!(
+        rho_s, expected_rhos,
+        "Rhosvector does not match expected evaluations"
+    );
 }
-
 
 #[test]
 fn test_prepare_lccs() {
