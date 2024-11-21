@@ -154,13 +154,15 @@ fn test_compute_v() {
         .unwrap();
 
     // Compute expected v vector (witness evaluations)
-    let expected_v: Vec<RqNTT> = cfg_iter!(wit.f_hat)
-        .map(|f_hat_row| {
-            DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
-                .evaluate(&point_r)
-                .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
-        })
-        .collect();
+    let f_hat_mles =
+        to_mles::<_, _, LinearizationError<RqNTT>>(ccs.s, cfg_iter!(wit.f_hat)).unwrap();
+
+    let expected_v =
+        evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, LinearizationError<RqNTT>>(
+            cfg_iter!(f_hat_mles),
+            &point_r,
+        )
+        .unwrap();
 
     // Validate
     assert_eq!(point_r.len(), ccs.s, "point_r length mismatch");

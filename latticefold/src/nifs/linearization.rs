@@ -8,6 +8,7 @@ use lattirust_poly::{
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
+use super::mle_helpers::{evaluate_mles, to_mles};
 use crate::ark_base::*;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCCS, CCS, LCCCS},
@@ -75,7 +76,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         Mz_mles: &[DenseMultilinearExtension<NTT>],
     ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         // Compute v
-        let v: Vec<NTT> = cfg_iter!(wit.f_hat).map(|f_hat_row| DenseMultilinearExtension::from_slice(ccs.s, f_hat_row).evaluate(point_r).expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")).collect();
+
+        let mles = to_mles::<_, _, LinearizationError<NTT>>(ccs.s, cfg_iter!(wit.f_hat))?;
+        let v: Vec<NTT> =
+            evaluate_mles::<NTT, _, _, LinearizationError<NTT>>(cfg_iter!(mles), point_r)?;
 
         // Compute u_j
         let u = compute_u(Mz_mles, point_r)?;

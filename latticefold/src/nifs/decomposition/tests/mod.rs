@@ -2,7 +2,9 @@ use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRi
 use lattirust_poly::mle::DenseMultilinearExtension;
 use rand::Rng;
 
+use crate::nifs::error::DecompositionError;
 use crate::nifs::linearization::utils::compute_u;
+use crate::nifs::mle_helpers::{evaluate_mles, to_mles};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
     ark_base::*,
@@ -13,6 +15,9 @@ use crate::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 
 fn generate_decomposition_args<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>() -> (
     LCCCS<4, RqNTT>,
@@ -53,14 +58,13 @@ where
         .collect();
 
     let u = compute_u(&Mz_mles, &r).unwrap();
-    let v = (wit.f_hat)
-        .iter()
-        .map(|f_hat_row| {
-            DenseMultilinearExtension::from_slice(log_m, f_hat_row)
-                .evaluate(&r)
-                .unwrap()
-        })
-        .collect();
+
+    let f_hat_mles = to_mles::<_, _, DecompositionError>(log_m, cfg_iter!(wit.f_hat)).unwrap();
+    let v = evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, DecompositionError>(
+        cfg_iter!(f_hat_mles),
+        &r,
+    )
+    .unwrap();
 
     let lcccs = LCCCS {
         r,

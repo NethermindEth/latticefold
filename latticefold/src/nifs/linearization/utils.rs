@@ -1,4 +1,4 @@
-use crate::ark_base::Vec;
+use crate::{ark_base::Vec, nifs::mle_helpers::evaluate_mles};
 use ark_ff::PrimeField;
 use ark_std::cfg_iter;
 
@@ -20,17 +20,7 @@ pub fn compute_u<NTT: OverField>(
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     r: &[NTT],
 ) -> Result<Vec<NTT>, LinearizationError<NTT>> {
-    cfg_iter!(Mz_mles)
-        .map(|M_i_mle| {
-            M_i_mle
-                .evaluate(r)
-                .ok_or(LinearizationError::ParametersError(format!(
-                    "one of the CCS matrices has an incorrect length {}, expected {}",
-                    M_i_mle.evaluations.len(),
-                    1 << r.len(),
-                )))
-        })
-        .collect()
+    evaluate_mles::<NTT, _, _, LinearizationError<NTT>>(cfg_iter!(Mz_mles), r)
 }
 
 /// Prepare the main linearization polynomial.
