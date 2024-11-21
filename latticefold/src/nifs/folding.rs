@@ -32,6 +32,7 @@ mod tests;
 
 mod utils;
 pub use structs::*;
+
 mod structs;
 
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<NTT, T> {
@@ -254,26 +255,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         Ok(())
     }
 
-    // Previously refactored methods stay the same
-    fn get_alphas_betas_zetas_mus<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
-        log_m: usize,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
-    ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>, VPAuxInfo<NTT>), FoldingError<NTT>> {
-        // Validate input length
-        if cm_i_s.len() != 2 * P::K {
-            return Err(FoldingError::IncorrectLength);
-        }
-
-        // Step 1: Generate alpha, zeta, mu, beta challenges
-        let (alpha_s, beta_s, zeta_s, mu_s) =
-            get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
-
-        let poly_info = VPAuxInfo::new(log_m, 2 * P::B_SMALL);
-
-        Ok((alpha_s, beta_s, zeta_s, mu_s, poly_info))
-    }
-
     fn calculate_claims<const C: usize>(
         alpha_s: &[NTT],
         zeta_s: &[NTT],
@@ -347,11 +328,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
         // Step 1: Generate alpha, zeta, mu, beta challenges and validate input
-        let (alpha_s, beta_s, zeta_s, mu_s, poly_info) =
-            Self::get_alphas_betas_zetas_mus::<C, P>(cm_i_s, ccs.s, transcript)?;
+        let (alpha_s, beta_s, zeta_s, mu_s) =
+            get_alphas_betas_zetas_mus::<NTT, _, P>(ccs.s, transcript);
 
         // Calculate claims for sumcheck verification
         let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
+
+        let poly_info = VPAuxInfo::new(ccs.s, 2 * P::B_SMALL);
 
         //Step 2: The sumcheck.
         let (r_0, expected_evaluation) =

@@ -35,6 +35,7 @@ use cyclotomic_rings::rings::{
     StarkChallengeSet, SuitableRing,
 };
 use lattirust_poly::mle::DenseMultilinearExtension;
+use lattirust_poly::polynomials::VPAuxInfo;
 use lattirust_ring::cyclotomic_ring::models::{
     frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
     stark_prime::RqNTT as StarkRqNTT,
@@ -720,12 +721,9 @@ fn test_verify_sumcheck_proof() {
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
     let proof = proof.unwrap();
 
-    let (alpha_s, _, zeta_s, _, poly_info) =
-        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_alphas_betas_zetas_mus::<
-            C,
-            DP,
-        >(&lcccs_vec, ccs.s, &mut transcript)
-        .unwrap();
+    let (alpha_s, _, zeta_s, _) = get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+
+    let poly_info = VPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
 
     let (claim_g1, claim_g3) =
         LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
