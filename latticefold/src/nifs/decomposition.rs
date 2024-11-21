@@ -118,6 +118,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         ),
         DecompositionError,
     > {
+        ccs.sanity_check()?;
         let log_m = ccs.s;
 
         let wit_s: Vec<Witness<NTT>> = Self::decompose_witness::<P>(wit);

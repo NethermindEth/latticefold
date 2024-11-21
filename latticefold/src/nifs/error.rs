@@ -14,6 +14,8 @@ pub enum LatticefoldError<R: Ring> {
     DecompositionError(#[from] DecompositionError),
     #[error("folding failed: {0}")]
     FoldingError(#[from] FoldingError<R>),
+    #[error("constraint system related error: {0}")]
+    ConstraintSystemError(#[from] CSError),
 }
 
 #[derive(Debug, Error)]

@@ -138,6 +138,15 @@ impl<R: Ring> CCS<R> {
         }
     }
 
+    pub fn sanity_check(&self) -> Result<(), Error> {
+        // Check that m is power of 2
+        if !self.m.is_power_of_two() {
+            return Err(Error::MatricesRowsLengthNotPowerOf2(self.m));
+        }
+
+        Ok(())
+    }
+
     fn pad_rows_to_the_next_pow_of_2(&mut self) {
         let target_len = self.m.next_power_of_two();
         self.m = target_len;

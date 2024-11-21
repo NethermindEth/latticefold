@@ -60,6 +60,8 @@ impl<
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
+        ccs.sanity_check()?;
+
         let (linearized_cm_i, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
@@ -126,6 +128,8 @@ impl<
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LatticefoldError<NTT>> {
+        ccs.sanity_check()?;
+
         let linearized_cm_i = LFLinearizationVerifier::<_, T>::verify(
             cm_i,
             &proof.linearization_proof,

@@ -77,6 +77,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
+        ccs.sanity_check()?;
+
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
@@ -196,6 +198,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
+        ccs.sanity_check()?;
+
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
