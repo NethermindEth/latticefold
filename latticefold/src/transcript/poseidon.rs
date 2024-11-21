@@ -14,6 +14,7 @@ use cyclotomic_rings::{
 };
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
+#[derive(Clone)]
 pub struct PoseidonTranscript<R: OverField, CS> {
     _marker: PhantomData<CS>,
     sponge: PoseidonSponge<<R::BaseRing as Field>::BasePrimeField>,

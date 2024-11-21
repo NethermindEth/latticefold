@@ -1,3 +1,4 @@
+use ark_ff::{Field, PrimeField};
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
@@ -9,7 +10,7 @@ use crate::nifs::folding::{
     FoldingProver, LFFoldingProver, LFFoldingVerifier,
 };
 use crate::nifs::FoldingProof;
-use crate::transcript::Transcript;
+use crate::transcript::{Transcript, TranscriptWithShortChallenges};
 use crate::utils::sumcheck::MLSumcheck;
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
@@ -37,7 +38,7 @@ use lattirust_ring::cyclotomic_ring::models::{
     frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
     stark_prime::RqNTT as StarkRqNTT,
 };
-use lattirust_ring::cyclotomic_ring::CRT;
+use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use lattirust_ring::Ring;
 use num_traits::{One, Zero};
 use rand::Rng;
@@ -490,7 +491,6 @@ fn test_get_etas() {
     );
 }
 
-/*
 #[test]
 fn test_get_rhos() {
     type RqNTT = StarkRqNTT;
@@ -499,10 +499,16 @@ fn test_get_rhos() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (_, _, mut transcript, _) = setup_test_environment::<RqNTT, CS, DP,  C, W>(None);
+    let (_, _, mut transcript, _, _) = setup_test_environment::<RqNTT, CS, DP,  C, W>(None, false);
+    let mut transcript_clone = transcript.clone();
+    
     let rho_s = get_rhos::<_, _, DP>(&mut transcript);
-
-    let mut expected_rhos = transcript.get_small_challenges((2 * DP::K) - 1); // Note that we are missing the first element
+    
+    // Compute expected result
+    transcript_clone.absorb_field_element(&<_>::from_base_prime_field(
+        <_>::from_be_bytes_mod_order(b"rho_s"),
+    ));
+    let mut expected_rhos = transcript_clone.get_small_challenges((2 * DP::K) - 1); // Note that we are missing the first element
     expected_rhos.push(RqNTT::ONE.icrt());
 
     // Validate
@@ -510,7 +516,7 @@ fn test_get_rhos() {
     assert_eq!(rho_s.len(), 2 * DP::K, "Mismatch in Rhos length");
     assert_eq!(rho_s, expected_rhos, "Rhosvector does not match expected evaluations");
 }
-*/
+
 
 #[test]
 fn test_prepare_lccs() {

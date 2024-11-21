@@ -24,7 +24,7 @@ impl SuitableRing for BabyBearRingNTT {
 }
 
 pub struct BabyBearPoseidonConfig;
-
+#[derive(Clone)]
 pub struct BabyBearChallengeSet;
 
 const MAX_COEFF: i16 = 32;
