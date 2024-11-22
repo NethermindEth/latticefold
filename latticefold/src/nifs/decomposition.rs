@@ -31,6 +31,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
             .collect()
     }
 
+    fn compute_x_s<P: DecompositionParams>(mut x_w: Vec<NTT>, h: NTT) -> Vec<Vec<NTT>> {
+        x_w.push(h);
+        decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(x_w)
+    }
+
     fn commit_from_witnesses<const C: usize, const W: usize, P: DecompositionParams>(
         wit_s: &Vec<Witness<NTT>>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
@@ -64,7 +69,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
         M: &[SparseMatrix<NTT>],
         decomposed_statements: &[Vec<NTT>],
         point_r: &[NTT],
-        mle_length: usize,
+        num_mle_vars: usize,
     ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
         cfg_iter!(wit_s)
             .enumerate()
@@ -83,7 +88,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
 
                 for M in M {
                     u_s_for_i.push(
-                        DenseMultilinearExtension::from_slice(mle_length, &mat_vec_mul(M, &z)?)
+                        DenseMultilinearExtension::from_slice(num_mle_vars, &mat_vec_mul(M, &z)?)
                             .evaluate(point_r)
                             .ok_or(DecompositionError::WitnessMleEvalFail)?,
                     );
@@ -115,9 +120,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let wit_s: Vec<Witness<NTT>> = Self::decompose_witness::<P>(wit);
 
-        let mut cm_i_x_w = cm_i.x_w.clone();
-        cm_i_x_w.push(cm_i.h);
-        let x_s = decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(cm_i_x_w);
+        let x_s = Self::compute_x_s::<P>(cm_i.x_w.clone(), cm_i.h);
 
         let y_s: Vec<Commitment<C, NTT>> = Self::commit_from_witnesses::<C, W, P>(&wit_s, scheme)?;
 
