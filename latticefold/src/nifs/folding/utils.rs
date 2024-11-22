@@ -291,3 +291,15 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
 
     Ok(())
 }
+
+fn compute_coefficients<R: Ring, I: IntoIterator<Item = R>>(roots: I) -> Vec<R> {
+    let mut coefficients = vec![R::one()];
+    for r in roots {
+        coefficients.push(R::zero());
+        for i in (1..coefficients.len()).rev() {
+            let (left, right) = coefficients.split_at_mut(i);
+            right[0] -= r * left[left.len() - 1];
+        }
+    }
+    coefficients
+}
