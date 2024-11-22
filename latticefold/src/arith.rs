@@ -107,11 +107,12 @@ impl<R: Ring> Arith<R> for CCS<R> {
 }
 
 impl<R: Ring> CCS<R> {
+    /// Constructs a [`CCS`] instance from a [`R1CS`].
     pub fn from_r1cs(r1cs: R1CS<R>, W: usize) -> Self {
         let m = W;
         let n = r1cs.A.ncols();
 
-        let mut ccs = CCS {
+        CCS {
             m,
             n,
             l: r1cs.l,
@@ -124,8 +125,14 @@ impl<R: Ring> CCS<R> {
             S: vec![vec![0, 1], vec![2]],
             c: vec![R::one(), R::one().neg()],
             M: vec![r1cs.A, r1cs.B, r1cs.C],
-        };
-        ccs.pad_rows_to_the_next_pow_of_2();
+        }
+    }
+
+    /// Constructs a [`CCS`] instance from a [`R1CS`]. The CCS instance matrices rows are then padded
+    /// to length `size` or its next power of 2.
+    pub fn from_r1cs_padded(r1cs: R1CS<R>, W: usize, L: usize) -> Self {
+        let mut ccs = Self::from_r1cs(r1cs, W);
+        ccs.pad_rows_to((ccs.n * L).next_power_of_two());
         ccs
     }
 
@@ -147,13 +154,15 @@ impl<R: Ring> CCS<R> {
         Ok(())
     }
 
-    fn pad_rows_to_the_next_pow_of_2(&mut self) {
-        let target_len = self.m.next_power_of_two();
-        self.m = target_len;
-        self.s = log2(target_len) as usize;
+    fn pad_rows_to(&mut self, size: usize) {
+        let size = size.next_power_of_two();
+        if size > self.m {
+            self.m = size;
+            self.s = log2(size) as usize;
 
-        // Update matrices
-        self.M.iter_mut().for_each(|mat| mat.pad_rows(target_len));
+            // Update matrices
+            self.M.iter_mut().for_each(|mat| mat.pad_rows(size));
+        }
     }
 }
 
@@ -366,9 +375,9 @@ pub mod tests {
     };
     use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
-    pub fn get_test_ccs<R: Ring>(W: usize) -> CCS<R> {
+    pub fn get_test_ccs<R: Ring>(W: usize, L: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
-        CCS::<R>::from_r1cs(r1cs, W)
+        CCS::<R>::from_r1cs_padded(r1cs, W, L)
     }
 
     pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
@@ -377,15 +386,16 @@ pub mod tests {
 
     pub fn get_test_dummy_ccs<R: Ring, const X_LEN: usize, const WIT_LEN: usize, const W: usize>(
         rows_size: usize,
+        L: usize,
     ) -> CCS<R> {
         let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(rows_size);
-        CCS::<R>::from_r1cs(r1cs, W)
+        CCS::<R>::from_r1cs_padded(r1cs, W, L)
     }
 
     /// Test that a basic CCS relation can be satisfied
     #[test]
     fn test_ccs_relation() {
-        let ccs = get_test_ccs::<BabyBearRingNTT>(4);
+        let ccs = get_test_ccs::<BabyBearRingNTT>(4, 1);
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();

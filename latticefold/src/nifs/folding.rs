@@ -357,7 +357,7 @@ mod tests {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<R>(W);
+        let ccs = get_test_ccs::<R>(W, DPL1::L);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -429,7 +429,7 @@ mod tests {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<R>(W);
+        let ccs = get_test_ccs::<R>(W, DPL1::L);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -489,7 +489,7 @@ mod tests {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<R>(W);
+        let ccs = get_test_ccs::<R>(W, DPL1::L);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -602,7 +602,7 @@ mod tests_goldilocks {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<R>(W);
+        let ccs = get_test_ccs::<R>(W, DPL1::L);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -674,7 +674,7 @@ mod tests_goldilocks {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<R>(W);
+        let ccs = get_test_ccs::<R>(W, DPL1::L);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -736,7 +736,7 @@ mod tests_goldilocks {
         const WIT_LEN: usize = 256;
         const W: usize = WIT_LEN * GoldilocksDP::L;
 
-        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(X_LEN + WIT_LEN + 1);
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(W, GoldilocksDP::L);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -813,7 +813,7 @@ mod tests_goldilocks {
         const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
         const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
 
-        let ccs = get_test_ccs::<R>(W);
+        let ccs = get_test_ccs::<R>(W, DPL1::L);
         let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
