@@ -15,7 +15,7 @@ use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
-    arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
+    arith::{error::CSError, utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
     utils::sumcheck,
 };
@@ -77,7 +77,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
-        ccs.sanity_check()?;
+        sanity_check::<NTT, P>(ccs)?;
 
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
@@ -198,7 +198,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
-        ccs.sanity_check()?;
+        sanity_check::<NTT, P>(ccs)?;
 
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
@@ -307,6 +307,18 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             h,
         })
     }
+}
+
+fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
+    ccs: &CCS<NTT>,
+) -> Result<(), FoldingError<NTT>> {
+    ccs.sanity_check()?;
+
+    if ccs.m != (DP::L * ccs.n).next_power_of_two() {
+        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
