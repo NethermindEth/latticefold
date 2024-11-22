@@ -4,12 +4,16 @@ use crate::{
     ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
     decomposition_parameters::DecompositionParams,
-    nifs::error::DecompositionError,
+    nifs::{
+        error::DecompositionError,
+        mle_helpers::{evaluate_mles, to_mles_err},
+    },
     transcript::Transcript,
 };
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_poly::polynomials::DenseMultilinearExtension;
+
 use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
@@ -18,6 +22,8 @@ use ark_std::{cfg_into_iter, cfg_iter};
 use rayon::prelude::*;
 
 pub use structs::*;
+
+use super::mle_helpers::to_mles;
 mod structs;
 #[cfg(test)]
 mod tests;
@@ -52,14 +58,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
         cfg_iter!(wit_s)
             .map(|wit| {
-                wit.f_hat
-                    .iter()
-                    .map(|f_hat_row| {
-                        DenseMultilinearExtension::from_slice(mle_length, f_hat_row)
-                            .evaluate(point_r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)
-                    })
-                    .collect::<Result<Vec<_>, _>>()
+                evaluate_mles::<NTT, _, _, DecompositionError>(
+                    &to_mles::<_, _, DecompositionError>(mle_length, &wit.f_hat)?,
+                    point_r,
+                )
             })
             .collect::<Result<Vec<_>, _>>()
     }
@@ -74,9 +76,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
         cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
-                let mut u_s_for_i = Vec::with_capacity(M.len());
-
-                let z: Vec<NTT> = {
+                let z: Vec<_> = {
                     let mut z =
                         Vec::with_capacity(decomposed_statements[i].len() + wit.w_ccs.len());
 
@@ -86,13 +86,15 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
                     z
                 };
 
-                for M in M {
-                    u_s_for_i.push(
-                        DenseMultilinearExtension::from_slice(num_mle_vars, &mat_vec_mul(M, &z)?)
-                            .evaluate(point_r)
-                            .ok_or(DecompositionError::WitnessMleEvalFail)?,
-                    );
-                }
+                let mles = to_mles_err::<_, _, DecompositionError, _>(
+                    num_mle_vars,
+                    cfg_iter!(M).map(|M| mat_vec_mul(M, &z)),
+                )?;
+
+                let u_s_for_i =
+                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
+                        &mles, point_r,
+                    )?;
 
                 Ok(u_s_for_i)
             })

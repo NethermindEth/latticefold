@@ -8,9 +8,11 @@ use lattirust_poly::{
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
+use super::mle_helpers::evaluate_mles;
 use crate::ark_base::*;
 use crate::{
     arith::{utils::mat_vec_mul, Witness, CCCS, CCS, LCCCS},
+    nifs::mle_helpers::to_mles_err,
     transcript::Transcript,
     utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
@@ -70,17 +72,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     fn compute_evaluation_vectors(
         wit: &Witness<NTT>,
         point_r: &[NTT],
-        ccs: &CCS<NTT>,
         Mz_mles: &[DenseMultilinearExtension<NTT>],
     ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         // Compute v
-        let v: Vec<NTT> = cfg_iter!(wit.f_hat)
-            .map(|f_hat_row| {
-                DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
-                    .evaluate(point_r)
-                    .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
-            })
-            .collect();
+
+        let v: Vec<NTT> = evaluate_mles::<NTT, _, _, LinearizationError<NTT>>(&wit.f_hat, point_r)?;
 
         // Compute u_j
         let u = compute_u(Mz_mles, point_r)?;
@@ -93,15 +89,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         ccs: &CCS<NTT>,
         z_ccs: &&[NTT],
     ) -> Result<Vec<DenseMultilinearExtension<NTT>>, LinearizationError<NTT>> {
-        ccs.M
-            .iter()
-            .map(|M| {
-                Ok(DenseMultilinearExtension::from_slice(
-                    ccs.s,
-                    &mat_vec_mul(M, z_ccs)?,
-                ))
-            })
-            .collect::<Result<Vec<_>, LinearizationError<_>>>()
+        to_mles_err::<_, _, LinearizationError<NTT>, _>(
+            ccs.s,
+            cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, z_ccs)),
+        )
     }
 }
 
@@ -126,7 +117,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, transcript)?;
 
         // Step 3: Compute v, u_vector.
-        let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, ccs, &Mz_mles)?;
+        let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;
 
         // Absorbing the prover's messages to the verifier.
         transcript.absorb_slice(&v);

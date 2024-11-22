@@ -33,16 +33,11 @@ allow = [
     "Apache-2.0",
     "BSD-3-Clause",
     "BSD-2-Clause",
+    "Unicode-3.0",
     "Unicode-DFS-2016",
     "Zlib",
 ]
 confidence-threshold = 0.8
-# TODO remove this license clarifications after the lattirust status and license are clarified
-clarify = [
-    {crate = "lattirust-linear-algebra", expression = "MIT", license-files = []},
-    {crate = "lattirust-poly", expression = "MIT", license-files = []},
-    {crate = "lattirust-ring", expression = "MIT", license-files = []}
-]
 
 [licenses.private]
 ignore = false

@@ -149,18 +149,13 @@ fn test_compute_v() {
     // Compute actual v vector
     let (point_r, v, _) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles,
+            &wit, &point_r, &Mz_mles,
         )
         .unwrap();
 
     // Compute expected v vector (witness evaluations)
-    let expected_v: Vec<RqNTT> = cfg_iter!(wit.f_hat)
-        .map(|f_hat_row| {
-            DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
-                .evaluate(&point_r)
-                .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
-        })
-        .collect();
+    let expected_v =
+        evaluate_mles::<RqNTT, _, _, LinearizationError<RqNTT>>(&wit.f_hat, &point_r).unwrap();
 
     // Validate
     assert_eq!(point_r.len(), ccs.s, "point_r length mismatch");
@@ -183,7 +178,7 @@ fn test_compute_u() {
     // Compute actual u vector
     let (point_r, _, u) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles,
+            &wit, &point_r, &Mz_mles,
         )
         .unwrap();
 
