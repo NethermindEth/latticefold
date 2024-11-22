@@ -292,8 +292,9 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     Ok(())
 }
 
-fn compute_coefficients<R: Ring, I: IntoIterator<Item = R>>(roots: I) -> Vec<R> {
+fn compute_coefficients<R: Ring, I: IntoIterator<Item = R>>(roots: I) -> Vec<(R, Vec<usize>)> {
     let mut coefficients = vec![R::one()];
+    let mut polynomial = Vec::new();
     for r in roots {
         coefficients.push(R::zero());
         for i in (1..coefficients.len()).rev() {
@@ -301,5 +302,8 @@ fn compute_coefficients<R: Ring, I: IntoIterator<Item = R>>(roots: I) -> Vec<R> 
             right[0] -= r * left[left.len() - 1];
         }
     }
-    coefficients
+    for (degree, coeff) in (0..coefficients.len()).rev().zip(coefficients.into_iter()) {
+        polynomial.push((coeff, vec![1; degree]));
+    }
+    polynomial
 }
