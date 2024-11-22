@@ -29,7 +29,7 @@ pub fn wit_and_ccs_gen<
     } else {
         r1cs_rows // This makes a square matrix but is too much memory
     };
-    let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(new_r1cs_rows);
+    let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(new_r1cs_rows, P::L);
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
@@ -58,7 +58,8 @@ pub fn get_test_dummy_ccs<
     const W: usize,
 >(
     r1cs_rows: usize,
+    L: usize,
 ) -> CCS<R> {
     let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(r1cs_rows);
-    CCS::<R>::from_r1cs(r1cs, W)
+    CCS::<R>::from_r1cs_padded(r1cs, W, L)
 }

@@ -312,9 +312,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
     ccs: &CCS<NTT>,
 ) -> Result<(), FoldingError<NTT>> {
-    ccs.sanity_check()?;
-
-    if ccs.m != (DP::L * ccs.n).next_power_of_two() {
+    if ccs.m != ((ccs.n - ccs.l - 1) * DP::L).next_power_of_two() {
         return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
     }
 
@@ -736,7 +734,7 @@ mod tests_goldilocks {
         const WIT_LEN: usize = 256;
         const W: usize = WIT_LEN * GoldilocksDP::L;
 
-        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(W, GoldilocksDP::L);
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(WIT_LEN + X_LEN + 1, GoldilocksDP::L);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);

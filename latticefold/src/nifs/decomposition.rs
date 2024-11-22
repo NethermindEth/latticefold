@@ -293,9 +293,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
     ccs: &CCS<NTT>,
 ) -> Result<(), DecompositionError> {
-    ccs.sanity_check()?;
-
-    if ccs.m != (DP::L * ccs.n).next_power_of_two() {
+    if ccs.m != ((ccs.n - ccs.l - 1) * DP::L).next_power_of_two() {
         return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
     }
 

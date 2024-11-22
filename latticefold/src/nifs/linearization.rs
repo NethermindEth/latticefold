@@ -105,7 +105,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
-        ccs.sanity_check()?;
         // Step 1: Generate beta challenges (done in construct_polynomial_g because they are not needed
         // elsewhere.
 
@@ -217,7 +216,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
-        ccs.sanity_check()?;
         // Step 1: Generate the beta challenges.
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 

@@ -129,10 +129,10 @@ impl<R: Ring> CCS<R> {
     }
 
     /// Constructs a [`CCS`] instance from a [`R1CS`]. The CCS instance matrices rows are then padded
-    /// to length `size` or its next power of 2.
+    /// to `(n - l - 1) * L` next power of 2.
     pub fn from_r1cs_padded(r1cs: R1CS<R>, W: usize, L: usize) -> Self {
         let mut ccs = Self::from_r1cs(r1cs, W);
-        ccs.pad_rows_to((ccs.n * L).next_power_of_two());
+        ccs.pad_rows_to(((ccs.n - ccs.l - 1) * L).next_power_of_two());
         ccs
     }
 
@@ -143,15 +143,6 @@ impl<R: Ring> CCS<R> {
             B: self.M[1].clone(),
             C: self.M[2].clone(),
         }
-    }
-
-    pub fn sanity_check(&self) -> Result<(), Error> {
-        // Check that m is power of 2
-        if !self.m.is_power_of_two() {
-            return Err(Error::MatricesRowsLengthNotPowerOf2(self.m));
-        }
-
-        Ok(())
     }
 
     fn pad_rows_to(&mut self, size: usize) {
