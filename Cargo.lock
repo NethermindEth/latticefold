@@ -661,7 +661,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#7917fe90241c024469ca46b6576b6c390e140c05"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#68a327e5e2c2de5ee2de53dddc24071e5dfbda72"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -678,7 +678,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#7917fe90241c024469ca46b6576b6c390e140c05"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#68a327e5e2c2de5ee2de53dddc24071e5dfbda72"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#7917fe90241c024469ca46b6576b6c390e140c05"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#68a327e5e2c2de5ee2de53dddc24071e5dfbda72"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
