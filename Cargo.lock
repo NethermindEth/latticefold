@@ -348,9 +348,9 @@ checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
 
 [[package]]
 name = "cpufeatures"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ca741a962e1b0bff6d724a1a0958b686406e853bb14061f218562e1896f95e6"
+checksum = "16b80225097f2e5ae4e7179dd2266824648f3e2f49d9134d584b76389d31c4c3"
 dependencies = [
  "libc",
 ]
@@ -661,7 +661,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#68a327e5e2c2de5ee2de53dddc24071e5dfbda72"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#f9872868337214169b838d7e68777e78c84fb5d1"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -678,7 +678,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#68a327e5e2c2de5ee2de53dddc24071e5dfbda72"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#f9872868337214169b838d7e68777e78c84fb5d1"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#68a327e5e2c2de5ee2de53dddc24071e5dfbda72"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2Fmore-virtualpolynomial-operations#f9872868337214169b838d7e68777e78c84fb5d1"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
@@ -934,9 +934,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.91"
+version = "1.0.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "307e3004becf10f5a6e0d59d20f3cd28231b0e0827a96cd3e0ce6d14bc1e4bb3"
+checksum = "37d3544b3f2748c54e147655edb5025752e2303145b5aefb3c3ea2c78b973bb0"
 dependencies = [
  "unicode-ident",
 ]

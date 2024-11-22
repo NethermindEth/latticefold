@@ -2,6 +2,7 @@
 use ark_ff::{Field, PrimeField};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
+use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use lattirust_poly::polynomials::{ArithErrors, RefCounter};
 use lattirust_ring::{cyclotomic_ring::CRT, Ring};
@@ -260,20 +261,21 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
-        let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> = Vec::new();
+        let mut polynomial = VirtualPolynomial::new_from_mle(&Arc::from(fi_hat_mle), NTT::one());
 
-        for i in 1..b {
-            let i_hat = NTT::from(i as u128);
+        let range = (0..b as u128).flat_map(move |i| {
+            if i == 0 {
+                vec![NTT::from(i)].into_iter()
+            } else {
+                vec![NTT::zero() - NTT::from(i), NTT::from(i)].into_iter()
+            }
+        });
 
-            mle_list.push(RefCounter::from(fi_hat_mle.clone() - i_hat));
-            mle_list.push(RefCounter::from(fi_hat_mle.clone() + i_hat));
-        }
+        polynomial.products = compute_coefficients(range);
 
-        mle_list.push(RefCounter::from(fi_hat_mle));
+        polynomial.mul_by_mle(beta_eq_x.clone(), mu);
 
-        mle_list.push(beta_eq_x.clone());
-
-        g.add_mle_list(mle_list, mu)?;
+        *g = g.clone() + polynomial;
     }
 
     Ok(())
@@ -303,7 +305,38 @@ fn compute_coefficients<R: Ring, I: IntoIterator<Item = R>>(roots: I) -> Vec<(R,
         }
     }
     for (degree, coeff) in (0..coefficients.len()).rev().zip(coefficients.into_iter()) {
-        polynomial.push((coeff, vec![1; degree]));
+        polynomial.push((coeff, vec![0; degree]));
     }
     polynomial
+}
+
+#[cfg(test)]
+mod tests {
+    fn compute_coefficients<I: Iterator<Item = i32>>(roots: I) -> Vec<(i32, Vec<usize>)> {
+        let mut coefficients = vec![1];
+        let mut polynomial = Vec::new();
+        for r in roots {
+            coefficients.push(0);
+            for i in (1..coefficients.len()).rev() {
+                let (left, right) = coefficients.split_at_mut(i);
+                right[0] -= r * left[left.len() - 1];
+            }
+        }
+        for (degree, coeff) in (0..coefficients.len()).rev().zip(coefficients.into_iter()) {
+            polynomial.push((coeff, vec![0; degree]));
+        }
+        polynomial
+    }
+
+    #[test]
+    fn test() {
+        let roots = (0..5 as i32).flat_map(move |i| {
+            if i == 0 {
+                vec![i].into_iter()
+            } else {
+                vec![0 - i, i].into_iter()
+            }
+        });
+        println!("{:?}", compute_coefficients(roots));
+    }
 }
