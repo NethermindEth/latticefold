@@ -183,8 +183,11 @@ impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
             .ok_or(DecompositionError::RecomposedError)
     }
 
-    pub fn recompose_v(v_s: &[Vec<NTT>], coeffs: &[NTT], i: usize) -> NTT {
-        v_s.iter().zip(coeffs).map(|(v_i, b_i)| v_i[i] * b_i).sum()
+    pub fn recompose_v(v_s: &[Vec<NTT>], coeffs: &[NTT], row: usize) -> NTT {
+        v_s.iter()
+            .zip(coeffs)
+            .map(|(v_i, b_i)| v_i[row] * b_i)
+            .sum()
     }
 
     pub fn recompose_xw_and_h(
@@ -264,8 +267,8 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        for (i, &cm_i_value) in cm_i.v.iter().enumerate() {
-            let should_equal_v0: NTT = Self::recompose_v(&proof.v_s, &b_s, i);
+        for (row, &cm_i_value) in cm_i.v.iter().enumerate() {
+            let should_equal_v0: NTT = Self::recompose_v(&proof.v_s, &b_s, row);
 
             if should_equal_v0 != cm_i_value {
                 return Err(DecompositionError::RecomposedError);
