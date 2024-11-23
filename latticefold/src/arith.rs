@@ -129,10 +129,11 @@ impl<R: Ring> CCS<R> {
     }
 
     /// Constructs a [`CCS`] instance from a [`R1CS`]. The CCS instance matrices rows are then padded
-    /// to `(n - l - 1) * L` next power of 2.
+    /// to max { `(n - l - 1) * L`, `m` } next power of 2.
     pub fn from_r1cs_padded(r1cs: R1CS<R>, W: usize, L: usize) -> Self {
         let mut ccs = Self::from_r1cs(r1cs, W);
-        ccs.pad_rows_to(((ccs.n - ccs.l - 1) * L).next_power_of_two());
+        let len = usize::max((ccs.n - ccs.l - 1) * L, ccs.m).next_power_of_two();
+        ccs.pad_rows_to(len);
         ccs
     }
 
