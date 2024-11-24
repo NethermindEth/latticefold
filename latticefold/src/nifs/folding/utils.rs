@@ -2,7 +2,8 @@
 use ark_ff::{Field, PrimeField};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
-use ark_std::sync::Arc;
+
+// use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use lattirust_poly::polynomials::{ArithErrors, RefCounter};
 use lattirust_ring::{cyclotomic_ring::CRT, Ring};
@@ -261,7 +262,8 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
-        let mut polynomial = VirtualPolynomial::new_from_mle(&Arc::from(fi_hat_mle), NTT::one());
+        let mut polynomial =
+            VirtualPolynomial::new_from_mle(&RefCounter::from(fi_hat_mle), NTT::one());
 
         polynomial.products = coeffs.clone();
         let _ = polynomial.mul_by_mle(beta_eq_x.clone(), mu);
