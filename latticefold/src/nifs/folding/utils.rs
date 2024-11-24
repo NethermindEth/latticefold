@@ -288,17 +288,17 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
 fn compute_coefficients<R: Ring>(small_b: R) -> Vec<(R, Vec<usize>)> {
     let mut coefficients = vec![R::one()];
     let mut polynomial = Vec::new();
-    let mut root = R::one() - small_b;
+    let mut root = R::one();
     while root != small_b {
         coefficients.push(R::zero());
         for i in (1..coefficients.len()).rev() {
             let (left, right) = coefficients.split_at_mut(i);
-            right[0] -= root * left[left.len() - 1];
+            right[0] -= (root * root) * left[left.len() - 1];
         }
         root += R::one();
     }
     for (degree, coeff) in (0..coefficients.len()).rev().zip(coefficients.into_iter()) {
-        polynomial.push((coeff, vec![0; degree]));
+        polynomial.push((coeff, vec![0; 2 * degree + 1]));
     }
     polynomial
 }
