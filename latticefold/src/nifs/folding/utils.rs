@@ -121,7 +121,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         prepare_g2_i_mle_list(
             &mut g,
             f_hat_mles[i].clone(),
-            DP::B_SMALL,
             mu_s[i],
             beta_eq_x.clone(),
             coeffs.clone(),
@@ -255,7 +254,6 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
-    b: usize,
     mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
     coeffs: Vec<(NTT, Vec<usize>)>,
