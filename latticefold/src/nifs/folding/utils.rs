@@ -113,7 +113,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     let mut g = VirtualPolynomial::<NTT>::new(log_m);
 
     let beta_eq_x = build_eq_x_r(beta_s)?;
-
+    let coeffs = compute_coefficients(NTT::from(DP::B_SMALL as u128));
     for i in 0..2 * DP::K {
         let r_i_eq = build_eq_x_r(&r_s[i])?;
 
@@ -124,6 +124,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
             DP::B_SMALL,
             mu_s[i],
             beta_eq_x.clone(),
+            coeffs.clone(),
         )?;
         prepare_g3_i_mle_list(&mut g, &Mz_mles[i], zeta_s[i], r_i_eq)?;
     }
@@ -257,23 +258,15 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     b: usize,
     mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
+    coeffs: Vec<(NTT, Vec<usize>)>,
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
         let mut polynomial = VirtualPolynomial::new_from_mle(&Arc::from(fi_hat_mle), NTT::one());
 
-        let range = (0..b as u128).flat_map(move |i| {
-            if i == 0 {
-                vec![NTT::from(i)].into_iter()
-            } else {
-                vec![NTT::zero() - NTT::from(i), NTT::from(i)].into_iter()
-            }
-        });
-
-        polynomial.products = compute_coefficients(range);
-
-        polynomial.mul_by_mle(beta_eq_x.clone(), mu);
+        polynomial.products = coeffs.clone();
+        let _ = polynomial.mul_by_mle(beta_eq_x.clone(), mu);
 
         *g = g.clone() + polynomial;
     }
@@ -294,15 +287,17 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     Ok(())
 }
 
-fn compute_coefficients<R: Ring, I: IntoIterator<Item = R>>(roots: I) -> Vec<(R, Vec<usize>)> {
+fn compute_coefficients<R: Ring>(small_b: R) -> Vec<(R, Vec<usize>)> {
     let mut coefficients = vec![R::one()];
     let mut polynomial = Vec::new();
-    for r in roots {
+    let mut root = R::one() - small_b;
+    while root != small_b {
         coefficients.push(R::zero());
         for i in (1..coefficients.len()).rev() {
             let (left, right) = coefficients.split_at_mut(i);
-            right[0] -= r * left[left.len() - 1];
+            right[0] -= root * left[left.len() - 1];
         }
+        root += R::one();
     }
     for (degree, coeff) in (0..coefficients.len()).rev().zip(coefficients.into_iter()) {
         polynomial.push((coeff, vec![0; degree]));
