@@ -123,10 +123,14 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         prepare_g1_i_mle_list(&mut g, f_hat_mles[i].clone(), r_i_eq.clone(), alpha_s[i])?;
         prepare_g2_i_mle_list(
             &mut g,
-            f_hat_mles[i].clone(),
+            f_hat_mles[i]
+                .clone()
+                .into_iter()
+                .map(RefCounter::from)
+                .collect::<Vec<_>>(),
             mu_s[i],
             beta_eq_x.clone(),
-            coeffs.clone(),
+            &coeffs,
         )?;
         prepare_g3_i_mle_list(&mut g, &Mz_mles[i], zeta_s[i], r_i_eq)?;
     }
@@ -256,21 +260,20 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
+    fi_hat_mle_s: Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
-    coeffs: Vec<NTT>,
+    coeffs: &[NTT],
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
-        let rc = RefCounter::from(fi_hat_mle);
-        let mut vec = vec![rc.clone()];
+        let mut vec = vec![fi_hat_mle.clone()];
         for c in coeffs.iter() {
             let mut list = vec.clone();
             list.push(beta_eq_x.clone());
             g.add_mle_list(list, *c * mu)?;
-            vec.extend_from_slice(&[rc.clone(), rc.clone()]);
+            vec.extend_from_slice(&[fi_hat_mle.clone(), fi_hat_mle.clone()]);
         }
     }
 
