@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+
 use ark_ff::{Field, PrimeField};
 use ark_ff::{One, Zero};
 use ark_std::iter::successors;
@@ -124,6 +125,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
             &mut g,
             f_hat_mles[i].clone(),
             mu_s[i],
+            log_m,
             beta_eq_x.clone(),
             coeffs.clone(),
         )?;
@@ -257,17 +259,20 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
     mu_i: NTT,
+    log_m: usize,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
-    coeffs: Vec<(NTT, Vec<usize>)>,
+    coeffs: Vec<(NTT, usize)>,
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
-        let mut polynomial =
-            VirtualPolynomial::new_from_mle(&RefCounter::from(fi_hat_mle), NTT::one());
-
-        polynomial.products = coeffs.clone();
-        let _ = polynomial.mul_by_mle(beta_eq_x.clone(), mu);
+        let mut polynomial = VirtualPolynomial::new(log_m);
+        let rc = RefCounter::from(fi_hat_mle);
+        for (c, degree) in coeffs.iter() {
+            let list = vec![rc.clone(); *degree];
+            polynomial.add_mle_list(list, *c)?;
+        }
+        polynomial.mul_by_mle(beta_eq_x.clone(), mu)?;
 
         *g = g.clone() + polynomial;
     }
@@ -288,7 +293,7 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     Ok(())
 }
 
-fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<(R, Vec<usize>)> {
+fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<(R, usize)> {
     let small_b = <<R as PolyRing>::BaseRing as Field>::BasePrimeField::from(small_b);
     let mut coefficients = vec![<<R as PolyRing>::BaseRing as Field>::BasePrimeField::one()];
     let mut polynomial = Vec::new();
@@ -305,7 +310,7 @@ fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<(R, Vec<usize>)> {
         let coeff = R::from_scalar(<<R as PolyRing>::BaseRing as Field>::from_base_prime_field(
             coeff,
         ));
-        polynomial.push((coeff, vec![0; 2 * degree + 1]));
+        polynomial.push((coeff, 2 * degree + 1));
     }
     polynomial
 }
