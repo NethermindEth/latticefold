@@ -258,18 +258,19 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
     mu_i: NTT,
-
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
-    coeffs: Vec<(NTT, usize)>,
+    coeffs: Vec<NTT>,
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
     {
         let rc = RefCounter::from(fi_hat_mle);
-        for (c, degree) in coeffs.iter() {
-            let mut list = vec![rc.clone(); *degree];
+        let mut vec = vec![rc.clone()];
+        for c in coeffs.iter() {
+            let mut list = vec.clone();
             list.push(beta_eq_x.clone());
             g.add_mle_list(list, *c * mu)?;
+            vec.extend_from_slice(&[rc.clone(), rc.clone()]);
         }
     }
 
@@ -289,10 +290,10 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     Ok(())
 }
 
-fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<(R, usize)> {
+fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<R> {
     let small_b = <<R as PolyRing>::BaseRing as Field>::BasePrimeField::from(small_b);
     let mut coefficients = vec![<<R as PolyRing>::BaseRing as Field>::BasePrimeField::one()];
-    let mut polynomial = Vec::new();
+
     let mut root = <<R as PolyRing>::BaseRing as Field>::BasePrimeField::one();
     while root != small_b {
         coefficients.push(<<R as PolyRing>::BaseRing as Field>::BasePrimeField::zero());
@@ -302,11 +303,13 @@ fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<(R, usize)> {
         }
         root += <<R as PolyRing>::BaseRing as Field>::BasePrimeField::one();
     }
-    for (degree, coeff) in (0..coefficients.len()).rev().zip(coefficients.into_iter()) {
-        let coeff = R::from_scalar(<<R as PolyRing>::BaseRing as Field>::from_base_prime_field(
-            coeff,
-        ));
-        polynomial.push((coeff, 2 * degree + 1));
-    }
-    polynomial
+    coefficients
+        .into_iter()
+        .rev()
+        .map(|coeff| {
+            R::from_scalar(<<R as PolyRing>::BaseRing as Field>::from_base_prime_field(
+                coeff,
+            ))
+        })
+        .collect()
 }
