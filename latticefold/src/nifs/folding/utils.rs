@@ -117,17 +117,24 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
 
     let beta_eq_x = build_eq_x_r(beta_s)?;
     let coeffs = compute_coefficients(DP::B_SMALL as u128);
+
+    let f_hat_mles: Vec<Vec<RefCounter<DenseMultilinearExtension<NTT>>>> = f_hat_mles
+        .iter()
+        .map(|f_hat_mles_i| {
+            f_hat_mles_i
+                .clone()
+                .into_iter()
+                .map(RefCounter::from)
+                .collect::<Vec<_>>()
+        })
+        .collect();
     for i in 0..2 * DP::K {
         let r_i_eq = build_eq_x_r(&r_s[i])?;
 
         prepare_g1_i_mle_list(&mut g, f_hat_mles[i].clone(), r_i_eq.clone(), alpha_s[i])?;
         prepare_g2_i_mle_list(
             &mut g,
-            f_hat_mles[i]
-                .clone()
-                .into_iter()
-                .map(RefCounter::from)
-                .collect::<Vec<_>>(),
+            f_hat_mles[i].clone(),
             mu_s[i],
             beta_eq_x.clone(),
             &coeffs,
@@ -242,17 +249,14 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_hat_mle_s: Vec<DenseMultilinearExtension<NTT>>,
+    fi_hat_mle_s: Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
     for (alpha, fi_hat_mle) in successors(Some(alpha_i), |alpha_power| Some(alpha_i * alpha_power))
         .zip(fi_hat_mle_s.iter())
     {
-        g.add_mle_list(
-            vec![r_i_eq.clone(), RefCounter::from(fi_hat_mle.clone())],
-            alpha,
-        )?;
+        g.add_mle_list(vec![r_i_eq.clone(), fi_hat_mle.clone()], alpha)?;
     }
 
     Ok(())
