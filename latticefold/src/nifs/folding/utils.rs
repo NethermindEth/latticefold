@@ -320,3 +320,31 @@ fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<R> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod test_utils {
+    use super::compute_coefficients;
+    use cyclotomic_rings::rings::GoldilocksRingNTT;
+    type R = GoldilocksRingNTT;
+
+    #[test]
+    fn test_compute_coefficients() {
+        assert_eq!(
+            compute_coefficients::<R>(2u128),
+            vec![-R::from(1u128), R::from(1u128)]
+        );
+        assert_eq!(
+            compute_coefficients::<R>(3u128),
+            vec![R::from(4u128), -R::from(5u128), R::from(1u128)]
+        );
+        assert_eq!(
+            compute_coefficients::<R>(4u128),
+            vec![
+                -R::from(36u128),
+                R::from(49u128),
+                -R::from(14u128),
+                R::from(1u128)
+            ]
+        );
+    }
+}
