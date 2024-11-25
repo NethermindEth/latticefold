@@ -3,7 +3,7 @@ use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
 use crate::decomposition_parameters::test_params::{BabyBearDP, StarkFoldingDP, DP};
 use crate::nifs::folding::{
-    prepare_lccs,
+    prepare_public_output,
     utils::{
         compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos,
     },
@@ -206,8 +206,7 @@ fn test_get_zis() {
 
     let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
 
-    let (zis, _) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
 
     // Compute expected output
     let expected_zis = lccs
@@ -234,8 +233,7 @@ fn test_get_ris() {
 
     let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
 
-    let (_, ris) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
     // Compute expected output
     let expected_ris = lccs.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
@@ -258,8 +256,7 @@ fn test_calculate_mz_mles() {
 
     let (lccs, wit_s, _, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
 
-    let (zis, _) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
 
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
@@ -304,8 +301,8 @@ fn test_create_sumcheck_polynomial() {
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
 
-    let (zis, ris) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
@@ -332,7 +329,7 @@ fn test_create_sumcheck_polynomial() {
 }
 
 #[test]
-fn test_sample_randomness() {
+fn test_get_sumcheck_randomness() {
     type RqNTT = BabyBearRingNTT;
     type CS = BabyBearChallengeSet;
     type DP = BabyBearDP;
@@ -345,8 +342,8 @@ fn test_sample_randomness() {
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
-    let (zis, ris) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
@@ -365,8 +362,9 @@ fn test_sample_randomness() {
     // Compute sumcheck proof
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     // Derive randomness
-    let r_0 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
+    let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
+        prover_state,
+    );
 
     // Validate - Check dimensions
     assert_eq!(
@@ -390,8 +388,8 @@ fn test_get_thetas() {
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
-    let (zis, ris) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
@@ -407,15 +405,13 @@ fn test_get_thetas() {
     )
     .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
-    let r_0 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
+    let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
+        prover_state,
+    );
 
-    let (theta_s, _) = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas_etas(
-        &f_hat_mles,
-        &Mz_mles,
-        &r_0,
-    )
-    .unwrap();
+    let theta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas(&f_hat_mles, &r_0)
+            .unwrap();
 
     let expected_thetas: Vec<Vec<RqNTT>> = f_hat_mles
         .iter()
@@ -450,8 +446,8 @@ fn test_get_etas() {
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
-    let (zis, ris) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
@@ -467,15 +463,12 @@ fn test_get_etas() {
     )
     .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
-    let r_0 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
+    let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
+        prover_state,
+    );
 
-    let (_, eta_s) = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas_etas(
-        &f_hat_mles,
-        &Mz_mles,
-        &r_0,
-    )
-    .unwrap();
+    let eta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&Mz_mles, &r_0).unwrap();
 
     let expected_eta_s: Vec<Vec<RqNTT>> = Mz_mles
         .iter()
@@ -526,7 +519,7 @@ fn test_get_rhos() {
 }
 
 #[test]
-fn test_prepare_lccs() {
+fn test_prepare_public_output() {
     type RqNTT = StarkRqNTT;
     type CS = StarkChallengeSet;
     type DP = StarkFoldingDP;
@@ -539,8 +532,8 @@ fn test_prepare_lccs() {
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
-    let (zis, ris) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
@@ -556,15 +549,16 @@ fn test_prepare_lccs() {
     )
     .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
-    let r_0 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
-    let (theta_s, eta_s) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas_etas(
-            &f_hat_mles,
-            &Mz_mles,
-            &r_0,
-        )
-        .unwrap();
+    let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
+        prover_state,
+    );
+    let theta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas(&f_hat_mles, &r_0)
+            .unwrap();
+
+    let eta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&Mz_mles, &r_0).unwrap();
+
     theta_s
         .iter()
         .for_each(|thetas| transcript.absorb_slice(thetas));
@@ -575,7 +569,7 @@ fn test_prepare_lccs() {
     let expected_x_0 = x_0[0..x_0.len() - 1].to_vec();
     let h = x_0.last().copied().unwrap();
 
-    let lcccs = prepare_lccs(
+    let lcccs = prepare_public_output(
         r_0.clone(),
         v_0.clone(),
         cm_0.clone(),
@@ -606,8 +600,8 @@ fn test_compute_f_0() {
         get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
-    let (zis, ris) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis_ris(&lccs, &wit_s);
+    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
@@ -623,15 +617,15 @@ fn test_compute_f_0() {
     )
     .unwrap();
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
-    let r_0 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::sample_randomness(prover_state);
-    let (theta_s, eta_s) =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas_etas(
-            &f_hat_mles,
-            &Mz_mles,
-            &r_0,
-        )
-        .unwrap();
+    let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
+        prover_state,
+    );
+    let theta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas(&f_hat_mles, &r_0)
+            .unwrap();
+
+    let eta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&Mz_mles, &r_0).unwrap();
     theta_s
         .iter()
         .for_each(|thetas| transcript.absorb_slice(thetas));

@@ -8,7 +8,7 @@ use lattirust_ring::cyclotomic_ring::CRT;
 use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
-use super::mle_helpers::{evaluate_mles, to_mles_err};
+use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
@@ -36,7 +36,7 @@ pub use structs::*;
 
 mod structs;
 
-fn prepare_lccs<const C: usize, NTT: SuitableRing>(
+fn prepare_public_output<const C: usize, NTT: SuitableRing>(
     r_0: Vec<NTT>,
     v_0: Vec<NTT>,
     cm_0: Commitment<C, NTT>,
@@ -60,31 +60,22 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         w_s: &[Witness<NTT>],
     ) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
         w_s.iter()
-            .map(|w| {
-                w.f_hat
-                    .iter()
-                    .map(|f_hat_row| {
-                        DenseMultilinearExtension::from_evaluations_slice(log_m, f_hat_row)
-                    })
-                    .collect()
-            })
+            .map(|w| to_mles::<_, _, FoldingError<NTT>>(log_m, &w.f_hat).unwrap())
             .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>()
     }
 
-    fn get_zis_ris<const C: usize>(
-        cm_i_s: &[LCCCS<C, NTT>],
-        w_s: &[Witness<NTT>],
-    ) -> (Vec<Vec<NTT>>, Vec<Vec<NTT>>) {
-        let zis = cm_i_s
+    fn get_zis<const C: usize>(cm_i_s: &[LCCCS<C, NTT>], w_s: &[Witness<NTT>]) -> Vec<Vec<NTT>> {
+        cm_i_s
             .iter()
             .zip(w_s.iter())
             .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
-            .collect::<Vec<_>>();
-
-        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
-
-        (zis, ris)
+            .collect::<Vec<_>>()
     }
+
+    fn get_ris<const C: usize>(cm_i_s: &[LCCCS<C, NTT>]) -> Vec<Vec<NTT>> {
+        cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>()
+    }
+
     fn calculate_Mz_mles(
         ccs: &CCS<NTT>,
         zis: &Vec<Vec<NTT>>,
@@ -100,7 +91,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             .collect::<Result<_, FoldingError<_>>>()
     }
 
-    fn sample_randomness(state: ProverState<NTT>) -> Vec<NTT> {
+    fn get_sumcheck_randomness(state: ProverState<NTT>) -> Vec<NTT> {
         state
             .randomness
             .into_iter()
@@ -108,20 +99,26 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             .collect::<Vec<NTT>>()
     }
 
-    fn get_thetas_etas(
+    fn get_thetas(
         f_hat_mles: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
-        Mz_mles_vec: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
         r_0: &[NTT],
-    ) -> Result<(Vec<Vec<NTT>>, Vec<Vec<NTT>>), FoldingError<NTT>> {
+    ) -> Result<Vec<Vec<NTT>>, FoldingError<NTT>> {
         let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
             .map(|f_hat_row| evaluate_mles::<_, _, _, FoldingError<NTT>>(f_hat_row, r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
+        Ok(theta_s)
+    }
+
+    fn get_etas(
+        Mz_mles_vec: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
+        r_0: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, FoldingError<NTT>> {
         let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
             .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(Mz_mles, r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok((theta_s, eta_s))
+        Ok(eta_s)
     }
 
     fn compute_f_0(rho_s: &Vec<NTT::CoefficientRepresentation>, w_s: &[Witness<NTT>]) -> Vec<NTT> {
@@ -162,7 +159,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = Self::setup_f_hat_mles(log_m, w_s);
 
-        let (zis, ris) = Self::get_zis_ris(cm_i_s, w_s);
+        let zis = Self::get_zis(cm_i_s, w_s);
+        let ris = Self::get_ris(cm_i_s);
 
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> =
             Self::calculate_Mz_mles(ccs, &zis)?;
@@ -181,10 +179,11 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
 
-        let r_0 = Self::sample_randomness(prover_state);
+        let r_0 = Self::get_sumcheck_randomness(prover_state);
 
         // Step 3: Evaluate thetas and etas
-        let (theta_s, eta_s) = Self::get_thetas_etas(&f_hat_mles, &Mz_mles_vec, &r_0)?;
+        let theta_s = Self::get_thetas(&f_hat_mles, &r_0)?;
+        let eta_s = Self::get_etas(&Mz_mles_vec, &r_0)?;
 
         // Absorb them into the transcript
         theta_s
@@ -201,7 +200,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
 
-        let lcccs = prepare_lccs(r_0, v_0, cm_0, u_0, x_0, h);
+        let lcccs = prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h);
 
         let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, w_s);
 
@@ -372,6 +371,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         // Step 7: Compute f0 and Witness_0
 
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
-        Ok(prepare_lccs(r_0, v_0, cm_0, u_0, x_0, h))
+        Ok(prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h))
     }
 }
