@@ -104,7 +104,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         // Step 1: Generate beta challenges (done in construct_polynomial_g because they are not needed
         // elsewhere.
 
@@ -131,7 +131,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         };
 
         let lcccs = LCCCS {
-            r: point_r,
             v,
             cm: cm_i.cm.clone(),
             u,
@@ -139,7 +138,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
             h: NTT::one(),
         };
 
-        Ok((lcccs, linearization_proof))
+        Ok((point_r, lcccs, linearization_proof))
     }
 }
 
@@ -195,15 +194,17 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         cm_i: &CCCS<C, NTT>,
         point_r: Vec<NTT>,
         proof: &LinearizationProof<NTT>,
-    ) -> LCCCS<C, NTT> {
-        LCCCS {
-            r: point_r,
-            v: proof.v.clone(),
-            cm: cm_i.cm.clone(),
-            u: proof.u.clone(),
-            x_w: cm_i.x_ccs.clone(),
-            h: NTT::one(),
-        }
+    ) -> (Vec<NTT>, LCCCS<C, NTT>) {
+        (
+            point_r,
+            LCCCS {
+                v: proof.v.clone(),
+                cm: cm_i.cm.clone(),
+                u: proof.u.clone(),
+                x_w: cm_i.x_ccs.clone(),
+                h: NTT::one(),
+            },
+        )
     }
 }
 
@@ -215,7 +216,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
         proof: &LinearizationProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>), LinearizationError<NTT>> {
         // Step 1: Generate the beta challenges.
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 

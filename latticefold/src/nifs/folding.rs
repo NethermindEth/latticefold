@@ -42,20 +42,22 @@ pub struct FoldingProof<NTT: OverField> {
 
 pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
     fn prove<const C: usize, P: DecompositionParams>(
+        r_s: (Vec<NTT>, Vec<NTT>),
         cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
 }
 
 pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
     fn verify<const C: usize, P: DecompositionParams>(
+        r_s: (Vec<NTT>, Vec<NTT>),
         cm_i_s: &[LCCCS<C, NTT>],
         proof: &FoldingProof<NTT>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>>;
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>), FoldingError<NTT>>;
 }
 
 pub struct LFFoldingProver<NTT, T> {
@@ -72,11 +74,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
     for LFFoldingProver<NTT, T>
 {
     fn prove<const C: usize, P: DecompositionParams>(
+        r_s: (Vec<NTT>, Vec<NTT>),
         cm_i_s: &[LCCCS<C, NTT>],
         w_s: &[Witness<NTT>],
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
@@ -99,7 +102,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             .zip(w_s.iter())
             .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
             .collect::<Vec<_>>();
-        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+        let mut ris = vec![r_s.0; P::K];
+        ris.extend(vec![r_s.1; P::K]);
 
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = cfg_iter!(zis)
             .map(|zi| {
@@ -154,7 +158,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
         let lcccs = LCCCS {
-            r: r_0,
             v: v_0,
             cm: cm_0,
             u: u_0,
@@ -183,7 +186,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             eta_s,
         };
 
-        Ok((lcccs, w_0, folding_proof))
+        Ok((r_0, lcccs, w_0, folding_proof))
     }
 }
 
@@ -191,11 +194,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
     for LFFoldingVerifier<NTT, T>
 {
     fn verify<const C: usize, P: DecompositionParams>(
+        r_s: (Vec<NTT>, Vec<NTT>),
         cm_i_s: &[LCCCS<C, NTT>],
         proof: &FoldingProof<NTT>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>), FoldingError<NTT>> {
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
@@ -208,7 +212,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 
         let poly_info = VPAuxInfo::new(log_m, 2 * P::B_SMALL);
 
-        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+        let mut ris = vec![r_s.0; P::K];
+        ris.extend(vec![r_s.1; P::K]);
         let vs = cm_i_s
             .iter()
             .map(|cm_i| cm_i.v.clone())
@@ -294,14 +299,16 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
 
-        Ok(LCCCS {
-            r: r_0,
-            v: v_0,
-            cm: cm_0,
-            u: u_0,
-            x_w: x_0[0..x_0.len() - 1].to_vec(),
-            h,
-        })
+        Ok((
+            r_0,
+            LCCCS {
+                v: v_0,
+                cm: cm_0,
+                u: u_0,
+                x_w: x_0[0..x_0.len() - 1].to_vec(),
+                h,
+            },
+        ))
     }
 }
 
@@ -354,11 +361,11 @@ mod tests {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
+        let (r_p, _, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        let (r_v, lcccs) = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -366,16 +373,19 @@ mod tests {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
+        let (r_p, _, vec_wit, decomposition_proof) =
+            LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
+                r_p,
+                &lcccs,
+                &wit,
+                &mut prover_transcript,
+                &ccs,
+                &scheme,
+            )
+            .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+        let (r_v, vec_lcccs) = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+            r_v,
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -393,11 +403,17 @@ mod tests {
 
             (lcccs, wit_s)
         };
-        let (lcccs_prover, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
+        let (_, lcccs_prover, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, DPL1>(
+            (r_p.clone(), r_p),
+            &lcccs,
+            &wit_s,
+            &mut prover_transcript,
+            &ccs,
+        )
+        .unwrap();
 
-        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, DPL1>(
+        let (_, lcccs_verifier) = LFFoldingVerifier::<_, T>::verify::<4, DPL1>(
+            (r_v.clone(), r_v),
             &lcccs,
             &folding_proof,
             &mut verifier_transcript,
@@ -426,11 +442,11 @@ mod tests {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
+        let (r_p, _, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        let (r_v, lcccs) = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -438,8 +454,9 @@ mod tests {
         )
         .unwrap();
 
-        let (_, mut vec_wit, decomposition_proof) =
+        let (r_p, _, mut vec_wit, decomposition_proof) =
             LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
+                r_p,
                 &lcccs,
                 &wit,
                 &mut prover_transcript,
@@ -448,7 +465,8 @@ mod tests {
             )
             .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+        let (_, vec_lcccs) = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+            r_v,
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -459,6 +477,7 @@ mod tests {
         vec_wit[0] = Witness::<R>::from_w_ccs::<DPL1>(w_ccs);
 
         let res = LFFoldingProver::<_, T>::prove::<4, DPL1>(
+            (r_p.clone(), r_p),
             &vec_lcccs,
             &vec_wit,
             &mut prover_transcript,
@@ -486,11 +505,11 @@ mod tests {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
+        let (r_p, _, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        let (r_v, lcccs) = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -498,16 +517,19 @@ mod tests {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
+        let (r_p, _, vec_wit, decomposition_proof) =
+            LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
+                r_p,
+                &lcccs,
+                &wit,
+                &mut prover_transcript,
+                &ccs,
+                &scheme,
+            )
+            .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+        let (_, vec_lcccs) = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+            r_v,
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -525,9 +547,14 @@ mod tests {
 
             (lcccs, wit_s)
         };
-        let (_, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
+        let (_, _, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, DPL1>(
+            (r_p.clone(), r_p),
+            &lcccs,
+            &wit_s,
+            &mut prover_transcript,
+            &ccs,
+        )
+        .unwrap();
 
         let mut serialized = Vec::new();
         folding_proof
@@ -592,11 +619,11 @@ mod tests_goldilocks {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
+        let (r_p, _, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        let (r_v, lcccs) = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -604,16 +631,19 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
+        let (r_p, _, vec_wit, decomposition_proof) =
+            LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
+                r_p,
+                &lcccs,
+                &wit,
+                &mut prover_transcript,
+                &ccs,
+                &scheme,
+            )
+            .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+        let (r_v, vec_lcccs) = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+            r_v,
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -631,11 +661,17 @@ mod tests_goldilocks {
 
             (lcccs, wit_s)
         };
-        let (lcccs_prover, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
+        let (_, lcccs_prover, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, DPL1>(
+            (r_p.clone(), r_p),
+            &lcccs,
+            &wit_s,
+            &mut prover_transcript,
+            &ccs,
+        )
+        .unwrap();
 
-        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, DPL1>(
+        let (_, lcccs_verifier) = LFFoldingVerifier::<_, T>::verify::<4, DPL1>(
+            (r_v.clone(), r_v),
             &lcccs,
             &folding_proof,
             &mut verifier_transcript,
@@ -660,15 +696,14 @@ mod tests_goldilocks {
             cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
             x_ccs,
         };
-
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
+        let (r_p, _, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        let (r_v, lcccs) = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -676,8 +711,9 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        let (_, mut vec_wit, decomposition_proof) =
+        let (r_p, _, mut vec_wit, decomposition_proof) =
             LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
+                r_p,
                 &lcccs,
                 &wit,
                 &mut prover_transcript,
@@ -686,7 +722,8 @@ mod tests_goldilocks {
             )
             .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+        let (_, vec_lcccs) = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+            r_v,
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -697,6 +734,7 @@ mod tests_goldilocks {
         vec_wit[0] = Witness::<R>::from_w_ccs::<DPL1>(w_ccs);
 
         let res = LFFoldingProver::<_, T>::prove::<4, DPL1>(
+            (r_p.clone(), r_p),
             &vec_lcccs,
             &vec_wit,
             &mut prover_transcript,
@@ -724,11 +762,11 @@ mod tests_goldilocks {
         let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
         let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (_, linearization_proof) =
+        let (r_p, _, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
                 .unwrap();
 
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        let (r_v, lcccs) = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
             &linearization_proof,
             &mut verifier_transcript,
@@ -736,16 +774,19 @@ mod tests_goldilocks {
         )
         .unwrap();
 
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
+        let (r_p, _, vec_wit, decomposition_proof) =
+            LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
+                r_p,
+                &lcccs,
+                &wit,
+                &mut prover_transcript,
+                &ccs,
+                &scheme,
+            )
+            .unwrap();
 
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+        let (_, vec_lcccs) = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
+            r_v,
             &lcccs,
             &decomposition_proof,
             &mut verifier_transcript,
@@ -763,9 +804,14 @@ mod tests_goldilocks {
 
             (lcccs, wit_s)
         };
-        let (_, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
+        let (_, _, _, folding_proof) = LFFoldingProver::<_, T>::prove::<4, DPL1>(
+            (r_p.clone(), r_p),
+            &lcccs,
+            &wit_s,
+            &mut prover_transcript,
+            &ccs,
+        )
+        .unwrap();
 
         let mut serialized = Vec::new();
         folding_proof

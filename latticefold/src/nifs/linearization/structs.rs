@@ -28,7 +28,7 @@ pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
 }
 
 pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
@@ -37,7 +37,7 @@ pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
         proof: &LinearizationProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
+    ) -> Result<(Vec<NTT>, LCCCS<C, NTT>), LinearizationError<NTT>>;
 }
 
 pub struct LFLinearizationProver<NTT, T> {

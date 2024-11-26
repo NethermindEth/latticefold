@@ -24,6 +24,7 @@ pub struct DecompositionProof<const C: usize, NTT: Ring> {
 
 pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
     fn prove<const W: usize, const C: usize, P: DecompositionParams>(
+        r: Vec<NTT>,
         cm_i: &LCCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
@@ -31,6 +32,7 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<
         (
+            Vec<NTT>,
             Vec<LCCCS<C, NTT>>,
             Vec<Witness<NTT>>,
             DecompositionProof<C, NTT>,
@@ -41,11 +43,12 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
 
 pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
     fn verify<const C: usize, P: DecompositionParams>(
+        r: Vec<NTT>,
         cm_i: &LCCCS<C, NTT>,
         proof: &DecompositionProof<C, NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError>;
+    ) -> Result<(Vec<NTT>, Vec<LCCCS<C, NTT>>), DecompositionError>;
 }
 
 pub struct LFDecompositionProver<NTT, T> {

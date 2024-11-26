@@ -204,7 +204,7 @@ fn test_full_prove() {
     let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let (lcccs, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
+    let (r, lcccs, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
         &cm_i,
         &wit,
         &mut transcript,
@@ -212,7 +212,7 @@ fn test_full_prove() {
     )
     .unwrap();
 
-    assert_eq!(lcccs.r.len(), ccs.s);
+    assert_eq!(r.len(), ccs.s);
     assert_eq!(lcccs.v.len(), proof.v.len());
     assert_eq!(lcccs.u.len(), proof.u.len());
 }
@@ -225,7 +225,7 @@ fn test_verify_sumcheck_proof() {
     let mut prove_transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
-    let (lcccs, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
+    let (r, _, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
         &cm_i,
         &wit,
         &mut prove_transcript,
@@ -251,7 +251,7 @@ fn test_verify_sumcheck_proof() {
         Ok((point_r, _)) => {
             assert_eq!(point_r.len(), ccs.s);
             // We know that point_r from lcccs is valid
-            assert_eq!(point_r, lcccs.r);
+            assert_eq!(point_r, r);
         }
         Err(e) => panic!("Sumcheck verification failed: {:?}", e),
     }
@@ -265,7 +265,7 @@ fn test_verify_evaluation_claim() {
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
-    let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
+    let (_, _, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
         &cm_i,
         &wit,
         &mut transcript,
@@ -301,7 +301,7 @@ fn test_prepare_verifier_output() {
     let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
+    let (_, _, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
         &cm_i,
         &wit,
         &mut transcript,
@@ -311,7 +311,7 @@ fn test_prepare_verifier_output() {
 
     let point_r = vec![RqNTT::one(); ccs.s]; // Example point_r
 
-    let lcccs =
+    let (_, lcccs) =
         LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_verifier_output::<C>(
             &cm_i,
             point_r.clone(),
@@ -319,7 +319,6 @@ fn test_prepare_verifier_output() {
         );
 
     // Verify final state structure
-    assert_eq!(lcccs.r, point_r);
     assert_eq!(lcccs.v, proof.v);
     assert_eq!(lcccs.u, proof.u);
     assert_eq!(lcccs.cm, cm_i.cm);
@@ -334,7 +333,7 @@ fn test_verify_invalid_proof() {
     let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let (_, mut proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
+    let (_, _, mut proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
         &cm_i,
         &wit,
         &mut transcript,

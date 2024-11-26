@@ -105,6 +105,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {
     fn prove<const W: usize, const C: usize, P: DecompositionParams>(
+        r: Vec<NTT>,
         cm_i: &LCCCS<C, NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
@@ -112,6 +113,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<
         (
+            Vec<NTT>,
             Vec<LCCCS<C, NTT>>,
             Vec<Witness<NTT>>,
             DecompositionProof<C, NTT>,
@@ -126,9 +128,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let y_s: Vec<Commitment<C, NTT>> = Self::commit_from_witnesses::<C, W, P>(&wit_s, scheme)?;
 
-        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &cm_i.r)?;
+        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &r)?;
 
-        let u_s = Self::compute_u_s(&wit_s, &ccs.M, &x_s, &cm_i.r, log_m)?;
+        let u_s = Self::compute_u_s(&wit_s, &ccs.M, &x_s, &r, log_m)?;
 
         let mut lcccs_s = Vec::with_capacity(P::K);
 
@@ -143,7 +145,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
                 .cloned()
                 .ok_or(DecompositionError::IncorrectLength)?;
             lcccs_s.push(LCCCS {
-                r: cm_i.r.clone(),
                 v: v.clone(),
                 cm: y.clone(),
                 u: u.clone(),
@@ -154,7 +155,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let proof = DecompositionProof { u_s, v_s, x_s, y_s };
 
-        Ok((lcccs_s, wit_s, proof))
+        Ok((r, lcccs_s, wit_s, proof))
     }
 }
 
@@ -218,11 +219,12 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
     for LFDecompositionVerifier<NTT, T>
 {
     fn verify<const C: usize, P: DecompositionParams>(
+        r: Vec<NTT>,
         cm_i: &LCCCS<C, NTT>,
         proof: &DecompositionProof<C, NTT>,
         transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError> {
+    ) -> Result<(Vec<NTT>, Vec<LCCCS<C, NTT>>), DecompositionError> {
         let mut lcccs_s = Vec::<LCCCS<C, NTT>>::with_capacity(P::K);
 
         for (((x, y), u), v) in proof
@@ -242,7 +244,6 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
                 .cloned()
                 .ok_or(DecompositionError::IncorrectLength)?;
             lcccs_s.push(LCCCS {
-                r: cm_i.r.clone(),
                 v: v.clone(),
                 cm: y.clone(),
                 u: u.clone(),
@@ -285,6 +286,6 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        Ok(lcccs_s)
+        Ok((r, lcccs_s))
     }
 }

@@ -145,7 +145,6 @@ pub struct CCCS<const C: usize, R: Ring> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LCCCS<const C: usize, R: Ring> {
-    pub r: Vec<R>,
     pub v: Vec<R>,
     pub cm: Commitment<C, R>,
     pub u: Vec<R>,

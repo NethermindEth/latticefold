@@ -17,6 +17,7 @@ use crate::{
 };
 
 fn generate_decomposition_args<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>() -> (
+    Vec<RqNTT>,
     LCCCS<4, RqNTT>,
     PoseidonTranscript<RqNTT, CS>,
     PoseidonTranscript<RqNTT, CS>,
@@ -63,7 +64,6 @@ where
     .unwrap();
 
     let lcccs = LCCCS {
-        r,
         v,
         cm,
         u,
@@ -72,6 +72,7 @@ where
     };
 
     (
+        r,
         lcccs,
         PoseidonTranscript::<RqNTT, CS>::default(),
         PoseidonTranscript::<RqNTT, CS>::default(),
@@ -87,11 +88,12 @@ where
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
-    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+    let (r, lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, decomposition_proof) =
+    let (_, _, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, DP>(
+            r.clone(),
             &lcccs,
             &wit,
             &mut prover_transcript,
@@ -101,6 +103,7 @@ where
         .unwrap();
 
     let res = LFDecompositionVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify::<4, DP>(
+        r,
         &lcccs,
         &decomposition_proof,
         &mut verifier_transcript,
@@ -156,7 +159,7 @@ mod stark {
         let mut transcript = PoseidonTranscript::<R, CS>::default();
         let res = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
             &cm_i,
-            &res.expect("Linearization proof generation error").1,
+            &res.expect("Linearization proof generation error").2,
             &mut transcript,
             &ccs,
         );
