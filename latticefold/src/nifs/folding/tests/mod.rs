@@ -45,7 +45,7 @@ use lattirust_ring::cyclotomic_ring::models::{
 use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use lattirust_ring::Ring;
 use num_traits::{One, Zero};
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use std::iter::successors;
 
 const C: usize = 4;
@@ -340,7 +340,7 @@ fn evaluate_g_3<R: SuitableRing>(
 fn test_sumcheck_polynomial() {
     type RqNTT = StarkRqNTT;
     type DP = StarkFoldingDP;
-    let mut rng = thread_rng();
+    let mut rng = test_rng();
     let m = 8;
     let log_m = 3;
     let t = 3;
