@@ -28,14 +28,14 @@ use lattirust_ring::{OverField, PolyRing};
 pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
     fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
         &mut self,
-        n: usize,
+        log_m: usize,
     ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>);
 }
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
     fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
         &mut self,
-        n: usize,
+        log_m: usize,
     ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>) {
         self.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
@@ -70,7 +70,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
         ));
         let beta_s = self
-            .get_challenges(n)
+            .get_challenges(log_m)
             .into_iter()
             .map(|x| NTT::from(x))
             .collect::<Vec<_>>();

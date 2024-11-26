@@ -30,14 +30,14 @@ use crate::{
 use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::io::Cursor;
-use ark_std::test_rng;
+use ark_std::{test_rng, UniformRand};
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
     BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
     StarkChallengeSet, SuitableRing,
 };
 use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_poly::polynomials::VPAuxInfo;
+use lattirust_poly::polynomials::{eq_eval, VPAuxInfo};
 use lattirust_ring::cyclotomic_ring::models::{
     frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
     stark_prime::RqNTT as StarkRqNTT,
@@ -45,13 +45,13 @@ use lattirust_ring::cyclotomic_ring::models::{
 use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use lattirust_ring::Ring;
 use num_traits::{One, Zero};
-use rand::Rng;
+use rand::{thread_rng, Rng};
+use std::iter::successors;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
 
 fn setup_test_environment<RqNTT, CS, DP, const C: usize, const W: usize>(
-    input: Option<usize>,
     generate_proof: bool,
 ) -> (
     Vec<LCCCS<C, RqNTT>>,
@@ -67,7 +67,7 @@ where
 {
     let ccs = get_test_ccs::<RqNTT>(W, DP::L);
     let mut rng = test_rng();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input.unwrap_or(rng.gen_range(0..64)));
+    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(rng.gen_range(0..64));
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
     let wit = Witness::from_w_ccs::<DP>(w_ccs);
@@ -164,7 +164,7 @@ fn test_setup_f_hat_mles() {
     type DP = StarkFoldingDP;
     const W: usize = WIT_LEN * DP::L;
 
-    let (_, wit_s, _, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (_, wit_s, _, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
 
@@ -203,7 +203,7 @@ fn test_get_zis() {
     type DP = StarkFoldingDP;
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
 
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
 
@@ -230,7 +230,7 @@ fn test_get_ris() {
     type DP = BabyBearDP;
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
 
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
@@ -253,7 +253,7 @@ fn test_calculate_mz_mles() {
     type DP = StarkFoldingDP;
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, _, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lccs, wit_s, _, ccs, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
 
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
 
@@ -283,48 +283,161 @@ fn test_calculate_mz_mles() {
     );
 }
 
+fn evaluate_g_1<R: SuitableRing>(
+    x: &[R],
+    f_i: &[DenseMultilinearExtension<R>],
+    r_i: &[R],
+    coeff: R,
+) -> R {
+    let mut res = R::zero();
+    for (coeff, f) in successors(Some(coeff), |x| Some(coeff * *x)).zip(f_i.iter()) {
+        res += eq_eval(r_i, x).unwrap() * f.evaluate(x).unwrap() * coeff
+    }
+    res
+}
+
+fn evaluate_g_2<R: SuitableRing>(
+    x: &[R],
+    fi_hat_mle_s: &[DenseMultilinearExtension<R>],
+    b: usize,
+    beta: &[R],
+    mu_i: R,
+) -> R {
+    let mut evaluation = R::zero();
+    for (mu, f_i) in
+        successors(Some(mu_i), |mu_power| Some(mu_i * *mu_power)).zip(fi_hat_mle_s.iter())
+    {
+        let mut evaluation_j = R::one();
+        for i in 1..b {
+            let i_hat = R::from(i as u128);
+
+            evaluation_j *= f_i.evaluate(x).unwrap() - i_hat;
+            evaluation_j *= f_i.evaluate(x).unwrap() + i_hat;
+        }
+        evaluation_j *= f_i.evaluate(x).unwrap();
+        evaluation_j *= eq_eval(beta, x).unwrap();
+        evaluation_j *= mu;
+        evaluation += evaluation_j;
+    }
+    evaluation
+}
+
+fn evaluate_g_3<R: SuitableRing>(
+    x: &[R],
+    mz_mles: &[DenseMultilinearExtension<R>],
+    r_i: &[R],
+    zeta_i: &R,
+) -> R {
+    let mut evaluation = R::zero();
+
+    for (zeta, M) in successors(Some(*zeta_i), |y| Some(*zeta_i * *y)).zip(mz_mles.iter()) {
+        evaluation += zeta * M.evaluate(x).unwrap();
+    }
+    evaluation * eq_eval(x, r_i).unwrap()
+}
+
 #[test]
-fn test_create_sumcheck_polynomial() {
+fn test_sumcheck_polynomial() {
     type RqNTT = StarkRqNTT;
-    type CS = StarkChallengeSet;
     type DP = StarkFoldingDP;
+    let mut rng = thread_rng();
+    let m = 8;
+    let log_m = 3;
+    let t = 3;
+    let d_over_t = 3;
 
-    const W: usize = WIT_LEN * DP::L;
+    // Challenges
+    let alpha_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
+    let mu_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
+    let zeta_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
+    let beta_s: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
+    let r_s: Vec<Vec<RqNTT>> = (0..2 * DP::K)
+        .map(|_| (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect())
+        .collect();
 
-    let (lccs, wit_s, mut transcript, ccs, _) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    // Witnesses and extensions
+    let f_hats: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
+        .map(|_| {
+            (0..d_over_t)
+                .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
+                .collect()
+        })
+        .collect();
+    let f_hat_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = f_hats
+        .into_iter()
+        .map(|mz_list| {
+            mz_list
+                .into_iter()
+                .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
+                .collect()
+        })
+        .collect();
+    let mz_s: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
+        .map(|_| {
+            (0..t)
+                .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
+                .collect()
+        })
+        .collect();
+    let mz_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = mz_s
+        .into_iter()
+        .map(|mz_list| {
+            mz_list
+                .into_iter()
+                .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
+                .collect()
+        })
+        .collect();
 
-    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
-
-    // get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript)
-    let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
-
-    let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
-    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
-
-    let Mz_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
-            .unwrap();
-
-    // Compute polynomial
-    let g = create_sumcheck_polynomial::<_, DP>(
-        ccs.s,
+    let g = create_sumcheck_polynomial::<RqNTT, DP>(
+        log_m,
         &f_hat_mles,
         &alpha_s,
-        &Mz_mles,
+        &mz_mles,
         &zeta_s,
-        &ris,
+        &r_s,
         &beta_s,
         &mu_s,
     )
     .unwrap();
+    #[allow(clippy::too_many_arguments)]
+    fn evaluate_poly(
+        x: &[RqNTT],
+        f_hat_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
+        alpha_s: &[RqNTT],
+        Mz_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
+        zeta_s: &[RqNTT],
+        r_s: &[Vec<RqNTT>],
+        beta_s: &[RqNTT],
+        mu_s: &[RqNTT],
+    ) -> RqNTT {
+        (0..2 * DP::K)
+            .map(|i| {
+                let mut summand = RqNTT::zero();
+                summand += evaluate_g_1(x, &f_hat_mles[i], &r_s[i], alpha_s[i]);
+                summand += evaluate_g_2(x, &f_hat_mles[i], DP::B_SMALL, beta_s, mu_s[i]);
+                summand += evaluate_g_3(x, &Mz_mles[i], &r_s[i], &zeta_s[i]);
+                summand
+            })
+            .sum()
+    }
 
-    // Validate - Check degree of g
-    assert!(
-        g.aux_info.max_degree <= DP::B_SMALL * 2,
-        "Wrong polynomial degree"
-    )
+    for _ in 0..20 {
+        let point: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
+        assert_eq!(
+            g.evaluate(&point).unwrap(),
+            evaluate_poly(
+                &point,
+                &f_hat_mles,
+                &alpha_s,
+                &mz_mles,
+                &zeta_s,
+                &r_s,
+                &beta_s,
+                &mu_s
+            )
+        )
+    }
 }
 
 #[test]
@@ -336,7 +449,7 @@ fn test_get_sumcheck_randomness() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, mut transcript, ccs, _) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
@@ -381,7 +494,7 @@ fn test_get_thetas() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, mut transcript, ccs, _) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
@@ -438,7 +551,7 @@ fn test_get_etas() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, mut transcript, ccs, _) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
@@ -493,7 +606,7 @@ fn test_get_rhos() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (_, _, mut transcript, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (_, _, mut transcript, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let mut transcript_clone = transcript.clone();
 
     let rho_s = get_rhos::<_, _, DP>(&mut transcript);
@@ -523,7 +636,7 @@ fn test_prepare_public_output() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, mut transcript, ccs, _) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
@@ -590,7 +703,7 @@ fn test_compute_f_0() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, mut transcript, ccs, _) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
@@ -660,7 +773,7 @@ fn test_full_prove() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs, wit_s, mut transcript, ccs, _) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let _ = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<C, DP>(
         &lccs,
         &wit_s,
@@ -676,7 +789,7 @@ fn test_proof_serialization() {
     type CS = GoldilocksChallengeSet;
     const W: usize = WIT_LEN * DP::L;
 
-    let (_, _, _, _, proof) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
+    let (_, _, _, _, proof) = setup_test_environment::<RqNTT, CS, DP, C, W>(true);
 
     let proof = proof.unwrap();
 
@@ -702,7 +815,7 @@ fn test_verify_evaluation() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs_vec, _, mut transcript, ccs, proof) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(true);
     let proof = proof.unwrap();
 
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
@@ -744,7 +857,7 @@ fn test_calculate_claims() {
     type CS = GoldilocksChallengeSet;
     const W: usize = WIT_LEN * DP::L;
 
-    let (lcccs_vec, _, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
+    let (lcccs_vec, _, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
 
     let alpha_s = vec![RqNTT::one(); 2 * DP::K];
     let zeta_s = vec![RqNTT::one(); 2 * DP::K];
@@ -778,7 +891,7 @@ fn test_verify_sumcheck_proof() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lcccs_vec, _, mut transcript, ccs, proof) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(true);
     let proof = proof.unwrap();
 
     let (alpha_s, _, zeta_s, _) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
@@ -814,7 +927,7 @@ fn test_full_verify() {
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs_vec, _, mut transcript, ccs, proof) =
-        setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
+        setup_test_environment::<RqNTT, CS, DP, C, W>(true);
     let proof = proof.unwrap();
 
     let result = LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify::<C, DP>(
