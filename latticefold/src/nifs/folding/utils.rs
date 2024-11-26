@@ -247,11 +247,14 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
+    let mut mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
     for (alpha, fi_hat_mle) in successors(Some(alpha_i), |alpha_power| Some(alpha_i * alpha_power))
         .zip(fi_hat_mle_s.iter())
     {
-        g.add_mle_list(vec![r_i_eq.clone(), fi_hat_mle.clone()], alpha)?;
+        mle += (**fi_hat_mle).clone() * alpha;
     }
+
+    g.add_mle_list(vec![r_i_eq.clone(), RefCounter::from(mle)], NTT::one())?;
 
     Ok(())
 }
