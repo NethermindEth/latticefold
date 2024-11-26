@@ -58,6 +58,8 @@ pub enum FoldingError<R: Ring> {
     ArithError(#[from] ArithErrors),
     #[error("mle evaluation failed: {0}")]
     EvaluationError(#[from] MleEvaluationError),
+    #[error("sumcheck challenge point were not generate correctly")]
+    SumcheckChallengeError,
 }
 
 #[derive(Debug, Error)]

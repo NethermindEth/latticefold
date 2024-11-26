@@ -109,10 +109,17 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         || r_s.len() != 2 * DP::K
         || beta_s.len() != log_m
         || mu_s.len() != 2 * DP::K
-        || r_s[..DP::K].iter().any(|r| r != &r_s[0])
-        || r_s[DP::K..].iter().any(|r| r != &r_s[DP::K])
     {
         return Err(FoldingError::IncorrectLength);
+    }
+
+    #[cfg(test)]
+    {
+        if r_s[..DP::K].iter().any(|r| r != &r_s[0])
+            || r_s[DP::K..].iter().any(|r| r != &r_s[DP::K])
+        {
+            return Err(FoldingError::SumcheckChallengeError);
+        }
     }
 
     let mut g = VirtualPolynomial::<NTT>::new(log_m);
