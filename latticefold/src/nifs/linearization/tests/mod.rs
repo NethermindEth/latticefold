@@ -30,7 +30,7 @@ fn setup_test_environment<RqNTT: SuitableRing>(
     CCS<RqNTT>,
     AjtaiCommitmentScheme<C, W, RqNTT>,
 ) {
-    let ccs = get_test_ccs::<RqNTT>(W);
+    let ccs = get_test_ccs::<RqNTT>(W, DP::L);
     let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input.unwrap_or(rng.gen_range(0..64)));
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
