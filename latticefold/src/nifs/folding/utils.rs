@@ -243,7 +243,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_hat_mle_s: &Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
+    fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
@@ -258,7 +258,7 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_hat_mle_s: &Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
+    fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
     mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
     coeffs: &[NTT],
