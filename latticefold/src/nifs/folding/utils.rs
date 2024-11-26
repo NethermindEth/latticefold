@@ -322,15 +322,28 @@ mod test_utils {
     type R = GoldilocksRingNTT;
 
     #[test]
-    fn test_compute_coefficients() {
+    fn test_compute_coefficients_b_equals_2() {
         assert_eq!(
-            compute_coefficients::<R>(2u128),
-            vec![-R::from(1u128), R::from(1u128)]
+            compute_coefficients::<R>(4u128),
+            vec![
+                -R::from(36u128),
+                R::from(49u128),
+                -R::from(14u128),
+                R::from(1u128)
+            ]
         );
+    }
+
+    #[test]
+    fn test_compute_coefficients_b_equals_3() {
         assert_eq!(
             compute_coefficients::<R>(3u128),
             vec![R::from(4u128), -R::from(5u128), R::from(1u128)]
         );
+    }
+
+    #[test]
+    fn test_compute_coefficients_b_equals_4() {
         assert_eq!(
             compute_coefficients::<R>(4u128),
             vec![
