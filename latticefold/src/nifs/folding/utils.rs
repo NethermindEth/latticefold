@@ -109,6 +109,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         || r_s.len() != 2 * DP::K
         || beta_s.len() != log_m
         || mu_s.len() != 2 * DP::K
+        || r_s[..DP::K].iter().any(|r| r != &r_s[0])
+        || r_s[DP::K..].iter().any(|r| r != &r_s[DP::K])
     {
         return Err(FoldingError::IncorrectLength);
     }
@@ -128,8 +130,15 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
                 .collect::<Vec<_>>()
         })
         .collect();
-    for i in 0..2 * DP::K {
-        let r_i_eq = build_eq_x_r(&r_s[i])?;
+    for i in 0..DP::K {
+        let r_i_eq = build_eq_x_r(&r_s[0])?;
+
+        prepare_g1_i_mle_list(&mut g, &f_hat_mles[i], r_i_eq.clone(), alpha_s[i])?;
+        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
+        prepare_g3_i_mle_list(&mut g, &Mz_mles[i], zeta_s[i], r_i_eq)?;
+    }
+    for i in DP::K..2 * DP::K {
+        let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
 
         prepare_g1_i_mle_list(&mut g, &f_hat_mles[i], r_i_eq.clone(), alpha_s[i])?;
         prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
