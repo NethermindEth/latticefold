@@ -137,6 +137,9 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
                 .collect::<Vec<_>>()
         })
         .collect();
+
+    // We assume here that decomposition subprotocol puts the same r challenge point
+    // into all decomposed linearized commitments
     let r_i_eq = build_eq_x_r(&r_s[0])?;
     for i in 0..DP::K {
         prepare_g1_i_mle_list(&mut g, &f_hat_mles[i], r_i_eq.clone(), alpha_s[i])?;
