@@ -131,14 +131,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     for i in 0..2 * DP::K {
         let r_i_eq = build_eq_x_r(&r_s[i])?;
 
-        prepare_g1_i_mle_list(&mut g, f_hat_mles[i].clone(), r_i_eq.clone(), alpha_s[i])?;
-        prepare_g2_i_mle_list(
-            &mut g,
-            f_hat_mles[i].clone(),
-            mu_s[i],
-            beta_eq_x.clone(),
-            &coeffs,
-        )?;
+        prepare_g1_i_mle_list(&mut g, &f_hat_mles[i], r_i_eq.clone(), alpha_s[i])?;
+        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
         prepare_g3_i_mle_list(&mut g, &Mz_mles[i], zeta_s[i], r_i_eq)?;
     }
 
@@ -249,7 +243,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 
 fn prepare_g1_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_hat_mle_s: Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
+    fi_hat_mle_s: &Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
@@ -264,13 +258,13 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    fi_hat_mle_s: Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
+    fi_hat_mle_s: &Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
     coeffs: &[NTT],
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
-        successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.into_iter())
+        successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.iter())
     {
         let mut vec = vec![fi_hat_mle.clone()];
         for c in coeffs.iter() {
