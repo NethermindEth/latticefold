@@ -2,11 +2,10 @@ use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
 use crate::decomposition_parameters::test_params::{BabyBearDP, StarkFoldingDP, DP};
+use crate::nifs::folding::utils::SqueezeAlphaBetaZetaMu;
 use crate::nifs::folding::{
     prepare_public_output,
-    utils::{
-        compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_alphas_betas_zetas_mus, get_rhos,
-    },
+    utils::{compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_rhos},
     FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
 use crate::nifs::FoldingProof;
@@ -295,9 +294,9 @@ fn test_create_sumcheck_polynomial() {
     let (lccs, wit_s, mut transcript, ccs, _) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
 
-    let (alpha_s, beta_s, zeta_s, mu_s) =
-        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
 
+    // get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript)
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
 
@@ -338,8 +337,7 @@ fn test_get_sumcheck_randomness() {
 
     let (lccs, wit_s, mut transcript, ccs, _) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
-    let (alpha_s, beta_s, zeta_s, mu_s) =
-        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
@@ -384,8 +382,7 @@ fn test_get_thetas() {
 
     let (lccs, wit_s, mut transcript, ccs, _) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
-    let (alpha_s, beta_s, zeta_s, mu_s) =
-        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
@@ -442,8 +439,7 @@ fn test_get_etas() {
 
     let (lccs, wit_s, mut transcript, ccs, _) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
-    let (alpha_s, beta_s, zeta_s, mu_s) =
-        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
@@ -528,8 +524,7 @@ fn test_prepare_public_output() {
 
     let (lccs, wit_s, mut transcript, ccs, _) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
-    let (alpha_s, beta_s, zeta_s, mu_s) =
-        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
@@ -596,8 +591,7 @@ fn test_compute_f_0() {
 
     let (lccs, wit_s, mut transcript, ccs, _) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, false);
-    let (alpha_s, beta_s, zeta_s, mu_s) =
-        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
@@ -711,8 +705,7 @@ fn test_verify_evaluation() {
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
     let proof = proof.unwrap();
 
-    let (alpha_s, beta_s, zeta_s, mu_s) =
-        get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
 
     let poly_info = VPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
 
@@ -788,7 +781,7 @@ fn test_verify_sumcheck_proof() {
         setup_test_environment::<RqNTT, CS, DP, C, W>(None, true);
     let proof = proof.unwrap();
 
-    let (alpha_s, _, zeta_s, _) = get_alphas_betas_zetas_mus::<_, _, DP>(ccs.s, &mut transcript);
+    let (alpha_s, _, zeta_s, _) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
 
     let poly_info = VPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
 

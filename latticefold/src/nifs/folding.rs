@@ -5,7 +5,6 @@ use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::cyclotomic_ring::CRT;
-use utils::get_alphas_betas_zetas_mus;
 
 use super::error::FoldingError;
 use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
@@ -91,8 +90,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             .collect::<Result<_, FoldingError<_>>>()
     }
 
-    fn get_sumcheck_randomness(state: ProverState<NTT>) -> Vec<NTT> {
-        state
+    fn get_sumcheck_randomness(sumcheck_prover_state: ProverState<NTT>) -> Vec<NTT> {
+        sumcheck_prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
@@ -152,8 +151,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let log_m = ccs.s;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
-        let (alpha_s, beta_s, zeta_s, mu_s) =
-            get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
+        let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<P>(log_m);
 
         // Step 2: Compute g polynomial and sumcheck on it
         // Setup f_hat_mle for later evaluation of thetas
@@ -329,8 +327,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
         // Step 1: Generate alpha, zeta, mu, beta challenges and validate input
-        let (alpha_s, beta_s, zeta_s, mu_s) =
-            get_alphas_betas_zetas_mus::<NTT, _, P>(ccs.s, transcript);
+        let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<P>(ccs.s);
 
         // Calculate claims for sumcheck verification
         let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);

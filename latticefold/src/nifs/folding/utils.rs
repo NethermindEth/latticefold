@@ -21,53 +21,58 @@ use lattirust_poly::{
 };
 use lattirust_ring::OverField;
 
-pub(super) fn get_alphas_betas_zetas_mus<
-    NTT: OverField,
-    T: Transcript<NTT>,
-    P: DecompositionParams,
->(
-    log_m: usize,
-    transcript: &mut T,
-) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>) {
-    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
-        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
-    ));
-    let alpha_s = transcript
-        .get_challenges(2 * P::K)
-        .into_iter()
-        .map(|x| NTT::from(x))
-        .collect::<Vec<_>>();
+pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
+    fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
+        &mut self,
+        n: usize,
+    ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>);
+}
 
-    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
-        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"zeta_s"),
-    ));
-    let zeta_s = transcript
-        .get_challenges(2 * P::K)
-        .into_iter()
-        .map(|x| NTT::from(x))
-        .collect::<Vec<_>>();
+impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
+    fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
+        &mut self,
+        n: usize,
+    ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>) {
+        self.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
+        ));
+        let alpha_s = self
+            .get_challenges(2 * P::K)
+            .into_iter()
+            .map(|x| NTT::from(x))
+            .collect::<Vec<_>>();
 
-    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
-        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"mu_s"),
-    ));
-    let mut mu_s = transcript
-        .get_challenges((2 * P::K) - 1)
-        .into_iter()
-        .map(|x| NTT::from(x))
-        .collect::<Vec<_>>(); // Note is one challenge less
+        self.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"zeta_s"),
+        ));
+        let zeta_s = self
+            .get_challenges(2 * P::K)
+            .into_iter()
+            .map(|x| NTT::from(x))
+            .collect::<Vec<_>>();
 
-    mu_s.push(NTT::ONE);
+        self.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"mu_s"),
+        ));
+        let mut mu_s = self
+            .get_challenges((2 * P::K) - 1)
+            .into_iter()
+            .map(|x| NTT::from(x))
+            .collect::<Vec<_>>(); // Note is one challenge less
 
-    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
-        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
-    ));
-    let beta_s = transcript
-        .get_challenges(log_m)
-        .into_iter()
-        .map(|x| NTT::from(x))
-        .collect::<Vec<_>>();
+        mu_s.push(NTT::ONE);
 
-    (alpha_s, beta_s, zeta_s, mu_s)
+        self.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+            <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"beta_s"),
+        ));
+        let beta_s = self
+            .get_challenges(n)
+            .into_iter()
+            .map(|x| NTT::from(x))
+            .collect::<Vec<_>>();
+
+        (alpha_s, beta_s, zeta_s, mu_s)
+    }
 }
 
 pub(super) fn get_rhos<
