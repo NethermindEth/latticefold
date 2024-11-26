@@ -29,8 +29,7 @@ use crate::{
 };
 use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-use ark_std::io::Cursor;
-use ark_std::{test_rng, UniformRand};
+use ark_std::{io::Cursor, iter::successors, test_rng, UniformRand};
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
     BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
@@ -46,7 +45,6 @@ use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use lattirust_ring::Ring;
 use num_traits::{One, Zero};
 use rand::Rng;
-use std::iter::successors;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
