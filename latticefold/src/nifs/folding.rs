@@ -102,8 +102,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             .zip(w_s.iter())
             .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
             .collect::<Vec<_>>();
-        let mut ris = vec![r_s.0; P::K];
-        ris.extend(vec![r_s.1; P::K]);
 
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = cfg_iter!(zis)
             .map(|zi| {
@@ -121,7 +119,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             &alpha_s,
             &Mz_mles_vec,
             &zeta_s,
-            &ris,
+            r_s,
             &beta_s,
             &mu_s,
         )?;
@@ -212,8 +210,6 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
 
         let poly_info = VPAuxInfo::new(log_m, 2 * P::B_SMALL);
 
-        let mut ris = vec![r_s.0; P::K];
-        ris.extend(vec![r_s.1; P::K]);
         let vs = cm_i_s
             .iter()
             .map(|cm_i| cm_i.v.clone())
@@ -258,10 +254,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             .collect::<Vec<NTT>>();
 
         let e_asterisk = eq_eval(&beta_s, &r_0)?;
-        let e_s: Vec<NTT> = ris
-            .iter()
-            .map(|r_i: &Vec<NTT>| eq_eval(r_i, &r_0))
-            .collect::<Result<Vec<_>, _>>()?;
+        let e_s = (eq_eval(&r_s.0, &r_0)?, eq_eval(&r_s.1, &r_0)?);
 
         let should_equal_s: NTT = compute_sumcheck_claim_expected_value::<NTT, P>(
             &alpha_s,

@@ -98,7 +98,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     alpha_s: &[NTT],
     Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     zeta_s: &[NTT],
-    r_s: &[Vec<NTT>],
+    r_s: (Vec<NTT>, Vec<NTT>),
     beta_s: &[NTT],
     mu_s: &[NTT],
 ) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
@@ -106,7 +106,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         || f_hat_mles.len() != 2 * DP::K
         || Mz_mles.len() != 2 * DP::K
         || zeta_s.len() != 2 * DP::K
-        || r_s.len() != 2 * DP::K
         || beta_s.len() != log_m
         || mu_s.len() != 2 * DP::K
     {
@@ -129,7 +128,11 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         })
         .collect();
     for i in 0..2 * DP::K {
-        let r_i_eq = build_eq_x_r(&r_s[i])?;
+        let r_i_eq = if i < DP::K {
+            build_eq_x_r(&r_s.0)?
+        } else {
+            build_eq_x_r(&r_s.1)?
+        };
 
         prepare_g1_i_mle_list(&mut g, &f_hat_mles[i], r_i_eq.clone(), alpha_s[i])?;
         prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
@@ -145,7 +148,7 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
     mu_s: &[NTT],
     theta_s: &[Vec<NTT>],
     e_asterisk: NTT,
-    e_s: &[NTT],
+    e_s: &(NTT, NTT),
     zeta_s: &[NTT],
     eta_s: &[Vec<NTT>],
 ) -> NTT {
@@ -156,7 +159,13 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
                 Some(alpha_s[i] * alpha_power)
             })
             .zip(theta_s[i].iter())
-            .map(|(pow_of_alpha_i, theta)| pow_of_alpha_i * e_s[i] * theta) // Might need to change e_s[i] double check
+            .map(|(pow_of_alpha_i, theta)| {
+                if i < P::K {
+                    pow_of_alpha_i * e_s.0 * theta
+                } else {
+                    pow_of_alpha_i * e_s.1 * theta
+                }
+            }) // Might need to change e_s[i] double check
             .sum();
 
             // norm range check contribution
@@ -174,11 +183,20 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
                     .sum::<NTT>();
 
             // linearisation claims contribuition
-            s_summand += e_s[i]
-                * successors(Some(zeta_s[i]), |&zeta| Some(zeta * zeta_s[i]))
-                    .zip(eta_s[i].iter())
-                    .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
-                    .sum::<NTT>();
+
+            if i < P::K {
+                s_summand += e_s.0
+                    * successors(Some(zeta_s[i]), |&zeta| Some(zeta * zeta_s[i]))
+                        .zip(eta_s[i].iter())
+                        .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
+                        .sum::<NTT>();
+            } else {
+                s_summand += e_s.1
+                    * successors(Some(zeta_s[i]), |&zeta| Some(zeta * zeta_s[i]))
+                        .zip(eta_s[i].iter())
+                        .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
+                        .sum::<NTT>();
+            }
 
             s_summand
         })
