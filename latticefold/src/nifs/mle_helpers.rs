@@ -2,15 +2,18 @@
 //! Helper function used by all three subprotocols.
 //!  
 
-use ark_std::{cfg_into_iter, vec::Vec};
+use ark_std::{cfg_into_iter, cfg_iter, vec::Vec};
 
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::Ring;
 
 use super::error::MleEvaluationError;
 
+use crate::arith::{error::CSError, utils::mat_vec_mul, CCS};
+use cyclotomic_rings::rings::SuitableRing;
+
 #[cfg(feature = "parallel")]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 pub trait Evaluate<R: Ring> {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError>;
@@ -152,4 +155,16 @@ where
             }
         })
         .collect::<Result<_, E>>()
+}
+
+// Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
+pub fn calculate_Mz_mles<NTT, E>(
+    ccs: &CCS<NTT>,
+    z_ccs: &[NTT],
+) -> Result<Vec<DenseMultilinearExtension<NTT>>, E>
+where
+    NTT: SuitableRing,
+    E: From<MleEvaluationError> + From<CSError> + Sync + Send,
+{
+    to_mles_err::<_, _, E, CSError>(ccs.s, cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, z_ccs)))
 }

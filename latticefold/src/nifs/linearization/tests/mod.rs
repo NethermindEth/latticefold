@@ -1,4 +1,5 @@
 use super::*;
+use crate::arith::utils::mat_vec_mul;
 use crate::decomposition_parameters::test_params::{StarkDP, DP};
 use crate::nifs::linearization::utils::SqueezeBeta;
 use crate::{

@@ -7,12 +7,12 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
-use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
+use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
-    arith::{error::CSError, utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
+    arith::{error::CSError, Instance, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
 };
 
@@ -80,13 +80,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         zis: &Vec<Vec<NTT>>,
     ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, FoldingError<NTT>> {
         cfg_iter!(zis)
-            .map(|zi| {
-                let Mz_mle = to_mles_err::<_, _, FoldingError<NTT>, _>(
-                    ccs.s,
-                    cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, zi)),
-                )?;
-                Ok(Mz_mle)
-            })
+            .map(|zi| calculate_Mz_mles::<NTT, FoldingError<NTT>>(ccs, zi))
             .collect::<Result<_, FoldingError<_>>>()
     }
 

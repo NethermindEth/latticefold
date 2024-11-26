@@ -1,4 +1,3 @@
-use ark_std::cfg_iter;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::polynomials::VirtualPolynomial;
 use lattirust_poly::{
@@ -8,17 +7,13 @@ use lattirust_poly::{
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
-use super::mle_helpers::evaluate_mles;
+use super::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::ark_base::*;
 use crate::{
-    arith::{utils::mat_vec_mul, Witness, CCCS, CCS, LCCCS},
-    nifs::mle_helpers::to_mles_err,
+    arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
 };
-
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 
 use crate::arith::Instance;
 use crate::nifs::linearization::utils::SqueezeBeta;
@@ -45,7 +40,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 
         // Prepare MLEs
-        let Mz_mles = Self::calculate_Mz_mles(ccs, &z_ccs)?;
+        let Mz_mles = calculate_Mz_mles::<NTT, LinearizationError<NTT>>(ccs, z_ccs)?;
 
         // Construct the sumcheck polynomial g
         let g = prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
@@ -82,17 +77,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         let u = compute_u(Mz_mles, point_r)?;
 
         Ok((point_r.to_vec(), v, u))
-    }
-
-    // Prepare MLE's of the form mle[M_i \cdot z_ccs](x), a.k.a. \sum mle[M_i](x, b) * mle[z_ccs](b).
-    fn calculate_Mz_mles(
-        ccs: &CCS<NTT>,
-        z_ccs: &&[NTT],
-    ) -> Result<Vec<DenseMultilinearExtension<NTT>>, LinearizationError<NTT>> {
-        to_mles_err::<_, _, LinearizationError<NTT>, _>(
-            ccs.s,
-            cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, z_ccs)),
-        )
     }
 }
 
