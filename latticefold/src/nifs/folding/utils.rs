@@ -287,10 +287,11 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     zeta_i: NTT,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
+    let mut mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
     for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
-        g.add_mle_list(vec![RefCounter::from(M.clone()), r_i_eq.clone()], zeta)?;
+        mle += M.clone() * zeta;
     }
-
+    g.add_mle_list(vec![RefCounter::from(mle), r_i_eq.clone()], NTT::one())?;
     Ok(())
 }
 
