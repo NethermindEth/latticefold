@@ -24,6 +24,7 @@ impl SuitableRing for BabyBearRingNTT {
 }
 
 pub struct BabyBearPoseidonConfig;
+
 #[derive(Clone)]
 pub struct BabyBearChallengeSet;
 

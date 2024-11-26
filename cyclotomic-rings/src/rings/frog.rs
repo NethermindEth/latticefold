@@ -24,6 +24,7 @@ impl SuitableRing for FrogRingNTT {
 }
 
 pub struct FrogPoseidonConfig;
+
 #[derive(Clone)]
 pub struct FrogChallengeSet;
 
