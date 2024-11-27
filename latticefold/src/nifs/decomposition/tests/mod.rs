@@ -6,7 +6,7 @@ use crate::commitment::{AjtaiCommitmentScheme, Commitment};
 use crate::decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP};
 use crate::decomposition_parameters::DecompositionParams;
 use crate::nifs::decomposition::{
-    DecompositionProver, LFDecompositionProver, LFDecompositionVerifier,
+    DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
 };
 use crate::nifs::error::DecompositionError;
 use crate::nifs::linearization::utils::compute_u;
@@ -19,6 +19,7 @@ use cyclotomic_rings::rings::{
     StarkChallengeSet, StarkRingNTT, SuitableRing,
 };
 use lattirust_poly::mle::DenseMultilinearExtension;
+use num_traits::One;
 use rand::Rng;
 
 fn generate_decomposition_args<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>() -> (
@@ -209,4 +210,66 @@ fn test_recompose_xw_and_h() {
 
     assert_eq!(should_equal_h, lcccs.h);
     assert_eq!(should_equal_xw, lcccs.x_w);
+}
+
+#[test]
+fn test_verify_full() {
+    type CS = StarkChallengeSet;
+    type RqNTT = StarkRingNTT;
+    type DP = StarkDP;
+    type T = PoseidonTranscript<RqNTT, CS>;
+    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+    const C: usize = 4;
+
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+        &lcccs,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+        &scheme,
+    )
+    .unwrap();
+
+    let _ = Verifier::verify::<C, DP>(&lcccs, &proof, &mut verifier_transcript, &ccs)
+        .expect("Failed to verify decomposition proof");
+}
+
+#[test]
+fn test_verify_invalid_proof() {
+    type CS = GoldilocksChallengeSet;
+    type RqNTT = GoldilocksRingNTT;
+    type DP = GoldilocksDP;
+    type T = PoseidonTranscript<RqNTT, CS>;
+    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+    const C: usize = 4;
+
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let (_, _, mut proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+        &lcccs,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+        &scheme,
+    )
+    .unwrap();
+
+    // Make proof components have mismatched lengths
+    if !proof.v_s.is_empty() {
+        proof.v_s[0][0] += RqNTT::one();
+    }
+
+    let result = Verifier::verify::<C, DP>(&lcccs, &proof, &mut verifier_transcript, &ccs);
+    assert!(
+        result.is_err(),
+        "Verification should fail with mismatched proof component lengths"
+    );
 }
