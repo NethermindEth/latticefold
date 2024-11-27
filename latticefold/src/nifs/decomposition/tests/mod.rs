@@ -3,7 +3,7 @@ use crate::arith::tests::get_test_ccs;
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Witness, CCS, LCCCS};
 use crate::commitment::{AjtaiCommitmentScheme, Commitment};
-use crate::decomposition_parameters::test_params::{GoldilocksDP, StarkDP};
+use crate::decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP};
 use crate::decomposition_parameters::DecompositionParams;
 use crate::nifs::decomposition::{
     DecompositionProver, LFDecompositionProver, LFDecompositionVerifier,
@@ -14,7 +14,10 @@ use crate::nifs::mle_helpers::{evaluate_mles, to_mles};
 use crate::transcript::poseidon::PoseidonTranscript;
 use ark_std::vec::Vec;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing};
+use cyclotomic_rings::rings::{
+    BabyBearChallengeSet, BabyBearRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT,
+    StarkChallengeSet, StarkRingNTT, SuitableRing,
+};
 use lattirust_poly::mle::DenseMultilinearExtension;
 use rand::Rng;
 
@@ -88,6 +91,7 @@ fn test_recompose_commitment() {
     type RqNTT = GoldilocksRingNTT;
     type DP = GoldilocksDP;
     type T = PoseidonTranscript<RqNTT, CS>;
+    type Verifier = LFDecompositionVerifier<RqNTT, T>;
     const WIT_LEN: usize = 4;
     const W: usize = WIT_LEN * DP::L;
     const C: usize = 4;
@@ -104,13 +108,10 @@ fn test_recompose_commitment() {
     )
     .unwrap();
 
-    let b_s: Vec<_> = (0..DP::K)
-        .map(|i| RqNTT::from((DP::B_SMALL as u128).pow(i as u32)))
-        .collect();
+    let b_s = Verifier::calculate_b_s::<DP>();
 
     let should_equal_y0 =
-        LFDecompositionVerifier::<RqNTT, T>::recompose_commitment::<C>(&proof.y_s, &b_s)
-            .expect("Recomposing proof failed");
+        Verifier::recompose_commitment::<C>(&proof.y_s, &b_s).expect("Recomposing proof failed");
 
     assert_eq!(should_equal_y0, lcccs.cm);
 }
@@ -121,6 +122,7 @@ fn test_recompose_u() {
     type RqNTT = StarkRingNTT;
     type DP = StarkDP;
     type T = PoseidonTranscript<RqNTT, CS>;
+    type Verifier = LFDecompositionVerifier<RqNTT, T>;
     const WIT_LEN: usize = 4;
     const W: usize = WIT_LEN * DP::L;
     const C: usize = 4;
@@ -135,15 +137,44 @@ fn test_recompose_u() {
         &ccs,
         &scheme,
     )
-        .unwrap();
+    .unwrap();
 
-    let b_s: Vec<_> = (0..DP::K)
-        .map(|i| RqNTT::from((DP::B_SMALL as u128).pow(i as u32)))
-        .collect();
+    let b_s = Verifier::calculate_b_s::<DP>();
 
     let should_equal_u0 =
-        LFDecompositionVerifier::<RqNTT, T>::recompose_u(&proof.u_s, &b_s)
-            .expect("Recomposing proof failed");
+        Verifier::recompose_u(&proof.u_s, &b_s).expect("Recomposing proof failed");
 
     assert_eq!(should_equal_u0, lcccs.u);
+}
+
+#[test]
+fn test_recompose_v() {
+    type CS = BabyBearChallengeSet;
+    type RqNTT = BabyBearRingNTT;
+    type DP = BabyBearDP;
+    type T = PoseidonTranscript<RqNTT, CS>;
+    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+    const C: usize = 4;
+
+    let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+        &lcccs,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+        &scheme,
+    )
+    .unwrap();
+
+    let b_s = Verifier::calculate_b_s::<DP>();
+
+    for (row, &cm_i_value) in lcccs.v.iter().enumerate() {
+        let should_equal_v0 = Verifier::recompose_v(&proof.v_s, &b_s, row);
+
+        assert_eq!(should_equal_v0, cm_i_value);
+    }
 }

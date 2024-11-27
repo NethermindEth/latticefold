@@ -124,9 +124,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             });
         }
 
-        let b_s: Vec<_> = (0..P::K)
-            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
-            .collect();
+        let b_s: Vec<_> = Self::calculate_b_s::<P>();
 
         let should_equal_y0 = Self::recompose_commitment::<C>(&proof.y_s, &b_s)?;
 
@@ -302,6 +300,12 @@ impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
             .ok_or(DecompositionError::RecomposedError)?;
 
         Ok((should_equal_xw, should_equal_h))
+    }
+
+    fn calculate_b_s<P: DecompositionParams>() -> Vec<NTT> {
+        (0..P::K)
+            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
+            .collect()
     }
 }
 
