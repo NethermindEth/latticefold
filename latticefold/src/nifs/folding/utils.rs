@@ -141,34 +141,28 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     // We assume here that decomposition subprotocol puts the same r challenge point
     // into all decomposed linearized commitments
     let r_i_eq = build_eq_x_r(&r_s[0])?;
-    prepare_g1_k_mles_list(
+    prepare_g1_and_3_k_mles_list(
         &mut g,
         r_i_eq.clone(),
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
-    )?;
-    prepare_g3_i_mle_list(
-        &mut g,
-        r_i_eq.clone(),
         &Mz_mles[0..DP::K],
         &zeta_s[0..DP::K],
     )?;
+
     for i in 0..DP::K {
         prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
     }
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
-    prepare_g1_k_mles_list(
+    prepare_g1_and_3_k_mles_list(
         &mut g,
         r_i_eq.clone(),
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
-    )?;
-    prepare_g3_i_mle_list(
-        &mut g,
-        r_i_eq.clone(),
         &Mz_mles[DP::K..2 * DP::K],
         &zeta_s[DP::K..2 * DP::K],
     )?;
+
     for i in DP::K..2 * DP::K {
         prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
     }
@@ -278,11 +272,13 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     (v_0, cm_0, u_0, x_0)
 }
 
-fn prepare_g1_k_mles_list<NTT: OverField>(
+fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
+    Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
+    zeta_s: &[NTT],
 ) -> Result<(), ArithErrors> {
     let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
 
@@ -291,6 +287,15 @@ fn prepare_g1_k_mles_list<NTT: OverField>(
         for fi_hat_mle in fi_hat_mle_s.iter().rev() {
             mle += fi_hat_mle.as_ref();
             mle *= *alpha_i;
+        }
+        combined_mle += mle;
+    }
+
+    for (Mz_mle_s, zeta_i) in Mz_mles.iter().zip(zeta_s.iter()) {
+        let mut mle = DenseMultilinearExtension::zero();
+        for Mz_mle in Mz_mle_s.iter().rev() {
+            mle += Mz_mle;
+            mle *= *zeta_i;
         }
         combined_mle += mle;
     }
@@ -320,29 +325,6 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
         }
     }
 
-    Ok(())
-}
-
-fn prepare_g3_i_mle_list<NTT: OverField>(
-    g: &mut VirtualPolynomial<NTT>,
-    r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
-    Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-    zeta_s: &[NTT],
-) -> Result<(), ArithErrors> {
-    let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
-
-    for (Mz_mle_s, zeta_i) in Mz_mles.iter().zip(zeta_s.iter()) {
-        let mut mle = DenseMultilinearExtension::zero();
-        for Mz_mle in Mz_mle_s.iter().rev() {
-            mle += Mz_mle;
-            mle *= *zeta_i;
-        }
-        combined_mle += mle;
-    }
-    g.add_mle_list(
-        vec![r_i_eq.clone(), RefCounter::from(combined_mle)],
-        NTT::one(),
-    )?;
     Ok(())
 }
 
