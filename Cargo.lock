@@ -661,7 +661,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2FMulAssign-dense-mle#002a5849b7ed9dcb78dc4c94d0d0cc5fd3313dce"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e5169904bb2949576073535953de8a8dd4cc0c12"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -678,7 +678,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2FMulAssign-dense-mle#002a5849b7ed9dcb78dc4c94d0d0cc5fd3313dce"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e5169904bb2949576073535953de8a8dd4cc0c12"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=MatthewKlein%2FMulAssign-dense-mle#002a5849b7ed9dcb78dc4c94d0d0cc5fd3313dce"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#e5169904bb2949576073535953de8a8dd4cc0c12"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
