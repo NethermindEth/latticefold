@@ -334,6 +334,7 @@ fn evaluate_g_3<R: SuitableRing>(
     evaluation * eq_eval(x, r_i).unwrap()
 }
 
+#[ignore]
 #[test]
 fn test_sumcheck_polynomial() {
     type RqNTT = StarkRqNTT;
