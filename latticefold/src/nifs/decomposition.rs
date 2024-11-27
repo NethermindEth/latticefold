@@ -18,6 +18,7 @@ use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
 use ark_std::{cfg_into_iter, cfg_iter};
+
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -25,8 +26,10 @@ pub use structs::*;
 
 use super::mle_helpers::to_mles;
 mod structs;
+
 #[cfg(test)]
 mod tests;
+
 mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>

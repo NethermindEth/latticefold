@@ -5,12 +5,15 @@ use crate::arith::{Witness, CCS, LCCCS};
 use crate::commitment::{AjtaiCommitmentScheme, Commitment};
 use crate::decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP};
 use crate::decomposition_parameters::DecompositionParams;
+use crate::nifs::decomposition::utils::{
+    decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back,
+};
 use crate::nifs::decomposition::{
     DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
 };
 use crate::nifs::error::DecompositionError;
 use crate::nifs::linearization::utils::compute_u;
-use crate::nifs::mle_helpers::{evaluate_mles, to_mles};
+use crate::nifs::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
 use crate::transcript::poseidon::PoseidonTranscript;
 use ark_std::vec::Vec;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
@@ -21,6 +24,11 @@ use cyclotomic_rings::rings::{
 use lattirust_poly::mle::DenseMultilinearExtension;
 use num_traits::One;
 use rand::Rng;
+
+#[cfg(feature = "parallel")]
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 
 fn generate_decomposition_args<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>() -> (
     LCCCS<4, RqNTT>,
@@ -84,6 +92,237 @@ where
         wit,
         scheme,
     )
+}
+
+fn test_decomposition<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>()
+where
+    RqNTT: SuitableRing,
+    CS: LatticefoldChallengeSet<RqNTT>,
+    DP: DecompositionParams,
+{
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let (_, _, decomposition_proof) =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, DP>(
+            &lcccs,
+            &wit,
+            &mut prover_transcript,
+            &ccs,
+            &scheme,
+        )
+        .unwrap();
+
+    let res = LFDecompositionVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify::<4, DP>(
+        &lcccs,
+        &decomposition_proof,
+        &mut verifier_transcript,
+        &ccs,
+    );
+    assert!(res.is_ok())
+}
+
+#[test]
+fn test_decompose_witness() {
+    type RqNTT = StarkRingNTT;
+    type CS = StarkChallengeSet;
+    type DP = StarkDP;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+
+    let (_, _, _, _, wit, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let wit_vec =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
+
+    // Compute expected result
+    let f_s = decompose_B_vec_into_k_vec::<RqNTT, DP>(&wit.f_coeff);
+    let expected_wit_vec: Vec<Witness<RqNTT>> = cfg_into_iter!(f_s)
+        .map(Witness::from_f_coeff::<DP>)
+        .collect();
+
+    // Validate
+    assert!(
+        !wit_vec.is_empty(),
+        "Decomposed witness vector should not be empty"
+    );
+    assert_eq!(
+        wit_vec.len() * wit_vec[0].f_coeff.len(),
+        wit.f_coeff.len() * DP::K,
+        "Mismatch in decomposed witness vector length"
+    );
+    assert_eq!(
+        wit_vec, expected_wit_vec,
+        "Decomposed witness vector does not match expected evaluations"
+    );
+}
+
+#[test]
+fn test_compute_x_s() {
+    type RqNTT = BabyBearRingNTT;
+    type CS = BabyBearChallengeSet;
+    type DP = BabyBearDP;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+
+    let (lcccs, _, _, _, _, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+    let x_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_x_s::<DP>(
+        lcccs.x_w.clone(),
+        lcccs.h,
+    );
+
+    // Compute expected result
+    let mut x_w_clone = lcccs.x_w.clone();
+    x_w_clone.push(lcccs.h);
+    let expected_x_s = decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, DP>(x_w_clone);
+
+    // Validate
+    assert!(!x_s.is_empty(), "X_s vector should not be empty");
+    assert_eq!(
+        x_s.len(),
+        lcccs.x_w.len() * DP::K,
+        "Mismatch in X_s vector length"
+    );
+    assert_eq!(
+        x_s, expected_x_s,
+        "X_s vector does not match expected evaluations"
+    );
+}
+
+#[test]
+fn test_commit_witnesses() {
+    type RqNTT = GoldilocksRingNTT;
+    type CS = GoldilocksChallengeSet;
+    type DP = GoldilocksDP;
+    const C: usize = 4;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+
+    let (_, _, _, _, wit, scheme) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let wit_vec =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
+    let y_s: Vec<Commitment<C, RqNTT>> =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::commit_witnesses::<C, W, DP>(
+            &wit_vec, &scheme,
+        )
+        .unwrap();
+
+    // Compute expected result
+    let expected_y_s: Vec<Commitment<C, RqNTT>> = cfg_iter!(wit_vec)
+        .map(|wit| wit.commit::<C, W, DP>(&scheme))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+    // Validate
+    assert!(!y_s.is_empty(), "Y_s vector should not be empty");
+    assert_eq!(y_s.len(), wit_vec.len(), "Mismatch in Y_s vector length");
+    assert_eq!(
+        y_s, expected_y_s,
+        "Y_s vector does not match expected evaluations"
+    );
+}
+
+#[test]
+fn test_compute_v_s() {
+    type RqNTT = BabyBearRingNTT;
+    type CS = BabyBearChallengeSet;
+    type DP = BabyBearDP;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+
+    let (lcccs, _, _, ccs, wit, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+    let wit_vec =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
+    let v_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s(
+        &wit_vec, ccs.s, &lcccs.r,
+    )
+    .unwrap();
+
+    // Compute expected result
+    let expected_v_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
+        .map(|wit| {
+            evaluate_mles::<RqNTT, _, _, DecompositionError>(
+                &to_mles::<_, _, DecompositionError>(ccs.s, &wit.f_hat).unwrap(),
+                &lcccs.r,
+            )
+            .unwrap()
+        })
+        .collect();
+
+    // Validate
+    assert!(!v_s.is_empty(), "V_s vector should not be empty");
+    assert_eq!(v_s.len(), wit_vec.len(), "Mismatch in V_s vector length");
+    assert_eq!(
+        v_s, expected_v_s,
+        "V_s vector does not match expected evaluations"
+    );
+}
+
+#[test]
+fn test_compute_u_s() {
+    type RqNTT = GoldilocksRingNTT;
+    type CS = GoldilocksChallengeSet;
+    type DP = GoldilocksDP;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+
+    let (lcccs, _, _, ccs, wit, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+    let wit_vec =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
+    let x_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_x_s::<DP>(
+        lcccs.x_w.clone(),
+        lcccs.h,
+    );
+    let u_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_u_s(
+        &wit_vec, &ccs.M, &x_s, &lcccs.r, ccs.s,
+    )
+    .unwrap();
+
+    // Compute expected result
+    let expected_u_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
+        .enumerate()
+        .map(|(i, wit)| {
+            let z: Vec<_> = {
+                let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
+
+                z.extend_from_slice(&x_s[i]);
+                z.extend_from_slice(&wit.w_ccs);
+
+                z
+            };
+            let mles = to_mles_err::<_, _, DecompositionError, _>(
+                ccs.s,
+                cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z)),
+            )
+            .unwrap();
+
+            evaluate_mles::<RqNTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
+                &mles, &lcccs.r,
+            )
+            .unwrap()
+        })
+        .collect();
+
+    // Validate
+    assert!(!u_s.is_empty(), "U_s vector should not be empty");
+    assert_eq!(u_s.len(), wit_vec.len(), "Mismatch in U_s vector length");
+    assert_eq!(
+        u_s, expected_u_s,
+        "U_s vector does not match expected evaluations"
+    );
+}
+
+#[test]
+fn test_test_decomposition() {
+    type RqNTT = StarkRingNTT;
+    type CS = StarkChallengeSet;
+    type DP = StarkDP;
+    const WIT_LEN: usize = 4;
+
+    const W: usize = WIT_LEN * DP::L;
+
+    test_decomposition::<RqNTT, CS, DP, WIT_LEN, W>();
 }
 
 #[test]
