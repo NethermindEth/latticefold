@@ -3,7 +3,7 @@ use crate::arith::tests::get_test_ccs;
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Witness, CCS, LCCCS};
 use crate::commitment::{AjtaiCommitmentScheme, Commitment};
-use crate::decomposition_parameters::test_params::GoldilocksDP;
+use crate::decomposition_parameters::test_params::{GoldilocksDP, StarkDP};
 use crate::decomposition_parameters::DecompositionParams;
 use crate::nifs::decomposition::{
     DecompositionProver, LFDecompositionProver, LFDecompositionVerifier,
@@ -14,7 +14,7 @@ use crate::nifs::mle_helpers::{evaluate_mles, to_mles};
 use crate::transcript::poseidon::PoseidonTranscript;
 use ark_std::vec::Vec;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
+use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing};
 use lattirust_poly::mle::DenseMultilinearExtension;
 use rand::Rng;
 
@@ -113,4 +113,37 @@ fn test_recompose_commitment() {
             .expect("Recomposing proof failed");
 
     assert_eq!(should_equal_y0, lcccs.cm);
+}
+
+#[test]
+fn test_recompose_u() {
+    type CS = StarkChallengeSet;
+    type RqNTT = StarkRingNTT;
+    type DP = StarkDP;
+    type T = PoseidonTranscript<RqNTT, CS>;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+    const C: usize = 4;
+
+    let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+        &lcccs,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+        &scheme,
+    )
+        .unwrap();
+
+    let b_s: Vec<_> = (0..DP::K)
+        .map(|i| RqNTT::from((DP::B_SMALL as u128).pow(i as u32)))
+        .collect();
+
+    let should_equal_u0 =
+        LFDecompositionVerifier::<RqNTT, T>::recompose_u(&proof.u_s, &b_s)
+            .expect("Recomposing proof failed");
+
+    assert_eq!(should_equal_u0, lcccs.u);
 }
