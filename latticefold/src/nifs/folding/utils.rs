@@ -156,7 +156,14 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     )?;
 
     for i in 0..DP::K {
-        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
+        prepare_g2_i_mle_list(
+            &mut g,
+            DP::B_SMALL,
+            &f_hat_mles[i],
+            mu_s[i],
+            beta_eq_x.clone(),
+            &coeffs,
+        )?;
     }
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
     prepare_g1_and_3_k_mles_list(
@@ -169,7 +176,14 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     )?;
 
     for i in DP::K..2 * DP::K {
-        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
+        prepare_g2_i_mle_list(
+            &mut g,
+            DP::B_SMALL,
+            &f_hat_mles[i],
+            mu_s[i],
+            beta_eq_x.clone(),
+            &coeffs,
+        )?;
     }
 
     Ok(g)
@@ -313,6 +327,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
+    b: usize,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
     mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
@@ -321,13 +336,17 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.iter())
     {
-        let mut vec = vec![fi_hat_mle.clone()];
-        for c in coeffs.iter() {
-            let mut list = vec.clone();
-            list.push(beta_eq_x.clone());
-            g.add_mle_list(list, *c * mu)?;
-            vec.extend_from_slice(&[fi_hat_mle.clone(), fi_hat_mle.clone()]);
+        let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> = Vec::new();
+
+        for i in 1..b {
+            let i_hat = NTT::from(i as u128);
+            mle_list.push(RefCounter::from(fi_hat_mle.as_ref().clone() - i_hat));
+            mle_list.push(RefCounter::from(fi_hat_mle.as_ref().clone() + i_hat));
         }
+
+        mle_list.push(fi_hat_mle.clone());
+        mle_list.push(beta_eq_x.clone());
+        g.add_mle_list(mle_list, mu)?;
     }
 
     Ok(())
