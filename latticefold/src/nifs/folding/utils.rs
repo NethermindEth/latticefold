@@ -265,10 +265,9 @@ fn prepare_g1_i_mle_list<NTT: OverField>(
     alpha_i: NTT,
 ) -> Result<(), ArithErrors> {
     let mut mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
-    for (alpha, fi_hat_mle) in successors(Some(alpha_i), |alpha_power| Some(alpha_i * alpha_power))
-        .zip(fi_hat_mle_s.iter())
-    {
-        mle += (**fi_hat_mle).clone() * alpha;
+    for fi_hat_mle in fi_hat_mle_s.iter().rev() {
+        mle += fi_hat_mle.as_ref();
+        mle *= alpha_i;
     }
 
     g.add_mle_list(vec![r_i_eq.clone(), RefCounter::from(mle)], NTT::one())?;
@@ -305,8 +304,9 @@ fn prepare_g3_i_mle_list<NTT: OverField>(
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     let mut mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
-    for (zeta, M) in successors(Some(zeta_i), |x| Some(zeta_i * x)).zip(Mz_mles.iter()) {
-        mle += M.clone() * zeta;
+    for M in Mz_mles.iter().rev() {
+        mle += M;
+        mle *= zeta_i;
     }
     g.add_mle_list(vec![RefCounter::from(mle), r_i_eq.clone()], NTT::one())?;
     Ok(())
