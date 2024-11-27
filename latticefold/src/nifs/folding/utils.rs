@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
+use ark_ff::Zero;
 use ark_ff::{Field, PrimeField};
-use ark_ff::{One, Zero};
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 
@@ -23,7 +23,7 @@ use lattirust_poly::{
     mle::DenseMultilinearExtension,
     polynomials::{build_eq_x_r, VirtualPolynomial},
 };
-use lattirust_ring::{OverField, PolyRing};
+use lattirust_ring::OverField;
 
 pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
     fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
@@ -130,7 +130,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     let mut g = VirtualPolynomial::<NTT>::new(log_m);
 
     let beta_eq_x = build_eq_x_r(beta_s)?;
-    let coeffs = compute_coefficients(DP::B_SMALL as u128);
 
     let f_hat_mles: Vec<Vec<RefCounter<DenseMultilinearExtension<NTT>>>> = f_hat_mles
         .iter()
@@ -162,7 +161,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
             &f_hat_mles[i],
             mu_s[i],
             beta_eq_x.clone(),
-            &coeffs,
         )?;
     }
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
@@ -182,7 +180,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
             &f_hat_mles[i],
             mu_s[i],
             beta_eq_x.clone(),
-            &coeffs,
         )?;
     }
 
@@ -331,7 +328,6 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
     mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
-    coeffs: &[NTT],
 ) -> Result<(), ArithErrors> {
     for (mu, fi_hat_mle) in
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.iter())
@@ -350,69 +346,4 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     }
 
     Ok(())
-}
-
-fn compute_coefficients<R: OverField>(small_b: u128) -> Vec<R> {
-    let small_b = <<R as PolyRing>::BaseRing as Field>::BasePrimeField::from(small_b);
-    let mut coefficients = vec![<<R as PolyRing>::BaseRing as Field>::BasePrimeField::one()];
-
-    let mut root = <<R as PolyRing>::BaseRing as Field>::BasePrimeField::one();
-    while root != small_b {
-        coefficients.push(<<R as PolyRing>::BaseRing as Field>::BasePrimeField::zero());
-        for i in (1..coefficients.len()).rev() {
-            let (left, right) = coefficients.split_at_mut(i);
-            right[0] -= (root * root) * left[left.len() - 1];
-        }
-        root += <<R as PolyRing>::BaseRing as Field>::BasePrimeField::one();
-    }
-    coefficients
-        .into_iter()
-        .rev()
-        .map(|coeff| {
-            R::from_scalar(<<R as PolyRing>::BaseRing as Field>::from_base_prime_field(
-                coeff,
-            ))
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod test_utils {
-    use super::compute_coefficients;
-    use cyclotomic_rings::rings::GoldilocksRingNTT;
-    type R = GoldilocksRingNTT;
-
-    #[test]
-    fn test_compute_coefficients_b_equals_2() {
-        assert_eq!(
-            compute_coefficients::<R>(4u128),
-            vec![
-                -R::from(36u128),
-                R::from(49u128),
-                -R::from(14u128),
-                R::from(1u128)
-            ]
-        );
-    }
-
-    #[test]
-    fn test_compute_coefficients_b_equals_3() {
-        assert_eq!(
-            compute_coefficients::<R>(3u128),
-            vec![R::from(4u128), -R::from(5u128), R::from(1u128)]
-        );
-    }
-
-    #[test]
-    fn test_compute_coefficients_b_equals_4() {
-        assert_eq!(
-            compute_coefficients::<R>(4u128),
-            vec![
-                -R::from(36u128),
-                R::from(49u128),
-                -R::from(14u128),
-                R::from(1u128)
-            ]
-        );
-    }
 }
