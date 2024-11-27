@@ -178,3 +178,35 @@ fn test_recompose_v() {
         assert_eq!(should_equal_v0, cm_i_value);
     }
 }
+
+#[test]
+fn test_recompose_xw_and_h() {
+    type CS = GoldilocksChallengeSet;
+    type RqNTT = GoldilocksRingNTT;
+    type DP = GoldilocksDP;
+    type T = PoseidonTranscript<RqNTT, CS>;
+    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    const WIT_LEN: usize = 4;
+    const W: usize = WIT_LEN * DP::L;
+    const C: usize = 4;
+
+    let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+
+    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+        &lcccs,
+        &wit,
+        &mut prover_transcript,
+        &ccs,
+        &scheme,
+    )
+    .unwrap();
+
+    let b_s = Verifier::calculate_b_s::<DP>();
+
+    let (should_equal_xw, should_equal_h) =
+        Verifier::recompose_xw_and_h(&proof.x_s, &b_s).expect("Recomposing proof failed");
+
+    assert_eq!(should_equal_h, lcccs.h);
+    assert_eq!(should_equal_xw, lcccs.x_w);
+}
