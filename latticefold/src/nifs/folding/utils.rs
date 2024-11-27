@@ -147,9 +147,14 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
     )?;
+    prepare_g3_i_mle_list(
+        &mut g,
+        r_i_eq.clone(),
+        &Mz_mles[0..DP::K],
+        &zeta_s[0..DP::K],
+    )?;
     for i in 0..DP::K {
         prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
-        prepare_g3_i_mle_list(&mut g, &Mz_mles[i], zeta_s[i], r_i_eq.clone())?;
     }
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
     prepare_g1_k_mles_list(
@@ -158,9 +163,14 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
     )?;
+    prepare_g3_i_mle_list(
+        &mut g,
+        r_i_eq.clone(),
+        &Mz_mles[DP::K..2 * DP::K],
+        &zeta_s[DP::K..2 * DP::K],
+    )?;
     for i in DP::K..2 * DP::K {
         prepare_g2_i_mle_list(&mut g, &f_hat_mles[i], mu_s[i], beta_eq_x.clone(), &coeffs)?;
-        prepare_g3_i_mle_list(&mut g, &Mz_mles[i], zeta_s[i], r_i_eq.clone())?;
     }
 
     Ok(g)
@@ -315,16 +325,24 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
 
 fn prepare_g3_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    Mz_mles: &[DenseMultilinearExtension<NTT>],
-    zeta_i: NTT,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
+    Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
+    zeta_s: &[NTT],
 ) -> Result<(), ArithErrors> {
-    let mut mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
-    for M in Mz_mles.iter().rev() {
-        mle += M;
-        mle *= zeta_i;
+    let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
+
+    for (Mz_mle_s, zeta_i) in Mz_mles.iter().zip(zeta_s.iter()) {
+        let mut mle = DenseMultilinearExtension::zero();
+        for Mz_mle in Mz_mle_s.iter().rev() {
+            mle += Mz_mle;
+            mle *= *zeta_i;
+        }
+        combined_mle += mle;
     }
-    g.add_mle_list(vec![RefCounter::from(mle), r_i_eq.clone()], NTT::one())?;
+    g.add_mle_list(
+        vec![r_i_eq.clone(), RefCounter::from(combined_mle)],
+        NTT::one(),
+    )?;
     Ok(())
 }
 
