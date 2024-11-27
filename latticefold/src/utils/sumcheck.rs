@@ -61,7 +61,9 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         let mut verifier_msg = None;
         let mut prover_msgs = Vec::with_capacity(polynomial.aux_info.num_variables);
         for _ in 0..polynomial.aux_info.num_variables {
-            let prover_msg = IPForMLSumcheck::<R, T>::prove_round(&mut prover_state, &verifier_msg);
+            //let prover_msg = IPForMLSumcheck::<R, T>::prove_round(&mut prover_state, &verifier_msg);
+            let prover_msg =
+                IPForMLSumcheck::<R, T>::prove_round_jolt(&mut prover_state, &verifier_msg);
             transcript.absorb_slice(&prover_msg.evaluations);
             prover_msgs.push(prover_msg);
             let next_verifier_msg = IPForMLSumcheck::<R, T>::sample_round(transcript);
