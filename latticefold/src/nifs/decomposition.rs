@@ -43,7 +43,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     }
 
     fn commit_from_witnesses<const C: usize, const W: usize, P: DecompositionParams>(
-        wit_s: &Vec<Witness<NTT>>,
+        wit_s: &[Witness<NTT>],
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<Vec<Commitment<C, NTT>>, CommitmentError> {
         cfg_iter!(wit_s)
@@ -52,7 +52,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     }
 
     fn compute_v_s(
-        wit_s: &Vec<Witness<NTT>>,
+        wit_s: &[Witness<NTT>],
         mle_length: usize,
         point_r: &[NTT],
     ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
@@ -67,7 +67,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     }
 
     fn compute_u_s(
-        wit_s: &Vec<Witness<NTT>>,
+        wit_s: &[Witness<NTT>],
         M: &[SparseMatrix<NTT>],
         decomposed_statements: &[Vec<NTT>],
         point_r: &[NTT],
