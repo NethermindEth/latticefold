@@ -1,4 +1,5 @@
 use super::*;
+use crate::arith::utils::mat_vec_mul;
 use crate::decomposition_parameters::test_params::{StarkDP, DP};
 use crate::nifs::linearization::utils::SqueezeBeta;
 use crate::{
@@ -30,7 +31,7 @@ fn setup_test_environment<RqNTT: SuitableRing>(
     CCS<RqNTT>,
     AjtaiCommitmentScheme<C, W, RqNTT>,
 ) {
-    let ccs = get_test_ccs::<RqNTT>(W);
+    let ccs = get_test_ccs::<RqNTT>(W, DP::L);
     let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input.unwrap_or(rng.gen_range(0..64)));
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -149,18 +150,13 @@ fn test_compute_v() {
     // Compute actual v vector
     let (point_r, v, _) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles,
+            &wit, &point_r, &Mz_mles,
         )
         .unwrap();
 
     // Compute expected v vector (witness evaluations)
-    let expected_v: Vec<RqNTT> = cfg_iter!(wit.f_hat)
-        .map(|f_hat_row| {
-            DenseMultilinearExtension::from_slice(ccs.s, f_hat_row)
-                .evaluate(&point_r)
-                .expect("cannot end up here, because the sumcheck subroutine must yield a point of the length log m")
-        })
-        .collect();
+    let expected_v =
+        evaluate_mles::<RqNTT, _, _, LinearizationError<RqNTT>>(&wit.f_hat, &point_r).unwrap();
 
     // Validate
     assert_eq!(point_r.len(), ccs.s, "point_r length mismatch");
@@ -183,7 +179,7 @@ fn test_compute_u() {
     // Compute actual u vector
     let (point_r, _, u) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_evaluation_vectors(
-            &wit, &point_r, &ccs, &Mz_mles,
+            &wit, &point_r, &Mz_mles,
         )
         .unwrap();
 

@@ -14,6 +14,8 @@ pub enum LatticefoldError<R: Ring> {
     DecompositionError(#[from] DecompositionError),
     #[error("folding failed: {0}")]
     FoldingError(#[from] FoldingError<R>),
+    #[error("constraint system related error: {0}")]
+    ConstraintSystemError(#[from] CSError),
 }
 
 #[derive(Debug, Error)]
@@ -26,6 +28,8 @@ pub enum LinearizationError<R: Ring> {
     ConstraintSystemError(#[from] CSError),
     #[error("Arithmetic error: {0}")]
     ArithmeticError(#[from] ArithErrors),
+    #[error("mle evaluation failed: {0}")]
+    EvaluationError(#[from] MleEvaluationError),
 }
 
 #[derive(Debug, Error)]
@@ -34,12 +38,12 @@ pub enum DecompositionError {
     IncorrectLength,
     #[error("ajtai commitment error: {0}")]
     CommitmentError(#[from] CommitmentError),
-    #[error("failed to evaluate witness MLE")]
-    WitnessMleEvalFail,
     #[error("constraint system related error: {0}")]
     ConstraintSystemError(#[from] CSError),
     #[error("recomposing proof checked failed")]
     RecomposedError,
+    #[error("mle evaluation failed: {0}")]
+    EvaluationError(#[from] MleEvaluationError),
 }
 
 #[derive(Debug, Error)]
@@ -53,5 +57,13 @@ pub enum FoldingError<R: Ring> {
     #[error("virtual polynomial error: {0}")]
     ArithError(#[from] ArithErrors),
     #[error("mle evaluation failed: {0}")]
-    EvaluationError(String),
+    EvaluationError(#[from] MleEvaluationError),
+    #[error("sumcheck challenge point were not generate correctly")]
+    SumcheckChallengeError,
+}
+
+#[derive(Debug, Error)]
+pub enum MleEvaluationError {
+    #[error("lengths of evaluation point and evaluations are not consistent: 1 << {0} != {1}")]
+    IncorrectLength(usize, usize),
 }

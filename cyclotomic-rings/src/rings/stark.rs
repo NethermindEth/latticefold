@@ -26,6 +26,7 @@ impl SuitableRing for StarkRingNTT {
 
 pub struct StarkPoseidonConfig;
 
+#[derive(Clone)]
 pub struct StarkChallengeSet;
 
 /// Small challenges are the ring elements with coefficients in range [0; 2^8[.

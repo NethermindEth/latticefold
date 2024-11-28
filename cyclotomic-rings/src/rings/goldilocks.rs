@@ -25,6 +25,7 @@ impl SuitableRing for GoldilocksRingNTT {
 
 pub struct GoldilocksPoseidonConfig;
 
+#[derive(Clone)]
 pub struct GoldilocksChallengeSet;
 
 const MAX_COEFF: i16 = 32;

@@ -4,7 +4,7 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::OverField;
 
 use crate::{
-    arith::{Witness, CCCS, CCS, LCCCS},
+    arith::{error::CSError, Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     transcript::TranscriptWithShortChallenges,
@@ -16,10 +16,12 @@ use linearization::{
     LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
     LinearizationVerifier,
 };
+
 pub mod decomposition;
 pub mod error;
 pub mod folding;
 pub mod linearization;
+mod mle_helpers;
 
 /// `C` is the length of Ajtai commitment vectors.
 /// `NTT` is a cyclotomic ring in the NTT form.
@@ -59,6 +61,8 @@ impl<
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
+        sanity_check::<NTT, P>(ccs)?;
+
         let (linearized_cm_i, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
@@ -125,6 +129,8 @@ impl<
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<C, NTT>, LatticefoldError<NTT>> {
+        sanity_check::<NTT, P>(ccs)?;
+
         let linearized_cm_i = LFLinearizationVerifier::<_, T>::verify(
             cm_i,
             &proof.linearization_proof,
@@ -160,4 +166,14 @@ impl<
             ccs,
         )?)
     }
+}
+
+fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
+    ccs: &CCS<NTT>,
+) -> Result<(), LatticefoldError<NTT>> {
+    if ccs.m != usize::max((ccs.n - ccs.l - 1) * DP::L, ccs.m).next_power_of_two() {
+        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
+    }
+
+    Ok(())
 }

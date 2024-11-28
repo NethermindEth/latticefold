@@ -1,22 +1,19 @@
 #![allow(non_snake_case)]
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::cfg_iter;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
-use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::{cyclotomic_ring::CRT, OverField};
-use utils::get_alphas_betas_zetas_mus;
+use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
+use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
-    arith::{utils::mat_vec_mul, Instance, Witness, CCS, LCCCS},
+    arith::{error::CSError, Instance, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
-    utils::sumcheck,
 };
 
 use lattirust_poly::{
@@ -25,46 +22,111 @@ use lattirust_poly::{
 };
 use utils::*;
 
+use crate::commitment::Commitment;
+use crate::utils::sumcheck::prover::ProverState;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+#[cfg(test)]
+mod tests;
+
 mod utils;
+pub use structs::*;
 
-#[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct FoldingProof<NTT: OverField> {
-    // Step 2.
-    pub pointshift_sumcheck_proof: sumcheck::Proof<NTT>,
-    // Step 3
-    pub theta_s: Vec<Vec<NTT>>,
-    pub eta_s: Vec<Vec<NTT>>,
+mod structs;
+
+fn prepare_public_output<const C: usize, NTT: SuitableRing>(
+    r_0: Vec<NTT>,
+    v_0: Vec<NTT>,
+    cm_0: Commitment<C, NTT>,
+    u_0: Vec<NTT>,
+    x_0: Vec<NTT>,
+    h: NTT,
+) -> LCCCS<C, NTT> {
+    LCCCS {
+        r: r_0,
+        v: v_0,
+        cm: cm_0,
+        u: u_0,
+        x_w: x_0[0..x_0.len() - 1].to_vec(),
+        h,
+    }
 }
 
-pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
-    fn prove<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<NTT, T> {
+    fn setup_f_hat_mles(
+        log_m: usize,
         w_s: &[Witness<NTT>],
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+    ) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
+        w_s.iter()
+            .map(|w| to_mles::<_, _, FoldingError<NTT>>(log_m, &w.f_hat).unwrap())
+            .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>()
+    }
+
+    fn get_zis<const C: usize>(cm_i_s: &[LCCCS<C, NTT>], w_s: &[Witness<NTT>]) -> Vec<Vec<NTT>> {
+        cm_i_s
+            .iter()
+            .zip(w_s.iter())
+            .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
+            .collect::<Vec<_>>()
+    }
+
+    fn get_ris<const C: usize>(cm_i_s: &[LCCCS<C, NTT>]) -> Vec<Vec<NTT>> {
+        cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>()
+    }
+
+    fn calculate_Mz_mles(
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
-}
+        zis: &Vec<Vec<NTT>>,
+    ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, FoldingError<NTT>> {
+        cfg_iter!(zis)
+            .map(|zi| calculate_Mz_mles::<NTT, FoldingError<NTT>>(ccs, zi))
+            .collect::<Result<_, FoldingError<_>>>()
+    }
 
-pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
-        proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>>;
-}
+    fn get_sumcheck_randomness(sumcheck_prover_state: ProverState<NTT>) -> Vec<NTT> {
+        sumcheck_prover_state
+            .randomness
+            .into_iter()
+            .map(|x| x.into())
+            .collect::<Vec<NTT>>()
+    }
 
-pub struct LFFoldingProver<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
-}
+    fn get_thetas(
+        f_hat_mles: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
+        r_0: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, FoldingError<NTT>> {
+        let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
+            .map(|f_hat_row| evaluate_mles::<_, _, _, FoldingError<NTT>>(f_hat_row, r_0))
+            .collect::<Result<Vec<_>, _>>()?;
 
-pub struct LFFoldingVerifier<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
+        Ok(theta_s)
+    }
+
+    fn get_etas(
+        Mz_mles_vec: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
+        r_0: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, FoldingError<NTT>> {
+        let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
+            .map(|Mz_mles| evaluate_mles::<_, _, _, FoldingError<NTT>>(Mz_mles, r_0))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(eta_s)
+    }
+
+    fn compute_f_0(rho_s: &Vec<NTT::CoefficientRepresentation>, w_s: &[Witness<NTT>]) -> Vec<NTT> {
+        rho_s
+            .iter()
+            .zip(w_s)
+            .fold(vec![NTT::ZERO; w_s[0].f.len()], |acc, (&rho_i, w_i)| {
+                let rho_i: NTT = rho_i.crt();
+
+                acc.into_iter()
+                    .zip(w_i.f.iter())
+                    .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
+                    .collect()
+            })
+    }
 }
 
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT, T>
@@ -76,6 +138,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
+        sanity_check::<NTT, P>(ccs)?;
+
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
@@ -83,46 +147,17 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let log_m = ccs.s;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
-        let (alpha_s, beta_s, zeta_s, mu_s) =
-            get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
+        let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<P>(log_m);
 
         // Step 2: Compute g polynomial and sumcheck on it
         // Setup f_hat_mle for later evaluation of thetas
-        let f_hat_mles = w_s
-            .iter()
-            .map(|w| {
-                w.f_hat
-                    .iter()
-                    .map(|f_hat_row| {
-                        DenseMultilinearExtension::from_evaluations_slice(log_m, f_hat_row)
-                    })
-                    .collect()
-            })
-            .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>();
+        let f_hat_mles = Self::setup_f_hat_mles(log_m, w_s);
 
-        let zis = cm_i_s
-            .iter()
-            .zip(w_s.iter())
-            .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
-            .collect::<Vec<_>>();
-        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+        let zis = Self::get_zis(cm_i_s, w_s);
+        let ris = Self::get_ris(cm_i_s);
 
-        let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> = zis
-            .iter()
-            .map(|zi| {
-                let Mz_mle = ccs
-                    .M
-                    .iter()
-                    .map(|M| {
-                        Ok(DenseMultilinearExtension::from_slice(
-                            log_m,
-                            &mat_vec_mul(M, zi)?,
-                        ))
-                    })
-                    .collect::<Result<_, FoldingError<_>>>()?;
-                Ok(Mz_mle)
-            })
-            .collect::<Result<_, FoldingError<_>>>()?;
+        let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> =
+            Self::calculate_Mz_mles(ccs, &zis)?;
 
         let g = create_sumcheck_polynomial::<_, P>(
             log_m,
@@ -138,38 +173,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
 
-        let r_0 = prover_state
-            .randomness
-            .into_iter()
-            .map(|x| x.into())
-            .collect::<Vec<NTT>>();
+        let r_0 = Self::get_sumcheck_randomness(prover_state);
 
         // Step 3: Evaluate thetas and etas
-        let theta_s: Vec<Vec<NTT>> = cfg_iter!(f_hat_mles)
-            .map(|f_hat_row| {
-                f_hat_row
-                    .iter()
-                    .map(|f_hat_mle| {
-                        f_hat_mle
-                            .evaluate(&r_0)
-                            .ok_or(FoldingError::<NTT>::EvaluationError("f_hat".to_string()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let theta_s = Self::get_thetas(&f_hat_mles, &r_0)?;
+        let eta_s = Self::get_etas(&Mz_mles_vec, &r_0)?;
 
-        let eta_s: Vec<Vec<NTT>> = cfg_iter!(Mz_mles_vec)
-            .map(|Mz_mles| {
-                Mz_mles
-                    .iter()
-                    .map(|mle| {
-                        mle.evaluate(r_0.as_slice())
-                            .ok_or(FoldingError::<NTT>::EvaluationError("Mz".to_string()))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
+        // Absorb them into the transcript
         theta_s
             .iter()
             .for_each(|thetas| transcript.absorb_slice(thetas));
@@ -183,27 +193,10 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
-        let lcccs = LCCCS {
-            r: r_0,
-            v: v_0,
-            cm: cm_0,
-            u: u_0,
-            x_w: x_0[0..x_0.len() - 1].to_vec(),
-            h,
-        };
 
-        let f_0: Vec<NTT> =
-            rho_s
-                .iter()
-                .zip(w_s)
-                .fold(vec![NTT::ZERO; w_s[0].f.len()], |acc, (&rho_i, w_i)| {
-                    let rho_i: NTT = rho_i.crt();
+        let lcccs = prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h);
 
-                    acc.into_iter()
-                        .zip(w_i.f.iter())
-                        .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
-                        .collect()
-                });
+        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, w_s);
 
         let w_0 = Witness::from_f::<P>(f_0);
 
@@ -217,34 +210,58 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
-    for LFFoldingVerifier<NTT, T>
-{
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier<NTT, T> {
+    #[allow(clippy::too_many_arguments)]
+    fn verify_evaluation<const C: usize, P: DecompositionParams>(
+        alpha_s: &[NTT],
+        beta_s: &[NTT],
+        mu_s: &[NTT],
+        zeta_s: &[NTT],
+        r_0: &[NTT],
+        expected_evaluation: NTT,
         proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
-        if cm_i_s.len() != 2 * P::K {
-            return Err(FoldingError::IncorrectLength);
+        cm_i_s: &[LCCCS<C, NTT>],
+    ) -> Result<(), FoldingError<NTT>> {
+        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+
+        let e_asterisk = eq_eval(beta_s, r_0)?;
+        let e_s: Vec<NTT> = ris
+            .iter()
+            .map(|r_i: &Vec<NTT>| eq_eval(r_i, r_0))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let should_equal_s: NTT = compute_sumcheck_claim_expected_value::<NTT, P>(
+            alpha_s,
+            mu_s,
+            &proof.theta_s,
+            e_asterisk,
+            &e_s,
+            zeta_s,
+            &proof.eta_s,
+        );
+
+        if should_equal_s != expected_evaluation {
+            return Err(FoldingError::SumCheckError(SumCheckFailed(
+                should_equal_s,
+                expected_evaluation,
+            )));
         }
 
-        let log_m = ccs.s;
+        Ok(())
+    }
 
-        // Step 1: Generate alpha, zeta, mu, beta challenges
-        let (alpha_s, beta_s, zeta_s, mu_s) =
-            get_alphas_betas_zetas_mus::<_, _, P>(log_m, transcript);
-
-        let poly_info = VPAuxInfo::new(log_m, 2 * P::B_SMALL);
-
-        let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
+    fn calculate_claims<const C: usize>(
+        alpha_s: &[NTT],
+        zeta_s: &[NTT],
+        cm_i_s: &[LCCCS<C, NTT>],
+    ) -> (NTT, NTT) {
         let vs = cm_i_s
             .iter()
             .map(|cm_i| cm_i.v.clone())
             .collect::<Vec<Vec<NTT>>>();
         let us = cm_i_s.iter().map(|cm_i| cm_i.u.clone()).collect::<Vec<_>>();
 
+        // Calculate claim_g1
         let claim_g1: NTT = alpha_s
             .iter()
             .zip(vs.iter())
@@ -255,6 +272,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
                     .sum::<NTT>()
             })
             .sum();
+
+        // Calculate claim_g3
         let claim_g3: NTT = zeta_s
             .iter()
             .zip(us.iter())
@@ -266,13 +285,21 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             })
             .sum();
 
-        //Step 2: The sumcheck.
+        (claim_g1, claim_g3)
+    }
 
+    fn verify_sumcheck_proof(
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        poly_info: &VPAuxInfo<NTT>,
+        total_claim: NTT,
+        proof: &FoldingProof<NTT>,
+    ) -> Result<(Vec<NTT>, NTT), FoldingError<NTT>> {
+        //Step 2: The sumcheck.
         // Verify the sumcheck proof.
         let sub_claim = MLSumcheck::verify_as_subprotocol(
             transcript,
-            &poly_info,
-            claim_g1 + claim_g3,
+            poly_info,
+            total_claim,
             &proof.pointshift_sumcheck_proof,
         )?;
 
@@ -282,28 +309,44 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             .map(|x| x.into())
             .collect::<Vec<NTT>>();
 
-        let e_asterisk = eq_eval(&beta_s, &r_0)?;
-        let e_s: Vec<NTT> = ris
-            .iter()
-            .map(|r_i: &Vec<NTT>| eq_eval(r_i, &r_0))
-            .collect::<Result<Vec<_>, _>>()?;
+        Ok((r_0, sub_claim.expected_evaluation))
+    }
+}
 
-        let should_equal_s: NTT = compute_sumcheck_claim_expected_value::<NTT, P>(
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
+    for LFFoldingVerifier<NTT, T>
+{
+    fn verify<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        proof: &FoldingProof<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
+        sanity_check::<NTT, P>(ccs)?;
+
+        // Step 1: Generate alpha, zeta, mu, beta challenges and validate input
+        let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<P>(ccs.s);
+
+        // Calculate claims for sumcheck verification
+        let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
+
+        let poly_info = VPAuxInfo::new(ccs.s, 2 * P::B_SMALL);
+
+        //Step 2: The sumcheck.
+        let (r_0, expected_evaluation) =
+            Self::verify_sumcheck_proof(transcript, &poly_info, claim_g1 + claim_g3, proof)?;
+
+        // Verify evaluation claim
+        Self::verify_evaluation::<C, P>(
             &alpha_s,
+            &beta_s,
             &mu_s,
-            &proof.theta_s,
-            e_asterisk,
-            &e_s,
             &zeta_s,
-            &proof.eta_s,
-        );
-
-        if should_equal_s != sub_claim.expected_evaluation {
-            return Err(FoldingError::SumCheckError(SumCheckFailed(
-                should_equal_s,
-                sub_claim.expected_evaluation,
-            )));
-        }
+            &r_0,
+            expected_evaluation,
+            proof,
+            cm_i_s,
+        )?;
 
         // Step 5
         proof
@@ -323,720 +366,16 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         // Step 7: Compute f0 and Witness_0
 
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
-
-        Ok(LCCCS {
-            r: r_0,
-            v: v_0,
-            cm: cm_0,
-            u: u_0,
-            x_w: x_0[0..x_0.len() - 1].to_vec(),
-            h,
-        })
+        Ok(prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h))
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-    use ark_std::io::Cursor;
-
-    use crate::ark_base::*;
-    use crate::nifs::folding::FoldingProof;
-    use crate::{
-        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
-        commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::{test_params::DPL1, DecompositionParams},
-        nifs::{
-            decomposition::{
-                DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-                LFDecompositionVerifier,
-            },
-            folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
-            linearization::{
-                LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
-                LinearizationVerifier,
-            },
-        },
-        transcript::poseidon::PoseidonTranscript,
-    };
-    use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
-
-    // Boilerplate code to generate values needed for testing
-    type R = StarkRingNTT;
-    type CS = StarkChallengeSet;
-    type T = PoseidonTranscript<StarkRingNTT, CS>;
-
-    #[test]
-    fn test_folding() {
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-        let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &linearization_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
-
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-        let (lcccs, wit_s) = {
-            let mut lcccs = vec_lcccs.clone();
-            let mut lcccs_r = vec_lcccs;
-            lcccs.append(&mut lcccs_r);
-
-            let mut wit_s = vec_wit.clone();
-            let mut wit_s_r = vec_wit;
-            wit_s.append(&mut wit_s_r);
-
-            (lcccs, wit_s)
-        };
-        let (lcccs_prover, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &folding_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        assert_eq!(lcccs_prover, lcccs_verifier);
+fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
+    ccs: &CCS<NTT>,
+) -> Result<(), FoldingError<NTT>> {
+    if ccs.m != usize::max((ccs.n - ccs.l - 1) * DP::L, ccs.m).next_power_of_two() {
+        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
     }
 
-    #[test]
-    fn test_failing_folding_prover() {
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-        let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &linearization_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let (_, mut vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-                &lcccs,
-                &wit,
-                &mut prover_transcript,
-                &ccs,
-                &scheme,
-            )
-            .unwrap();
-
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        vec_wit[0] = Witness::<R>::from_w_ccs::<DPL1>(w_ccs);
-
-        let res = LFFoldingProver::<_, T>::prove::<4, DPL1>(
-            &vec_lcccs,
-            &vec_wit,
-            &mut prover_transcript,
-            &ccs,
-        );
-
-        assert!(res.is_err())
-    }
-
-    #[test]
-    fn test_folding_proof_serialization() {
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-        let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &linearization_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
-
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-        let (lcccs, wit_s) = {
-            let mut lcccs = vec_lcccs.clone();
-            let mut lcccs_r = vec_lcccs;
-            lcccs.append(&mut lcccs_r);
-
-            let mut wit_s = vec_wit.clone();
-            let mut wit_s_r = vec_wit;
-            wit_s.append(&mut wit_s_r);
-
-            (lcccs, wit_s)
-        };
-        let (_, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let mut serialized = Vec::new();
-        folding_proof
-            .serialize_with_mode(&mut serialized, Compress::Yes)
-            .expect("Failed to serialize proof");
-
-        let mut cursor = Cursor::new(&serialized);
-        assert_eq!(
-            folding_proof,
-            FoldingProof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
-                .expect("Failed to deserialize proof")
-        );
-    }
-}
-
-#[cfg(test)]
-mod tests_goldilocks {
-    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-    use ark_std::io::Cursor;
-
-    use crate::ark_base::*;
-    use crate::nifs::folding::FoldingProof;
-    use crate::{
-        arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
-        commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::{test_params::DPL1, DecompositionParams},
-        nifs::{
-            decomposition::{
-                DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-                LFDecompositionVerifier,
-            },
-            folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
-            linearization::{
-                LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
-                LinearizationVerifier,
-            },
-        },
-        transcript::poseidon::PoseidonTranscript,
-    };
-    use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
-
-    // Boilerplate code to generate values needed for testing
-    type R = GoldilocksRingNTT;
-    type CS = GoldilocksChallengeSet;
-    type T = PoseidonTranscript<GoldilocksRingNTT, CS>;
-
-    #[test]
-    fn test_folding() {
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-        let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &linearization_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
-
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-        let (lcccs, wit_s) = {
-            let mut lcccs = vec_lcccs.clone();
-            let mut lcccs_r = vec_lcccs;
-            lcccs.append(&mut lcccs_r);
-
-            let mut wit_s = vec_wit.clone();
-            let mut wit_s_r = vec_wit;
-            wit_s.append(&mut wit_s_r);
-
-            (lcccs, wit_s)
-        };
-        let (lcccs_prover, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs_verifier = LFFoldingVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &folding_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        assert_eq!(lcccs_prover, lcccs_verifier);
-    }
-
-    #[test]
-    fn test_failing_folding_prover() {
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-        let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs.clone());
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &linearization_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let (_, mut vec_wit, decomposition_proof) =
-            LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-                &lcccs,
-                &wit,
-                &mut prover_transcript,
-                &ccs,
-                &scheme,
-            )
-            .unwrap();
-
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        vec_wit[0] = Witness::<R>::from_w_ccs::<DPL1>(w_ccs);
-
-        let res = LFFoldingProver::<_, T>::prove::<4, DPL1>(
-            &vec_lcccs,
-            &vec_wit,
-            &mut prover_transcript,
-            &ccs,
-        );
-
-        assert!(res.is_err())
-    }
-
-    #[test]
-    fn test_folding_proof_serialization() {
-        const WIT_LEN: usize = 4; // 4 is the length of witness in this (Vitalik's) example
-        const W: usize = WIT_LEN * DPL1::L; // the number of columns of the Ajtai matrix
-
-        let ccs = get_test_ccs::<R>(W);
-        let (_, x_ccs, w_ccs) = get_test_z_split::<R>(3);
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-        let wit: Witness<R> = Witness::from_w_ccs::<DPL1>(w_ccs);
-        let cm_i: CCCS<4, R> = CCCS {
-            cm: wit.commit::<4, 4, DPL1>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let (_, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            &cm_i,
-            &linearization_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-
-        let (_, vec_wit, decomposition_proof) = LFDecompositionProver::<_, T>::prove::<4, 4, DPL1>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
-
-        let vec_lcccs = LFDecompositionVerifier::<_, T>::verify::<4, DPL1>(
-            &lcccs,
-            &decomposition_proof,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .unwrap();
-        let (lcccs, wit_s) = {
-            let mut lcccs = vec_lcccs.clone();
-            let mut lcccs_r = vec_lcccs;
-            lcccs.append(&mut lcccs_r);
-
-            let mut wit_s = vec_wit.clone();
-            let mut wit_s_r = vec_wit;
-            wit_s.append(&mut wit_s_r);
-
-            (lcccs, wit_s)
-        };
-        let (_, _, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<4, DPL1>(&lcccs, &wit_s, &mut prover_transcript, &ccs)
-                .unwrap();
-
-        let mut serialized = Vec::new();
-        folding_proof
-            .serialize_with_mode(&mut serialized, Compress::Yes)
-            .expect("Failed to serialize proof");
-
-        let mut cursor = Cursor::new(&serialized);
-        assert_eq!(
-            folding_proof,
-            FoldingProof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
-                .expect("Failed to deserialize proof")
-        );
-    }
-}
-
-#[cfg(test)]
-mod tests_stark {
-    use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-    use ark_std::io::Cursor;
-    use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
-
-    use crate::arith::tests::get_test_dummy_ccs;
-    use crate::ark_base::*;
-    use crate::nifs::folding::FoldingProof;
-    use crate::{
-        arith::r1cs::get_test_dummy_z_split,
-        nifs::{
-            decomposition::{
-                DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-                LFDecompositionVerifier,
-            },
-            folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
-            linearization::LinearizationProver,
-        },
-    };
-    use crate::{
-        arith::{Witness, CCCS},
-        commitment::AjtaiCommitmentScheme,
-        decomposition_parameters::{test_params::StarkFoldingDP, DecompositionParams},
-        nifs::linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationVerifier,
-        },
-        transcript::poseidon::PoseidonTranscript,
-    };
-    use cyclotomic_rings::rings::StarkChallengeSet;
-
-    #[test]
-    fn test_dummy_folding() {
-        #[cfg(feature = "dhat-heap")]
-        #[global_allocator]
-        static ALLOC: dhat::Alloc = dhat::Alloc;
-
-        type R = RqNTT;
-        type CS = StarkChallengeSet;
-        type T = PoseidonTranscript<R, CS>;
-
-        const C: usize = 15;
-        const X_LEN: usize = 1;
-        const WIT_LEN: usize = 512;
-        const W: usize = WIT_LEN * StarkFoldingDP::L; // the number of columns of the Ajtai matrix
-        let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
-
-        #[cfg(feature = "dhat-heap")]
-        let _profiler = dhat::Profiler::new_heap(); // Move a round to measure specific parts
-
-        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
-        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-
-        let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
-
-        let cm_i = CCCS {
-            cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let linearization_proof =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
-
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let linearization_verification = LFLinearizationVerifier::<_, T>::verify(
-            &cm_i,
-            &linearization_proof
-                .expect("Linearization proof generation error")
-                .1,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .expect("Linearization Verification error");
-
-        let lcccs = linearization_verification;
-
-        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, StarkFoldingDP>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        );
-
-        let decomposition_proof =
-            decomposition_prover.expect("Decomposition proof generation error");
-
-        let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, StarkFoldingDP>(
-            &lcccs,
-            &decomposition_proof.2,
-            &mut verifier_transcript,
-            &ccs,
-        );
-
-        let lcccs = decomposition_verification.expect("Decomposition Verification error");
-
-        #[cfg(feature = "dhat-heap")]
-        let _profiler = dhat::Profiler::new_heap();
-        let (lcccs, wit_s) = {
-            let mut lcccs = lcccs.clone();
-            let mut lcccs_r = lcccs.clone();
-            lcccs.append(&mut lcccs_r);
-
-            let mut wit_s = decomposition_proof.1.clone();
-            let mut wit_s_r = decomposition_proof.1;
-            wit_s.append(&mut wit_s_r);
-
-            (lcccs, wit_s)
-        };
-        let folding_prover = LFFoldingProver::<_, T>::prove::<C, StarkFoldingDP>(
-            &lcccs,
-            &wit_s,
-            &mut prover_transcript,
-            &ccs,
-        );
-
-        let folding_proof = folding_prover.expect("Folding proof generation error");
-
-        let folding_verification = LFFoldingVerifier::<_, T>::verify::<C, StarkFoldingDP>(
-            &lcccs,
-            &folding_proof.2,
-            &mut verifier_transcript,
-            &ccs,
-        );
-
-        folding_verification.expect("Folding Verification error");
-    }
-
-    #[test]
-    fn test_folding_proof_serialization() {
-        type R = RqNTT;
-        type CS = StarkChallengeSet;
-        type T = PoseidonTranscript<R, CS>;
-
-        const C: usize = 15;
-        const X_LEN: usize = 1;
-        const WIT_LEN: usize = 512;
-        const W: usize = WIT_LEN * StarkFoldingDP::L; // the number of columns of the Ajtai matrix
-        let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
-
-        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
-        let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
-        let mut rng = ark_std::test_rng();
-        let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-
-        let wit = Witness::from_w_ccs::<StarkFoldingDP>(w_ccs);
-
-        let cm_i = CCCS {
-            cm: wit.commit::<C, W, StarkFoldingDP>(&scheme).unwrap(),
-            x_ccs,
-        };
-
-        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let linearization_proof =
-            LFLinearizationProver::<_, T>::prove(&cm_i, &wit, &mut prover_transcript, &ccs);
-
-        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-
-        let linearization_verification = LFLinearizationVerifier::<_, T>::verify(
-            &cm_i,
-            &linearization_proof
-                .expect("Linearization proof generation error")
-                .1,
-            &mut verifier_transcript,
-            &ccs,
-        )
-        .expect("Linearization Verification error");
-
-        let lcccs = linearization_verification;
-
-        let decomposition_prover = LFDecompositionProver::<_, T>::prove::<W, C, StarkFoldingDP>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        );
-
-        let decomposition_proof =
-            decomposition_prover.expect("Decomposition proof generation error");
-
-        let decomposition_verification = LFDecompositionVerifier::<_, T>::verify::<C, StarkFoldingDP>(
-            &lcccs,
-            &decomposition_proof.2,
-            &mut verifier_transcript,
-            &ccs,
-        );
-
-        let lcccs = decomposition_verification.expect("Decomposition Verification error");
-
-        let (lcccs, wit_s) = {
-            let mut lcccs = lcccs.clone();
-            let mut lcccs_r = lcccs.clone();
-            lcccs.append(&mut lcccs_r);
-
-            let mut wit_s = decomposition_proof.1.clone();
-            let mut wit_s_r = decomposition_proof.1;
-            wit_s.append(&mut wit_s_r);
-
-            (lcccs, wit_s)
-        };
-        let folding_prover = LFFoldingProver::<_, T>::prove::<C, StarkFoldingDP>(
-            &lcccs,
-            &wit_s,
-            &mut prover_transcript,
-            &ccs,
-        );
-
-        let folding_proof = folding_prover.expect("Folding proof generation error").2;
-
-        let mut serialized = Vec::new();
-        folding_proof
-            .serialize_with_mode(&mut serialized, Compress::Yes)
-            .expect("Failed to serialize proof");
-
-        let mut cursor = Cursor::new(&serialized);
-        assert_eq!(
-            folding_proof,
-            FoldingProof::deserialize_with_mode(&mut cursor, Compress::Yes, Validate::Yes)
-                .expect("Failed to deserialize proof")
-        );
-    }
+    Ok(())
 }

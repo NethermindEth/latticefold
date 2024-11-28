@@ -2,7 +2,9 @@ use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRi
 use lattirust_poly::mle::DenseMultilinearExtension;
 use rand::Rng;
 
+use crate::nifs::error::DecompositionError;
 use crate::nifs::linearization::utils::compute_u;
+use crate::nifs::mle_helpers::{evaluate_mles, to_mles};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
     ark_base::*,
@@ -29,7 +31,7 @@ where
 {
     let mut rng = ark_std::test_rng();
     let input: usize = rng.gen_range(1..101);
-    let ccs = get_test_ccs(W);
+    let ccs = get_test_ccs(W, DP::L);
     let log_m = ccs.s;
 
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
@@ -53,14 +55,12 @@ where
         .collect();
 
     let u = compute_u(&Mz_mles, &r).unwrap();
-    let v = (wit.f_hat)
-        .iter()
-        .map(|f_hat_row| {
-            DenseMultilinearExtension::from_slice(log_m, f_hat_row)
-                .evaluate(&r)
-                .unwrap()
-        })
-        .collect();
+
+    let v = evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, DecompositionError>(
+        &to_mles::<_, _, DecompositionError>(log_m, &wit.f_hat).unwrap(),
+        &r,
+    )
+    .unwrap();
 
     let lcccs = LCCCS {
         r,
@@ -141,7 +141,7 @@ mod stark {
         const WIT_LEN: usize = 2048;
         const W: usize = WIT_LEN * DP::L; // the number of columns of the Ajtai matrix
         let r1cs_rows_size = X_LEN + WIT_LEN + 1; // Let's have a square matrix
-        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size);
+        let ccs = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(r1cs_rows_size, DP::L);
         let (_, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
         let mut rng = ark_std::test_rng();
         let scheme = AjtaiCommitmentScheme::rand(&mut rng);
