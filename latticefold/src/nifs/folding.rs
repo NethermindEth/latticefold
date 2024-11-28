@@ -87,8 +87,9 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             ccs.s,
             ccs.M.iter().map(|M| {
                 for i in 0..z.len() {
+                    z[i] = NTT::zero();
                     for (z_i, zeta) in cfg_iter!(zis).zip(cfg_iter!(zetas)) {
-                        z[i] = z_i[i] * zeta;
+                        z[i] += z_i[i] * zeta;
                     }
                 }
                 for i in 0..zetas.len() {
