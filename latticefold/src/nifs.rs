@@ -22,6 +22,9 @@ pub mod error;
 pub mod folding;
 pub mod linearization;
 
+#[cfg(test)]
+mod tests;
+
 /// `C` is the length of Ajtai commitment vectors.
 /// `NTT` is a cyclotomic ring in the NTT form.
 #[derive(Clone)]
