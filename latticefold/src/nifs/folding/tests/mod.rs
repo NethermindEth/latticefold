@@ -334,110 +334,121 @@ fn evaluate_g_3<R: SuitableRing>(
     evaluation * eq_eval(x, r_i).unwrap()
 }
 
-#[ignore]
-#[test]
-fn test_sumcheck_polynomial() {
-    type RqNTT = StarkRqNTT;
-    type DP = StarkFoldingDP;
-    let mut rng = test_rng();
-    let m = 8;
-    let log_m = 3;
-    let t = 3;
-    let d_over_t = 3;
+// #[ignore]
+// #[test]
+// fn test_sumcheck_polynomial() {
+//     type RqNTT = StarkRqNTT;
+//     type DP = StarkFoldingDP;
+//     let mut rng = test_rng();
+//     let m = 8;
+//     let log_m = 3;
+//     let t = 3;
+//     let d_over_t = 3;
 
-    // Challenges
-    let alpha_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
-    let mu_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
-    let zeta_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
-    let beta_s: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
-    let r_s: Vec<Vec<RqNTT>> = (0..2 * DP::K)
-        .map(|_| (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect())
-        .collect();
+//     // Challenges
+//     let alpha_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
+//     let mu_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
+//     let zeta_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
+//     let beta_s: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
+//     let r_s: Vec<Vec<RqNTT>> = (0..2 * DP::K)
+//         .map(|_| (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect())
+//         .collect();
 
-    // Witnesses and extensions
-    let f_hats: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
-        .map(|_| {
-            (0..d_over_t)
-                .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
-                .collect()
-        })
-        .collect();
-    let f_hat_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = f_hats
-        .into_iter()
-        .map(|mz_list| {
-            mz_list
-                .into_iter()
-                .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
-                .collect()
-        })
-        .collect();
-    let mz_s: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
-        .map(|_| {
-            (0..t)
-                .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
-                .collect()
-        })
-        .collect();
-    let mz_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = mz_s
-        .into_iter()
-        .map(|mz_list| {
-            mz_list
-                .into_iter()
-                .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
-                .collect()
-        })
-        .collect();
+//     // Witnesses and extensions
+//     let f_hats: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
+//         .map(|_| {
+//             (0..d_over_t)
+//                 .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
+//                 .collect()
+//         })
+//         .collect();
+//     let f_hat_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = f_hats
+//         .into_iter()
+//         .map(|mz_list| {
+//             mz_list
+//                 .into_iter()
+//                 .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
+//                 .collect()
+//         })
+//         .collect();
+//     let mz_s: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
+//         .map(|_| {
+//             (0..t)
+//                 .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
+//                 .collect()
+//         })
+//         .collect();
+//     let mz_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = mz_s
+//         .into_iter()
+//         .map(|mz_list| {
+//             mz_list
+//                 .into_iter()
+//                 .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
+//                 .collect()
+//         })
+//         .collect();
+//     let prechallenged_Ms_1 =
+//         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+//             ccs,
+//             &zis[0..P::K],
+//             &zeta_s[0..P::K],
+//         )?;
+//     let prechallenged_Ms_2 =
+//         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+//             ccs,
+//             &zis[P::K..2 * P::K],
+//             &zeta_s[P::K..2 * P::K],
+//         )?;
+//     let g = create_sumcheck_polynomial::<RqNTT, DP>(
+//         log_m,
+//         &f_hat_mles,
+//         &alpha_s,
+//         &mz_mles,
+//         &zeta_s,
+//         &r_s,
+//         &beta_s,
+//         &mu_s,
+//     )
+//     .unwrap();
+//     #[allow(clippy::too_many_arguments)]
+//     fn evaluate_poly(
+//         x: &[RqNTT],
+//         f_hat_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
+//         alpha_s: &[RqNTT],
+//         Mz_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
+//         zeta_s: &[RqNTT],
+//         r_s: &[Vec<RqNTT>],
+//         beta_s: &[RqNTT],
+//         mu_s: &[RqNTT],
+//     ) -> RqNTT {
+//         (0..2 * DP::K)
+//             .map(|i| {
+//                 let mut summand = RqNTT::zero();
+//                 summand += evaluate_g_1(x, &f_hat_mles[i], &r_s[i], alpha_s[i]);
+//                 summand += evaluate_g_2(x, &f_hat_mles[i], DP::B_SMALL, beta_s, mu_s[i]);
+//                 summand += evaluate_g_3(x, &Mz_mles[i], &r_s[i], &zeta_s[i]);
+//                 summand
+//             })
+//             .sum()
+//     }
 
-    let g = create_sumcheck_polynomial::<RqNTT, DP>(
-        log_m,
-        &f_hat_mles,
-        &alpha_s,
-        &mz_mles,
-        &zeta_s,
-        &r_s,
-        &beta_s,
-        &mu_s,
-    )
-    .unwrap();
-    #[allow(clippy::too_many_arguments)]
-    fn evaluate_poly(
-        x: &[RqNTT],
-        f_hat_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
-        alpha_s: &[RqNTT],
-        Mz_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
-        zeta_s: &[RqNTT],
-        r_s: &[Vec<RqNTT>],
-        beta_s: &[RqNTT],
-        mu_s: &[RqNTT],
-    ) -> RqNTT {
-        (0..2 * DP::K)
-            .map(|i| {
-                let mut summand = RqNTT::zero();
-                summand += evaluate_g_1(x, &f_hat_mles[i], &r_s[i], alpha_s[i]);
-                summand += evaluate_g_2(x, &f_hat_mles[i], DP::B_SMALL, beta_s, mu_s[i]);
-                summand += evaluate_g_3(x, &Mz_mles[i], &r_s[i], &zeta_s[i]);
-                summand
-            })
-            .sum()
-    }
-
-    for _ in 0..20 {
-        let point: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
-        assert_eq!(
-            g.evaluate(&point).unwrap(),
-            evaluate_poly(
-                &point,
-                &f_hat_mles,
-                &alpha_s,
-                &mz_mles,
-                &zeta_s,
-                &r_s,
-                &beta_s,
-                &mu_s
-            )
-        )
-    }
-}
+//     for _ in 0..20 {
+//         let point: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
+//         assert_eq!(
+//             g.evaluate(&point).unwrap(),
+//             evaluate_poly(
+//                 &point,
+//                 &f_hat_mles,
+//                 &alpha_s,
+//                 &mz_mles,
+//                 &zeta_s,
+//                 &r_s,
+//                 &beta_s,
+//                 &mu_s
+//             )
+//         )
+//     }
+// }
 
 #[test]
 fn test_get_sumcheck_randomness() {
@@ -457,12 +468,27 @@ fn test_get_sumcheck_randomness() {
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
+
+    let prechallenged_Ms_1 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[0..DP::K],
+            &zeta_s[0..DP::K],
+        )
+        .unwrap();
+    let prechallenged_Ms_2 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[DP::K..2 * DP::K],
+            &zeta_s[DP::K..2 * DP::K],
+        )
+        .unwrap();
     let g = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
-        &Mz_mles,
-        &zeta_s,
+        &prechallenged_Ms_1,
+        &prechallenged_Ms_2,
         &ris,
         &beta_s,
         &mu_s,
@@ -502,17 +528,33 @@ fn test_get_thetas() {
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
+
+    let prechallenged_Ms_1 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[0..DP::K],
+            &zeta_s[0..DP::K],
+        )
+        .unwrap();
+    let prechallenged_Ms_2 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[DP::K..2 * DP::K],
+            &zeta_s[DP::K..2 * DP::K],
+        )
+        .unwrap();
     let g = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
-        &Mz_mles,
-        &zeta_s,
+        &prechallenged_Ms_1,
+        &prechallenged_Ms_2,
         &ris,
         &beta_s,
         &mu_s,
     )
     .unwrap();
+
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
@@ -559,17 +601,33 @@ fn test_get_etas() {
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
+
+    let prechallenged_Ms_1 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[0..DP::K],
+            &zeta_s[0..DP::K],
+        )
+        .unwrap();
+    let prechallenged_Ms_2 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[DP::K..2 * DP::K],
+            &zeta_s[DP::K..2 * DP::K],
+        )
+        .unwrap();
     let g = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
-        &Mz_mles,
-        &zeta_s,
+        &prechallenged_Ms_1,
+        &prechallenged_Ms_2,
         &ris,
         &beta_s,
         &mu_s,
     )
     .unwrap();
+
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
@@ -644,17 +702,33 @@ fn test_prepare_public_output() {
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
+
+    let prechallenged_Ms_1 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[0..DP::K],
+            &zeta_s[0..DP::K],
+        )
+        .unwrap();
+    let prechallenged_Ms_2 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[DP::K..2 * DP::K],
+            &zeta_s[DP::K..2 * DP::K],
+        )
+        .unwrap();
     let g = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
-        &Mz_mles,
-        &zeta_s,
+        &prechallenged_Ms_1,
+        &prechallenged_Ms_2,
         &ris,
         &beta_s,
         &mu_s,
     )
     .unwrap();
+
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
@@ -711,17 +785,33 @@ fn test_compute_f_0() {
     let Mz_mles =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
             .unwrap();
+
+    let prechallenged_Ms_1 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[0..DP::K],
+            &zeta_s[0..DP::K],
+        )
+        .unwrap();
+    let prechallenged_Ms_2 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
+            &ccs,
+            &zis[DP::K..2 * DP::K],
+            &zeta_s[DP::K..2 * DP::K],
+        )
+        .unwrap();
     let g = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
-        &Mz_mles,
-        &zeta_s,
+        &prechallenged_Ms_1,
+        &prechallenged_Ms_2,
         &ris,
         &beta_s,
         &mu_s,
     )
     .unwrap();
+
     let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,

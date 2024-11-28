@@ -101,16 +101,14 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     log_m: usize,
     f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     alpha_s: &[NTT],
-    Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-    zeta_s: &[NTT],
+    challenged_Ms_1: &[DenseMultilinearExtension<NTT>],
+    challenged_Ms_2: &[DenseMultilinearExtension<NTT>],
     r_s: &[Vec<NTT>],
     beta_s: &[NTT],
     mu_s: &[NTT],
 ) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
     if alpha_s.len() != 2 * DP::K
         || f_hat_mles.len() != 2 * DP::K
-        || Mz_mles.len() != 2 * DP::K
-        || zeta_s.len() != 2 * DP::K
         || r_s.len() != 2 * DP::K
         || beta_s.len() != log_m
         || mu_s.len() != 2 * DP::K
@@ -150,8 +148,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         r_i_eq.clone(),
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
-        &Mz_mles[0..DP::K],
-        &zeta_s[0..DP::K],
+        &challenged_Ms_1,
     )?;
 
     for i in 0..DP::K {
@@ -169,8 +166,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         r_i_eq.clone(),
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
-        &Mz_mles[DP::K..2 * DP::K],
-        &zeta_s[DP::K..2 * DP::K],
+        &challenged_Ms_2,
     )?;
 
     for i in DP::K..2 * DP::K {
@@ -293,8 +289,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
-    Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-    zeta_s: &[NTT],
+    challened_Ms: &[DenseMultilinearExtension<NTT>],
 ) -> Result<(), ArithErrors> {
     let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
 
@@ -307,13 +302,8 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
         combined_mle += mle;
     }
 
-    for (Mz_mle_s, zeta_i) in Mz_mles.iter().zip(zeta_s.iter()) {
-        let mut mle = DenseMultilinearExtension::zero();
-        for Mz_mle in Mz_mle_s.iter().rev() {
-            mle += Mz_mle;
-            mle *= *zeta_i;
-        }
-        combined_mle += mle;
+    for M in challened_Ms.iter() {
+        combined_mle += M;
     }
     g.add_mle_list(
         vec![r_i_eq.clone(), RefCounter::from(combined_mle)],
