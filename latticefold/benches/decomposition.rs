@@ -6,8 +6,8 @@ use criterion::{
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{
-        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet,
-        GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
+        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT,
+        GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
 use std::{fmt::Debug, time::Duration};

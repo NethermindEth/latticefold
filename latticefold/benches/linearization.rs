@@ -6,7 +6,8 @@ use criterion::{
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{
-        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
+        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT,
+        GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
 use std::time::Duration;
@@ -192,7 +193,6 @@ macro_rules! run_single_frog_benchmark {
         }
     };
 }
-
 
 fn benchmarks_main(c: &mut Criterion) {
     // Babybear
