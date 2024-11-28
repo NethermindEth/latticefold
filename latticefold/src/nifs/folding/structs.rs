@@ -7,6 +7,7 @@ use crate::utils::sumcheck;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
@@ -24,6 +25,7 @@ pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>
         w_s: &[Witness<NTT>],
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
+        mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
 }
 

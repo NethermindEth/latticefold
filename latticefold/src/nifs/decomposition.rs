@@ -66,13 +66,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
             .collect::<Result<Vec<_>, _>>()
     }
 
-    fn compute_u_s(
+    fn compute_mz_mles(
         wit_s: &Vec<Witness<NTT>>,
         M: &[SparseMatrix<NTT>],
         decomposed_statements: &[Vec<NTT>],
-        point_r: &[NTT],
         num_mle_vars: usize,
-    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+    ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, DecompositionError> {
         cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
@@ -91,9 +90,21 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
                     cfg_iter!(M).map(|M| mat_vec_mul(M, &z)),
                 )?;
 
+                Ok(mles)
+            })
+            .collect::<Result<Vec<Vec<_>>, DecompositionError>>()
+    }
+
+    fn compute_u_s(
+        mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
+
+        point_r: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+        cfg_iter!(mz_mles)
+            .map(|mles| {
                 let u_s_for_i =
                     evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
-                        &mles, point_r,
+                        mles, point_r,
                     )?;
 
                 Ok(u_s_for_i)
@@ -112,6 +123,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<
         (
+            Vec<Vec<DenseMultilinearExtension<NTT>>>,
             Vec<LCCCS<C, NTT>>,
             Vec<Witness<NTT>>,
             DecompositionProof<C, NTT>,
@@ -129,7 +141,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &cm_i.r)?;
 
-        let u_s = Self::compute_u_s(&wit_s, &ccs.M, &x_s, &cm_i.r, log_m)?;
+        let mz_mles = Self::compute_mz_mles(&wit_s, &ccs.M, &x_s, log_m)?;
+
+        let u_s = Self::compute_u_s(&mz_mles, &cm_i.r)?;
 
         let mut lcccs_s = Vec::with_capacity(P::K);
 
@@ -155,7 +169,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let proof = DecompositionProof { u_s, v_s, x_s, y_s };
 
-        Ok((lcccs_s, wit_s, proof))
+        Ok((mz_mles, lcccs_s, wit_s, proof))
     }
 }
 

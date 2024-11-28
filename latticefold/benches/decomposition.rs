@@ -82,11 +82,13 @@ fn prover_decomposition_benchmark<
         &(lcccs, wit, ccs),
         |b, (lcccs, wit, ccs)| {
             b.iter(|| {
-                let (_, _, _) = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<
+                let (_, _, _, _) = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<
                     W,
                     C,
                     P,
-                >(lcccs, wit, &mut prover_transcript, ccs, scheme)
+                >(
+                    lcccs, wit, &mut prover_transcript, ccs, scheme
+                )
                 .unwrap();
             })
         },
@@ -130,7 +132,7 @@ fn verifier_decomposition_benchmark<
     .unwrap();
 
     println!("prove decomposition");
-    let (_, _, decomposition_proof) =
+    let (_, _, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
             &lcccs,
             wit,

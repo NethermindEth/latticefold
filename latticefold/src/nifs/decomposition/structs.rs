@@ -1,6 +1,7 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::{OverField, Ring};
 
 use crate::{
@@ -31,6 +32,7 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<
         (
+            Vec<Vec<DenseMultilinearExtension<NTT>>>,
             Vec<LCCCS<C, NTT>>,
             Vec<Witness<NTT>>,
             DecompositionProof<C, NTT>,

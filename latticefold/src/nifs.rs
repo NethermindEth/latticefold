@@ -65,9 +65,9 @@ impl<
 
         let (linearized_cm_i, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
-        let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
+        let (mz_mles_l, decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
-        let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
+        let (mz_mles_r, decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(
                 &linearized_cm_i,
                 w_i,
@@ -76,7 +76,7 @@ impl<
                 scheme,
             )?;
 
-        let (lcccs, wit_s) = {
+        let (mz_mles, lcccs, wit_s) = {
             let mut lcccs = decomposed_lcccs_l;
             let mut lcccs_r = decomposed_lcccs_r;
             lcccs.append(&mut lcccs_r);
@@ -85,11 +85,14 @@ impl<
             let mut wit_s_r = decomposed_wit_r;
             wit_s.append(&mut wit_s_r);
 
-            (lcccs, wit_s)
+            let mut mz_mles = mz_mles_l;
+            let mut mz_mles_r = mz_mles_r;
+            mz_mles.append(&mut mz_mles_r);
+            (mz_mles, lcccs, wit_s)
         };
 
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs)?;
+            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs, &mz_mles)?;
 
         Ok((
             folded_lcccs,

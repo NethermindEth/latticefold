@@ -90,7 +90,7 @@ where
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, decomposition_proof) =
+    let (_, _, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, DP>(
             &lcccs,
             &wit,
