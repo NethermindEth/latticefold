@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use std::time::Instant;
+
 use ark_std::cfg_iter;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;

@@ -91,6 +91,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
     ) -> ProverMsg<R> {
+
         if let Some(msg) = v_msg {
             if prover_state.round == 0 {
                 panic!("first round should be prover first.");
@@ -107,11 +108,14 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             panic!("verifier message is empty");
         }
 
+        println!("Round: {:?}", prover_state.round);
         prover_state.round += 1;
 
         if prover_state.round > prover_state.num_vars {
             panic!("Prover is not active");
         }
+        let g2_result = Self::prove_round_g2(prover_state, v_msg);
+        println!("G1 and G3 Round");
 
         let i = prover_state.round;
         let nv = prover_state.num_vars;
@@ -127,10 +131,12 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
                 // In effect, this fold is essentially doing simply:
                 // for b in 0..1 << (nv - i) {
+                println!("Variable in fold: {:?}", b);
                 let index = b << 1;
                 for (coefficient, products) in &prover_state.list_of_products {
                     product.fill(*coefficient);
                     for &jth_product in products {
+                        println!("Product being multiplied in sumcheck: {:?}", jth_product);
                         let table = &prover_state.flattened_ml_extensions[jth_product];
                         let mut start = table[index];
                         let step = table[index + 1] - start;
@@ -162,6 +168,91 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             },
         );
 
+        assert_eq!(
+            g2_result.evaluations,
+            products_sum,
+            "G2 result and products sum are not equal"
+        );
+        ProverMsg {
+            evaluations: products_sum,
+        }
+    }
+    pub fn prove_round_g2(
+        prover_state: &mut ProverState<R>,
+        v_msg: &Option<VerifierMsg<R>>,
+    ) -> ProverMsg<R> {
+        println!("G2 round");
+        println!("Round: {:?}", prover_state.round);
+
+        if prover_state.round > prover_state.num_vars {
+            panic!("Prover is not active");
+        }
+
+        let i = prover_state.round;
+        let nv = prover_state.num_vars;
+        let degree = prover_state.max_multiplicands; // the degree of univariate polynomial sent by prover at this round
+
+        #[cfg(not(feature = "parallel"))]
+        let zeros = (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
+        #[cfg(feature = "parallel")]
+        let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
+
+        // generate sum
+        let fold_result =
+            cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
+                // In effect, this fold is essentially doing simply:
+                // for b in 0..1 << (nv - i) {
+                println!("Variable in fold: {:?}", b);
+                let index = b << 1;
+                for (coefficient, products) in &prover_state.list_of_products {
+                    product.fill(*coefficient);
+                    for &jth_product in products {
+                        println!("Product being multiplied in sumcheck: {:?}", jth_product);
+                        let table = &prover_state.flattened_ml_extensions[jth_product];
+                        let mut start = table[index];
+                        let step = table[index + 1] - start;
+                        if jth_product == 0 {
+                            println!("Start: {}", start);
+                            println!("Step: {}", step);
+                        }
+                        for p in product.iter_mut() {
+                            *p *= start;
+                            start += step;
+                        }
+                    }
+                    for (sum, prod) in products_sum.iter_mut().zip(product.iter()) {
+                        *sum += prod;
+                    }
+                    let eq_beta_x = prover_state.flattened_ml_extensions[0].clone();
+                    let start = eq_beta_x[index];
+                    let step = eq_beta_x[index + 1] - start;
+                    println!("Eq beta x start: {}", start);
+                    println!("Eq beta x step: {}", step);
+                }
+                (products_sum, product)
+            });
+
+        #[cfg(not(feature = "parallel"))]
+        let products_sum = fold_result.0;
+
+        // When rayon is used, the `fold` operation results in a iterator of `Vec<F>` rather than a single `Vec<F>`. In this case, we simply need to sum them.
+        #[cfg(feature = "parallel")]
+        let products_sum = fold_result.map(|scratch| scratch.0).reduce(
+            || vec![R::zero(); degree + 1],
+            |mut overall_products_sum, sublist_sum| {
+                overall_products_sum
+                    .iter_mut()
+                    .zip(sublist_sum.iter())
+                    .for_each(|(f, s)| *f += s);
+                overall_products_sum
+            },
+        );
+
+        // assert_eq!(
+        //     g2_result.evaluations,
+        //     products_sum,
+        //     "G2 result and products sum are not equal"
+        // );
         ProverMsg {
             evaluations: products_sum,
         }
