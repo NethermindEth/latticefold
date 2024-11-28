@@ -1,9 +1,5 @@
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::polynomials::VirtualPolynomial;
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{eq_eval, VPAuxInfo},
-};
+use lattirust_poly::mle::DenseMultilinearExtension;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
@@ -12,7 +8,11 @@ use crate::ark_base::*;
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
+    utils::sumcheck::{
+        virtual_polynomial::{eq_eval, VPAuxInfo, VirtualPolynomial},
+        MLSumcheck,
+        SumCheckError::SumCheckFailed,
+    },
 };
 
 use crate::arith::Instance;

@@ -10,7 +10,10 @@ use crate::nifs::folding::{
 };
 use crate::nifs::FoldingProof;
 use crate::transcript::{Transcript, TranscriptWithShortChallenges};
-use crate::utils::sumcheck::MLSumcheck;
+use crate::utils::sumcheck::{
+    virtual_polynomial::{eq_eval, VPAuxInfo},
+    MLSumcheck,
+};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
@@ -36,7 +39,6 @@ use cyclotomic_rings::rings::{
     StarkChallengeSet, SuitableRing,
 };
 use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_poly::polynomials::{eq_eval, VPAuxInfo};
 use lattirust_ring::cyclotomic_ring::models::{
     frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
     stark_prime::RqNTT as StarkRqNTT,

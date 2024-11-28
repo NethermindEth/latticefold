@@ -2,13 +2,10 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
-use lattirust_poly::{
-    mle::MultilinearExtension,
-    polynomials::{DenseMultilinearExtension, VirtualPolynomial},
-};
+use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
 use lattirust_ring::{OverField, Ring};
 
-use super::{verifier::VerifierMsg, IPForMLSumcheck};
+use super::{verifier::VerifierMsg, virtual_polynomial::VirtualPolynomial, IPForMLSumcheck};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -21,7 +18,6 @@ pub struct ProverMsg<R1: Ring> {
 }
 
 /// Prover State
-#[derive(Clone)]
 pub struct ProverState<R: OverField> {
     /// sampled randomness given by the verifier
     pub randomness: Vec<R::BaseRing>,
@@ -36,6 +32,24 @@ pub struct ProverState<R: OverField> {
     pub max_multiplicands: usize,
     /// The current round number
     pub round: usize,
+    #[cfg(feature = "jolt-sumcheck")]
+    /// MLE combinator function
+    pub comb_fn: Box<dyn Fn(&ProverState<R>, &[R]) -> R + Sync + Send>,
+}
+
+#[cfg(feature = "jolt-sumcheck")]
+impl<R: OverField> ProverState<R> {
+    pub fn product_combine(state: &ProverState<R>, vals: &[R]) -> R {
+        let mut sum = R::zero();
+        for (coefficient, products) in &state.list_of_products {
+            let mut prod = *coefficient;
+            for j in products {
+                prod *= vals[*j];
+            }
+            sum += prod;
+        }
+        sum
+    }
 }
 
 impl<R: OverField, T> IPForMLSumcheck<R, T> {
@@ -52,6 +66,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
     ///
     /// $$\sum_{i=0}^{n}C_i\cdot\prod_{j=0}^{m_i}P_{ij}$$
     ///
+    #[cfg(not(feature = "jolt-sumcheck"))]
     pub fn prover_init(polynomial: &VirtualPolynomial<R>) -> ProverState<R> {
         if polynomial.aux_info.num_variables == 0 {
             panic!("Attempt to prove a constant.")
@@ -72,6 +87,32 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         }
     }
 
+    #[cfg(feature = "jolt-sumcheck")]
+    pub fn prover_init(
+        polynomial: &VirtualPolynomial<R>,
+        comb_fn: Option<Box<dyn Fn(&ProverState<R>, &[R]) -> R + Sync + Send>>,
+    ) -> ProverState<R> {
+        if polynomial.aux_info.num_variables == 0 {
+            panic!("Attempt to prove a constant.")
+        }
+
+        // create a deep copy of all unique MLExtensions
+        let flattened_ml_extensions = ark_std::cfg_iter!(polynomial.flattened_ml_extensions)
+            .map(|x| x.as_ref().clone())
+            .collect();
+
+        ProverState {
+            randomness: Vec::with_capacity(polynomial.aux_info.num_variables),
+            list_of_products: polynomial.products.clone(),
+            flattened_ml_extensions,
+            num_vars: polynomial.aux_info.num_variables,
+            max_multiplicands: polynomial.aux_info.max_degree,
+            round: 0,
+            comb_fn: comb_fn.unwrap_or(Box::new(ProverState::product_combine)),
+        }
+    }
+
+    #[cfg(not(feature = "jolt-sumcheck"))]
     /// receive message from verifier, generate prover message, and proceed to next round
     ///
     /// Main algorithm used is from section 3.2 of [XZZPS19](https://eprint.iacr.org/2019/317.pdf#subsection.3.2).
@@ -155,7 +196,8 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         }
     }
 
-    pub fn prove_round_jolt(
+    #[cfg(feature = "jolt-sumcheck")]
+    pub fn prove_round(
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
     ) -> ProverMsg<R> {
@@ -187,27 +229,17 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
 
         let polys = &prover_state.flattened_ml_extensions;
 
-        let comb_func = |vals: &[R]| -> R {
-            let mut sum = R::zero();
-            for (coefficient, products) in &prover_state.list_of_products {
-                let mut prod = *coefficient;
-                for j in products {
-                    prod *= vals[*j];
-                }
-                sum += prod;
-            }
-            sum
-        };
+        let comb_fn = &prover_state.comb_fn;
 
         let iter = cfg_into_iter!(0..1 << (nv - i)).map(|b| {
             let index = b << 1;
             let mut eval_points = vec![R::zero(); degree + 1];
 
             let params_zero: Vec<R> = polys.iter().map(|poly| poly[index]).collect();
-            eval_points[0] += comb_func(&params_zero);
+            eval_points[0] += comb_fn(prover_state, &params_zero);
 
             let params_one: Vec<R> = polys.iter().map(|poly| poly[index + 1]).collect();
-            eval_points[1] += comb_func(&params_one);
+            eval_points[1] += comb_fn(prover_state, &params_one);
 
             let steps: Vec<R> = params_one
                 .iter()
@@ -222,7 +254,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                     poly_evals[poly_i] = current[poly_i] + steps[poly_i];
                 }
 
-                *eval_point += comb_func(&poly_evals);
+                *eval_point += comb_fn(prover_state, &poly_evals);
                 ark_std::mem::swap(&mut current, &mut poly_evals);
             }
 

@@ -10,16 +10,17 @@ use super::error::FoldingError;
 use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
+use crate::utils::sumcheck::{
+    virtual_polynomial::{eq_eval, VPAuxInfo},
+    MLSumcheck,
+    SumCheckError::SumCheckFailed,
+};
 use crate::{
     arith::{error::CSError, Instance, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
 };
 
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{eq_eval, VPAuxInfo},
-};
+use lattirust_poly::mle::DenseMultilinearExtension;
 use utils::*;
 
 use crate::commitment::Commitment;

@@ -14,15 +14,13 @@ use crate::ark_base::*;
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
+use crate::utils::sumcheck::virtual_polynomial::{build_eq_x_r, VirtualPolynomial};
 use crate::{
     arith::{CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
     transcript::Transcript,
 };
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, VirtualPolynomial},
-};
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 
 pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {

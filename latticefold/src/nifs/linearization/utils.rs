@@ -1,14 +1,12 @@
 use crate::{ark_base::Vec, nifs::mle_helpers::evaluate_mles};
 use ark_ff::PrimeField;
 
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, RefCounter, VirtualPolynomial},
-};
+use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
 use lattirust_ring::OverField;
 
 use crate::nifs::error::LinearizationError;
 use crate::transcript::Transcript;
+use crate::utils::sumcheck::virtual_polynomial::{build_eq_x_r, VirtualPolynomial};
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 
