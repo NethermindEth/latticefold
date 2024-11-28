@@ -15,6 +15,9 @@ use crate::{
     },
 };
 
+#[cfg(feature = "jolt-sumcheck")]
+use crate::utils::sumcheck::prover::ProverState;
+
 use crate::arith::Instance;
 use crate::nifs::linearization::utils::SqueezeBeta;
 use crate::utils::sumcheck::Proof;
@@ -53,7 +56,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         g: &VirtualPolynomial<NTT>,
         transcript: &mut impl Transcript<NTT>,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
-        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, g);
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
+            transcript,
+            g,
+            #[cfg(feature = "jolt-sumcheck")]
+            ProverState::combine_product,
+        );
         let point_r = prover_state
             .randomness
             .into_iter()

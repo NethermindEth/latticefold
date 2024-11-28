@@ -32,14 +32,11 @@ pub struct ProverState<R: OverField> {
     pub max_multiplicands: usize,
     /// The current round number
     pub round: usize,
-    #[cfg(feature = "jolt-sumcheck")]
-    /// MLE combinator function
-    pub comb_fn: Box<dyn Fn(&ProverState<R>, &[R]) -> R + Sync + Send>,
 }
 
 #[cfg(feature = "jolt-sumcheck")]
 impl<R: OverField> ProverState<R> {
-    pub fn product_combine(state: &ProverState<R>, vals: &[R]) -> R {
+    pub fn combine_product(state: &ProverState<R>, vals: &[R]) -> R {
         let mut sum = R::zero();
         for (coefficient, products) in &state.list_of_products {
             let mut prod = *coefficient;
@@ -66,7 +63,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
     ///
     /// $$\sum_{i=0}^{n}C_i\cdot\prod_{j=0}^{m_i}P_{ij}$$
     ///
-    #[cfg(not(feature = "jolt-sumcheck"))]
     pub fn prover_init(polynomial: &VirtualPolynomial<R>) -> ProverState<R> {
         if polynomial.aux_info.num_variables == 0 {
             panic!("Attempt to prove a constant.")
@@ -84,31 +80,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             num_vars: polynomial.aux_info.num_variables,
             max_multiplicands: polynomial.aux_info.max_degree,
             round: 0,
-        }
-    }
-
-    #[cfg(feature = "jolt-sumcheck")]
-    pub fn prover_init(
-        polynomial: &VirtualPolynomial<R>,
-        comb_fn: Option<Box<dyn Fn(&ProverState<R>, &[R]) -> R + Sync + Send>>,
-    ) -> ProverState<R> {
-        if polynomial.aux_info.num_variables == 0 {
-            panic!("Attempt to prove a constant.")
-        }
-
-        // create a deep copy of all unique MLExtensions
-        let flattened_ml_extensions = ark_std::cfg_iter!(polynomial.flattened_ml_extensions)
-            .map(|x| x.as_ref().clone())
-            .collect();
-
-        ProverState {
-            randomness: Vec::with_capacity(polynomial.aux_info.num_variables),
-            list_of_products: polynomial.products.clone(),
-            flattened_ml_extensions,
-            num_vars: polynomial.aux_info.num_variables,
-            max_multiplicands: polynomial.aux_info.max_degree,
-            round: 0,
-            comb_fn: comb_fn.unwrap_or(Box::new(ProverState::product_combine)),
         }
     }
 
@@ -200,6 +171,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
     pub fn prove_round(
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
+        comb_fn: impl Fn(&ProverState<R>, &[R]) -> R + Sync + Send,
     ) -> ProverMsg<R> {
         if let Some(msg) = v_msg {
             if prover_state.round == 0 {
@@ -228,8 +200,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let degree = prover_state.max_multiplicands;
 
         let polys = &prover_state.flattened_ml_extensions;
-
-        let comb_fn = &prover_state.comb_fn;
 
         let iter = cfg_into_iter!(0..1 << (nv - i)).map(|b| {
             let index = b << 1;

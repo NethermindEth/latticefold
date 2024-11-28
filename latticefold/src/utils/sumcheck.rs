@@ -55,18 +55,21 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     pub fn prove_as_subprotocol(
         transcript: &mut T,
         polynomial: &VirtualPolynomial<R>,
+        #[cfg(feature = "jolt-sumcheck")] comb_fn: impl Fn(&ProverState<R>, &[R]) -> R + Sync + Send,
     ) -> (Proof<R>, ProverState<R>) {
         // TODO: return this back
         // transcript.absorb(&polynomial.info());
 
-        #[cfg(not(feature = "jolt-sumcheck"))]
         let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(polynomial);
-        #[cfg(feature = "jolt-sumcheck")]
-        let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(polynomial, None);
         let mut verifier_msg = None;
         let mut prover_msgs = Vec::with_capacity(polynomial.aux_info.num_variables);
         for _ in 0..polynomial.aux_info.num_variables {
-            let prover_msg = IPForMLSumcheck::<R, T>::prove_round(&mut prover_state, &verifier_msg);
+            let prover_msg = IPForMLSumcheck::<R, T>::prove_round(
+                &mut prover_state,
+                &verifier_msg,
+                #[cfg(feature = "jolt-sumcheck")]
+                &comb_fn,
+            );
             transcript.absorb_slice(&prover_msg.evaluations);
             prover_msgs.push(prover_msg);
             let next_verifier_msg = IPForMLSumcheck::<R, T>::sample_round(transcript);
@@ -119,6 +122,9 @@ mod tests {
     use cyclotomic_rings::rings::SuitableRing;
     use rand::Rng;
 
+    #[cfg(feature = "jolt-sumcheck")]
+    use crate::utils::sumcheck::prover::ProverState;
+
     fn generate_sumcheck_proof<R, CS>(
         mut rng: &mut (impl Rng + Sized),
     ) -> (VirtualPolynomial<R>, R, Proof<R>)
@@ -130,7 +136,12 @@ mod tests {
 
         let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
 
-        let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
+        let (proof, _) = MLSumcheck::prove_as_subprotocol(
+            &mut transcript,
+            &poly,
+            #[cfg(feature = "jolt-sumcheck")]
+            ProverState::combine_product,
+        );
         (poly, sum, proof)
     }
 
@@ -184,7 +195,12 @@ mod tests {
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
 
             let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly);
+            let (proof, _) = MLSumcheck::prove_as_subprotocol(
+                &mut transcript,
+                &poly,
+                #[cfg(feature = "jolt-sumcheck")]
+                ProverState::combine_product,
+            );
 
             let not_sum = poly
                 .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])

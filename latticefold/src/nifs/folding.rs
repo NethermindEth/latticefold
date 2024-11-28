@@ -172,7 +172,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         )?;
 
         // Step 5: Run sum check prover
-        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, &g);
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
+            transcript,
+            &g,
+            #[cfg(feature = "jolt-sumcheck")]
+            ProverState::combine_product,
+        );
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
 
