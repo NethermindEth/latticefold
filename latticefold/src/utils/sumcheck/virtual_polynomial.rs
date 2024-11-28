@@ -202,14 +202,13 @@ impl<R: Ring> VirtualPolynomial<R> {
         let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(&mle);
 
         // check if this mle already exists in the virtual polynomial
-        let mle_index = match self.raw_pointers_lookup_table.get(&mle_ptr) {
-            Some(&p) => p,
-            None => {
-                self.raw_pointers_lookup_table
-                    .insert(mle_ptr, self.flattened_ml_extensions.len());
-                self.flattened_ml_extensions.push(mle);
-                self.flattened_ml_extensions.len() - 1
-            }
+        let mle_index = if let Some(&p) = self.raw_pointers_lookup_table.get(&mle_ptr) {
+            p
+        } else {
+            self.raw_pointers_lookup_table
+                .insert(mle_ptr, self.flattened_ml_extensions.len());
+            self.flattened_ml_extensions.push(mle);
+            self.flattened_ml_extensions.len() - 1
         };
 
         for (prod_coef, indices) in self.products.iter_mut() {
