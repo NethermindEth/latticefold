@@ -133,6 +133,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                 // for b in 0..1 << (nv - i) {
                 println!("Variable in fold: {:?}", b);
                 let index = b << 1;
+
                 for (coefficient, products) in &prover_state.list_of_products {
                     product.fill(*coefficient);
                     for &jth_product in products {
@@ -204,17 +205,28 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                 // for b in 0..1 << (nv - i) {
                 println!("Variable in fold: {:?}", b);
                 let index = b << 1;
-                for (coefficient, products) in &prover_state.list_of_products {
+                let (products_with_zero, products_without_zero): (Vec<_>, Vec<_>) = 
+                    prover_state.list_of_products.iter().partition(|(_, products)| products.contains(&0));
+
+                // Process products with zero
+                for (coefficient, products) in &products_with_zero {
+                    println!("Test Products with zero: {}", products.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" "));
                     product.fill(*coefficient);
+                    let eq_beta_x = prover_state.flattened_ml_extensions[0].clone();
+                    let mut start = eq_beta_x[index];
+                    let step = eq_beta_x[index + 1] - start;
+                    for p in product.iter_mut() {
+                        *p *= start;
+                        start += step;
+                    }
                     for &jth_product in products {
+                        if jth_product == 0 {
+                            continue;
+                        }
                         println!("Product being multiplied in sumcheck: {:?}", jth_product);
                         let table = &prover_state.flattened_ml_extensions[jth_product];
                         let mut start = table[index];
                         let step = table[index + 1] - start;
-                        if jth_product == 0 {
-                            println!("Start: {}", start);
-                            println!("Step: {}", step);
-                        }
                         for p in product.iter_mut() {
                             *p *= start;
                             start += step;
@@ -223,11 +235,25 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                     for (sum, prod) in products_sum.iter_mut().zip(product.iter()) {
                         *sum += prod;
                     }
-                    let eq_beta_x = prover_state.flattened_ml_extensions[0].clone();
-                    let start = eq_beta_x[index];
-                    let step = eq_beta_x[index + 1] - start;
-                    println!("Eq beta x start: {}", start);
-                    println!("Eq beta x step: {}", step);
+                }
+
+                // Process products without zero
+                for (coefficient, products) in &products_without_zero {
+                    println!("Test Products without zero: {}", products.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" "));
+                    product.fill(*coefficient);
+                    for &jth_product in products {
+                        println!("Product being multiplied in sumcheck: {:?}", jth_product);
+                        let table = &prover_state.flattened_ml_extensions[jth_product];
+                        let mut start = table[index];
+                        let step = table[index + 1] - start;
+                        for p in product.iter_mut() {
+                            *p *= start;
+                            start += step;
+                        }
+                    }
+                    for (sum, prod) in products_sum.iter_mut().zip(product.iter()) {
+                        *sum += prod;
+                    }
                 }
                 (products_sum, product)
             });

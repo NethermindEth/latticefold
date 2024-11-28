@@ -166,10 +166,10 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         )?;
         let products_added = g.products.len() - num_products_before;
         total_products += products_added;
-        // println!(
-        //     "First half: Round {} added {} products. Total products: {}",
-        //     i, products_added, total_products
-        // );
+        println!(
+            "First half: Round {} added {} products. Total products: {}",
+            i, products_added, total_products
+        );
     }
     // println!(
     //     "Total g2 first half flattened mles: {:?}",
@@ -185,7 +185,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     //     &zeta_s[DP::K..2 * DP::K],
     // )?;
 
-    let total_flattened_ml_extensions_second_half = g.flattened_ml_extensions.len();
+    // let total_flattened_ml_extensions_second_half = g.flattened_ml_extensions.len();
     // for i in DP::K..2 * DP::K {
     //     let num_products_before = g.products.len();
     //     prepare_g2_i_mle_list(
