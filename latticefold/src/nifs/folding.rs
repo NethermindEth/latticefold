@@ -8,6 +8,7 @@ use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
 use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
+use crate::arith::utils::mat_vec_mul;
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
@@ -73,6 +74,32 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
 
     fn get_ris<const C: usize>(cm_i_s: &[LCCCS<C, NTT>]) -> Vec<Vec<NTT>> {
         cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>()
+    }
+
+    fn calculate_challenged_mz_mles(
+        ccs: &CCS<NTT>,
+        zis: &Vec<Vec<NTT>>,
+        zeta_s: &Vec<NTT>,
+    ) -> Result<Vec<DenseMultilinearExtension<NTT>>, FoldingError<NTT>> {
+        let mut z: Vec<NTT> = vec![NTT::zero(); zis[0].len()];
+        let mut zetas = zeta_s.clone();
+        ccs.M
+            .iter()
+            .map(|M| {
+                for i in 0..z.len() {
+                    for (z_i, zeta) in cfg_iter!(zis).zip(cfg_iter!(zetas)) {
+                        z[i] = z_i[i] * zeta;
+                    }
+                }
+                for i in 0..zetas.len() {
+                    zetas[i] *= zeta_s[i];
+                }
+                Ok(DenseMultilinearExtension::from_evaluations_slice(
+                    ccs.s,
+                    &mat_vec_mul(&M, &z)?,
+                ))
+            })
+            .collect::<Result<_, FoldingError<_>>>()
     }
 
     fn calculate_Mz_mles(
