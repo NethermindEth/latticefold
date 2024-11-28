@@ -29,14 +29,14 @@ use crate::{
 };
 use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-use ark_std::{io::Cursor, iter::successors, test_rng, UniformRand};
+use ark_std::{io::Cursor, test_rng};
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
     BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
     StarkChallengeSet, SuitableRing,
 };
 use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_poly::polynomials::{eq_eval, VPAuxInfo};
+use lattirust_poly::polynomials::VPAuxInfo;
 use lattirust_ring::cyclotomic_ring::models::{
     frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
     stark_prime::RqNTT as StarkRqNTT,
@@ -281,175 +281,6 @@ fn test_calculate_mz_mles() {
     );
 }
 
-fn evaluate_g_1<R: SuitableRing>(
-    x: &[R],
-    f_i: &[DenseMultilinearExtension<R>],
-    r_i: &[R],
-    coeff: R,
-) -> R {
-    let mut res = R::zero();
-    for (coeff, f) in successors(Some(coeff), |x| Some(coeff * *x)).zip(f_i.iter()) {
-        res += eq_eval(r_i, x).unwrap() * f.evaluate(x).unwrap() * coeff
-    }
-    res
-}
-
-fn evaluate_g_2<R: SuitableRing>(
-    x: &[R],
-    fi_hat_mle_s: &[DenseMultilinearExtension<R>],
-    b: usize,
-    beta: &[R],
-    mu_i: R,
-) -> R {
-    let mut evaluation = R::zero();
-    for (mu, f_i) in
-        successors(Some(mu_i), |mu_power| Some(mu_i * *mu_power)).zip(fi_hat_mle_s.iter())
-    {
-        let mut evaluation_j = R::one();
-        for i in 1..b {
-            let i_hat = R::from(i as u128);
-
-            evaluation_j *= f_i.evaluate(x).unwrap() - i_hat;
-            evaluation_j *= f_i.evaluate(x).unwrap() + i_hat;
-        }
-        evaluation_j *= f_i.evaluate(x).unwrap();
-        evaluation_j *= eq_eval(beta, x).unwrap();
-        evaluation_j *= mu;
-        evaluation += evaluation_j;
-    }
-    evaluation
-}
-
-fn evaluate_g_3<R: SuitableRing>(
-    x: &[R],
-    mz_mles: &[DenseMultilinearExtension<R>],
-    r_i: &[R],
-    zeta_i: &R,
-) -> R {
-    let mut evaluation = R::zero();
-
-    for (zeta, M) in successors(Some(*zeta_i), |y| Some(*zeta_i * *y)).zip(mz_mles.iter()) {
-        evaluation += zeta * M.evaluate(x).unwrap();
-    }
-    evaluation * eq_eval(x, r_i).unwrap()
-}
-
-// #[ignore]
-// #[test]
-// fn test_sumcheck_polynomial() {
-//     type RqNTT = StarkRqNTT;
-//     type DP = StarkFoldingDP;
-//     let mut rng = test_rng();
-//     let m = 8;
-//     let log_m = 3;
-//     let t = 3;
-//     let d_over_t = 3;
-
-//     // Challenges
-//     let alpha_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
-//     let mu_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
-//     let zeta_s: Vec<RqNTT> = (0..2 * DP::K).map(|_| RqNTT::rand(&mut rng)).collect();
-//     let beta_s: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
-//     let r_s: Vec<Vec<RqNTT>> = (0..2 * DP::K)
-//         .map(|_| (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect())
-//         .collect();
-
-//     // Witnesses and extensions
-//     let f_hats: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
-//         .map(|_| {
-//             (0..d_over_t)
-//                 .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
-//                 .collect()
-//         })
-//         .collect();
-//     let f_hat_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = f_hats
-//         .into_iter()
-//         .map(|mz_list| {
-//             mz_list
-//                 .into_iter()
-//                 .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
-//                 .collect()
-//         })
-//         .collect();
-//     let mz_s: Vec<Vec<Vec<RqNTT>>> = (0..2 * DP::K)
-//         .map(|_| {
-//             (0..t)
-//                 .map(|_| (0..m).map(|_| RqNTT::rand(&mut rng)).collect())
-//                 .collect()
-//         })
-//         .collect();
-//     let mz_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>> = mz_s
-//         .into_iter()
-//         .map(|mz_list| {
-//             mz_list
-//                 .into_iter()
-//                 .map(|m_z| DenseMultilinearExtension::from_evaluations_vec(log_m, m_z))
-//                 .collect()
-//         })
-//         .collect();
-//     let prechallenged_Ms_1 =
-//         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-//             ccs,
-//             &zis[0..P::K],
-//             &zeta_s[0..P::K],
-//         )?;
-//     let prechallenged_Ms_2 =
-//         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-//             ccs,
-//             &zis[P::K..2 * P::K],
-//             &zeta_s[P::K..2 * P::K],
-//         )?;
-//     let g = create_sumcheck_polynomial::<RqNTT, DP>(
-//         log_m,
-//         &f_hat_mles,
-//         &alpha_s,
-//         &mz_mles,
-//         &zeta_s,
-//         &r_s,
-//         &beta_s,
-//         &mu_s,
-//     )
-//     .unwrap();
-//     #[allow(clippy::too_many_arguments)]
-//     fn evaluate_poly(
-//         x: &[RqNTT],
-//         f_hat_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
-//         alpha_s: &[RqNTT],
-//         Mz_mles: &[Vec<DenseMultilinearExtension<RqNTT>>],
-//         zeta_s: &[RqNTT],
-//         r_s: &[Vec<RqNTT>],
-//         beta_s: &[RqNTT],
-//         mu_s: &[RqNTT],
-//     ) -> RqNTT {
-//         (0..2 * DP::K)
-//             .map(|i| {
-//                 let mut summand = RqNTT::zero();
-//                 summand += evaluate_g_1(x, &f_hat_mles[i], &r_s[i], alpha_s[i]);
-//                 summand += evaluate_g_2(x, &f_hat_mles[i], DP::B_SMALL, beta_s, mu_s[i]);
-//                 summand += evaluate_g_3(x, &Mz_mles[i], &r_s[i], &zeta_s[i]);
-//                 summand
-//             })
-//             .sum()
-//     }
-
-//     for _ in 0..20 {
-//         let point: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
-//         assert_eq!(
-//             g.evaluate(&point).unwrap(),
-//             evaluate_poly(
-//                 &point,
-//                 &f_hat_mles,
-//                 &alpha_s,
-//                 &mz_mles,
-//                 &zeta_s,
-//                 &r_s,
-//                 &beta_s,
-//                 &mu_s
-//             )
-//         )
-//     }
-// }
-
 #[test]
 fn test_get_sumcheck_randomness() {
     type RqNTT = BabyBearRingNTT;
@@ -465,9 +296,6 @@ fn test_get_sumcheck_randomness() {
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
-    let Mz_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
-            .unwrap();
 
     let prechallenged_Ms_1 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
@@ -525,9 +353,6 @@ fn test_get_thetas() {
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
     let zis = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_zis(&lccs, &wit_s);
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
-    let Mz_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_Mz_mles(&ccs, &zis)
-            .unwrap();
 
     let prechallenged_Ms_1 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
