@@ -17,20 +17,29 @@ use lattirust_ring::OverField;
 ///
 /// # Members
 ///
-/// * linearization_sumcheck - A list of on-interactive sumcheck prover messages
-/// * v - The MLE of f_hat evaluated at the sumcheck challenge point
-/// * u - The MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$ evaluated at sumcheck challenge point
+/// * `linearization_sumcheck` - A list of non-interactive sumcheck prover messages.
+/// * `v` - The MLE of `wit.f_hat` evaluated at the sumcheck challenge point.
+/// * `u` - The MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$ evaluated at sumcheck challenge point.
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LinearizationProof<NTT: OverField> {
     /// A list of non-interactive sumcheck prover messages.  
     ///
     /// Sent in step 2 of linearization subprotocol.  
     pub linearization_sumcheck: sumcheck::Proof<NTT>,
-    /// The evaluations of MLE's of the rows of $\hat{\mathbf{f}}$-matrices of the witness at the sumcheck challenge point
+    /// The evaluations of MLE's of the rows of $\hat{\mathbf{f}}$-matrices of the witness at the sumcheck challenge point, i.e.
+    ///
+    /// $$
+    /// \text{v[i]}= \text{mle}[\text{wit.f\\_hat[i]}] (\mathbf{r}).
+    /// $$
     ///
     /// Sent in the step 3 of linearization subprotocol.
     pub v: Vec<NTT>,
-    /// The evaluations of MLE's of ${ M_j \mathbf{z} \mid j = 1, 2, \dots, t }$ at evaluated at sumcheck challenge point.
+    /// The evaluations of MLE's of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$ at evaluated at the sumcheck challenge point, i.e.
+    ///
+    /// $$
+    /// \text{u[j]} =  \sum\_{\vec{\mathbf{b}} \in \\{0,1\\}^{\log n\_c}}
+    /// \text{mle}[\text{ccs.M[j]}](\vec{\mathbf{x}}, \vec{\mathbf{b}}) \cdot \text{mle}\[\mathbf{z}\](\vec{\mathbf{b}}).
+    /// $$
     ///
     /// Sent in the step 3 of linearization subprotocol.
     pub u: Vec<NTT>,
@@ -52,12 +61,11 @@ pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
     /// On success, returns a tuple `(LCCCS<C, NTT>, LinearizationProof<NTT>)` where:
     ///   * `LCCCS<C, NTT>` is a linearized version of the CCS witness commitment.
     ///   * `LinearizationProof<NTT>` is a proof that the linearization subprotocol was executed correctly.
-
     ///
     /// # Errors
     ///
     /// Returns an error if asked to evaluate MLEs with incorrect number of variables
-    /// 
+    ///
     fn prove<const C: usize>(
         cm_i: &CCCS<C, NTT>,
         wit: &Witness<NTT>,
@@ -68,8 +76,8 @@ pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
 
 /// Verifier for the linearization subprotocol.
 pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
-    /// Verifies a proof for the linearization subprotocol. 
-    /// 
+    /// Verifies a proof for the linearization subprotocol.
+    ///
     /// # Arguments
     ///
     /// * `cm_i` - A reference to a `CCCS<C, NTT>`, which represents a CCS statement and a commitment to a witness.

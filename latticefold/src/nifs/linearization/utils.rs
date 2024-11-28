@@ -12,11 +12,11 @@ use crate::transcript::Transcript;
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 
-/// Computes the evaluation of the MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$ at the sumcheck challenge point
+/// Computes the evaluation of the MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$ at the sumcheck challenge point.
 ///
 /// # Parameters
 ///
-/// * `Mz_mles` (`&[DenseMultilinearExtension<NTT>]`): The MLEs of $\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \}$
+/// * `Mz_mles` (`&[DenseMultilinearExtension<NTT>]`): The MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$
 /// * `r` (`&[NTT]`): The sumcheck challenge point
 ///
 /// # Errors
@@ -32,8 +32,6 @@ pub fn compute_u<NTT: OverField>(
 
 /// Prepare the main linearization polynomial.
 ///
-///  
-///  
 /// $$ g(\vec{\mathbf{x}}) := eq(\vec{\beta}, \vec{\mathbf{x}}) \cdot
 /// \left(
 /// \sum\_{i=1}^{n\_s} c\_i \cdot
