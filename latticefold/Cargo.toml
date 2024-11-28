@@ -10,6 +10,7 @@ ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 cyclotomic-rings = { path = "../cyclotomic-rings", default-features = false }
+hashbrown = "0.15"
 lattirust-linear-algebra = { workspace = true }
 lattirust-poly = { workspace = true }
 lattirust-ring = { workspace = true }
