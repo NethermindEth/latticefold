@@ -93,7 +93,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
     ) -> ProverMsg<R> {
-
         if let Some(msg) = v_msg {
             if prover_state.round == 0 {
                 panic!("first round should be prover first.");
@@ -132,7 +131,10 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         #[cfg(feature = "parallel")]
         let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
 
-        println!("List of products: {:?}", prover_state.list_of_products.len());
+        println!(
+            "List of products: {:?}",
+            prover_state.list_of_products.len()
+        );
         // generate sum
         let fold_result =
             cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
@@ -178,8 +180,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         println!("G2 time: {:?}", g2_time);
         println!("G1 and G3 time: {:?}", g1_g3_time);
         assert_eq!(
-            g2_result.evaluations,
-            products_sum,
+            g2_result.evaluations, products_sum,
             "G2 result and products sum are not equal"
         );
         ProverMsg {
@@ -190,7 +191,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
     ) -> ProverMsg<R> {
-
         if prover_state.round > prover_state.num_vars {
             panic!("Prover is not active");
         }
@@ -205,21 +205,22 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
 
         // generate sum
-        let (products_with_zero, products_without_zero): (Vec<_>, Vec<_>) =
-            prover_state.list_of_products.iter().partition(|(_, products)| products.contains(&0));
-        println!("Products with zero: {:?}", products_with_zero.len());
-        println!("Products without zero: {:?}", products_without_zero.len());
-        let fold_result =
-            cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
+        let (products_with_zero, products_without_zero): (Vec<_>, Vec<_>) = prover_state
+            .list_of_products
+            .iter()
+            .partition(|(_, products)| products.contains(&0));
+        let fold_result = cfg_into_iter!(0..1 << (nv - i)).fold(
+            zeros,
+            |(mut products_sum, mut product), b| {
+                // Instead of creating a new vector, fill the existing one with zeros
+                let mut products_inner_sum = vec![R::zero(); degree + 1];
+
                 // In effect, this fold is essentially doing simply:
                 // for b in 0..1 << (nv - i) {
                 let index = b << 1;
 
-
-                let mut products_inner_sum = vec![R::zero(); degree + 1];
                 // Process products with zero
                 for (coefficient, products) in &products_with_zero {
-                    assert!(products.contains(&0), "Products with zero should contain 0");
                     product.fill(*coefficient);
 
                     for &jth_product in products {
@@ -241,21 +242,18 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
 
                 // Factor out eq_beta_x multiplication
                 if !products_with_zero.is_empty() {
-                    let eq_beta_x = prover_state.flattened_ml_extensions[0].clone();
+                    let eq_beta_x = &prover_state.flattened_ml_extensions[0];
                     let mut start = eq_beta_x[index];
                     let step = eq_beta_x[index + 1] - start;
-                    for p in products_inner_sum.iter_mut() {
+                    for (p, sum) in products_inner_sum.iter_mut().zip(products_sum.iter_mut()) {
                         *p *= start;
+                        *sum += *p;
                         start += step;
-                    }
-                    for (sum, prod) in products_sum.iter_mut().zip(products_inner_sum.iter()) {
-                        *sum += prod;
                     }
                 }
 
                 // Process products without zero
                 for (coefficient, products) in &products_without_zero {
-                    assert!(!products.contains(&0), "Products without zero should not contain 0");
                     product.fill(*coefficient);
                     for &jth_product in products {
                         let table = &prover_state.flattened_ml_extensions[jth_product];
@@ -271,7 +269,8 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                     }
                 }
                 (products_sum, product)
-            });
+            },
+        );
 
         #[cfg(not(feature = "parallel"))]
         let products_sum = fold_result.0;

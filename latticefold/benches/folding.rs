@@ -322,7 +322,7 @@ fn benchmarks_main(c: &mut Criterion) {
         // run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
         // run_single_goldilocks_benchmark!(&mut group, 1, 14, 2048, 16384, 5, 2, 14);
         // run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 4, 2, 15);
-        run_single_goldilocks_benchmark!(&mut group, 1, 16, 2048, 65536, 4, 2, 16);
+        run_single_goldilocks_benchmark!(&mut group, 1, 16, 8192, 65536, 4, 2, 16);
     }
 
     // // BabyBear
