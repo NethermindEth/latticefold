@@ -198,13 +198,13 @@ fn test_commit_witnesses() {
     const WIT_LEN: usize = 4;
     const W: usize = WIT_LEN * DP::L;
 
-    let (_, _, _, _, wit, scheme) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+    let (cm_i, _, _, _, wit, scheme) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
     let wit_vec =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
     let y_s: Vec<Commitment<C, RqNTT>> =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::commit_witnesses::<C, W, DP>(
-            &wit_vec, &scheme,
+            &wit_vec, &scheme, &cm_i,
         )
         .unwrap();
 
