@@ -137,6 +137,7 @@ fn linearization_benchmarks<
 macro_rules! define_params {
     ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         paste::paste! {
+
             #[derive(Clone)]
             struct [<DecompParamsWithB $b W $w b $b_small K $k>];
 
@@ -149,21 +150,22 @@ macro_rules! define_params {
         }
     };
 }
+
 #[macro_export]
 macro_rules! run_single_goldilocks_benchmark {
-    ( $crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr,  $b_small:expr, $k:expr) => {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             linearization_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-
         }
     };
 }
+
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            linearization_benchmarks::<$io, $cw, $w,{$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            linearization_benchmarks::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }

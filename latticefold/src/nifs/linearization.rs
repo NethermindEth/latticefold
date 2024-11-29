@@ -1,9 +1,5 @@
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::polynomials::VirtualPolynomial;
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{eq_eval, VPAuxInfo},
-};
+use lattirust_poly::mle::DenseMultilinearExtension;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
@@ -12,8 +8,15 @@ use crate::ark_base::*;
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed},
+    utils::sumcheck::{
+        virtual_polynomial::{eq_eval, VPAuxInfo, VirtualPolynomial},
+        MLSumcheck,
+        SumCheckError::SumCheckFailed,
+    },
 };
+
+#[cfg(feature = "jolt-sumcheck")]
+use crate::utils::sumcheck::prover::ProverState;
 
 use crate::arith::Instance;
 use crate::nifs::linearization::utils::SqueezeBeta;
@@ -27,7 +30,7 @@ mod tests;
 pub mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
-    // Step 2 of Fig 5: Construct polynomial g and generate beta challenges
+    /// Step 2 of Fig 5: Construct polynomial $g$ and generate $\beta$ challenges.
     fn construct_polynomial_g(
         z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
@@ -48,12 +51,17 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         Ok((g, Mz_mles))
     }
 
-    // Step 2: Run sum-check protocol
+    /// Step 2: Run linearization sum-check protocol.
     fn generate_sumcheck_proof(
         g: &VirtualPolynomial<NTT>,
         transcript: &mut impl Transcript<NTT>,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
-        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(transcript, g);
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
+            transcript,
+            g,
+            #[cfg(feature = "jolt-sumcheck")]
+            ProverState::combine_product,
+        );
         let point_r = prover_state
             .randomness
             .into_iter()
@@ -63,7 +71,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         Ok((sum_check_proof, point_r))
     }
 
-    // Step 3: P sends V values
+    /// Step 3: the mle evaluations that the prover sends to the verifier.
+    /// I.e. f-hat rows mle evaluations and Mz mle evaluations.
     fn compute_evaluation_vectors(
         wit: &Witness<NTT>,
         point_r: &[NTT],
@@ -149,7 +158,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         ))
     }
 
-    // Step 4: Verify that e·(Σ c_i·Π_{j∈S_i} u_j) = s
+    /// Step 4: Verify
+    /// $$
+    /// \mathbf{e} \cdot \left( \sum\_{i=1}^{n\_s} c_i \cdot \prod\_{j \in S\_i} \mathbf{u}\_j \right) \stackrel{?}{=} s.
+    /// $$
     fn verify_evaluation_claim(
         beta_s: &[NTT],
         point_r: &[NTT],

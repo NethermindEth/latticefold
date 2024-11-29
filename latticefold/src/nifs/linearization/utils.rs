@@ -1,18 +1,26 @@
 use crate::{ark_base::Vec, nifs::mle_helpers::evaluate_mles};
 use ark_ff::PrimeField;
 
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{build_eq_x_r, RefCounter, VirtualPolynomial},
-};
+use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
 use lattirust_ring::OverField;
 
 use crate::nifs::error::LinearizationError;
 use crate::transcript::Transcript;
+use crate::utils::sumcheck::virtual_polynomial::{build_eq_x_r, VirtualPolynomial};
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 
-/// Batch compute the values of mles at the point r.
+/// Computes the evaluation of the MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$ at the sumcheck challenge point.
+///
+/// # Parameters
+///
+/// * `Mz_mles` (`&[DenseMultilinearExtension<NTT>]`): The MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$
+/// * `r` (`&[NTT]`): The sumcheck challenge point
+///
+/// # Errors
+///
+/// This function may return a `LinearizationError` if there are inconsistencies in the dimensions of `Mz_mles` and `r`.
+///
 pub fn compute_u<NTT: OverField>(
     Mz_mles: &[DenseMultilinearExtension<NTT>],
     r: &[NTT],
@@ -21,6 +29,38 @@ pub fn compute_u<NTT: OverField>(
 }
 
 /// Prepare the main linearization polynomial.
+///
+/// $$ g(\vec{\mathbf{x}}) := eq(\vec{\beta}, \vec{\mathbf{x}}) \cdot
+/// \left(
+/// \sum\_{i=1}^{n\_s} c\_i \cdot
+/// \left[
+/// \prod\_{j \in S\_i}
+/// \left(
+/// \sum\_{\vec{\mathbf{b}} \in \\{0,1\\}^{\log n\_c}}
+/// \text{mle}[M\_j](\vec{\mathbf{x}}, \vec{\mathbf{b}}) \cdot \text{mle}\[\mathbf{z}\_{ccs}\](\vec{b})
+/// \right)
+/// \right]
+/// \right) $$  
+///  
+/// # Parameters:
+///
+/// * `log_m` (`usize`): The number of variables in the polynomial
+///
+/// * `c` (`&[NTT]`): The second multiplicand of the polynomial is a linear combination of products of lists of MLEs, c is the coefficients of the lists
+///
+/// * `M_mles` (`&[DenseMultilinearExtension<NTT>]`): MLEs that the polynomial is constructed from
+///
+/// * `S` (`&[Vec<usize>]`): ] indices for the MLE lists
+///
+/// * `beta_s` (`&[NTT]`): Randomness
+///
+/// # Returns:
+///
+/// * `VirtualPolynomial<NTT>`: The linearization sumcheck polynomial
+///
+/// # Errors:
+/// * Will return an error if any of the MLEs are of the wrong size
+///
 pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     log_m: usize,
     c: &[NTT],

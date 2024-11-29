@@ -18,6 +18,7 @@ use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
 use ark_std::{cfg_into_iter, cfg_iter};
+
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -25,93 +26,12 @@ pub use structs::*;
 
 use super::mle_helpers::to_mles;
 mod structs;
+
 #[cfg(test)]
 mod tests;
+
 mod utils;
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
-    fn decompose_witness<P: DecompositionParams>(wit: &Witness<NTT>) -> Vec<Witness<NTT>> {
-        let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
-        cfg_into_iter!(f_s)
-            .map(|f| Witness::from_f_coeff::<P>(f))
-            .collect()
-    }
-
-    fn compute_x_s<P: DecompositionParams>(mut x_w: Vec<NTT>, h: NTT) -> Vec<Vec<NTT>> {
-        x_w.push(h);
-        decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(x_w)
-    }
-
-    fn commit_from_witnesses<const C: usize, const W: usize, P: DecompositionParams>(
-        wit_s: &Vec<Witness<NTT>>,
-        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
-    ) -> Result<Vec<Commitment<C, NTT>>, CommitmentError> {
-        cfg_iter!(wit_s)
-            .map(|wit| wit.commit::<C, W, P>(scheme))
-            .collect::<Result<Vec<_>, _>>()
-    }
-
-    fn compute_v_s(
-        wit_s: &Vec<Witness<NTT>>,
-        mle_length: usize,
-        point_r: &[NTT],
-    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
-        cfg_iter!(wit_s)
-            .map(|wit| {
-                evaluate_mles::<NTT, _, _, DecompositionError>(
-                    &to_mles::<_, _, DecompositionError>(mle_length, &wit.f_hat)?,
-                    point_r,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()
-    }
-
-    fn compute_mz_mles(
-        wit_s: &Vec<Witness<NTT>>,
-        M: &[SparseMatrix<NTT>],
-        decomposed_statements: &[Vec<NTT>],
-        num_mle_vars: usize,
-    ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, DecompositionError> {
-        cfg_iter!(wit_s)
-            .enumerate()
-            .map(|(i, wit)| {
-                let z: Vec<_> = {
-                    let mut z =
-                        Vec::with_capacity(decomposed_statements[i].len() + wit.w_ccs.len());
-
-                    z.extend_from_slice(&decomposed_statements[i]);
-                    z.extend_from_slice(&wit.w_ccs);
-
-                    z
-                };
-
-                let mles = to_mles_err::<_, _, DecompositionError, _>(
-                    num_mle_vars,
-                    cfg_iter!(M).map(|M| mat_vec_mul(M, &z)),
-                )?;
-
-                Ok(mles)
-            })
-            .collect::<Result<Vec<Vec<_>>, DecompositionError>>()
-    }
-
-    fn compute_u_s(
-        mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-
-        point_r: &[NTT],
-    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
-        cfg_iter!(mz_mles)
-            .map(|mles| {
-                let u_s_for_i =
-                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
-                        mles, point_r,
-                    )?;
-
-                Ok(u_s_for_i)
-            })
-            .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()
-    }
-}
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {
@@ -137,7 +57,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let x_s = Self::compute_x_s::<P>(cm_i.x_w.clone(), cm_i.h);
 
-        let y_s: Vec<Commitment<C, NTT>> = Self::commit_from_witnesses::<C, W, P>(&wit_s, scheme)?;
+        let y_s: Vec<Commitment<C, NTT>> = Self::commit_witnesses::<C, W, P>(&wit_s, scheme)?;
 
         let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &cm_i.r)?;
 
@@ -170,62 +90,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         let proof = DecompositionProof { u_s, v_s, x_s, y_s };
 
         Ok((mz_mles, lcccs_s, wit_s, proof))
-    }
-}
-
-impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
-    pub fn recompose_commitment<const C: usize>(
-        y_s: &[Commitment<C, NTT>],
-        coeffs: &[NTT],
-    ) -> Result<Commitment<C, NTT>, DecompositionError> {
-        y_s.iter()
-            .zip(coeffs)
-            .map(|(y_i, b_i)| y_i * b_i)
-            .reduce(|acc, bi_part| acc + bi_part)
-            .ok_or(DecompositionError::RecomposedError)
-    }
-
-    pub fn recompose_u(u_s: &[Vec<NTT>], coeffs: &[NTT]) -> Result<Vec<NTT>, DecompositionError> {
-        u_s.iter()
-            .zip(coeffs)
-            .map(|(u_i, b_i)| u_i.iter().map(|&u| u * b_i).collect())
-            .reduce(|acc, u_i_times_b_i: Vec<NTT>| {
-                acc.into_iter()
-                    .zip(&u_i_times_b_i)
-                    .map(|(u0, ui)| u0 + ui)
-                    .collect()
-            })
-            .ok_or(DecompositionError::RecomposedError)
-    }
-
-    pub fn recompose_v(v_s: &[Vec<NTT>], coeffs: &[NTT], row: usize) -> NTT {
-        v_s.iter()
-            .zip(coeffs)
-            .map(|(v_i, b_i)| v_i[row] * b_i)
-            .sum()
-    }
-
-    pub fn recompose_xw_and_h(
-        x_s: &[Vec<NTT>],
-        coeffs: &[NTT],
-    ) -> Result<(Vec<NTT>, NTT), DecompositionError> {
-        let mut should_equal_xw = x_s
-            .iter()
-            .zip(coeffs)
-            .map(|(x_i, b_i)| x_i.iter().map(|&x| x * b_i).collect())
-            .reduce(|acc, x_i_times_b_i: Vec<NTT>| {
-                acc.into_iter()
-                    .zip(&x_i_times_b_i)
-                    .map(|(x0, xi)| x0 + xi)
-                    .collect()
-            })
-            .ok_or(DecompositionError::RecomposedError)?;
-
-        let should_equal_h = should_equal_xw
-            .pop()
-            .ok_or(DecompositionError::RecomposedError)?;
-
-        Ok((should_equal_xw, should_equal_h))
     }
 }
 
@@ -266,9 +130,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             });
         }
 
-        let b_s: Vec<_> = (0..P::K)
-            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
-            .collect();
+        let b_s: Vec<_> = Self::calculate_b_s::<P>();
 
         let should_equal_y0 = Self::recompose_commitment::<C>(&proof.y_s, &b_s)?;
 
@@ -301,6 +163,164 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
         }
 
         Ok(lcccs_s)
+    }
+}
+
+impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
+    /// Decomposes a witness `wit` into `P::K` vectors norm `< P::B_SMALL` such that
+    /// $$ \text{wit} = \sum\limits_{i=0}^{\text{P::K} - 1} \text{P::B\\_SMALL}^i \cdot \text{wit}_i.$$
+    ///
+    fn decompose_witness<P: DecompositionParams>(wit: &Witness<NTT>) -> Vec<Witness<NTT>> {
+        let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
+        cfg_into_iter!(f_s)
+            .map(|f| Witness::from_f_coeff::<P>(f))
+            .collect()
+    }
+
+    /// Takes the concatenation `x_w || h`, performs gadget decomposition of it,
+    /// decomposes the resulting `P::B`-short vector into `P::K` `P::B_SMALL`-vectors
+    /// and gadget-composes each of the vectors back to obtain `P::K` vectors in their NTT form.
+    fn compute_x_s<P: DecompositionParams>(mut x_w: Vec<NTT>, h: NTT) -> Vec<Vec<NTT>> {
+        x_w.push(h);
+        decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(x_w)
+    }
+
+    /// Ajtai commits to witnesses `wit_s` using Ajtai commitment scheme `scheme`.
+    fn commit_witnesses<const C: usize, const W: usize, P: DecompositionParams>(
+        wit_s: &[Witness<NTT>],
+        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
+    ) -> Result<Vec<Commitment<C, NTT>>, CommitmentError> {
+        cfg_iter!(wit_s)
+            .map(|wit| wit.commit::<C, W, P>(scheme))
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    /// Compute f-hat evaluation claims.
+    fn compute_v_s(
+        wit_s: &[Witness<NTT>],
+        mle_length: usize,
+        point_r: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+        cfg_iter!(wit_s)
+            .map(|wit| {
+                evaluate_mles::<NTT, _, _, DecompositionError>(
+                    &to_mles::<_, _, DecompositionError>(mle_length, &wit.f_hat)?,
+                    point_r,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    /// Compute CCS-linearization evaluation claims.
+    fn compute_u_s(
+        mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
+        point_r: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+        cfg_iter!(mz_mles)
+            .map(|mles| {
+                let u_s_for_i =
+                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
+                        mles, point_r,
+                    )?;
+
+                Ok(u_s_for_i)
+            })
+            .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()
+    }
+    fn compute_mz_mles(
+        wit_s: &Vec<Witness<NTT>>,
+        M: &[SparseMatrix<NTT>],
+        decomposed_statements: &[Vec<NTT>],
+        num_mle_vars: usize,
+    ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, DecompositionError> {
+        cfg_iter!(wit_s)
+            .enumerate()
+            .map(|(i, wit)| {
+                let z: Vec<_> = {
+                    let mut z =
+                        Vec::with_capacity(decomposed_statements[i].len() + wit.w_ccs.len());
+
+                    z.extend_from_slice(&decomposed_statements[i]);
+                    z.extend_from_slice(&wit.w_ccs);
+
+                    z
+                };
+
+                let mles = to_mles_err::<_, _, DecompositionError, _>(
+                    num_mle_vars,
+                    cfg_iter!(M).map(|M| mat_vec_mul(M, &z)),
+                )?;
+
+                Ok(mles)
+            })
+            .collect::<Result<Vec<Vec<_>>, DecompositionError>>()
+    }
+}
+
+impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
+    /// Computes the linear combination `coeffs[0] * y_s[0] + coeffs[1] * y_s[1] + ... + coeffs[y_s.len() - 1] * y_s[y_s.len() - 1]`.
+    pub fn recompose_commitment<const C: usize>(
+        y_s: &[Commitment<C, NTT>],
+        coeffs: &[NTT],
+    ) -> Result<Commitment<C, NTT>, DecompositionError> {
+        y_s.iter()
+            .zip(coeffs)
+            .map(|(y_i, b_i)| y_i * b_i)
+            .reduce(|acc, bi_part| acc + bi_part)
+            .ok_or(DecompositionError::RecomposedError)
+    }
+
+    /// Computes the linear combination `coeffs[0] * u_s[0] + coeffs[1] * u_s[1] + ... + coeffs[y_s.len() - 1] * u_s[y_s.len() - 1]`.
+    pub fn recompose_u(u_s: &[Vec<NTT>], coeffs: &[NTT]) -> Result<Vec<NTT>, DecompositionError> {
+        u_s.iter()
+            .zip(coeffs)
+            .map(|(u_i, b_i)| u_i.iter().map(|&u| u * b_i).collect())
+            .reduce(|acc, u_i_times_b_i: Vec<NTT>| {
+                acc.into_iter()
+                    .zip(&u_i_times_b_i)
+                    .map(|(u0, ui)| u0 + ui)
+                    .collect()
+            })
+            .ok_or(DecompositionError::RecomposedError)
+    }
+
+    /// Computes the linear combination `coeffs[0] * v_s[0][row] + coeffs[1] * v_s[1][row] + ... + coeffs[v_s.len() - 1] * v_s[v_s.len() - 1][row]`.
+    pub fn recompose_v(v_s: &[Vec<NTT>], coeffs: &[NTT], row: usize) -> NTT {
+        v_s.iter()
+            .zip(coeffs)
+            .map(|(v_i, b_i)| v_i[row] * b_i)
+            .sum()
+    }
+
+    /// Computes the linear combination `(x || h) = coeffs[0] * x_s[0] + coeffs[1] * x_s[1] + ... + coeffs[x_s.len() - 1] * x_s[x_s.len() - 1]`
+    /// and returns `x`` and `h` separately.
+    pub fn recompose_xw_and_h(
+        x_s: &[Vec<NTT>],
+        coeffs: &[NTT],
+    ) -> Result<(Vec<NTT>, NTT), DecompositionError> {
+        let mut should_equal_xw = x_s
+            .iter()
+            .zip(coeffs)
+            .map(|(x_i, b_i)| x_i.iter().map(|&x| x * b_i).collect())
+            .reduce(|acc, x_i_times_b_i: Vec<NTT>| {
+                acc.into_iter()
+                    .zip(&x_i_times_b_i)
+                    .map(|(x0, xi)| x0 + xi)
+                    .collect()
+            })
+            .ok_or(DecompositionError::RecomposedError)?;
+
+        let should_equal_h = should_equal_xw
+            .pop()
+            .ok_or(DecompositionError::RecomposedError)?;
+
+        Ok((should_equal_xw, should_equal_h))
+    }
+
+    fn calculate_b_s<P: DecompositionParams>() -> Vec<NTT> {
+        (0..P::K)
+            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
+            .collect()
     }
 }
 

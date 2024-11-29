@@ -1,4 +1,4 @@
-use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
+use lattirust_linear_algebra::sparse_matrix::dense_matrix_u64_to_sparse;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
@@ -78,7 +78,12 @@ impl<R: Ring> RelaxedR1CS<R> {
 }
 
 pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
-    dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
+    // dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
+    let M_u64: Vec<Vec<u64>> = M
+        .iter()
+        .map(|m| m.iter().map(|r| *r as u64).collect())
+        .collect();
+    dense_matrix_u64_to_sparse(M_u64)
 }
 
 pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
@@ -118,7 +123,7 @@ pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
 pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     rows: usize,
 ) -> R1CS<R> {
-    let R1CS_A = to_F_matrix::<R>(create_dummy_identity_matrix(rows, X_LEN + WIT_LEN + 1));
+    let R1CS_A = create_dummy_identity_sparse_matrix(rows, X_LEN + WIT_LEN + 1);
     let R1CS_B = R1CS_A.clone();
     let R1CS_C = R1CS_A.clone();
 
@@ -133,6 +138,21 @@ pub fn create_dummy_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usiz
     let mut matrix = vec![vec![0; columns]; rows];
     for (i, item) in matrix.iter_mut().enumerate().take(rows) {
         item[i] = 1;
+    }
+    matrix
+}
+
+pub fn create_dummy_identity_sparse_matrix<R: Ring>(
+    rows: usize,
+    columns: usize,
+) -> SparseMatrix<R> {
+    let mut matrix = SparseMatrix {
+        n_rows: rows,
+        n_cols: columns,
+        coeffs: vec![vec![]; rows],
+    };
+    for (i, row) in matrix.coeffs.iter_mut().enumerate() {
+        row.push((R::one(), i));
     }
     matrix
 }

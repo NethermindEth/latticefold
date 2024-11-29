@@ -1,10 +1,9 @@
-use crate::ark_base::*;
 use ark_std::ops::{AddAssign, Mul};
-use lattirust_poly::{
-    mle::DenseMultilinearExtension,
-    polynomials::{ArithErrors, VirtualPolynomial},
-};
+use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::ArithErrors};
 use lattirust_ring::Ring;
+
+use crate::ark_base::*;
+use crate::utils::sumcheck::virtual_polynomial::VirtualPolynomial;
 
 // Represents a univariate polynomial
 // Coefficients represented in ascending order
@@ -134,8 +133,10 @@ mod tests {
     use lattirust_poly::polynomials::RefCounter;
 
     use super::*;
-    use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::VirtualPolynomial};
+    use lattirust_poly::mle::DenseMultilinearExtension;
     use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
+
+    use crate::utils::sumcheck::virtual_polynomial::VirtualPolynomial;
 
     // Define some sample DenseMultilinearExtension for testing
     fn sample_mle() -> DenseMultilinearExtension<Fq> {
