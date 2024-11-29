@@ -209,9 +209,8 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             .list_of_products
             .iter()
             .partition(|(_, products)| products.contains(&0));
-        let fold_result = cfg_into_iter!(0..1 << (nv - i)).fold(
-            zeros,
-            |(mut products_sum, mut product), b| {
+        let fold_result =
+            cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
                 // Instead of creating a new vector, fill the existing one with zeros
                 let mut products_inner_sum = vec![R::zero(); degree + 1];
 
@@ -269,8 +268,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                     }
                 }
                 (products_sum, product)
-            },
-        );
+            });
 
         #[cfg(not(feature = "parallel"))]
         let products_sum = fold_result.0;
@@ -288,11 +286,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             },
         );
 
-        // assert_eq!(
-        //     g2_result.evaluations,
-        //     products_sum,
-        //     "G2 result and products sum are not equal"
-        // );
         ProverMsg {
             evaluations: products_sum,
         }
