@@ -1,5 +1,7 @@
 //! Prover
 
+use std::time::Instant;
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
 use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
@@ -114,8 +116,12 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         if prover_state.round > prover_state.num_vars {
             panic!("Prover is not active");
         }
+        println!("Start G2 sumcheck round");
+        let g2_start = Instant::now();
         let g2_result = Self::prove_round_g2(prover_state, v_msg);
-        println!("G1 and G3 Round");
+        let g2_time = g2_start.elapsed();
+        println!("Start G1 and G3 sumcheck round");
+        let g1_g3_start = Instant::now();
 
         let i = prover_state.round;
         let nv = prover_state.num_vars;
@@ -126,18 +132,17 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         #[cfg(feature = "parallel")]
         let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
 
+        println!("List of products: {:?}", prover_state.list_of_products.len());
         // generate sum
         let fold_result =
             cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
                 // In effect, this fold is essentially doing simply:
                 // for b in 0..1 << (nv - i) {
-                println!("Variable in fold: {:?}", b);
                 let index = b << 1;
 
                 for (coefficient, products) in &prover_state.list_of_products {
                     product.fill(*coefficient);
                     for &jth_product in products {
-                        println!("Product being multiplied in sumcheck: {:?}", jth_product);
                         let table = &prover_state.flattened_ml_extensions[jth_product];
                         let mut start = table[index];
                         let step = table[index + 1] - start;
@@ -169,6 +174,9 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             },
         );
 
+        let g1_g3_time = g1_g3_start.elapsed();
+        println!("G2 time: {:?}", g2_time);
+        println!("G1 and G3 time: {:?}", g1_g3_time);
         assert_eq!(
             g2_result.evaluations,
             products_sum,
@@ -182,8 +190,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
     ) -> ProverMsg<R> {
-        println!("G2 round");
-        println!("Round: {:?}", prover_state.round);
 
         if prover_state.round > prover_state.num_vars {
             panic!("Prover is not active");
@@ -199,18 +205,19 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
 
         // generate sum
+        let (products_with_zero, products_without_zero): (Vec<_>, Vec<_>) =
+            prover_state.list_of_products.iter().partition(|(_, products)| products.contains(&0));
+        println!("Products with zero: {:?}", products_with_zero.len());
+        println!("Products without zero: {:?}", products_without_zero.len());
         let fold_result =
             cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
                 // In effect, this fold is essentially doing simply:
                 // for b in 0..1 << (nv - i) {
-                println!("Variable in fold: {:?}", b);
                 let index = b << 1;
-                let (products_with_zero, products_without_zero): (Vec<_>, Vec<_>) = 
-                    prover_state.list_of_products.iter().partition(|(_, products)| products.contains(&0));
 
                 // Process products with zero
                 for (coefficient, products) in &products_with_zero {
-                    println!("Test Products with zero: {}", products.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" "));
+                    assert!(products.contains(&0), "Products with zero should contain 0");
                     product.fill(*coefficient);
                     let eq_beta_x = prover_state.flattened_ml_extensions[0].clone();
                     let mut start = eq_beta_x[index];
@@ -223,7 +230,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                         if jth_product == 0 {
                             continue;
                         }
-                        println!("Product being multiplied in sumcheck: {:?}", jth_product);
                         let table = &prover_state.flattened_ml_extensions[jth_product];
                         let mut start = table[index];
                         let step = table[index + 1] - start;
@@ -239,10 +245,9 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
 
                 // Process products without zero
                 for (coefficient, products) in &products_without_zero {
-                    println!("Test Products without zero: {}", products.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" "));
+                    assert!(!products.contains(&0), "Products without zero should not contain 0");
                     product.fill(*coefficient);
                     for &jth_product in products {
-                        println!("Product being multiplied in sumcheck: {:?}", jth_product);
                         let table = &prover_state.flattened_ml_extensions[jth_product];
                         let mut start = table[index];
                         let step = table[index + 1] - start;

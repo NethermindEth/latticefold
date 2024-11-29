@@ -155,7 +155,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     let mut total_products = 0;
     let total_flattened_ml_extensions_first_half = g.flattened_ml_extensions.len();
     // for i in 0..DP::K {
-    for i in 0..1 {
+    for i in 0..2 {
         let num_products_before = g.products.len();
         prepare_g2_i_mle_list(
             &mut g,
