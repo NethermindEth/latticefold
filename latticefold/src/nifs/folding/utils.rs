@@ -101,8 +101,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     log_m: usize,
     f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     alpha_s: &[NTT],
-    challenged_Ms_1: &[DenseMultilinearExtension<NTT>],
-    challenged_Ms_2: &[DenseMultilinearExtension<NTT>],
+    challenged_Ms_1: &DenseMultilinearExtension<NTT>,
+    challenged_Ms_2: &DenseMultilinearExtension<NTT>,
     r_s: &[Vec<NTT>],
     beta_s: &[NTT],
     mu_s: &[NTT],
@@ -289,7 +289,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
-    challened_Ms: &[DenseMultilinearExtension<NTT>],
+    challenged_Ms: &DenseMultilinearExtension<NTT>,
 ) -> Result<(), ArithErrors> {
     let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
 
@@ -302,9 +302,8 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
         combined_mle += mle;
     }
 
-    for M in challened_Ms.iter() {
-        combined_mle += M;
-    }
+    combined_mle += challenged_Ms;
+
     g.add_mle_list(
         vec![r_i_eq.clone(), RefCounter::from(combined_mle)],
         NTT::one(),

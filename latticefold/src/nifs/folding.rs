@@ -71,26 +71,24 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>()
     }
 
-    fn calculate_challenged_mz_mles(
-        ccs: &CCS<NTT>,
+    fn calculate_challenged_mz_mle(
         Mz_mles_vec: &[Vec<DenseMultilinearExtension<NTT>>],
         zeta_s: &[NTT],
-    ) -> Result<Vec<DenseMultilinearExtension<NTT>>, FoldingError<NTT>> {
-        let mut zetas = zeta_s.to_vec();
+    ) -> Result<DenseMultilinearExtension<NTT>, FoldingError<NTT>> {
+        let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
 
-        let challenged_mz_mles = (0..ccs.t)
-            .map(|i| {
-                let mut mle = DenseMultilinearExtension::<NTT>::zero();
-                zetas.iter().enumerate().for_each(|(k, zeta)| {
-                    mle += Mz_mles_vec[k][i].clone() * *zeta;
-                });
-                for i in 0..zetas.len() {
-                    zetas[i] *= zeta_s[i];
+        zeta_s
+            .iter()
+            .zip(Mz_mles_vec)
+            .for_each(|(zeta_i, Mz_mles)| {
+                let mut mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
+                for M in Mz_mles.iter().rev() {
+                    mle += M;
+                    mle *= *zeta_i;
                 }
-                mle
-            })
-            .collect();
-        Ok(challenged_mz_mles)
+                combined_mle += mle;
+            });
+        Ok(combined_mle)
     }
 
     fn get_sumcheck_randomness(sumcheck_prover_state: ProverState<NTT>) -> Vec<NTT> {
@@ -166,12 +164,9 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let ris = Self::get_ris(cm_i_s);
 
         let prechallenged_Ms_1 =
-            Self::calculate_challenged_mz_mles(&ccs, &mz_mles[0..P::K], &zeta_s[0..P::K])?;
-        let prechallenged_Ms_2 = Self::calculate_challenged_mz_mles(
-            &ccs,
-            &mz_mles[P::K..2 * P::K],
-            &zeta_s[P::K..2 * P::K],
-        )?;
+            Self::calculate_challenged_mz_mle(&mz_mles[0..P::K], &zeta_s[0..P::K])?;
+        let prechallenged_Ms_2 =
+            Self::calculate_challenged_mz_mle(&mz_mles[P::K..2 * P::K], &zeta_s[P::K..2 * P::K])?;
         let g = create_sumcheck_polynomial::<_, P>(
             log_m,
             &f_hat_mles,

@@ -246,15 +246,13 @@ fn test_get_sumcheck_randomness() {
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
     let prechallenged_Ms_1 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[0..DP::K],
             &zeta_s[0..DP::K],
         )
         .unwrap();
     let prechallenged_Ms_2 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[DP::K..2 * DP::K],
             &zeta_s[DP::K..2 * DP::K],
         )
@@ -303,15 +301,13 @@ fn test_get_thetas() {
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
     let prechallenged_Ms_1 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[0..DP::K],
             &zeta_s[0..DP::K],
         )
         .unwrap();
     let prechallenged_Ms_2 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[DP::K..2 * DP::K],
             &zeta_s[DP::K..2 * DP::K],
         )
@@ -373,15 +369,13 @@ fn test_get_etas() {
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
     let prechallenged_Ms_1 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[0..DP::K],
             &zeta_s[0..DP::K],
         )
         .unwrap();
     let prechallenged_Ms_2 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[DP::K..2 * DP::K],
             &zeta_s[DP::K..2 * DP::K],
         )
@@ -471,15 +465,13 @@ fn test_prepare_public_output() {
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
     let prechallenged_Ms_1 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[0..DP::K],
             &zeta_s[0..DP::K],
         )
         .unwrap();
     let prechallenged_Ms_2 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[DP::K..2 * DP::K],
             &zeta_s[DP::K..2 * DP::K],
         )
@@ -550,15 +542,13 @@ fn test_compute_f_0() {
 
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
     let prechallenged_Ms_1 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &Mz_mles[0..DP::K],
             &zeta_s[0..DP::K],
         )
         .unwrap();
     let prechallenged_Ms_2 =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mles(
-            &ccs,
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &Mz_mles[DP::K..2 * DP::K],
             &zeta_s[DP::K..2 * DP::K],
         )
