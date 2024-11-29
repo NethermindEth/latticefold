@@ -148,7 +148,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         r_i_eq.clone(),
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
-        &challenged_Ms_1,
+        challenged_Ms_1,
     )?;
 
     for i in 0..DP::K {
@@ -166,7 +166,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         r_i_eq.clone(),
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
-        &challenged_Ms_2,
+        challenged_Ms_2,
     )?;
 
     for i in DP::K..2 * DP::K {

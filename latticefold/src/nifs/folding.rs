@@ -1,19 +1,21 @@
 #![allow(non_snake_case)]
 
+use ark_ff::Zero;
 use ark_std::cfg_iter;
 use ark_std::iter::successors;
+
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
-use super::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
-use crate::arith::utils::mat_vec_mul;
+use super::mle_helpers::{evaluate_mles, to_mles};
+
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::sumcheck::{MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
-    arith::{error::CSError, Instance, Witness, CCS, LCCCS},
+    arith::{error::CSError, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
 };
 
@@ -25,6 +27,7 @@ use utils::*;
 
 use crate::commitment::Commitment;
 use crate::utils::sumcheck::prover::ProverState;
+
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -64,41 +67,33 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>()
     }
 
-    fn get_zis<const C: usize>(cm_i_s: &[LCCCS<C, NTT>], w_s: &[Witness<NTT>]) -> Vec<Vec<NTT>> {
-        cm_i_s
-            .iter()
-            .zip(w_s.iter())
-            .map(|(cm_i, w_i)| cm_i.get_z_vector(&w_i.w_ccs))
-            .collect::<Vec<_>>()
-    }
-
     fn get_ris<const C: usize>(cm_i_s: &[LCCCS<C, NTT>]) -> Vec<Vec<NTT>> {
         cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>()
     }
 
     fn calculate_challenged_mz_mles(
-        ccs: &CCS<NTT>,
-        zis: &[Vec<NTT>],
+        Mz_mles_vec: &[Vec<DenseMultilinearExtension<NTT>>],
         zeta_s: &[NTT],
     ) -> Result<Vec<DenseMultilinearExtension<NTT>>, FoldingError<NTT>> {
-        let mut z: Vec<NTT> = vec![NTT::zero(); zis[0].len()];
+        let mut challenged_mz_mles =
+            vec![DenseMultilinearExtension::<NTT>::zero(); Mz_mles_vec[0].len()];
         let mut zetas = zeta_s.to_vec();
-        to_mles_err(
-            ccs.s,
-            cfg_iter!(ccs.M).map(|M| {
-                for i in 0..z.len() {
-                    z[i] = NTT::zero();
-                    for (z_i, zeta) in cfg_into_iter!(zis).zip(cfg_iter!(zetas)) {
-                        z[i] += z_i[i] * zeta;
-                    }
-                }
+
+        challenged_mz_mles
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, mle)| {
+                zetas
+                    .iter()
+                    .zip(Mz_mles_vec.iter())
+                    .for_each(|(zeta, mz_mle)| {
+                        *mle += mz_mle[i].clone() * *zeta;
+                    });
                 for i in 0..zetas.len() {
                     zetas[i] *= zeta_s[i];
                 }
-
-                mat_vec_mul(&M, &z)
-            }),
-        )
+            });
+        Ok(challenged_mz_mles)
     }
 
     fn get_sumcheck_randomness(sumcheck_prover_state: ProverState<NTT>) -> Vec<NTT> {
@@ -171,13 +166,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = Self::setup_f_hat_mles(log_m, w_s);
 
-        let zis = Self::get_zis(cm_i_s, w_s);
         let ris = Self::get_ris(cm_i_s);
 
         let prechallenged_Ms_1 =
-            Self::calculate_challenged_mz_mles(ccs, &zis[0..P::K], &zeta_s[0..P::K])?;
+            Self::calculate_challenged_mz_mles(&mz_mles[0..P::K], &zeta_s[0..P::K])?;
         let prechallenged_Ms_2 =
-            Self::calculate_challenged_mz_mles(ccs, &zis[P::K..2 * P::K], &zeta_s[P::K..2 * P::K])?;
+            Self::calculate_challenged_mz_mles(&mz_mles[P::K..2 * P::K], &zeta_s[P::K..2 * P::K])?;
         let g = create_sumcheck_polynomial::<_, P>(
             log_m,
             &f_hat_mles,
