@@ -662,7 +662,7 @@ dependencies = [
 [[package]]
 name = "lattirust-linear-algebra"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov%2Fimprovements-to-dense-mle#a8aa35dfc12845b08ad1c19076206220c523f64e"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov%2Fimprovements-to-dense-mle#d5c363417556ee70cac2a6c192d4dc5233198e8a"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -679,7 +679,7 @@ dependencies = [
 [[package]]
 name = "lattirust-poly"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov%2Fimprovements-to-dense-mle#a8aa35dfc12845b08ad1c19076206220c523f64e"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov%2Fimprovements-to-dense-mle#d5c363417556ee70cac2a6c192d4dc5233198e8a"
 dependencies = [
  "ark-ff",
  "ark-serialize",
@@ -696,7 +696,7 @@ dependencies = [
 [[package]]
 name = "lattirust-ring"
 version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov%2Fimprovements-to-dense-mle#a8aa35dfc12845b08ad1c19076206220c523f64e"
+source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=ElijahVlasov%2Fimprovements-to-dense-mle#d5c363417556ee70cac2a6c192d4dc5233198e8a"
 dependencies = [
  "ark-crypto-primitives",
  "ark-ff",

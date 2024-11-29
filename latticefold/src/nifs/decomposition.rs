@@ -1,4 +1,5 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
+
 use crate::{
     arith::{error::CSError, utils::mat_vec_mul, Witness, CCS, LCCCS},
     ark_base::*,
@@ -17,8 +18,9 @@ use lattirust_poly::polynomials::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
+use ark_std::iterable::Iterable;
 use ark_std::{cfg_into_iter, cfg_iter};
-
+use num_traits::Zero;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -57,7 +59,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let x_s = Self::compute_x_s::<P>(cm_i.x_w.clone(), cm_i.h);
 
-        let y_s: Vec<Commitment<C, NTT>> = Self::commit_witnesses::<C, W, P>(&wit_s, scheme)?;
+        let y_s: Vec<Commitment<C, NTT>> = Self::commit_witnesses::<C, W, P>(&wit_s, scheme, cm_i)?;
 
         let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &cm_i.r)?;
 
@@ -189,10 +191,24 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     fn commit_witnesses<const C: usize, const W: usize, P: DecompositionParams>(
         wit_s: &[Witness<NTT>],
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
+        cm_i: &LCCCS<C, NTT>,
     ) -> Result<Vec<Commitment<C, NTT>>, CommitmentError> {
-        cfg_iter!(wit_s)
+        let b = NTT::from(P::B_SMALL as u128);
+
+        let commitments_k1: Vec<_> = cfg_iter!(wit_s[1..])
             .map(|wit| wit.commit::<C, W, P>(scheme))
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<_, _>>()?;
+
+        let b_sum = commitments_k1
+            .iter()
+            .rev()
+            .fold(Commitment::zero(), |acc, y_i| (acc + y_i) * b);
+
+        let mut result = Vec::with_capacity(wit_s.len());
+        result.push(&cm_i.cm - b_sum);
+        result.extend(commitments_k1);
+
+        Ok(result)
     }
 
     /// Compute f-hat evaluation claims.
