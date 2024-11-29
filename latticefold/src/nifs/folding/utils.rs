@@ -140,53 +140,38 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         })
         .collect();
 
+    for i in 0..DP::K {
+        prepare_g2_i_mle_list(
+            &mut g,
+            DP::B_SMALL,
+            &f_hat_mles[i],
+            mu_s[i],
+            beta_eq_x.clone(),
+        )?;
+    }
     // We assume here that decomposition subprotocol puts the same r challenge point
     // into all decomposed linearized commitments
-    // let r_i_eq = build_eq_x_r(&r_s[0])?;
-    // prepare_g1_and_3_k_mles_list(
-    //     &mut g,
-    //     r_i_eq.clone(),
-    //     &f_hat_mles[0..DP::K],
-    //     &alpha_s[0..DP::K],
-    //     &Mz_mles[0..DP::K],
-    //     &zeta_s[0..DP::K],
-    // )?;
+    let r_i_eq = build_eq_x_r(&r_s[0])?;
+    prepare_g1_and_3_k_mles_list(
+        &mut g,
+        r_i_eq.clone(),
+        &f_hat_mles[0..DP::K],
+        &alpha_s[0..DP::K],
+        &Mz_mles[0..DP::K],
+        &zeta_s[0..DP::K],
+    )?;
 
-    let mut total_products = 0;
-    let total_flattened_ml_extensions_first_half = g.flattened_ml_extensions.len();
-    for i in 0..DP::K {
-        let num_products_before = g.products.len();
-        prepare_g2_i_mle_list(
-            &mut g,
-            DP::B_SMALL,
-            &f_hat_mles[i],
-            mu_s[i],
-            beta_eq_x.clone(),
-        )?;
-        let products_added = g.products.len() - num_products_before;
-        total_products += products_added;
-        println!(
-            "First half: Round {} added {} products. Total products: {}",
-            i, products_added, total_products
-        );
-    }
-    // println!(
-    //     "Total g2 first half flattened mles: {:?}",
-    //     g.flattened_ml_extensions.len() - total_flattened_ml_extensions_first_half
-    // );
-    // let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
-    // prepare_g1_and_3_k_mles_list(
-    //     &mut g,
-    //     r_i_eq.clone(),
-    //     &f_hat_mles[DP::K..2 * DP::K],
-    //     &alpha_s[DP::K..2 * DP::K],
-    //     &Mz_mles[DP::K..2 * DP::K],
-    //     &zeta_s[DP::K..2 * DP::K],
-    // )?;
+    let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
+    prepare_g1_and_3_k_mles_list(
+        &mut g,
+        r_i_eq.clone(),
+        &f_hat_mles[DP::K..2 * DP::K],
+        &alpha_s[DP::K..2 * DP::K],
+        &Mz_mles[DP::K..2 * DP::K],
+        &zeta_s[DP::K..2 * DP::K],
+    )?;
 
-    // let total_flattened_ml_extensions_second_half = g.flattened_ml_extensions.len();
     for i in DP::K..2 * DP::K {
-        let num_products_before = g.products.len();
         prepare_g2_i_mle_list(
             &mut g,
             DP::B_SMALL,
@@ -194,22 +179,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
             mu_s[i],
             beta_eq_x.clone(),
         )?;
-        let products_added = g.products.len() - num_products_before;
-        total_products += products_added;
-        // println!(
-        //     "Second half: Round {} added {} products. Total products: {}",
-        //     i, products_added, total_products
-        // );
     }
-    // println!(
-    //     "Total g2 second half flattened mles: {:?}",
-    //     g.flattened_ml_extensions.len() - total_flattened_ml_extensions_second_half
-    // );
 
-    // println!(
-    //     "Total g2 flattened mles: {:?}",
-    //     g.flattened_ml_extensions.len() - total_flattened_ml_extensions_first_half
-    // );
     Ok(g)
 }
 
@@ -369,26 +340,7 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
         }
 
         mle_list.push(fi_hat_mle.clone());
-        let this_products_index = g.products.len();
-        let this_flattened_products_len = g.flattened_ml_extensions.len();
         g.add_mle_list(mle_list, mu)?;
-        println!(
-            "Index products: {}",
-            g.products[this_products_index]
-                .1
-                .iter()
-                .map(|x| x.to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-        // println!(
-        //     "Indexed products: {:?}",
-        //     &g.products[this_products_index].1.len()
-        // );
-        // println!(
-        //     "Flattened products: {:?}",
-        //     &g.flattened_ml_extensions.len() - this_flattened_products_len
-        // );
     }
 
     Ok(())
