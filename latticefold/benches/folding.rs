@@ -106,16 +106,20 @@ fn prover_folding_benchmark<
             ),
         ),
         &(lcccs, wit_s, ccs),
-        |b, (lcccs_vec, wit_vec, ccs)| {
-            b.iter(|| {
-                let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
-                    lcccs_vec,
-                    wit_vec,
-                    &mut prover_transcript,
-                    ccs,
-                )
-                .unwrap();
-            })
+        |b, input| {
+            b.iter_batched(
+                || input.clone(),
+                |(lcccs_vec, wit_vec, ccs)| {
+                    let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
+                        &lcccs_vec,
+                        wit_vec,
+                        &mut prover_transcript,
+                        ccs,
+                    )
+                    .unwrap();
+                },
+                criterion::BatchSize::SmallInput,
+            )
         },
     );
 }
@@ -184,7 +188,7 @@ fn verifier_folding_benchmark<
 
     let (_, _, folding_proof) = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
         &lcccs,
-        &wit_s,
+        wit_s,
         &mut prover_transcript,
         ccs,
     )

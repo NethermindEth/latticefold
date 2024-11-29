@@ -1,9 +1,12 @@
 #![allow(non_snake_case)]
 
+use core::mem;
+
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::{
     balanced_decomposition::{gadget_decompose, gadget_recompose},
     cyclotomic_ring::{CRT, ICRT},
@@ -180,7 +183,7 @@ pub struct Witness<NTT: SuitableRing> {
     pub f: Vec<NTT>,
     pub f_coeff: Vec<NTT::CoefficientRepresentation>,
     /// NTT(f_hat) = Coeff(coefficient representation of f)
-    pub f_hat: Vec<Vec<NTT>>,
+    pub f_hat: Vec<DenseMultilinearExtension<NTT>>,
     pub w_ccs: Vec<NTT>,
 }
 
@@ -195,7 +198,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         // coef_repr_decomposed -> coefs -> NTT = coeffs.
-        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
+        let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
 
         Self {
             f,
@@ -228,9 +231,14 @@ impl<NTT: SuitableRing> Witness<NTT> {
     ///
     /// The hat matrix `Vec<Vec<NTT>>`.
     ///
-    fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<Vec<NTT>> {
+    fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<DenseMultilinearExtension<NTT>> {
+        let num_vars = log2(f.len().next_power_of_two()) as usize;
+
         let mut fhat = vec![
-            vec![NTT::zero(); f.len().next_power_of_two()];
+            DenseMultilinearExtension::from_evaluations_vec(
+                num_vars,
+                vec![NTT::zero(); f.len().next_power_of_two()]
+            );
             NTT::CoefficientRepresentation::dimension() / NTT::dimension()
         ];
 
@@ -250,7 +258,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
 
     pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
         let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(f.clone());
-        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
+        let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
         // Reconstruct the original CCS witness from the Ajtai witness
         // Ajtai witness has bound B
         // WE multiply by the base B gadget matrix to reconstruct w_ccs
@@ -275,7 +283,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // Ajtai witness has bound B
         // WE multiply by the base B gadget matrix to reconstruct w_ccs
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
-        let f_hat: Vec<Vec<NTT>> = Self::get_fhat(&f_coeff);
+        let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
 
         let w_ccs = gadget_recompose(&f, P::B, P::L);
 
@@ -306,6 +314,10 @@ impl<NTT: SuitableRing> Witness<NTT> {
         ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
         ajtai.commit_ntt(&self.f)
+    }
+
+    pub fn take_f_hat(&mut self) -> Vec<DenseMultilinearExtension<NTT>> {
+        mem::take(&mut self.f_hat)
     }
 
     pub fn within_bound(&self, b: u128) -> bool {
@@ -406,7 +418,10 @@ pub mod tests {
             GoldilocksRingPoly::from(f_2_coeffs),
         ];
 
-        let fhat = Witness::<GoldilocksRingNTT>::get_fhat(&f);
+        let fhat: Vec<Vec<_>> = Witness::<GoldilocksRingNTT>::get_fhat(&f)
+            .into_iter()
+            .map(|f_hat_mle| f_hat_mle.evaluations)
+            .collect();
 
         assert_eq!(
             fhat,

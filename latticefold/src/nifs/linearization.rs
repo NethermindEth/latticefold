@@ -3,8 +3,8 @@ use lattirust_poly::mle::DenseMultilinearExtension;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
 use super::error::LinearizationError;
-use super::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::ark_base::*;
+use crate::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
