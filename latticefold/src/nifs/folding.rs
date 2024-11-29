@@ -72,27 +72,24 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
     }
 
     fn calculate_challenged_mz_mles(
+        ccs: &CCS<NTT>,
         Mz_mles_vec: &[Vec<DenseMultilinearExtension<NTT>>],
         zeta_s: &[NTT],
     ) -> Result<Vec<DenseMultilinearExtension<NTT>>, FoldingError<NTT>> {
-        let mut challenged_mz_mles =
-            vec![DenseMultilinearExtension::<NTT>::zero(); Mz_mles_vec[0].len()];
         let mut zetas = zeta_s.to_vec();
 
-        challenged_mz_mles
-            .iter_mut()
-            .enumerate()
-            .for_each(|(i, mle)| {
-                zetas
-                    .iter()
-                    .zip(Mz_mles_vec.iter())
-                    .for_each(|(zeta, mz_mle)| {
-                        *mle += mz_mle[i].clone() * *zeta;
-                    });
+        let challenged_mz_mles = (0..ccs.t)
+            .map(|i| {
+                let mut mle = DenseMultilinearExtension::<NTT>::zero();
+                zetas.iter().enumerate().for_each(|(k, zeta)| {
+                    mle += Mz_mles_vec[k][i].clone() * *zeta;
+                });
                 for i in 0..zetas.len() {
                     zetas[i] *= zeta_s[i];
                 }
-            });
+                mle
+            })
+            .collect();
         Ok(challenged_mz_mles)
     }
 
@@ -169,9 +166,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let ris = Self::get_ris(cm_i_s);
 
         let prechallenged_Ms_1 =
-            Self::calculate_challenged_mz_mles(&mz_mles[0..P::K], &zeta_s[0..P::K])?;
-        let prechallenged_Ms_2 =
-            Self::calculate_challenged_mz_mles(&mz_mles[P::K..2 * P::K], &zeta_s[P::K..2 * P::K])?;
+            Self::calculate_challenged_mz_mles(&ccs, &mz_mles[0..P::K], &zeta_s[0..P::K])?;
+        let prechallenged_Ms_2 = Self::calculate_challenged_mz_mles(
+            &ccs,
+            &mz_mles[P::K..2 * P::K],
+            &zeta_s[P::K..2 * P::K],
+        )?;
         let g = create_sumcheck_polynomial::<_, P>(
             log_m,
             &f_hat_mles,
