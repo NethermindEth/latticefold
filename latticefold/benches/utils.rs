@@ -35,8 +35,8 @@ pub fn wit_and_ccs_gen<
     z.extend(&x_ccs);
     z.extend(&w_ccs);
     match ccs.check_relation(&z) {
-        Ok(_) => println!("R1CS valid!"),
-        Err(e) => println!("R1CS invalid: {:?}", e),
+        Ok(_) => (),
+        Err(e) => panic!("R1CS invalid: {:?}", e),
     }
 
     let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
