@@ -215,17 +215,13 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                 // for b in 0..1 << (nv - i) {
                 let index = b << 1;
 
+
+                let mut products_inner_sum = vec![R::zero(); degree + 1];
                 // Process products with zero
                 for (coefficient, products) in &products_with_zero {
                     assert!(products.contains(&0), "Products with zero should contain 0");
                     product.fill(*coefficient);
-                    let eq_beta_x = prover_state.flattened_ml_extensions[0].clone();
-                    let mut start = eq_beta_x[index];
-                    let step = eq_beta_x[index + 1] - start;
-                    for p in product.iter_mut() {
-                        *p *= start;
-                        start += step;
-                    }
+
                     for &jth_product in products {
                         if jth_product == 0 {
                             continue;
@@ -238,7 +234,21 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                             start += step;
                         }
                     }
-                    for (sum, prod) in products_sum.iter_mut().zip(product.iter()) {
+                    for (sum, prod) in products_inner_sum.iter_mut().zip(product.iter()) {
+                        *sum += prod;
+                    }
+                }
+
+                // Factor out eq_beta_x multiplication
+                if !products_with_zero.is_empty() {
+                    let eq_beta_x = prover_state.flattened_ml_extensions[0].clone();
+                    let mut start = eq_beta_x[index];
+                    let step = eq_beta_x[index + 1] - start;
+                    for p in products_inner_sum.iter_mut() {
+                        *p *= start;
+                        start += step;
+                    }
+                    for (sum, prod) in products_sum.iter_mut().zip(products_inner_sum.iter()) {
                         *sum += prod;
                     }
                 }
