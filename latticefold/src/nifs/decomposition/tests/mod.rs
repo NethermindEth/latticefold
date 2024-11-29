@@ -233,10 +233,9 @@ fn test_compute_v_s() {
     let (lcccs, _, _, _, wit, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
     let wit_vec =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
-    let v_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s(
-        &wit_vec, &lcccs.r,
-    )
-    .unwrap();
+    let v_s =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s(&wit_vec, &lcccs.r)
+            .unwrap();
 
     // Compute expected result
     let expected_v_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
