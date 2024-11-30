@@ -66,7 +66,8 @@ fn prover_linearization_benchmark<
                     wit,
                     &mut transcript,
                     ccs,
-                );
+                )
+                .expect("Failed to generate linearization proof");
             })
         },
     );
@@ -108,7 +109,8 @@ fn verifier_linearization_benchmark<
                     proof,
                     &mut transcript,
                     ccs,
-                );
+                )
+                .expect("Failed to verify linearization proof");
             })
         },
     );

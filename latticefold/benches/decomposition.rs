@@ -98,7 +98,7 @@ fn verifier_decomposition_benchmark<
     const W: usize,
     P: DecompositionParams,
     R: Clone + UniformRand + Debug + SuitableRing,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
@@ -106,30 +106,25 @@ fn verifier_decomposition_benchmark<
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
-    println!("verify decomposition");
-    println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    println!("prove linearization");
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
         &mut prover_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to generate linearization proof");
 
-    println!("verify linearization");
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
         &mut verifier_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to verify linearization proof");
 
-    println!("prove decomposition");
     let (_, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
             &lcccs,
@@ -138,9 +133,8 @@ fn verifier_decomposition_benchmark<
             ccs,
             scheme,
         )
-        .unwrap();
+        .expect("Failed to generate decomposition proof");
 
-    println!("verify decomposition");
     c.bench_with_input(
         BenchmarkId::new(
             "Decomposition Verifier",
@@ -157,12 +151,14 @@ fn verifier_decomposition_benchmark<
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {
             b.iter(|| {
+                let mut bench_verifier_transcript = verifier_transcript.clone();
                 let _ = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
                     lcccs,
                     proof,
-                    &mut verifier_transcript,
+                    &mut bench_verifier_transcript,
                     ccs,
-                );
+                )
+                .expect("Failed to verify decomposition proof");
             })
         },
     );
@@ -173,7 +169,7 @@ fn decomposition_benchmarks<
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
     R: Clone + UniformRand + Debug + SuitableRing,
     P: DecompositionParams + Clone,
 >(
