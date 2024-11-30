@@ -15,7 +15,6 @@ use crate::{
     },
 };
 
-#[cfg(feature = "jolt-sumcheck")]
 use crate::utils::sumcheck::prover::ProverState;
 
 use crate::arith::Instance;
@@ -55,12 +54,15 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     fn generate_sumcheck_proof(
         g: &VirtualPolynomial<NTT>,
         transcript: &mut impl Transcript<NTT>,
+        #[cfg(feature = "jolt-sumcheck")] comb_fn: impl Fn(&ProverState<NTT>, &[NTT]) -> NTT
+            + Sync
+            + Send,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
             transcript,
             g,
             #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            comb_fn,
         );
         let point_r = prover_state
             .randomness
@@ -106,8 +108,33 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
         let (g, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
 
+        #[cfg(feature = "jolt-sumcheck")]
+        let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
+            let mut result = NTT::zero();
+            'outer: for (i, &c) in ccs.c.iter().enumerate() {
+                if c.is_zero() {
+                    continue;
+                }
+                let mut term = c;
+                for &j in &ccs.S[i] {
+                    if vals[j].is_zero() {
+                        continue 'outer;
+                    }
+                    term *= vals[j];
+                }
+                result += term;
+            }
+            // eq() is the last term added
+            result * vals[vals.len() - 1]
+        };
+
         // Run sumcheck protocol.
-        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, transcript)?;
+        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(
+            &g,
+            transcript,
+            #[cfg(feature = "jolt-sumcheck")]
+            comb_fn,
+        )?;
 
         // Step 3: Compute v, u_vector.
         let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;
