@@ -43,12 +43,9 @@ fn prover_decomposition_benchmark<
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
-    println!("Proving decomposition");
-    println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    println!("prove linearization");
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
@@ -57,7 +54,6 @@ fn prover_decomposition_benchmark<
     )
     .unwrap();
 
-    println!("verify linearization");
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
@@ -176,9 +172,7 @@ fn decomposition_benchmarks<
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
-    println!("Witness generation");
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
-    // N/Q = prime / degree
 
     prover_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 

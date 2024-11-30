@@ -40,11 +40,9 @@ fn prover_linearization_benchmark<
         wit,
         &mut transcript,
         ccs,
-    );
-    match res {
-        Ok(_) => println!("Linearization proof generated with success"),
-        Err(ref e) => println!("Linearization error: {:?}", e),
-    }
+    )
+    .expect("Failed to generate linearization proof");
+
     c.bench_with_input(
         BenchmarkId::new(
             "Linearization Prover",
@@ -71,7 +69,6 @@ fn prover_linearization_benchmark<
             })
         },
     );
-    res.unwrap()
 }
 
 fn verifier_linearization_benchmark<
@@ -86,7 +83,6 @@ fn verifier_linearization_benchmark<
     ccs: &CCS<R>,
     proof: (LCCCS<C, R>, LinearizationProof<R>),
 ) {
-    println!("Verifying linearization");
     c.bench_with_input(
         BenchmarkId::new(
             "Linearization Verifier",
@@ -127,8 +123,7 @@ fn linearization_benchmarks<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let r1cs_rows = 5;
-    println!("Witness generation");
+    let r1cs_rows = X_LEN + WIT_LEN + 1;
     let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
     let proof = prover_linearization_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs);
