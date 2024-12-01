@@ -4,7 +4,7 @@ use ark_std::cfg_iter;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::cyclotomic_ring::CRT;
+use lattirust_ring::{cyclotomic_ring::CRT, PolyRing};
 
 use super::error::FoldingError;
 use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
@@ -173,14 +173,18 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         #[cfg(feature = "jolt-sumcheck")]
         let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
-            let mut result = vals[0] * vals[1]
-                + vals[P::K * P::B_SMALL as usize + 2] * vals[P::K * P::B_SMALL as usize + 3];
-            result += &vals[2..P::K * P::B_SMALL as usize + 2].iter().product();
-            result += &vals[P::K * P::B_SMALL as usize + 4..2 * P::K * P::B_SMALL as usize + 5]
+            let num_g_2_mles =
+                P::K * (2 * P::B_SMALL as usize - 1) * NTT::CoefficientRepresentation::dimension()
+                    / NTT::dimension();
+
+            let mut result = vals[0] * vals[1];
+            result += vals[2..2 * num_g_2_mles + 3].iter().product::<NTT>();
+            result += vals[num_g_2_mles + 3] * vals[num_g_2_mles + 4];
+            let mut second_b: NTT = vals[num_g_2_mles + 5..2 * num_g_2_mles + 5]
                 .iter()
                 .product();
-
-            // println!("{:?}", vals.len());
+            second_b *= vals[num_g_2_mles + 3];
+            result += second_b;
             result
         };
 
