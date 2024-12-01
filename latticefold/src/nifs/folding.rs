@@ -171,12 +171,23 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             &mu_s,
         )?;
 
+        #[cfg(feature = "jolt-sumcheck")]
+        let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
+            let mut result = vals[0] * vals[1]
+                + vals[P::K * P::B_SMALL as usize + 3] * vals[P::K * P::B_SMALL as usize + 4];
+            result += &vals[2..P::K * P::B_SMALL as usize + 2].iter().product();
+            result += &vals[P::K * P::B_SMALL as usize + 4..2 * P::K * P::B_SMALL as usize + 4]
+                .iter()
+                .product();
+            result
+        };
+
         // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
             transcript,
             &g,
             #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            comb_fn,
         );
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
