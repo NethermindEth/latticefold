@@ -174,11 +174,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         #[cfg(feature = "jolt-sumcheck")]
         let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
             let mut result = vals[0] * vals[1]
-                + vals[P::K * P::B_SMALL as usize + 3] * vals[P::K * P::B_SMALL as usize + 4];
+                + vals[P::K * P::B_SMALL as usize + 2] * vals[P::K * P::B_SMALL as usize + 3];
             result += &vals[2..P::K * P::B_SMALL as usize + 2].iter().product();
-            result += &vals[P::K * P::B_SMALL as usize + 5..2 * P::K * P::B_SMALL as usize + 5]
+            result += &vals[P::K * P::B_SMALL as usize + 4..2 * P::K * P::B_SMALL as usize + 5]
                 .iter()
                 .product();
+
+            // println!("{:?}", vals.len());
             result
         };
 
