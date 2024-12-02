@@ -194,10 +194,6 @@ fn verifier_folding_benchmark<
     )
     .expect("Failed to generate folding proof");
 
-    println!(
-        "Size of verifier transcript: {}",
-        std::mem::size_of_val(&verifier_transcript)
-    );
     c.bench_with_input(
         BenchmarkId::new(
             "Folding Verifier",
