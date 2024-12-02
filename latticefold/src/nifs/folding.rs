@@ -195,9 +195,10 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                     let i = k * extension_degree + d;
                     let mut eval = NTT::one();
                     let f_i = vals[4 + (i + 1) * (2 * P::B_SMALL - 1)];
+                    let f_i_squared = f_i * f_i;
                     eval *= f_i;
                     for b in 1..P::B_SMALL {
-                        eval *= f_i * f_i - NTT::from(b as u128 * b as u128);
+                        eval *= f_i_squared - NTT::from(b as u128 * b as u128);
                     }
                     eval *= vals[4];
                     inter_result += eval;
