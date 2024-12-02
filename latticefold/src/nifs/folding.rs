@@ -5,6 +5,7 @@ use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::{cyclotomic_ring::CRT, PolyRing};
+use num_traits::zero;
 
 use super::error::FoldingError;
 use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
@@ -183,13 +184,20 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             result += vals[2] * vals[num_g_2_mles + 3];
             // we have k * extension degree mles of b
             // each one consists of 2 * small_b -1 extensions
-            for i in 0..2 * P::K * extension_degree {
-                let mut eval = vals
-                    [5 + i * (2 * P::B_SMALL - 1)..5 + (i + 1) * (2 * P::B_SMALL - 1)]
-                    .iter()
-                    .product::<NTT>();
-                eval *= vals[4];
-                result += eval;
+
+            for k in 0..2 * P::K {
+                let mut inter_result = NTT::zero();
+                for d in (0..extension_degree).rev() {
+                    let i = k * extension_degree + d;
+                    let mut eval = vals
+                        [5 + i * (2 * P::B_SMALL - 1)..5 + (i + 1) * (2 * P::B_SMALL - 1)]
+                        .iter()
+                        .product::<NTT>();
+                    eval *= vals[4];
+                    inter_result += eval;
+                    inter_result *= mu_s[k]
+                }
+                result += inter_result;
             }
 
             result
