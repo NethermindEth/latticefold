@@ -1,5 +1,4 @@
 #![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 
 use ark_std::{time::Duration, UniformRand};
 use criterion::{
