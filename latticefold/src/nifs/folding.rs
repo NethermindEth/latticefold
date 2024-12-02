@@ -4,7 +4,7 @@ use ark_std::cfg_iter;
 use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::{cyclotomic_ring::CRT, PolyRing};
+use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
 use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
@@ -27,6 +27,9 @@ use crate::commitment::Commitment;
 use crate::utils::sumcheck::prover::ProverState;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
+
+#[cfg(feature = "jolt-sumcheck")]
+use lattirust_ring::PolyRing;
 
 #[cfg(test)]
 mod tests;
@@ -175,10 +178,17 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
             let extension_degree = NTT::CoefficientRepresentation::dimension() / NTT::dimension();
 
+            // Add eq_r * g1 * g3 for first k
             let mut result = vals[0] * vals[1];
+
+            // Add eq_r * g1 * g3 for second k
             result += vals[2] * vals[3];
-            // we have k * extension degree mles of b
-            // each one consists of 2 * small_b -1 extensions
+
+            // We have k * extension degree mles of b
+            // each one consists of (2 * small_b) -1 extensions
+            // We start at index 5
+            // Multiply each group of (2 * small_b) -1 extensions
+            // Then multiply by the eq_beta evaluation at index 4
             for (k, mu) in mu_s.iter().enumerate() {
                 let mut inter_result = NTT::zero();
                 for d in (0..extension_degree).rev() {
