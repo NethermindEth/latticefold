@@ -15,6 +15,7 @@ use crate::{
     },
 };
 
+#[cfg(feature = "jolt-sumcheck")]
 use crate::utils::sumcheck::prover::ProverState;
 
 use crate::arith::Instance;
