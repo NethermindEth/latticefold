@@ -134,7 +134,7 @@ where
             &mut prover_transcript,
             &lcccs,
             wit_s.clone(),
-            mz_mles.clone(),  
+            mz_mles.clone(),
         ))
     } else {
         None
@@ -176,9 +176,10 @@ fn test_setup_f_hat_mles() {
     type DP = StarkFoldingDP;
     const W: usize = WIT_LEN * DP::L;
 
-    let (_, wit_s, _, ccs, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
-    let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s.clone());
+    let (_, wit_s, _, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
+    let f_hat_mles = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(
+        &mut wit_s.clone(),
+    );
 
     let expected_f_hat = wit_s
         .iter()

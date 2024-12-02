@@ -11,7 +11,7 @@ use lattirust_ring::cyclotomic_ring::CRT;
 use super::error::FoldingError;
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles};
+use crate::utils::mle_helpers::evaluate_mles;
 use crate::utils::sumcheck::{
     virtual_polynomial::{eq_eval, VPAuxInfo},
     MLSumcheck,
