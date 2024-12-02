@@ -27,7 +27,7 @@ fn prover_linearization_benchmark<
     const W: usize,
     P: DecompositionParams,
     R: SuitableRing,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
@@ -58,15 +58,19 @@ fn prover_linearization_benchmark<
         ),
         &(cm_i, wit, ccs),
         |b, (cm_i, wit, ccs)| {
-            b.iter(|| {
-                let _ = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                    cm_i,
-                    wit,
-                    &mut transcript,
-                    ccs,
-                )
-                .expect("Failed to generate linearization proof");
-            })
+            b.iter_batched(
+                || transcript.clone(),
+                |mut bench_transcript| {
+                    let _ = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+                        cm_i,
+                        wit,
+                        &mut bench_transcript,
+                        ccs,
+                    )
+                    .expect("Failed to generate linearization proof");
+                },
+                criterion::BatchSize::SmallInput,
+            );
         },
     );
     res
@@ -77,7 +81,7 @@ fn verifier_linearization_benchmark<
     const W: usize,
     P: DecompositionParams,
     R: SuitableRing,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
@@ -118,7 +122,7 @@ fn linearization_benchmarks<
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
     R: SuitableRing,
     P: DecompositionParams,
 >(

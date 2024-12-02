@@ -146,16 +146,20 @@ fn verifier_decomposition_benchmark<
         ),
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {
-            b.iter(|| {
-                let mut bench_verifier_transcript = verifier_transcript.clone();
-                let _ = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
-                    lcccs,
-                    proof,
-                    &mut bench_verifier_transcript,
-                    ccs,
-                )
-                .expect("Failed to verify decomposition proof");
-            })
+            b.iter_batched(
+                || verifier_transcript.clone(),
+                |mut bench_verifier_transcript| {
+                    let _ =
+                        LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
+                            lcccs,
+                            proof,
+                            &mut bench_verifier_transcript,
+                            ccs,
+                        )
+                        .expect("Failed to verify decomposition proof");
+                },
+                criterion::BatchSize::SmallInput,
+            );
         },
     );
 }

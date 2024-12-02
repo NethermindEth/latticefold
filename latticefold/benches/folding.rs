@@ -190,6 +190,10 @@ fn verifier_folding_benchmark<
     )
     .expect("Failed to generate folding proof");
 
+    println!(
+        "Size of verifier transcript: {}",
+        std::mem::size_of_val(&verifier_transcript)
+    );
     c.bench_with_input(
         BenchmarkId::new(
             "Folding Verifier",
@@ -205,16 +209,19 @@ fn verifier_folding_benchmark<
         ),
         &(lcccs, folding_proof, ccs),
         |b, (lcccs_vec, proof, ccs)| {
-            b.iter(|| {
-                let mut bench_verifier_transcript = verifier_transcript.clone();
-                let _ = LFFoldingVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
-                    lcccs_vec,
-                    proof,
-                    &mut bench_verifier_transcript,
-                    ccs,
-                )
-                .expect("Failed to verify folding proof");
-            })
+            b.iter_batched(
+                || verifier_transcript.clone(),
+                |mut bench_verifier_transcript| {
+                    let _ = LFFoldingVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
+                        lcccs_vec,
+                        proof,
+                        &mut bench_verifier_transcript,
+                        ccs,
+                    )
+                    .expect("Failed to verify folding proof");
+                },
+                criterion::BatchSize::SmallInput,
+            );
         },
     );
 }
