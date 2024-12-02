@@ -83,7 +83,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let y_s: Vec<Commitment<C, NTT>> = Self::commit_witnesses::<C, W, P>(&wit_s, scheme, cm_i)?;
 
-        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, &cm_i.r)?;
+        let v_s: Vec<Vec<NTT>> = Self::compute_v_s::<C, P>(&wit_s, cm_i)?;
 
         let u_s = Self::compute_u_s(&wit_s, &ccs.M, &x_s, &cm_i.r, log_m)?;
 
@@ -232,13 +232,34 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     }
 
     /// Compute f-hat evaluation claims.
-    fn compute_v_s(
+    fn compute_v_s<const C: usize, P: DecompositionParams>(
         wit_s: &[Witness<NTT>],
-        point_r: &[NTT],
+        lcccs: &LCCCS<C, NTT>,
     ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
-        cfg_iter!(wit_s)
-            .map(|wit| evaluate_mles::<NTT, _, _, DecompositionError>(&wit.f_hat, point_r))
-            .collect::<Result<Vec<_>, _>>()
+        let b = NTT::from(P::B_SMALL as u128);
+
+        let v_k1: Vec<_> = cfg_iter!(wit_s[1..])
+            .map(|wit| evaluate_mles::<NTT, _, _, DecompositionError>(&wit.f_hat, &lcccs.r))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut b_sum = vec![NTT::zero(); v_k1[0].len()];
+
+        v_k1.iter().rev().for_each(|y_i| {
+            b_sum.iter_mut().zip(y_i).for_each(|(acc_j, y_i_j)| {
+                *acc_j = (*acc_j + y_i_j) * b;
+            });
+        });
+
+        b_sum
+            .iter_mut()
+            .zip(&lcccs.v)
+            .for_each(|(acc_j, v_i_j)| *acc_j = *v_i_j - *acc_j);
+
+        let mut result = Vec::with_capacity(wit_s.len());
+
+        result.push(b_sum);
+        result.extend(v_k1);
+        Ok(result)
     }
 
     /// Compute CCS-linearization evaluation claims.

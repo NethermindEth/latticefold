@@ -227,15 +227,18 @@ fn test_compute_v_s() {
     type RqNTT = BabyBearRingNTT;
     type CS = BabyBearChallengeSet;
     type DP = BabyBearDP;
+
+    const C: usize = 4;
     const WIT_LEN: usize = 4;
     const W: usize = WIT_LEN * DP::L;
 
     let (lcccs, _, _, _, wit, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
     let wit_vec =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
-    let v_s =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s(&wit_vec, &lcccs.r)
-            .unwrap();
+    let v_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s::<C, DP>(
+        &wit_vec, &lcccs,
+    )
+    .unwrap();
 
     // Compute expected result
     let expected_v_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
@@ -246,7 +249,7 @@ fn test_compute_v_s() {
     assert!(!v_s.is_empty(), "V_s vector should not be empty");
     assert_eq!(v_s.len(), wit_vec.len(), "Mismatch in V_s vector length");
     assert_eq!(
-        v_s, expected_v_s,
+        expected_v_s, v_s,
         "V_s vector does not match expected evaluations"
     );
 }
