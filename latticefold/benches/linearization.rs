@@ -69,6 +69,7 @@ fn prover_linearization_benchmark<
             })
         },
     );
+    res
 }
 
 fn verifier_linearization_benchmark<
