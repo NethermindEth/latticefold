@@ -22,7 +22,7 @@ pub struct FoldingProof<NTT: OverField> {
 pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
     fn prove<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
-        w_s: &[Witness<NTT>],
+        w_s: Vec<Witness<NTT>>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
         mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],

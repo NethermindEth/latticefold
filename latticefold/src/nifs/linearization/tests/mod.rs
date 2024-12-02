@@ -105,6 +105,8 @@ fn test_generate_sumcheck() {
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &g,
             &mut transcript,
+            #[cfg(feature = "jolt-sumcheck")]
+            ProverState::combine_product,
         )
         .unwrap();
 
@@ -132,6 +134,8 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &g,
             &mut transcript,
+            #[cfg(feature = "jolt-sumcheck")]
+            ProverState::combine_product,
         )
         .unwrap();
 

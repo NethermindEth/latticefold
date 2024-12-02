@@ -109,17 +109,21 @@ fn prover_folding_benchmark<
             ),
         ),
         &(lcccs, wit_s, ccs),
-        |b, (lcccs_vec, wit_vec, ccs)| {
-            b.iter(|| {
-                let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
-                    lcccs_vec,
-                    wit_vec,
-                    &mut prover_transcript,
-                    ccs,
-                    &mz_mles,
-                )
-                .unwrap();
-            })
+        |b, input| {
+            b.iter_batched(
+                || input.clone(),
+                |(lcccs_vec, wit_vec, ccs)| {
+                    let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
+                        &lcccs_vec,
+                        wit_vec,
+                        &mut prover_transcript,
+                        ccs,
+                        &mz_mles,
+                    )
+                    .unwrap();
+                },
+                criterion::BatchSize::SmallInput,
+            )
         },
     );
 }
@@ -129,7 +133,7 @@ fn verifier_folding_benchmark<
     const W: usize,
     P: DecompositionParams,
     R: Clone + UniformRand + Debug + SuitableRing,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
@@ -146,7 +150,7 @@ fn verifier_folding_benchmark<
         &mut prover_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to generate linearization proof");
 
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
@@ -154,7 +158,7 @@ fn verifier_folding_benchmark<
         &mut verifier_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to verify linearization proof");
 
     let (mz_mles, _, wit_vec, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
@@ -164,7 +168,7 @@ fn verifier_folding_benchmark<
             ccs,
             scheme,
         )
-        .unwrap();
+        .expect("Failed to generate decomposition proof");
 
     let lcccs_vec = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
         &lcccs,
@@ -172,7 +176,7 @@ fn verifier_folding_benchmark<
         &mut verifier_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to verify decomposition proof");
 
     let (lcccs, wit_s, mz_mles) = {
         let mut lcccs = lcccs_vec.clone();
@@ -191,13 +195,17 @@ fn verifier_folding_benchmark<
 
     let (_, _, folding_proof) = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
         &lcccs,
-        &wit_s,
+        wit_s,
         &mut prover_transcript,
         ccs,
         &mz_mles,
     )
-    .unwrap();
+    .expect("Failed to generate folding proof");
 
+    println!(
+        "Size of verifier transcript: {}",
+        std::mem::size_of_val(&verifier_transcript)
+    );
     c.bench_with_input(
         BenchmarkId::new(
             "Folding Verifier",
@@ -213,14 +221,19 @@ fn verifier_folding_benchmark<
         ),
         &(lcccs, folding_proof, ccs),
         |b, (lcccs_vec, proof, ccs)| {
-            b.iter(|| {
-                let _ = LFFoldingVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
-                    lcccs_vec,
-                    proof,
-                    &mut verifier_transcript,
-                    ccs,
-                );
-            })
+            b.iter_batched(
+                || verifier_transcript.clone(),
+                |mut bench_verifier_transcript| {
+                    let _ = LFFoldingVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
+                        lcccs_vec,
+                        proof,
+                        &mut bench_verifier_transcript,
+                        ccs,
+                    )
+                    .expect("Failed to verify folding proof");
+                },
+                criterion::BatchSize::SmallInput,
+            );
         },
     );
 }
@@ -230,7 +243,7 @@ fn folding_benchmarks<
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
     R: SuitableRing,
     P: DecompositionParams,
 >(
@@ -347,7 +360,7 @@ fn benchmarks_main(c: &mut Criterion) {
         run_single_babybear_benchmark!(&mut group, 1, 10, 4096, 16384, 3, 2, 14);
     }
 
-    // StarkPrime
+    // // StarkPrime
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Folding StarkPrime");

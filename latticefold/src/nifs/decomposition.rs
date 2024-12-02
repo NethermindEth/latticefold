@@ -5,11 +5,9 @@ use crate::{
     ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
     decomposition_parameters::DecompositionParams,
-    nifs::{
-        error::DecompositionError,
-        mle_helpers::{evaluate_mles, to_mles_err},
-    },
+    nifs::error::DecompositionError,
     transcript::Transcript,
+    utils::mle_helpers::{evaluate_mles, to_mles_err},
 };
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
@@ -26,7 +24,6 @@ use rayon::prelude::*;
 
 pub use structs::*;
 
-use super::mle_helpers::to_mles;
 mod structs;
 
 #[cfg(test)]
@@ -61,7 +58,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let y_s: Vec<Commitment<C, NTT>> = Self::commit_witnesses::<C, W, P>(&wit_s, scheme, cm_i)?;
 
-        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &cm_i.r)?;
+        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, &cm_i.r)?;
 
         let mz_mles = Self::compute_mz_mles(&wit_s, &ccs.M, &x_s, log_m)?;
 
@@ -214,16 +211,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     /// Compute f-hat evaluation claims.
     fn compute_v_s(
         wit_s: &[Witness<NTT>],
-        mle_length: usize,
         point_r: &[NTT],
     ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
         cfg_iter!(wit_s)
-            .map(|wit| {
-                evaluate_mles::<NTT, _, _, DecompositionError>(
-                    &to_mles::<_, _, DecompositionError>(mle_length, &wit.f_hat)?,
-                    point_r,
-                )
-            })
+            .map(|wit| evaluate_mles::<NTT, _, _, DecompositionError>(&wit.f_hat, point_r))
             .collect::<Result<Vec<_>, _>>()
     }
 

@@ -43,12 +43,9 @@ fn prover_decomposition_benchmark<
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
-    println!("Proving decomposition");
-    println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    println!("prove linearization");
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
@@ -57,7 +54,6 @@ fn prover_decomposition_benchmark<
     )
     .unwrap();
 
-    println!("verify linearization");
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
@@ -100,7 +96,7 @@ fn verifier_decomposition_benchmark<
     const W: usize,
     P: DecompositionParams,
     R: Clone + UniformRand + Debug + SuitableRing,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
@@ -108,30 +104,25 @@ fn verifier_decomposition_benchmark<
     ccs: &CCS<R>,
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
-    println!("verify decomposition");
-    println!("transcript");
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    println!("prove linearization");
     let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
         &mut prover_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to generate linearization proof");
 
-    println!("verify linearization");
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
         &mut verifier_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to verify linearization proof");
 
-    println!("prove decomposition");
     let (_, _, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
             &lcccs,
@@ -140,9 +131,8 @@ fn verifier_decomposition_benchmark<
             ccs,
             scheme,
         )
-        .unwrap();
+        .expect("Failed to generate decomposition proof");
 
-    println!("verify decomposition");
     c.bench_with_input(
         BenchmarkId::new(
             "Decomposition Verifier",
@@ -158,14 +148,20 @@ fn verifier_decomposition_benchmark<
         ),
         &(lcccs, decomposition_proof, ccs),
         |b, (lcccs, proof, ccs)| {
-            b.iter(|| {
-                let _ = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
-                    lcccs,
-                    proof,
-                    &mut verifier_transcript,
-                    ccs,
-                );
-            })
+            b.iter_batched(
+                || verifier_transcript.clone(),
+                |mut bench_verifier_transcript| {
+                    let _ =
+                        LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
+                            lcccs,
+                            proof,
+                            &mut bench_verifier_transcript,
+                            ccs,
+                        )
+                        .expect("Failed to verify decomposition proof");
+                },
+                criterion::BatchSize::SmallInput,
+            );
         },
     );
 }
@@ -175,16 +171,14 @@ fn decomposition_benchmarks<
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
-    CS: LatticefoldChallengeSet<R>,
+    CS: LatticefoldChallengeSet<R> + Clone,
     R: Clone + UniformRand + Debug + SuitableRing,
     P: DecompositionParams + Clone,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
-    println!("Witness generation");
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
-    // N/Q = prime / degree
 
     prover_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 

@@ -133,8 +133,8 @@ where
             &ccs,
             &mut prover_transcript,
             &lcccs,
-            &wit_s,
-            mz_mles.clone(),
+            wit_s.clone(),
+            mz_mles.clone(),  
         ))
     } else {
         None
@@ -154,7 +154,7 @@ fn generate_folding_proof<RqNTT, CS, const C: usize>(
     ccs: &CCS<RqNTT>,
     prover_transcript: &mut PoseidonTranscript<RqNTT, CS>,
     lcccs: &[LCCCS<C, RqNTT>],
-    wit_s: &[Witness<RqNTT>],
+    wit_s: Vec<Witness<RqNTT>>,
     mz_mles: Vec<Vec<DenseMultilinearExtension<RqNTT>>>,
 ) -> FoldingProof<RqNTT>
 where
@@ -178,18 +178,11 @@ fn test_setup_f_hat_mles() {
 
     let (_, wit_s, _, ccs, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s.clone());
 
     let expected_f_hat = wit_s
         .iter()
-        .map(|w| {
-            w.f_hat
-                .iter()
-                .map(|f_hat_row| {
-                    DenseMultilinearExtension::from_evaluations_slice(ccs.s, f_hat_row)
-                })
-                .collect()
-        })
+        .map(|w| w.f_hat.clone())
         .collect::<Vec<Vec<DenseMultilinearExtension<RqNTT>>>>();
 
     // Validate
@@ -239,11 +232,11 @@ fn test_get_sumcheck_randomness() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _, mz_mles) =
+    let (lccs, mut wit_s, mut transcript, ccs, _, mz_mles) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s);
 
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
@@ -299,11 +292,11 @@ fn test_get_thetas() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _, mz_mles) =
+    let (lccs, mut wit_s, mut transcript, ccs, _, mz_mles) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s);
 
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
@@ -373,11 +366,11 @@ fn test_get_etas() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _, mz_mles) =
+    let (lccs, mut wit_s, mut transcript, ccs, _, mz_mles) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s);
 
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
@@ -475,11 +468,11 @@ fn test_prepare_public_output() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _, mz_mles) =
+    let (lccs, mut wit_s, mut transcript, ccs, _, mz_mles) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s);
 
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
 
@@ -559,11 +552,11 @@ fn test_compute_f_0() {
 
     const W: usize = WIT_LEN * DP::L;
 
-    let (lccs, wit_s, mut transcript, ccs, _, Mz_mles) =
+    let (lccs, mut wit_s, mut transcript, ccs, _, Mz_mles) =
         setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
     let f_hat_mles =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(ccs.s, &wit_s);
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s);
 
     let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lccs);
     let prechallenged_Ms_1 =
@@ -649,7 +642,7 @@ fn test_full_prove() {
         setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let _ = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<C, DP>(
         &lccs,
-        &wit_s,
+        wit_s,
         &mut transcript,
         &ccs,
         &mz_mles,
