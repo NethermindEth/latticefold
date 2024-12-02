@@ -189,16 +189,26 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             // We start at index 5
             // Multiply each group of (2 * small_b) -1 extensions
             // Then multiply by the eq_beta evaluation at index 4
-            for (k, mu) in mu_s.iter().enumerate() {
+            'outer: for (k, mu) in mu_s.iter().enumerate() {
                 let mut inter_result = NTT::zero();
                 for d in (0..extension_degree).rev() {
                     let i = k * extension_degree + d;
-                    let mut eval = NTT::one();
+
                     let f_i = vals[4 + (i + 1) * (2 * P::B_SMALL - 1)];
+                    if f_i.is_zero() {
+                        continue;
+                    }
+                    let mut eval = NTT::one();
+
                     let f_i_squared = f_i * f_i;
+
                     eval *= f_i;
                     for b in 1..P::B_SMALL {
-                        eval *= f_i_squared - NTT::from(b as u128 * b as u128);
+                        let multiplicand = f_i_squared - NTT::from(b as u128 * b as u128);
+                        if f_i.is_zero() {
+                            continue 'outer;
+                        }
+                        eval *= multiplicand
                     }
                     eval *= vals[4];
                     inter_result += eval;
