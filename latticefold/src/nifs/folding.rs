@@ -173,18 +173,25 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         #[cfg(feature = "jolt-sumcheck")]
         let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
+            let extension_degree = NTT::CoefficientRepresentation::dimension() / NTT::dimension();
+
             let num_g_2_mles =
                 P::K * (2 * P::B_SMALL as usize - 1) * NTT::CoefficientRepresentation::dimension()
                     / NTT::dimension();
 
             let mut result = vals[0] * vals[1];
-            result += vals[2..2 * num_g_2_mles + 3].iter().product::<NTT>();
-            result += vals[num_g_2_mles + 3] * vals[num_g_2_mles + 4];
-            let mut second_b: NTT = vals[num_g_2_mles + 5..2 * num_g_2_mles + 5]
-                .iter()
-                .product();
-            second_b *= vals[num_g_2_mles + 3];
-            result += second_b;
+            result += vals[2] * vals[num_g_2_mles + 3];
+            // we have k * extension degree mles of b
+            // each one consists of 2 * small_b -1 extensions
+            for i in 0..2 * P::K * extension_degree {
+                let mut eval = vals
+                    [5 + i * (2 * P::B_SMALL - 1)..5 + (i + 1) * (2 * P::B_SMALL - 1)]
+                    .iter()
+                    .product::<NTT>();
+                eval *= vals[4];
+                result += eval;
+            }
+
             result
         };
 
