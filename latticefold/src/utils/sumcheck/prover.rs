@@ -1,7 +1,4 @@
 //! Prover
-
-use std::time::Instant;
-
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
 use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
