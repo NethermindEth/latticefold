@@ -205,7 +205,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                     eval *= f_i;
                     for b in 1..P::B_SMALL {
                         let multiplicand = f_i_squared - NTT::from(b as u128 * b as u128);
-                        if f_i.is_zero() {
+                        if multiplicand.is_zero() {
                             continue 'outer;
                         }
                         eval *= multiplicand
