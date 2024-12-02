@@ -31,6 +31,32 @@ mod tests;
 
 mod utils;
 
+pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
+    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
+        cm_i: &LCCCS<C, NTT>,
+        wit: &Witness<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
+    ) -> Result<
+        (
+            Vec<LCCCS<C, NTT>>,
+            Vec<Witness<NTT>>,
+            DecompositionProof<C, NTT>,
+        ),
+        DecompositionError,
+    >;
+}
+
+pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
+    fn verify<const C: usize, P: DecompositionParams>(
+        cm_i: &LCCCS<C, NTT>,
+        proof: &DecompositionProof<C, NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError>;
+}
+
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {

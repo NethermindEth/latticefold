@@ -36,6 +36,24 @@ pub use structs::*;
 
 mod structs;
 
+pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
+    fn prove<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        w_s: Vec<Witness<NTT>>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
+}
+
+pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
+    fn verify<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        proof: &FoldingProof<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>>;
+}
+
 fn prepare_public_output<const C: usize, NTT: SuitableRing>(
     r_0: Vec<NTT>,
     v_0: Vec<NTT>,
