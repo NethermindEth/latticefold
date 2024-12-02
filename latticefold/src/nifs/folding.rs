@@ -194,15 +194,17 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                 for d in (0..extension_degree).rev() {
                     let i = k * extension_degree + d;
 
-                    let f_i = vals[4 + (i + 1) * (2 * P::B_SMALL - 1)];
+                    let f_i = vals[5 + i];
+
                     if f_i.is_zero() {
                         continue;
                     }
-                    let mut eval = NTT::one();
+
+                    // start with eq_b
+                    let mut eval = vals[4];
 
                     let f_i_squared = f_i * f_i;
 
-                    eval *= f_i;
                     for b in 1..P::B_SMALL {
                         let multiplicand = f_i_squared - NTT::from(b as u128 * b as u128);
                         if multiplicand.is_zero() {
@@ -210,7 +212,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                         }
                         eval *= multiplicand
                     }
-                    eval *= vals[4];
+                    eval *= f_i;
                     inter_result += eval;
                     inter_result *= mu
                 }
@@ -385,7 +387,11 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         // Calculate claims for sumcheck verification
         let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
 
+        #[cfg(not(feature = "jolt-sumcheck"))]
         let poly_info = VPAuxInfo::new(ccs.s, 2 * P::B_SMALL);
+
+        #[cfg(feature = "jolt-sumcheck")]
+        let poly_info = VPAuxInfo::new(ccs.s, 2);
 
         //Step 2: The sumcheck.
         let (r_0, expected_evaluation) =

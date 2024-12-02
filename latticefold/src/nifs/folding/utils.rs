@@ -347,25 +347,17 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
 
     Ok(())
 }
+
 #[cfg(feature = "jolt-sumcheck")]
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    b: usize,
+    _b: usize,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
     _mu_i: NTT,
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     for fi_hat_mle in fi_hat_mle_s.iter() {
-        let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> = Vec::new();
-        mle_list.push(beta_eq_x.clone());
-        for _ in 1..b {
-            mle_list.push(RefCounter::from(fi_hat_mle.as_ref().clone()));
-            mle_list.push(RefCounter::from(fi_hat_mle.as_ref().clone()));
-        }
-
-        mle_list.push(fi_hat_mle.clone());
-
-        g.add_mle_list(mle_list, NTT::one())?;
+        g.add_mle_list(vec![beta_eq_x.clone(), fi_hat_mle.clone()], NTT::one())?;
     }
 
     Ok(())
