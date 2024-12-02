@@ -5,7 +5,6 @@ use ark_std::iter::successors;
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::{cyclotomic_ring::CRT, PolyRing};
-use num_traits::zero;
 
 use super::error::FoldingError;
 use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
@@ -176,16 +175,11 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
             let extension_degree = NTT::CoefficientRepresentation::dimension() / NTT::dimension();
 
-            let num_g_2_mles =
-                P::K * (2 * P::B_SMALL as usize - 1) * NTT::CoefficientRepresentation::dimension()
-                    / NTT::dimension();
-
             let mut result = vals[0] * vals[1];
-            result += vals[2] * vals[num_g_2_mles + 3];
+            result += vals[2] * vals[3];
             // we have k * extension degree mles of b
             // each one consists of 2 * small_b -1 extensions
-
-            for k in 0..2 * P::K {
+            for (k, mu) in mu_s.iter().enumerate() {
                 let mut inter_result = NTT::zero();
                 for d in (0..extension_degree).rev() {
                     let i = k * extension_degree + d;
@@ -195,7 +189,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
                         .product::<NTT>();
                     eval *= vals[4];
                     inter_result += eval;
-                    inter_result *= mu_s[k]
+                    inter_result *= mu
                 }
                 result += inter_result;
             }
