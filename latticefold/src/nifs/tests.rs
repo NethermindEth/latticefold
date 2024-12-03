@@ -3,6 +3,7 @@ use crate::arith::tests::get_test_ccs;
 use crate::arith::{Witness, CCCS, CCS, LCCCS};
 use crate::commitment::AjtaiCommitmentScheme;
 use crate::decomposition_parameters::DecompositionParams;
+use crate::nifs::linearization::{LFLinearizationProver, LinearizationProver};
 use crate::nifs::{NIFSProver, NIFSVerifier};
 use crate::transcript::poseidon::PoseidonTranscript;
 use crate::transcript::TranscriptWithShortChallenges;
@@ -17,6 +18,7 @@ fn setup_test_environment<
     DP: DecompositionParams,
     const W: usize,
     const WIT_LEN: usize,
+    CS: LatticefoldChallengeSet<RqNTT>,
 >() -> (
     LCCCS<C, RqNTT>, // acc
     Witness<RqNTT>,  // w_acc
@@ -36,16 +38,18 @@ fn setup_test_environment<
         x_ccs: x_ccs.clone(),
     };
 
-    let wit_acc = Witness::rand::<_, DP>(&mut rng, WIT_LEN);
-    let acc = LCCCS {
-        r: vec![RqNTT::rand(&mut rng); ccs.s],
-        v: vec![RqNTT::rand(&mut rng); wit_acc.f_hat.len()],
-        cm: wit_acc.commit::<C, W, DP>(&scheme).unwrap(),
-        u: vec![RqNTT::rand(&mut rng); ccs.t],
-        x_w: x_ccs.clone(),
-        h: RqNTT::one(),
-    };
+    let rand_w_ccs: Vec<RqNTT> = (0..WIT_LEN).map(|i| RqNTT::from(i as u64)).collect();
+    let wit_acc = Witness::from_w_ccs::<DP>(rand_w_ccs);
 
+    let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
+
+    let (acc, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
+        &cm_i,
+        &wit_acc,
+        &mut transcript,
+        &ccs,
+    )
+    .unwrap();
     (acc, wit_acc, cm_i, wit_i, ccs, scheme)
 }
 
@@ -58,7 +62,8 @@ fn test_nifs_prove<
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
 >() {
-    let (acc, w_acc, cm_i, w_i, ccs, scheme) = setup_test_environment::<C, RqNTT, DP, W, WIT_LEN>();
+    let (acc, w_acc, cm_i, w_i, ccs, scheme) =
+        setup_test_environment::<C, RqNTT, DP, W, WIT_LEN, CS>();
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
@@ -84,7 +89,8 @@ fn test_nifs_verify<
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
 >() {
-    let (acc, w_acc, cm_i, w_i, ccs, scheme) = setup_test_environment::<C, RqNTT, DP, W, WIT_LEN>();
+    let (acc, w_acc, cm_i, w_i, ccs, scheme) =
+        setup_test_environment::<C, RqNTT, DP, W, WIT_LEN, CS>();
 
     let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
