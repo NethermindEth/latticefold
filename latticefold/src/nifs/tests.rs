@@ -8,6 +8,7 @@ use crate::nifs::{NIFSProver, NIFSVerifier};
 use crate::transcript::poseidon::PoseidonTranscript;
 use crate::transcript::TranscriptWithShortChallenges;
 use ark_std::test_rng;
+use ark_std::vec::Vec;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::SuitableRing;
 use rand::Rng;
