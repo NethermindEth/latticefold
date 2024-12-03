@@ -245,7 +245,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
         let mut b_sum = vec![NTT::zero(); v_k1[0].len()];
 
         v_k1.iter().rev().for_each(|y_i| {
-            b_sum.iter_mut().zip(y_i).for_each(|(acc_j, y_i_j)| {
+            cfg_iter_mut!(b_sum).zip(y_i).for_each(|(acc_j, y_i_j)| {
                 *acc_j = (*acc_j + y_i_j) * b;
             });
         });
