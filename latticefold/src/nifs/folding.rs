@@ -7,9 +7,9 @@ use cyclotomic_rings::rings::SuitableRing;
 use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
-use super::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles};
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
+use crate::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::utils::sumcheck::{
     virtual_polynomial::{eq_eval, VPAuxInfo},
     MLSumcheck,
@@ -39,6 +39,24 @@ pub use structs::*;
 
 mod structs;
 
+pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
+    fn prove<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        w_s: Vec<Witness<NTT>>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
+}
+
+pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
+    fn verify<const C: usize, P: DecompositionParams>(
+        cm_i_s: &[LCCCS<C, NTT>],
+        proof: &FoldingProof<NTT>,
+        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>>;
+}
+
 fn prepare_public_output<const C: usize, NTT: SuitableRing>(
     r_0: Vec<NTT>,
     v_0: Vec<NTT>,
@@ -58,12 +76,9 @@ fn prepare_public_output<const C: usize, NTT: SuitableRing>(
 }
 
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<NTT, T> {
-    fn setup_f_hat_mles(
-        log_m: usize,
-        w_s: &[Witness<NTT>],
-    ) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
-        w_s.iter()
-            .map(|w| to_mles::<_, _, FoldingError<NTT>>(log_m, &w.f_hat).unwrap())
+    fn setup_f_hat_mles(w_s: &mut [Witness<NTT>]) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
+        cfg_iter_mut!(w_s)
+            .map(|w| w.take_f_hat())
             .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>()
     }
 
@@ -138,7 +153,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 {
     fn prove<const C: usize, P: DecompositionParams>(
         cm_i_s: &[LCCCS<C, NTT>],
-        w_s: &[Witness<NTT>],
+        mut w_s: Vec<Witness<NTT>>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
@@ -155,9 +170,9 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         // Step 2: Compute g polynomial and sumcheck on it
         // Setup f_hat_mle for later evaluation of thetas
-        let f_hat_mles = Self::setup_f_hat_mles(log_m, w_s);
+        let f_hat_mles = Self::setup_f_hat_mles(&mut w_s);
 
-        let zis = Self::get_zis(cm_i_s, w_s);
+        let zis = Self::get_zis(cm_i_s, &w_s);
         let ris = Self::get_ris(cm_i_s);
 
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> =
@@ -253,7 +268,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         let lcccs = prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h);
 
-        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, w_s);
+        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, &w_s);
 
         let w_0 = Witness::from_f::<P>(f_0);
 

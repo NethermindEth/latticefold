@@ -1,4 +1,4 @@
-use crate::{ark_base::Vec, nifs::mle_helpers::evaluate_mles};
+use crate::{ark_base::Vec, utils::mle_helpers::evaluate_mles};
 use ark_ff::PrimeField;
 
 use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};

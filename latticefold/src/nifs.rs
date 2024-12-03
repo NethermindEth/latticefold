@@ -21,7 +21,6 @@ pub mod decomposition;
 pub mod error;
 pub mod folding;
 pub mod linearization;
-mod mle_helpers;
 
 /// `C` is the length of Ajtai commitment vectors.
 /// `NTT` is a cyclotomic ring in the NTT form.
@@ -89,7 +88,7 @@ impl<
         };
 
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, &wit_s, transcript, ccs)?;
+            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, wit_s, transcript, ccs)?;
 
         Ok((
             folded_lcccs,

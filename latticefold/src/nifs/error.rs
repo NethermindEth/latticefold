@@ -3,7 +3,8 @@ use lattirust_ring::Ring;
 use thiserror::Error;
 
 use crate::{
-    arith::error::CSError, ark_base::*, commitment::CommitmentError, utils::sumcheck::SumCheckError,
+    arith::error::CSError, ark_base::*, commitment::CommitmentError,
+    utils::mle_helpers::MleEvaluationError, utils::sumcheck::SumCheckError,
 };
 
 #[derive(Debug, Error)]
@@ -60,10 +61,4 @@ pub enum FoldingError<R: Ring> {
     EvaluationError(#[from] MleEvaluationError),
     #[error("sumcheck challenge point were not generate correctly")]
     SumcheckChallengeError,
-}
-
-#[derive(Debug, Error)]
-pub enum MleEvaluationError {
-    #[error("lengths of evaluation point and evaluations are not consistent: 1 << {0} != {1}")]
-    IncorrectLength(usize, usize),
 }

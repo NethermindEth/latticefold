@@ -5,11 +5,9 @@ use crate::{
     ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
     decomposition_parameters::DecompositionParams,
-    nifs::{
-        error::DecompositionError,
-        mle_helpers::{evaluate_mles, to_mles_err},
-    },
+    nifs::error::DecompositionError,
     transcript::Transcript,
+    utils::mle_helpers::{evaluate_mles, to_mles_err},
 };
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
@@ -26,13 +24,38 @@ use rayon::prelude::*;
 
 pub use structs::*;
 
-use super::mle_helpers::to_mles;
 mod structs;
 
 #[cfg(test)]
 mod tests;
 
 mod utils;
+
+pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
+    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
+        cm_i: &LCCCS<C, NTT>,
+        wit: &Witness<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
+    ) -> Result<
+        (
+            Vec<LCCCS<C, NTT>>,
+            Vec<Witness<NTT>>,
+            DecompositionProof<C, NTT>,
+        ),
+        DecompositionError,
+    >;
+}
+
+pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
+    fn verify<const C: usize, P: DecompositionParams>(
+        cm_i: &LCCCS<C, NTT>,
+        proof: &DecompositionProof<C, NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError>;
+}
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
@@ -60,7 +83,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let y_s: Vec<Commitment<C, NTT>> = Self::commit_witnesses::<C, W, P>(&wit_s, scheme, cm_i)?;
 
-        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, log_m, &cm_i.r)?;
+        let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, &cm_i.r)?;
 
         let u_s = Self::compute_u_s(&wit_s, &ccs.M, &x_s, &cm_i.r, log_m)?;
 
@@ -211,16 +234,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     /// Compute f-hat evaluation claims.
     fn compute_v_s(
         wit_s: &[Witness<NTT>],
-        mle_length: usize,
         point_r: &[NTT],
     ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
         cfg_iter!(wit_s)
-            .map(|wit| {
-                evaluate_mles::<NTT, _, _, DecompositionError>(
-                    &to_mles::<_, _, DecompositionError>(mle_length, &wit.f_hat)?,
-                    point_r,
-                )
-            })
+            .map(|wit| evaluate_mles::<NTT, _, _, DecompositionError>(&wit.f_hat, point_r))
             .collect::<Result<Vec<_>, _>>()
     }
 

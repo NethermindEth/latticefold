@@ -34,10 +34,7 @@ pub fn wit_and_ccs_gen<
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
-    match ccs.check_relation(&z) {
-        Ok(_) => println!("R1CS valid!"),
-        Err(e) => println!("R1CS invalid: {:?}", e),
-    }
+    ccs.check_relation(&z).expect("R1CS invalid!");
 
     let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
     let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);

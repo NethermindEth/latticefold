@@ -13,8 +13,8 @@ use crate::nifs::decomposition::{
 };
 use crate::nifs::error::DecompositionError;
 use crate::nifs::linearization::utils::compute_u;
-use crate::nifs::mle_helpers::{evaluate_mles, to_mles, to_mles_err};
 use crate::transcript::poseidon::PoseidonTranscript;
+use crate::utils::mle_helpers::{evaluate_mles, to_mles_err};
 use ark_std::vec::Vec;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
@@ -70,8 +70,7 @@ where
     let u = compute_u(&Mz_mles, &r).unwrap();
 
     let v = evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, DecompositionError>(
-        &to_mles::<_, _, DecompositionError>(log_m, &wit.f_hat).unwrap(),
-        &r,
+        &wit.f_hat, &r,
     )
     .unwrap();
 
@@ -231,23 +230,16 @@ fn test_compute_v_s() {
     const WIT_LEN: usize = 4;
     const W: usize = WIT_LEN * DP::L;
 
-    let (lcccs, _, _, ccs, wit, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
+    let (lcccs, _, _, _, wit, _) = generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
     let wit_vec =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
-    let v_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s(
-        &wit_vec, ccs.s, &lcccs.r,
-    )
-    .unwrap();
+    let v_s =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s(&wit_vec, &lcccs.r)
+            .unwrap();
 
     // Compute expected result
     let expected_v_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
-        .map(|wit| {
-            evaluate_mles::<RqNTT, _, _, DecompositionError>(
-                &to_mles::<_, _, DecompositionError>(ccs.s, &wit.f_hat).unwrap(),
-                &lcccs.r,
-            )
-            .unwrap()
-        })
+        .map(|wit| evaluate_mles::<RqNTT, _, _, DecompositionError>(&wit.f_hat, &lcccs.r).unwrap())
         .collect();
 
     // Validate

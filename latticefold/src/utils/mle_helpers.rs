@@ -3,17 +3,22 @@
 //!  
 
 use ark_std::{cfg_into_iter, cfg_iter, vec::Vec};
+use thiserror::Error;
 
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::Ring;
-
-use super::error::MleEvaluationError;
 
 use crate::arith::{error::CSError, utils::mat_vec_mul, CCS};
 use cyclotomic_rings::rings::SuitableRing;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
+#[derive(Debug, Error)]
+pub enum MleEvaluationError {
+    #[error("lengths of evaluation point and evaluations are not consistent: 1 << {0} != {1}")]
+    IncorrectLength(usize, usize),
+}
 
 pub trait Evaluate<R: Ring> {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError>;
@@ -86,19 +91,6 @@ where
 }
 
 #[cfg(not(feature = "parallel"))]
-pub fn to_mles<'a, I, R, E>(n_vars: usize, mle_s: I) -> Result<Vec<DenseMultilinearExtension<R>>, E>
-where
-    I: IntoIterator<Item = &'a Vec<R>>,
-    R: Ring,
-    E: From<MleEvaluationError> + Sync + Send,
-{
-    mle_s
-        .into_iter()
-        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, M)))
-        .collect::<Result<_, E>>()
-}
-
-#[cfg(not(feature = "parallel"))]
 pub fn to_mles_err<I, R, E, E1>(
     n_vars: usize,
     mle_s: I,
@@ -118,19 +110,6 @@ where
                 Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
             }
         })
-        .collect::<Result<_, E>>()
-}
-
-#[cfg(feature = "parallel")]
-pub fn to_mles<'a, I, R, E>(n_vars: usize, mle_s: I) -> Result<Vec<DenseMultilinearExtension<R>>, E>
-where
-    I: IntoParallelIterator<Item = &'a Vec<R>>,
-    R: Ring,
-    E: From<MleEvaluationError> + Sync + Send,
-{
-    mle_s
-        .into_par_iter()
-        .map(|M| Ok(DenseMultilinearExtension::from_slice(n_vars, M)))
         .collect::<Result<_, E>>()
 }
 
