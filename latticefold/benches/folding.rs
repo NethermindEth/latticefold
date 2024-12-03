@@ -1,5 +1,4 @@
 #![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
@@ -202,10 +201,6 @@ fn verifier_folding_benchmark<
     )
     .expect("Failed to generate folding proof");
 
-    println!(
-        "Size of verifier transcript: {}",
-        std::mem::size_of_val(&verifier_transcript)
-    );
     c.bench_with_input(
         BenchmarkId::new(
             "Folding Verifier",

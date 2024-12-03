@@ -1,15 +1,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 
-use cyclotomic_rings::rings::SuitableRing;
-
-use crate::{
-    arith::{Witness, CCCS, CCS, LCCCS},
-    ark_base::*,
-    nifs::error::LinearizationError,
-    transcript::Transcript,
-    utils::sumcheck,
-};
+use crate::{ark_base::*, utils::sumcheck};
 
 use lattirust_ring::OverField;
 
@@ -43,59 +35,6 @@ pub struct LinearizationProof<NTT: OverField> {
     ///
     /// Sent in the step 3 of linearization subprotocol.
     pub u: Vec<NTT>,
-}
-
-/// Prover for the linearization subprotocol
-pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
-    /// Generates a proof for the linearization subprotocol
-    ///
-    /// # Arguments
-    ///
-    /// * `cm_i` - A reference to a committed CCS statement to be linearized, i.e. a CCCS<C, NTT>.
-    /// * `wit` - A reference to a CCS witness for the statement cm_i.
-    /// * `transcript` - A mutable reference to a sponge for generating NI challenges.
-    /// * `ccs` - A reference to a Customizable Constraint System circuit representation.
-    ///
-    /// # Returns
-    ///
-    /// On success, returns a tuple `(LCCCS<C, NTT>, LinearizationProof<NTT>)` where:
-    ///   * `LCCCS<C, NTT>` is a linearized version of the CCS witness commitment.
-    ///   * `LinearizationProof<NTT>` is a proof that the linearization subprotocol was executed correctly.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if asked to evaluate MLEs with incorrect number of variables
-    ///
-    fn prove<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
-        wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
-}
-
-/// Verifier for the linearization subprotocol.
-pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
-    /// Verifies a proof for the linearization subprotocol.
-    ///
-    /// # Arguments
-    ///
-    /// * `cm_i` - A reference to a `CCCS<C, NTT>`, which represents a CCS statement and a commitment to a witness.
-    /// * `proof` - A reference to a `LinearizationProof<NTT>` containing the linearization proof.
-    /// * `transcript` - A mutable reference to a sponge for generating NI challenges.
-    /// * `ccs` - A reference to a Customizable Constraint System instance used in the protocol.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(LCCCS<C, NTT>)` - On success, returns a linearized version of the CCS witness commitment.
-    /// * `Err(LinearizationError<NTT>)` - If verification fails, returns a `LinearizationError<NTT>`.
-    ///
-    fn verify<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
-        proof: &LinearizationProof<NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
 }
 
 /// The LatticeFold prover

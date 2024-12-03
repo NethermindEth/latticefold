@@ -31,6 +31,9 @@ use crate::utils::sumcheck::prover::ProverState;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+#[cfg(feature = "jolt-sumcheck")]
+use lattirust_ring::PolyRing;
+
 #[cfg(test)]
 mod tests;
 
@@ -175,12 +178,62 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             &mu_s,
         )?;
 
+        #[cfg(feature = "jolt-sumcheck")]
+        let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
+            let extension_degree = NTT::CoefficientRepresentation::dimension() / NTT::dimension();
+
+            // Add eq_r * g1 * g3 for first k
+            let mut result = vals[0] * vals[1];
+
+            // Add eq_r * g1 * g3 for second k
+            result += vals[2] * vals[3];
+
+            // We have k * extension degree mles of b
+            // each one consists of (2 * small_b) -1 extensions
+            // We start at index 5
+            // Multiply each group of (2 * small_b) -1 extensions
+            // Then multiply by the eq_beta evaluation at index 4
+            for (k, mu) in mu_s.iter().enumerate() {
+                let mut inter_result = NTT::zero();
+                for d in (0..extension_degree).rev() {
+                    let i = k * extension_degree + d;
+
+                    let f_i = vals[5 + i];
+
+                    if f_i.is_zero() {
+                        inter_result *= mu;
+                        continue;
+                    }
+
+                    // start with eq_b
+                    let mut eval = vals[4];
+
+                    let f_i_squared = f_i * f_i;
+
+                    for b in 1..P::B_SMALL {
+                        let multiplicand = f_i_squared - NTT::from(b as u128 * b as u128);
+                        if multiplicand.is_zero() {
+                            eval = NTT::zero();
+                            break;
+                        }
+                        eval *= multiplicand
+                    }
+                    eval *= f_i;
+                    inter_result += eval;
+                    inter_result *= mu
+                }
+                result += inter_result;
+            }
+
+            result
+        };
+
         // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
             transcript,
             &g,
             #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            comb_fn,
         );
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);

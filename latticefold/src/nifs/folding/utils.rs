@@ -149,6 +149,15 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         challenged_Ms_1,
     )?;
 
+    let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
+    prepare_g1_and_3_k_mles_list(
+        &mut g,
+        r_i_eq.clone(),
+        &f_hat_mles[DP::K..2 * DP::K],
+        &alpha_s[DP::K..2 * DP::K],
+        challenged_Ms_2,
+    )?;
+
     for i in 0..DP::K {
         prepare_g2_i_mle_list(
             &mut g,
@@ -158,14 +167,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
             beta_eq_x.clone(),
         )?;
     }
-    let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
-    prepare_g1_and_3_k_mles_list(
-        &mut g,
-        r_i_eq.clone(),
-        &f_hat_mles[DP::K..2 * DP::K],
-        &alpha_s[DP::K..2 * DP::K],
-        challenged_Ms_2,
-    )?;
 
     for i in DP::K..2 * DP::K {
         prepare_g2_i_mle_list(
@@ -176,6 +177,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
             beta_eq_x.clone(),
         )?;
     }
+
+    g.aux_info.max_degree = 2 * DP::B_SMALL;
 
     Ok(g)
 }
@@ -309,6 +312,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     Ok(())
 }
 
+#[cfg(not(feature = "jolt-sumcheck"))]
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
     b: usize,
@@ -320,7 +324,7 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
         successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.iter())
     {
         let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> = Vec::new();
-
+        mle_list.push(beta_eq_x.clone());
         for i in 1..b {
             let i_hat = NTT::from(i as u128);
             mle_list.push(RefCounter::from(fi_hat_mle.as_ref().clone() - i_hat));
@@ -328,8 +332,23 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
         }
 
         mle_list.push(fi_hat_mle.clone());
-        mle_list.push(beta_eq_x.clone());
+
         g.add_mle_list(mle_list, mu)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "jolt-sumcheck")]
+fn prepare_g2_i_mle_list<NTT: OverField>(
+    g: &mut VirtualPolynomial<NTT>,
+    _b: usize,
+    fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
+    _mu_i: NTT,
+    beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
+) -> Result<(), ArithErrors> {
+    for fi_hat_mle in fi_hat_mle_s.iter() {
+        g.add_mle_list(vec![beta_eq_x.clone(), fi_hat_mle.clone()], NTT::one())?;
     }
 
     Ok(())
