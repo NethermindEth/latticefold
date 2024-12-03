@@ -17,7 +17,7 @@ use lattirust_ring::cyclotomic_ring::models::{
     babybear::RqNTT as BabyBearRqNTT, frog_ring::RqNTT as FrogRqNTT,
     goldilocks::RqNTT as GoldilocksRqNTT, stark_prime::RqNTT as StarkRqNTT,
 };
-use num_traits::One;
+use num_traits::{One, Zero};
 use rand::Rng;
 
 const C: usize = 4;
@@ -111,12 +111,23 @@ fn test_generate_sumcheck() {
         )
         .unwrap();
 
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        let mut sum = RqNTT::zero();
+        for (coefficient, products) in &g.products {
+            let mut prod = *coefficient;
+            for j in products {
+                prod *= vals[*j];
+            }
+            sum += prod;
+        }
+        sum
+    };
+
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &g,
             &mut transcript,
-            #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            comb_fn,
         )
         .unwrap();
 
@@ -140,12 +151,30 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
         )
         .unwrap();
 
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        let mut result = RqNTT::zero();
+        'outer: for (i, &c) in ccs.c.iter().enumerate() {
+            if c.is_zero() {
+                continue;
+            }
+            let mut term = c;
+            for &j in &ccs.S[i] {
+                if vals[j].is_zero() {
+                    continue 'outer;
+                }
+                term *= vals[j];
+            }
+            result += term;
+        }
+        // eq() is the last term added
+        result * vals[vals.len() - 1]
+    };
+
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &g,
             &mut transcript,
-            #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            comb_fn,
         )
         .unwrap();
 

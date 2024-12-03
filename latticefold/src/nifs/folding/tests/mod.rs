@@ -11,9 +11,10 @@ use crate::nifs::folding::{
 };
 use crate::nifs::FoldingProof;
 use crate::transcript::{Transcript, TranscriptWithShortChallenges};
-#[cfg(feature = "jolt-sumcheck")]
-use crate::utils::sumcheck::prover::ProverState;
-use crate::utils::sumcheck::{virtual_polynomial::VPAuxInfo, MLSumcheck};
+use crate::utils::sumcheck::{
+    virtual_polynomial::VPAuxInfo,
+    MLSumcheck,
+};
 use crate::{
     arith::{r1cs::get_test_z_ntt_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
@@ -269,13 +270,20 @@ fn test_get_sumcheck_randomness() {
     )
     .unwrap();
 
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        let mut sum = RqNTT::zero();
+        for (coefficient, products) in &g.products {
+            let mut prod = *coefficient;
+            for j in products {
+                prod *= vals[*j];
+            }
+            sum += prod;
+        }
+        sum
+    };
+
     // Compute sumcheck proof
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g,
-        #[cfg(feature = "jolt-sumcheck")]
-        ProverState::combine_product,
-    );
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
     // Derive randomness
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
@@ -329,13 +337,19 @@ fn test_get_thetas() {
     )
     .unwrap();
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g,
-        #[cfg(feature = "jolt-sumcheck")]
-        ProverState::combine_product,
-    );
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        let mut sum = RqNTT::zero();
+        for (coefficient, products) in &g.products {
+            let mut prod = *coefficient;
+            for j in products {
+                prod *= vals[*j];
+            }
+            sum += prod;
+        }
+        sum
+    };
 
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -403,13 +417,19 @@ fn test_get_etas() {
     )
     .unwrap();
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g,
-        #[cfg(feature = "jolt-sumcheck")]
-        ProverState::combine_product,
-    );
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        let mut sum = RqNTT::zero();
+        for (coefficient, products) in &g.products {
+            let mut prod = *coefficient;
+            for j in products {
+                prod *= vals[*j];
+            }
+            sum += prod;
+        }
+        sum
+    };
 
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -505,13 +525,19 @@ fn test_prepare_public_output() {
     )
     .unwrap();
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g,
-        #[cfg(feature = "jolt-sumcheck")]
-        ProverState::combine_product,
-    );
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        let mut sum = RqNTT::zero();
+        for (coefficient, products) in &g.products {
+            let mut prod = *coefficient;
+            for j in products {
+                prod *= vals[*j];
+            }
+            sum += prod;
+        }
+        sum
+    };
 
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -588,13 +614,19 @@ fn test_compute_f_0() {
     )
     .unwrap();
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g,
-        #[cfg(feature = "jolt-sumcheck")]
-        ProverState::combine_product,
-    );
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        let mut sum = RqNTT::zero();
+        for (coefficient, products) in &g.products {
+            let mut prod = *coefficient;
+            for j in products {
+                prod *= vals[*j];
+            }
+            sum += prod;
+        }
+        sum
+    };
 
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );

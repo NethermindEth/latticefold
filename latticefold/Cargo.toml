@@ -33,7 +33,6 @@ parallel = [
     "lattirust-ring/parallel",
 ]
 getrandom = [ "ark-std/getrandom" ]
-jolt-sumcheck = []
 
 # dev-only
 dhat-heap = []

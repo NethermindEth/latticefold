@@ -34,11 +34,10 @@ pub struct ProverState<R: OverField> {
     pub round: usize,
 }
 
-#[cfg(feature = "jolt-sumcheck")]
 impl<R: OverField> ProverState<R> {
-    pub fn combine_product(state: &ProverState<R>, vals: &[R]) -> R {
+    pub fn combine_product(&self, vals: &[R]) -> R {
         let mut sum = R::zero();
-        for (coefficient, products) in &state.list_of_products {
+        for (coefficient, products) in &self.list_of_products {
             let mut prod = *coefficient;
             for j in products {
                 prod *= vals[*j];
@@ -83,95 +82,13 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         }
     }
 
-    #[cfg(not(feature = "jolt-sumcheck"))]
     /// receive message from verifier, generate prover message, and proceed to next round
     ///
-    /// Main algorithm used is from section 3.2 of [XZZPS19](https://eprint.iacr.org/2019/317.pdf#subsection.3.2).
+    /// Adapted Jolt's sumcheck implementation
     pub fn prove_round(
         prover_state: &mut ProverState<R>,
         v_msg: &Option<VerifierMsg<R>>,
-    ) -> ProverMsg<R> {
-        if let Some(msg) = v_msg {
-            if prover_state.round == 0 {
-                panic!("first round should be prover first.");
-            }
-            prover_state.randomness.push(msg.randomness);
-
-            // fix argument
-            let i = prover_state.round;
-            let r = prover_state.randomness[i - 1];
-            cfg_iter_mut!(prover_state.flattened_ml_extensions).for_each(|multiplicand| {
-                *multiplicand = multiplicand.fix_variables(&[r.into()]);
-            });
-        } else if prover_state.round > 0 {
-            panic!("verifier message is empty");
-        }
-
-        prover_state.round += 1;
-
-        if prover_state.round > prover_state.num_vars {
-            panic!("Prover is not active");
-        }
-
-        let i = prover_state.round;
-        let nv = prover_state.num_vars;
-        let degree = prover_state.max_multiplicands; // the degree of univariate polynomial sent by prover at this round
-
-        #[cfg(not(feature = "parallel"))]
-        let zeros = (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
-        #[cfg(feature = "parallel")]
-        let zeros = || (vec![R::zero(); degree + 1], vec![R::zero(); degree + 1]);
-
-        // generate sum
-        let fold_result =
-            cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |(mut products_sum, mut product), b| {
-                // In effect, this fold is essentially doing simply:
-                // for b in 0..1 << (nv - i) {
-                let index = b << 1;
-                for (coefficient, products) in &prover_state.list_of_products {
-                    product.fill(*coefficient);
-                    for &jth_product in products {
-                        let table = &prover_state.flattened_ml_extensions[jth_product];
-                        let mut start = table[index];
-                        let step = table[index + 1] - start;
-                        for p in product.iter_mut() {
-                            *p *= start;
-                            start += step;
-                        }
-                    }
-                    for (sum, prod) in products_sum.iter_mut().zip(product.iter()) {
-                        *sum += prod;
-                    }
-                }
-                (products_sum, product)
-            });
-
-        #[cfg(not(feature = "parallel"))]
-        let products_sum = fold_result.0;
-
-        // When rayon is used, the `fold` operation results in a iterator of `Vec<F>` rather than a single `Vec<F>`. In this case, we simply need to sum them.
-        #[cfg(feature = "parallel")]
-        let products_sum = fold_result.map(|scratch| scratch.0).reduce(
-            || vec![R::zero(); degree + 1],
-            |mut overall_products_sum, sublist_sum| {
-                overall_products_sum
-                    .iter_mut()
-                    .zip(sublist_sum.iter())
-                    .for_each(|(f, s)| *f += s);
-                overall_products_sum
-            },
-        );
-
-        ProverMsg {
-            evaluations: products_sum,
-        }
-    }
-
-    #[cfg(feature = "jolt-sumcheck")]
-    pub fn prove_round(
-        prover_state: &mut ProverState<R>,
-        v_msg: &Option<VerifierMsg<R>>,
-        comb_fn: impl Fn(&ProverState<R>, &[R]) -> R + Sync + Send,
+        comb_fn: impl Fn(&[R]) -> R + Sync + Send,
     ) -> ProverMsg<R> {
         if let Some(msg) = v_msg {
             if prover_state.round == 0 {
@@ -206,10 +123,10 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             let mut eval_points = vec![R::zero(); degree + 1];
 
             let params_zero: Vec<R> = polys.iter().map(|poly| poly[index]).collect();
-            eval_points[0] += comb_fn(prover_state, &params_zero);
+            eval_points[0] += comb_fn(&params_zero);
 
             let params_one: Vec<R> = polys.iter().map(|poly| poly[index + 1]).collect();
-            eval_points[1] += comb_fn(prover_state, &params_one);
+            eval_points[1] += comb_fn(&params_one);
 
             let steps: Vec<R> = params_one
                 .iter()
@@ -224,7 +141,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
                     poly_evals[poly_i] = current[poly_i] + steps[poly_i];
                 }
 
-                *eval_point += comb_fn(prover_state, &poly_evals);
+                *eval_point += comb_fn(&poly_evals);
                 ark_std::mem::swap(&mut current, &mut poly_evals);
             }
 

@@ -23,6 +23,7 @@ use crate::{
 };
 
 use lattirust_poly::mle::DenseMultilinearExtension;
+use lattirust_ring::PolyRing;
 use utils::*;
 
 use crate::commitment::Commitment;
@@ -30,9 +31,6 @@ use crate::utils::sumcheck::prover::ProverState;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
-
-#[cfg(feature = "jolt-sumcheck")]
-use lattirust_ring::PolyRing;
 
 #[cfg(test)]
 mod tests;
@@ -178,8 +176,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             &mu_s,
         )?;
 
-        #[cfg(feature = "jolt-sumcheck")]
-        let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
+        let comb_fn = |vals: &[NTT]| -> NTT {
             let extension_degree = NTT::CoefficientRepresentation::dimension() / NTT::dimension();
 
             // Add eq_r * g1 * g3 for first k
@@ -229,12 +226,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         };
 
         // Step 5: Run sum check prover
-        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
-            transcript,
-            &g,
-            #[cfg(feature = "jolt-sumcheck")]
-            comb_fn,
-        );
+        let (sum_check_proof, prover_state) =
+            MLSumcheck::prove_as_subprotocol(transcript, &g, comb_fn);
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
 
