@@ -387,12 +387,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         // Calculate claims for sumcheck verification
         let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
 
-        #[cfg(not(feature = "jolt-sumcheck"))]
         let poly_info = VPAuxInfo::new(ccs.s, 2 * P::B_SMALL);
-
-        #[cfg(feature = "jolt-sumcheck")]
-        let poly_info = VPAuxInfo::new(ccs.s, 2);
-
+        
         //Step 2: The sumcheck.
         let (r_0, expected_evaluation) =
             Self::verify_sumcheck_proof(transcript, &poly_info, claim_g1 + claim_g3, proof)?;

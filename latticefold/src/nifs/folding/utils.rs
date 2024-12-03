@@ -182,6 +182,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         )?;
     }
 
+    g.aux_info.max_degree = 2 * DP::B_SMALL;
+
     Ok(g)
 }
 
