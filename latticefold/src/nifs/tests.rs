@@ -118,79 +118,84 @@ fn test_nifs_verify<
     assert!(result.is_ok());
 }
 
-mod stark {
+mod e2e_tests {
     use super::*;
-    use crate::decomposition_parameters::test_params::StarkDP;
-    use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
+    mod stark {
+        use crate::decomposition_parameters::test_params::StarkDP;
+        use crate::decomposition_parameters::DecompositionParams;
+        use crate::nifs::tests::{test_nifs_prove, test_nifs_verify};
+        use crate::transcript::poseidon::PoseidonTranscript;
+        use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
 
-    type RqNTT = StarkRingNTT;
-    type CS = StarkChallengeSet;
-    type DP = StarkDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
+        type RqNTT = StarkRingNTT;
+        type CS = StarkChallengeSet;
+        type DP = StarkDP;
+        type T = PoseidonTranscript<RqNTT, CS>;
 
-    const C: usize = 4;
-    const WIT_LEN: usize = 4;
-    const W: usize = WIT_LEN * DP::L;
+        const C: usize = 4;
+        const WIT_LEN: usize = 4;
+        const W: usize = WIT_LEN * DP::L;
 
-    #[ignore]
-    #[test]
-    fn test_prove() {
-        test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        #[ignore]
+        #[test]
+        fn test_prove() {
+            test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        }
+
+        #[ignore]
+        #[test]
+        fn test_verify() {
+            test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        }
     }
 
-    #[ignore]
-    #[test]
-    fn test_verify() {
-        test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
-    }
-}
+    mod goldilocks {
+        use super::*;
+        use crate::decomposition_parameters::test_params::GoldilocksDP;
+        use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
 
-mod goldilocks {
-    use super::*;
-    use crate::decomposition_parameters::test_params::GoldilocksDP;
-    use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
+        type RqNTT = GoldilocksRingNTT;
+        type CS = GoldilocksChallengeSet;
+        type DP = GoldilocksDP;
+        type T = PoseidonTranscript<RqNTT, CS>;
 
-    type RqNTT = GoldilocksRingNTT;
-    type CS = GoldilocksChallengeSet;
-    type DP = GoldilocksDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
+        const C: usize = 4;
+        const WIT_LEN: usize = 4;
+        const W: usize = WIT_LEN * DP::L;
 
-    const C: usize = 4;
-    const WIT_LEN: usize = 4;
-    const W: usize = WIT_LEN * DP::L;
+        #[test]
+        fn test_prove() {
+            test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        }
 
-    #[test]
-    fn test_prove() {
-        test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
-    }
-
-    #[test]
-    fn test_verify() {
-        test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
-    }
-}
-
-mod babybear {
-    use super::*;
-    use crate::decomposition_parameters::test_params::BabyBearDP;
-    use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
-
-    type RqNTT = BabyBearRingNTT;
-    type CS = BabyBearChallengeSet;
-    type DP = BabyBearDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
-
-    const C: usize = 4;
-    const WIT_LEN: usize = 4;
-    const W: usize = WIT_LEN * DP::L;
-
-    #[test]
-    fn test_prove() {
-        test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        #[test]
+        fn test_verify() {
+            test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        }
     }
 
-    #[test]
-    fn test_verify() {
-        test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+    mod babybear {
+        use super::*;
+        use crate::decomposition_parameters::test_params::BabyBearDP;
+        use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
+
+        type RqNTT = BabyBearRingNTT;
+        type CS = BabyBearChallengeSet;
+        type DP = BabyBearDP;
+        type T = PoseidonTranscript<RqNTT, CS>;
+
+        const C: usize = 4;
+        const WIT_LEN: usize = 4;
+        const W: usize = WIT_LEN * DP::L;
+
+        #[test]
+        fn test_prove() {
+            test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        }
+
+        #[test]
+        fn test_verify() {
+            test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+        }
     }
 }
