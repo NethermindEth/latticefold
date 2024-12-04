@@ -73,7 +73,6 @@ macro_rules! run_single_starkprime_benchmark {
         ajtai_benchmark::<$cw, $w, StarkRingNTT>($crit);
     };
 }
-
 macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $cw:expr, $w:expr) => {
         ajtai_benchmark::<$cw, $w, GoldilocksRingNTT>($crit);

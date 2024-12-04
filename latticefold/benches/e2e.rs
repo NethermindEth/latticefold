@@ -1,4 +1,6 @@
 #![allow(incomplete_features)]
+use std::time::Duration;
+
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
@@ -9,9 +11,7 @@ use cyclotomic_rings::{
         GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
-use std::{fmt::Debug, time::Duration};
 mod utils;
-use ark_std::UniformRand;
 
 use crate::utils::wit_and_ccs_gen;
 use latticefold::nifs::linearization::{
@@ -240,7 +240,7 @@ macro_rules! run_single_frog_benchmark {
 }
 
 fn benchmarks_main(c: &mut Criterion) {
-    // Godlilocks
+    // Goldilocks
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("E2E Goldilocks");
