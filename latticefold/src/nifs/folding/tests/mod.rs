@@ -1,7 +1,9 @@
 use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
-use crate::decomposition_parameters::test_params::{BabyBearDP, StarkFoldingDP, DP};
+use crate::decomposition_parameters::test_params::{
+    BabyBearDP, FrogDP, GoldilocksDP, StarkFoldingDP, DP,
+};
 use crate::nifs::folding::utils::SqueezeAlphaBetaZetaMu;
 use crate::nifs::folding::{
     prepare_public_output,
@@ -69,6 +71,7 @@ where
     let ccs = get_test_ccs::<RqNTT>(W, DP::L);
     let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_ntt_split::<RqNTT>();
+
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
     let wit = Witness::from_w_ccs::<DP>(w_ccs);
@@ -808,6 +811,7 @@ fn test_full_prove() {
 fn test_proof_serialization() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
+    type DP = GoldilocksDP;
     const W: usize = WIT_LEN * DP::L;
 
     let (_, _, _, _, proof) = setup_test_environment::<RqNTT, CS, DP, C, W>(true);
@@ -833,6 +837,7 @@ fn test_proof_serialization() {
 fn test_verify_evaluation() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
+    type DP = GoldilocksDP;
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs_vec, _, mut transcript, ccs, proof) =
@@ -876,6 +881,7 @@ fn test_verify_evaluation() {
 fn test_calculate_claims() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
+    type DP = GoldilocksDP;
     const W: usize = WIT_LEN * DP::L;
 
     let (lcccs_vec, _, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
@@ -909,6 +915,8 @@ fn test_calculate_claims() {
 fn test_verify_sumcheck_proof() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
+    type DP = FrogDP;
+
     const W: usize = WIT_LEN * DP::L;
 
     let (lcccs_vec, _, mut transcript, ccs, proof) =
@@ -944,7 +952,7 @@ fn test_verify_sumcheck_proof() {
 fn test_full_verify() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
-
+    type DP = GoldilocksDP;
     const W: usize = WIT_LEN * DP::L;
 
     let (lccs_vec, _, mut transcript, ccs, proof) =
