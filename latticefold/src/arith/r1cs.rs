@@ -215,6 +215,31 @@ pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>
     )
 }
 
+pub fn get_test_dummy_z_split_ntt<R: SuitableRing, const X_LEN: usize, const WIT_LEN: usize>(
+) -> (R, Vec<R>, Vec<R>) {
+    let statement_vec = (0..X_LEN)
+        .map(|_| {
+            R::from(
+                (0..R::dimension())
+                    .map(|i| R::BaseRing::from(i as u128))
+                    .collect::<Vec<R::BaseRing>>(),
+            )
+        })
+        .collect();
+
+    let witness_vec = (0..WIT_LEN)
+        .map(|_| {
+            R::from(
+                (0..R::dimension())
+                    .map(|i| R::BaseRing::from(i as u128))
+                    .collect::<Vec<R::BaseRing>>(),
+            )
+        })
+        .collect();
+
+    (R::one(), statement_vec, witness_vec)
+}
+
 #[cfg(test)]
 pub mod tests {
     use cyclotomic_rings::rings::FrogRingNTT;
