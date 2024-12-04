@@ -78,10 +78,10 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
             mle_list.push(RefCounter::new(M_mles[j].clone()));
         }
 
-        g.add_mle_list(mle_list, *coefficient)?;
+        g.add_mle_list(mle_list)?;
     }
 
-    g.mul_by_mle(build_eq_x_r(beta_s)?, NTT::one())?;
+    g.mul_by_mle(build_eq_x_r(beta_s)?)?;
 
     Ok(g)
 }

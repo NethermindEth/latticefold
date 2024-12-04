@@ -305,10 +305,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
     combined_mle += challenged_Ms;
 
-    g.add_mle_list(
-        vec![r_i_eq.clone(), RefCounter::from(combined_mle)],
-        NTT::one(),
-    )?;
+    g.add_mle_list(vec![r_i_eq.clone(), RefCounter::from(combined_mle)])?;
     Ok(())
 }
 
@@ -320,7 +317,7 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     for fi_hat_mle in fi_hat_mle_s.iter() {
-        g.add_mle_list(vec![beta_eq_x.clone(), fi_hat_mle.clone()], NTT::one())?;
+        g.add_mle_list(vec![beta_eq_x.clone(), fi_hat_mle.clone()])?;
     }
 
     Ok(())

@@ -11,10 +11,7 @@ use crate::nifs::folding::{
 };
 use crate::nifs::FoldingProof;
 use crate::transcript::{Transcript, TranscriptWithShortChallenges};
-use crate::utils::sumcheck::{
-    virtual_polynomial::VPAuxInfo,
-    MLSumcheck,
-};
+use crate::utils::sumcheck::{virtual_polynomial::VPAuxInfo, MLSumcheck};
 use crate::{
     arith::{r1cs::get_test_z_ntt_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,

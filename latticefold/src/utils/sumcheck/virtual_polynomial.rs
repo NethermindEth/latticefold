@@ -19,9 +19,9 @@ use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_poly::polynomials::{random_mle_list, random_zero_mle_list, ArithErrors, RefCounter};
 
 #[cfg(feature = "std")]
-use ark_std::collections::HashMap;
+use ark_std::collections::HashSet;
 #[cfg(not(feature = "std"))]
-use hashbrown::HashMap;
+use hashbrown::HashSet;
 
 use lattirust_ring::Ring;
 #[cfg(feature = "parallel")]
@@ -62,7 +62,7 @@ pub struct VirtualPolynomial<R: Ring> {
     /// to.
     pub flattened_ml_extensions: Vec<RefCounter<DenseMultilinearExtension<R>>>,
     /// Pointers to the above poly extensions
-    raw_pointers_lookup_table: HashMap<*const DenseMultilinearExtension<R>, usize>,
+    raw_pointers_lookup_table: HashSet<*const DenseMultilinearExtension<R>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, CanonicalSerialize)]
@@ -77,26 +77,6 @@ pub struct VPAuxInfo<R: Ring> {
     pub phantom: PhantomData<R>,
 }
 
-//impl<R: Ring> Add for &VirtualPolynomial<R> {
-//    type Output = VirtualPolynomial<R>;
-//    fn add(self, other: &VirtualPolynomial<R>) -> Self::Output {
-//        let start = start_timer!(|| "virtual poly add");
-//        let mut res = self.clone();
-//        for products in other.products.iter() {
-//            let cur: Vec<RefCounter<DenseMultilinearExtension<R>>> = products
-//                .1
-//                .iter()
-//                .map(|&x| other.flattened_ml_extensions[x].clone())
-//                .collect();
-//
-//            res.add_mle_list(cur, products.0)
-//                .expect("add product failed");
-//        }
-//        end_timer!(start);
-//        res
-//    }
-//}
-
 // TODO: convert this into a trait
 impl<R: Ring> VirtualPolynomial<R> {
     /// Creates an empty virtual polynomial with `num_variables`.
@@ -108,15 +88,15 @@ impl<R: Ring> VirtualPolynomial<R> {
                 phantom: PhantomData,
             },
             flattened_ml_extensions: Vec::new(),
-            raw_pointers_lookup_table: HashMap::new(),
+            raw_pointers_lookup_table: HashSet::new(),
         }
     }
 
     /// Creates an new virtual polynomial from a MLE and its coefficient.
     pub fn new_from_mle(mle: &RefCounter<DenseMultilinearExtension<R>>, coefficient: R) -> Self {
         let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(mle);
-        let mut hm = HashMap::new();
-        hm.insert(mle_ptr, 0);
+        let mut hm = HashSet::new();
+        hm.insert(mle_ptr);
 
         VirtualPolynomial {
             aux_info: VPAuxInfo {
@@ -140,11 +120,9 @@ impl<R: Ring> VirtualPolynomial<R> {
     pub fn add_mle_list(
         &mut self,
         mle_list: impl IntoIterator<Item = RefCounter<DenseMultilinearExtension<R>>>,
-        coefficient: R,
     ) -> Result<(), ArithErrors> {
         let mle_list: Vec<RefCounter<DenseMultilinearExtension<R>>> =
             mle_list.into_iter().collect();
-        let mut indexed_product = Vec::with_capacity(mle_list.len());
 
         if mle_list.is_empty() {
             return Err(ArithErrors::InvalidParameters(
@@ -163,16 +141,12 @@ impl<R: Ring> VirtualPolynomial<R> {
             }
 
             let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(&mle);
-            if let Some(index) = self.raw_pointers_lookup_table.get(&mle_ptr) {
-                indexed_product.push(*index);
-            } else {
+            if self.raw_pointers_lookup_table.get(&mle_ptr).is_none() {
                 let curr_index = self.flattened_ml_extensions.len();
                 self.flattened_ml_extensions.push(mle.clone());
-                self.raw_pointers_lookup_table.insert(mle_ptr, curr_index);
-                indexed_product.push(curr_index);
+                self.raw_pointers_lookup_table.insert(mle_ptr);
             }
         }
-        //self.products.push((coefficient, indexed_product));
         Ok(())
     }
 
@@ -184,7 +158,6 @@ impl<R: Ring> VirtualPolynomial<R> {
     pub fn mul_by_mle(
         &mut self,
         mle: RefCounter<DenseMultilinearExtension<R>>,
-        coefficient: R,
     ) -> Result<(), ArithErrors> {
         let start = start_timer!(|| "mul by mle");
 
@@ -198,21 +171,10 @@ impl<R: Ring> VirtualPolynomial<R> {
         let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(&mle);
 
         // check if this mle already exists in the virtual polynomial
-        let mle_index = if let Some(&p) = self.raw_pointers_lookup_table.get(&mle_ptr) {
-            p
-        } else {
-            self.raw_pointers_lookup_table
-                .insert(mle_ptr, self.flattened_ml_extensions.len());
+        if self.raw_pointers_lookup_table.get(&mle_ptr).is_none() {
+            self.raw_pointers_lookup_table.insert(mle_ptr);
             self.flattened_ml_extensions.push(mle);
-            self.flattened_ml_extensions.len() - 1
         };
-
-        //for (prod_coef, indices) in self.products.iter_mut() {
-        //    // - add the MLE to the MLE list;
-        //    // - multiple each product by MLE and its coefficient.
-        //    indices.push(mle_index);
-        //    *prod_coef *= coefficient;
-        //}
 
         // increase the max degree by one as the MLE has degree 1.
         self.aux_info.max_degree += 1;
@@ -268,9 +230,10 @@ impl<R: Ring> VirtualPolynomial<R> {
             let num_multiplicands =
                 rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
             let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
-            let coefficient = R::rand(rng);
-            poly.add_mle_list(product.into_iter(), coefficient)?;
-            sum += product_sum * coefficient;
+            //let coefficient = R::rand(rng);
+            //poly.add_mle_list(product.into_iter(), coefficient)?;
+            poly.add_mle_list(product.into_iter())?;
+            //sum += product_sum * coefficient;
         }
 
         end_timer!(start);
@@ -290,8 +253,9 @@ impl<R: Ring> VirtualPolynomial<R> {
             let num_multiplicands =
                 rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
             let product = random_zero_mle_list(nv, num_multiplicands, rng);
-            let coefficient = R::rand(rng);
-            poly.add_mle_list(product.into_iter(), coefficient)?;
+            //let coefficient = R::rand(rng);
+            //poly.add_mle_list(product.into_iter(), coefficient)?;
+            poly.add_mle_list(product.into_iter())?;
         }
 
         Ok(poly)
@@ -316,7 +280,7 @@ impl<R: Ring> VirtualPolynomial<R> {
 
         let eq_x_r = build_eq_x_r(r)?;
         let mut res = self.clone();
-        res.mul_by_mle(eq_x_r, R::one())?;
+        res.mul_by_mle(eq_x_r)?;
 
         end_timer!(start);
         Ok(res)
