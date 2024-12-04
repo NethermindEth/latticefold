@@ -13,7 +13,7 @@ use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::mle_helpers::evaluate_mles;
 use crate::utils::sumcheck::{
-    virtual_polynomial::{eq_eval, VPAuxInfo},
+    dense_polynomial::{eq_eval, DPAuxInfo},
     MLSumcheck,
     SumCheckError::SumCheckFailed,
 };
@@ -346,7 +346,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
 
     fn verify_sumcheck_proof(
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
-        poly_info: &VPAuxInfo<NTT>,
+        poly_info: &DPAuxInfo<NTT>,
         total_claim: NTT,
         proof: &FoldingProof<NTT>,
     ) -> Result<(Vec<NTT>, NTT), FoldingError<NTT>> {
@@ -386,7 +386,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         // Calculate claims for sumcheck verification
         let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
 
-        let poly_info = VPAuxInfo::new(ccs.s, 2 * P::B_SMALL);
+        let poly_info = DPAuxInfo::new(ccs.s, 2 * P::B_SMALL);
 
         //Step 2: The sumcheck.
         let (r_0, expected_evaluation) =

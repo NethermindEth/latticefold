@@ -6,13 +6,13 @@ use thiserror::Error;
 
 use crate::ark_base::*;
 use crate::transcript::Transcript;
+use dense_polynomial::{DPAuxInfo, DensePolynomial};
 use prover::{ProverMsg, ProverState};
 use verifier::SubClaim;
-use virtual_polynomial::{VPAuxInfo, VirtualPolynomial};
 
+pub mod dense_polynomial;
 pub mod prover;
 pub mod verifier;
-pub mod virtual_polynomial;
 
 /// Interactive Proof for Multilinear Sumcheck
 pub struct IPForMLSumcheck<R, T> {
@@ -54,7 +54,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     /// Both of these allow this sumcheck to be better used as a part of a larger protocol.
     pub fn prove_as_subprotocol(
         transcript: &mut T,
-        polynomial: &VirtualPolynomial<R>,
+        polynomial: &DensePolynomial<R>,
         comb_fn: impl Fn(&[R]) -> R + Sync + Send,
     ) -> (Proof<R>, ProverState<R>) {
         // TODO: return this back
@@ -84,7 +84,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     /// verifier challenges. This allows this sumcheck to be used as a part of a larger protocol.
     pub fn verify_as_subprotocol(
         transcript: &mut T,
-        polynomial_info: &VPAuxInfo<R>,
+        polynomial_info: &DPAuxInfo<R>,
         claimed_sum: R,
         proof: &Proof<R>,
     ) -> Result<SubClaim<R>, SumCheckError<R>> {
@@ -111,7 +111,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use crate::ark_base::*;
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::sumcheck::{virtual_polynomial::VirtualPolynomial, MLSumcheck, Proof};
+    use crate::utils::sumcheck::{dense_polynomial::DensePolynomial, MLSumcheck, Proof};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
     use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
@@ -120,14 +120,14 @@ mod tests {
 
     fn generate_sumcheck_proof<R, CS>(
         mut rng: &mut (impl Rng + Sized),
-    ) -> (VirtualPolynomial<R>, R, Proof<R>)
+    ) -> (DensePolynomial<R>, R, Proof<R>)
     where
         R: SuitableRing,
         CS: LatticefoldChallengeSet<R>,
     {
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+        let (poly, sum) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
 
         //let comb_fn = |vals: &[R]| -> R {
         //    let mut sum = R::zero();
@@ -195,7 +195,7 @@ mod tests {
         for _ in 0..20 {
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
 
-            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+            let (poly, _) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
 
             //let comb_fn = |vals: &[R]| -> R {
             //    let mut sum = R::zero();

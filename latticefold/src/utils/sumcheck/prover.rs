@@ -5,7 +5,7 @@ use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
 use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
 use lattirust_ring::{OverField, Ring};
 
-use super::{verifier::VerifierMsg, virtual_polynomial::VirtualPolynomial, IPForMLSumcheck};
+use super::{dense_polynomial::DensePolynomial, verifier::VerifierMsg, IPForMLSumcheck};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -59,7 +59,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
     ///
     /// $$\sum_{i=0}^{n}C_i\cdot\prod_{j=0}^{m_i}P_{ij}$$
     ///
-    pub fn prover_init(polynomial: &VirtualPolynomial<R>) -> ProverState<R> {
+    pub fn prover_init(polynomial: &DensePolynomial<R>) -> ProverState<R> {
         if polynomial.aux_info.num_variables == 0 {
             panic!("Attempt to prove a constant.")
         }

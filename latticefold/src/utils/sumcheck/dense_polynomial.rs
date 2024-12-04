@@ -3,7 +3,7 @@
 
 // Adapted for rings by Nethermind
 
-//! This module defines our main mathematical object `VirtualPolynomial`; and
+//! This module defines our main mathematical object `DensePolynomial`; and
 //! various functions associated with it.
 
 use ark_serialize::CanonicalSerialize;
@@ -22,37 +22,10 @@ use lattirust_ring::Ring;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-#[rustfmt::skip]
-/// A virtual polynomial is a sum of products of multilinear polynomials;
-/// where the multilinear polynomials are stored via their multilinear
-/// extensions:  `(coefficient, DenseMultilinearExtension)`
-///
-/// * Number of products n = `polynomial.products.len()`,
-/// * Number of multiplicands of ith product m_i =
-///   `polynomial.products[i].1.len()`,
-/// * Coefficient of ith product c_i = `polynomial.products[i].0`
-///
-/// The resulting polynomial is
-///
-/// $$ \sum_{i=0}^{n} c_i \cdot \prod_{j=0}^{m_i} P_{ij} $$
-///
-/// Example:
-///  f = c0 * f0 * f1 * f2 + c1 * f3 * f4
-/// where f0 ... f4 are multilinear polynomials
-///
-/// - flattened_ml_extensions stores the multilinear extension representation of
-///   f0, f1, f2, f3 and f4
-/// - products is
-///     \[
-///         (c0, \[0, 1, 2\]),
-///         (c1, \[3, 4\])
-///     \]
-/// - raw_pointers_lookup_table maps fi to i
-///
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct VirtualPolynomial<R: Ring> {
+pub struct DensePolynomial<R: Ring> {
     /// Aux information about the multilinear polynomial
-    pub aux_info: VPAuxInfo<R>,
+    pub aux_info: DPAuxInfo<R>,
     /// Stores multilinear extensions in which product multiplicand can refer
     /// to.
     pub flattened_ml_extensions: Vec<RefCounter<DenseMultilinearExtension<R>>>,
@@ -60,7 +33,7 @@ pub struct VirtualPolynomial<R: Ring> {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, CanonicalSerialize)]
 /// Auxiliary information about the multilinear polynomial
-pub struct VPAuxInfo<R: Ring> {
+pub struct DPAuxInfo<R: Ring> {
     /// max number of multiplicands in each product
     pub max_degree: usize,
     /// number of variables of the polynomial
@@ -71,11 +44,11 @@ pub struct VPAuxInfo<R: Ring> {
 }
 
 // TODO: convert this into a trait
-impl<R: Ring> VirtualPolynomial<R> {
-    /// Creates an empty virtual polynomial with `num_variables`.
+impl<R: Ring> DensePolynomial<R> {
+    /// Creates an empty `DensePolynomial` with `num_variables`.
     pub fn new(num_variables: usize) -> Self {
-        VirtualPolynomial {
-            aux_info: VPAuxInfo {
+        DensePolynomial {
+            aux_info: DPAuxInfo {
                 max_degree: 0,
                 num_variables,
                 phantom: PhantomData,
@@ -84,12 +57,12 @@ impl<R: Ring> VirtualPolynomial<R> {
         }
     }
 
-    /// Creates an new virtual polynomial from a MLE and its coefficient.
+    /// Creates an new DensePolynomial from a MLE and its coefficient.
     pub fn new_from_mle(mle: &RefCounter<DenseMultilinearExtension<R>>, coefficient: R) -> Self {
         let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(mle);
 
-        VirtualPolynomial {
-            aux_info: VPAuxInfo {
+        DensePolynomial {
+            aux_info: DPAuxInfo {
                 // The max degree is the max degree of any individual variable
                 max_degree: 1,
                 num_variables: mle.num_vars,
@@ -100,13 +73,10 @@ impl<R: Ring> VirtualPolynomial<R> {
         }
     }
 
-    /// Add a product of list of multilinear extensions to self
-    /// Returns an error if the list is empty, or the MLE has a different
-    /// `num_vars` from self.
+    /// Add MLEs, increasing the degree if the list is larger than the current degree.
     ///
-    /// The MLEs will be multiplied together, and then multiplied by the scalar
-    /// `coefficient`.
-    pub fn add_mle_list(
+    /// Returns an error if the list is empty, or the MLE has a different `num_vars` from self.
+    pub fn add_mles(
         &mut self,
         mle_list: impl IntoIterator<Item = RefCounter<DenseMultilinearExtension<R>>>,
     ) -> Result<(), ArithErrors> {
@@ -134,12 +104,10 @@ impl<R: Ring> VirtualPolynomial<R> {
         Ok(())
     }
 
-    /// Multiple the current VirtualPolynomial by an MLE:
-    /// - add the MLE to the MLE list;
-    /// - multiple each product by MLE and its coefficient.
+    /// Adds an MLE, incrementing also the degree:
     ///
     /// Returns an error if the MLE has a different `num_vars` from self.
-    pub fn mul_by_mle(
+    pub fn mul_mle(
         &mut self,
         mle: RefCounter<DenseMultilinearExtension<R>>,
     ) -> Result<(), ArithErrors> {
@@ -162,7 +130,7 @@ impl<R: Ring> VirtualPolynomial<R> {
         Ok(())
     }
 
-    /// Evaluate the virtual polynomial at point `point`.
+    /// Evaluate the `DensePolynomial` at point `point`.
     /// Returns an error is point.len() does not match `num_variables`.
     pub fn evaluate(&self, point: &[R]) -> Result<R, ArithErrors> {
         let start = start_timer!(|| "evaluation");
@@ -195,24 +163,24 @@ impl<R: Ring> VirtualPolynomial<R> {
         Ok(res)
     }
 
-    /// Sample a random virtual polynomial, return the polynomial and its sum.
+    /// Sample a random `DensePolynomial`, return the polynomial and its sum.
     pub fn rand<Rn: RngCore>(
         nv: usize,
         num_multiplicands_range: (usize, usize),
         num_products: usize,
         rng: &mut Rn,
     ) -> Result<(Self, R), ArithErrors> {
-        let start = start_timer!(|| "sample random virtual polynomial");
+        let start = start_timer!(|| "sample random dense polynomial");
 
         let mut sum = R::zero();
-        let mut poly = VirtualPolynomial::new(nv);
+        let mut poly = DensePolynomial::new(nv);
         for _ in 0..num_products {
             let num_multiplicands =
                 rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
             let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
             //let coefficient = R::rand(rng);
             //poly.add_mle_list(product.into_iter(), coefficient)?;
-            poly.add_mle_list(product.into_iter())?;
+            poly.add_mles(product.into_iter())?;
             //sum += product_sum * coefficient;
         }
 
@@ -220,7 +188,7 @@ impl<R: Ring> VirtualPolynomial<R> {
         Ok((poly, sum))
     }
 
-    /// Sample a random virtual polynomial that evaluates to zero everywhere
+    /// Sample a random dense polynomial that evaluates to zero everywhere
     /// over the boolean hypercube.
     pub fn rand_zero<Rn: RngCore>(
         nv: usize,
@@ -228,14 +196,14 @@ impl<R: Ring> VirtualPolynomial<R> {
         num_products: usize,
         rng: &mut Rn,
     ) -> Result<Self, ArithErrors> {
-        let mut poly = VirtualPolynomial::new(nv);
+        let mut poly = DensePolynomial::new(nv);
         for _ in 0..num_products {
             let num_multiplicands =
                 rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
             let product = random_zero_mle_list(nv, num_multiplicands, rng);
             //let coefficient = R::rand(rng);
             //poly.add_mle_list(product.into_iter(), coefficient)?;
-            poly.add_mle_list(product.into_iter())?;
+            poly.add_mles(product.into_iter())?;
         }
 
         Ok(poly)
@@ -260,7 +228,7 @@ impl<R: Ring> VirtualPolynomial<R> {
 
         let eq_x_r = build_eq_x_r(r)?;
         let mut res = self.clone();
-        res.mul_by_mle(eq_x_r)?;
+        res.mul_mle(eq_x_r)?;
 
         end_timer!(start);
         Ok(res)
@@ -281,9 +249,9 @@ impl<R: Ring> VirtualPolynomial<R> {
     }
 }
 
-impl<R: Ring> VPAuxInfo<R> {
+impl<R: Ring> DPAuxInfo<R> {
     pub fn new(num_variables: usize, max_degree: usize) -> Self {
-        VPAuxInfo {
+        DPAuxInfo {
             max_degree,
             num_variables,
             phantom: PhantomData,

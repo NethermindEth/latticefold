@@ -14,7 +14,7 @@ use crate::ark_base::*;
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::sumcheck::virtual_polynomial::{build_eq_x_r, VirtualPolynomial};
+use crate::utils::sumcheck::dense_polynomial::{build_eq_x_r, DensePolynomial};
 use crate::{
     arith::{CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
@@ -104,7 +104,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     r_s: &[Vec<NTT>],
     beta_s: &[NTT],
     mu_s: &[NTT],
-) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
+) -> Result<DensePolynomial<NTT>, FoldingError<NTT>> {
     if alpha_s.len() != 2 * DP::K
         || f_hat_mles.len() != 2 * DP::K
         || r_s.len() != 2 * DP::K
@@ -123,7 +123,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         }
     }
 
-    let mut g = VirtualPolynomial::<NTT>::new(log_m);
+    let mut g = DensePolynomial::<NTT>::new(log_m);
 
     let beta_eq_x = build_eq_x_r(beta_s)?;
 
@@ -159,7 +159,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     )?;
 
     // G2
-    g.mul_by_mle(beta_eq_x.clone())?;
+    g.mul_mle(beta_eq_x.clone())?;
 
     for i in 0..DP::K {
         prepare_g2_i_mle_list(&mut g, &f_hat_mles[i])?;
@@ -277,7 +277,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 }
 
 fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
-    g: &mut VirtualPolynomial<NTT>,
+    g: &mut DensePolynomial<NTT>,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
@@ -296,16 +296,16 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
     combined_mle += challenged_Ms;
 
-    g.add_mle_list(vec![r_i_eq.clone(), RefCounter::from(combined_mle)])?;
+    g.add_mles(vec![r_i_eq.clone(), RefCounter::from(combined_mle)])?;
     Ok(())
 }
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
-    g: &mut VirtualPolynomial<NTT>,
+    g: &mut DensePolynomial<NTT>,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
 ) -> Result<(), ArithErrors> {
     for fi_hat_mle in fi_hat_mle_s.iter() {
-        g.add_mle_list(vec![fi_hat_mle.clone()])?;
+        g.add_mles(vec![fi_hat_mle.clone()])?;
     }
 
     Ok(())

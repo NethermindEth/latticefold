@@ -6,7 +6,7 @@ use lattirust_ring::OverField;
 
 use crate::nifs::error::LinearizationError;
 use crate::transcript::Transcript;
-use crate::utils::sumcheck::virtual_polynomial::{build_eq_x_r, VirtualPolynomial};
+use crate::utils::sumcheck::dense_polynomial::{build_eq_x_r, DensePolynomial};
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 
@@ -56,7 +56,7 @@ pub fn compute_u<NTT: OverField>(
 ///
 /// # Returns:
 ///
-/// * `VirtualPolynomial<NTT>`: The linearization sumcheck polynomial
+/// * `DensePolynomial<NTT>`: The linearization sumcheck polynomial
 ///
 /// # Errors:
 /// * Will return an error if any of the MLEs are of the wrong size
@@ -67,8 +67,8 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     M_mles: &[DenseMultilinearExtension<NTT>],
     S: &[Vec<usize>],
     beta_s: &[NTT],
-) -> Result<VirtualPolynomial<NTT>, LinearizationError<NTT>> {
-    let mut g = VirtualPolynomial::new(log_m);
+) -> Result<DensePolynomial<NTT>, LinearizationError<NTT>> {
+    let mut g = DensePolynomial::new(log_m);
 
     for (i, coefficient) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
         let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> =
@@ -78,10 +78,10 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
             mle_list.push(RefCounter::new(M_mles[j].clone()));
         }
 
-        g.add_mle_list(mle_list)?;
+        g.add_mles(mle_list)?;
     }
 
-    g.mul_by_mle(build_eq_x_r(beta_s)?)?;
+    g.mul_mle(build_eq_x_r(beta_s)?)?;
 
     Ok(g)
 }

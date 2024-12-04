@@ -10,7 +10,7 @@ use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::{
-        virtual_polynomial::{eq_eval, VPAuxInfo, VirtualPolynomial},
+        dense_polynomial::{eq_eval, DPAuxInfo, DensePolynomial},
         MLSumcheck,
         SumCheckError::SumCheckFailed,
     },
@@ -86,10 +86,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<
-        (VirtualPolynomial<NTT>, Vec<DenseMultilinearExtension<NTT>>),
-        LinearizationError<NTT>,
-    > {
+    ) -> Result<(DensePolynomial<NTT>, Vec<DenseMultilinearExtension<NTT>>), LinearizationError<NTT>>
+    {
         // Generate beta challenges from Step 1
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 
@@ -104,7 +102,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
     /// Step 2: Run linearization sum-check protocol.
     fn generate_sumcheck_proof(
-        g: &VirtualPolynomial<NTT>,
+        g: &DensePolynomial<NTT>,
         transcript: &mut impl Transcript<NTT>,
         comb_fn: impl Fn(&[NTT]) -> NTT + Sync + Send,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
@@ -210,7 +208,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         ccs: &CCS<NTT>,
     ) -> Result<(Vec<NTT>, NTT), LinearizationError<NTT>> {
         // The polynomial has degree <= ccs.d + 1 and log_m (ccs.s) vars.
-        let poly_info = VPAuxInfo::new(ccs.s, ccs.d + 1);
+        let poly_info = DPAuxInfo::new(ccs.s, ccs.d + 1);
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,

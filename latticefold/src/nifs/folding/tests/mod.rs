@@ -11,7 +11,7 @@ use crate::nifs::folding::{
 };
 use crate::nifs::FoldingProof;
 use crate::transcript::{Transcript, TranscriptWithShortChallenges};
-use crate::utils::sumcheck::{virtual_polynomial::VPAuxInfo, MLSumcheck};
+use crate::utils::sumcheck::{dense_polynomial::DPAuxInfo, MLSumcheck};
 use crate::{
     arith::{r1cs::get_test_z_ntt_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
@@ -732,7 +732,7 @@ fn test_verify_evaluation() {
 
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
 
-    let poly_info = VPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
+    let poly_info = DPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
 
     let (claim_g1, claim_g3) =
         LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
@@ -811,7 +811,7 @@ fn test_verify_sumcheck_proof() {
 
     let (alpha_s, _, zeta_s, _) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
 
-    let poly_info = VPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
+    let poly_info = DPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
 
     let (claim_g1, claim_g3) =
         LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
