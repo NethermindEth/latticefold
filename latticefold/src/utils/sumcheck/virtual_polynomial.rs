@@ -61,8 +61,6 @@ pub struct VirtualPolynomial<R: Ring> {
     /// Stores multilinear extensions in which product multiplicand can refer
     /// to.
     pub flattened_ml_extensions: Vec<RefCounter<DenseMultilinearExtension<R>>>,
-    /// Pointers to the above poly extensions
-    raw_pointers_lookup_table: HashSet<*const DenseMultilinearExtension<R>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, CanonicalSerialize)]
@@ -88,7 +86,6 @@ impl<R: Ring> VirtualPolynomial<R> {
                 phantom: PhantomData,
             },
             flattened_ml_extensions: Vec::new(),
-            raw_pointers_lookup_table: HashSet::new(),
         }
     }
 
@@ -107,7 +104,6 @@ impl<R: Ring> VirtualPolynomial<R> {
             },
             // here `0` points to the first polynomial of `flattened_ml_extensions`
             flattened_ml_extensions: vec![mle.clone()],
-            raw_pointers_lookup_table: hm,
         }
     }
 
@@ -140,12 +136,7 @@ impl<R: Ring> VirtualPolynomial<R> {
                 )));
             }
 
-            let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(&mle);
-            if self.raw_pointers_lookup_table.get(&mle_ptr).is_none() {
-                let curr_index = self.flattened_ml_extensions.len();
-                self.flattened_ml_extensions.push(mle.clone());
-                self.raw_pointers_lookup_table.insert(mle_ptr);
-            }
+            self.flattened_ml_extensions.push(mle.clone());
         }
         Ok(())
     }
@@ -170,11 +161,7 @@ impl<R: Ring> VirtualPolynomial<R> {
 
         let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(&mle);
 
-        // check if this mle already exists in the virtual polynomial
-        if self.raw_pointers_lookup_table.get(&mle_ptr).is_none() {
-            self.raw_pointers_lookup_table.insert(mle_ptr);
-            self.flattened_ml_extensions.push(mle);
-        };
+        self.flattened_ml_extensions.push(mle);
 
         // increase the max degree by one as the MLE has degree 1.
         self.aux_info.max_degree += 1;

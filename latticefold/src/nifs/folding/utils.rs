@@ -158,24 +158,15 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         challenged_Ms_2,
     )?;
 
+    // G2
+    g.mul_by_mle(beta_eq_x.clone())?;
+
     for i in 0..DP::K {
-        prepare_g2_i_mle_list(
-            &mut g,
-            DP::B_SMALL,
-            &f_hat_mles[i],
-            mu_s[i],
-            beta_eq_x.clone(),
-        )?;
+        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i])?;
     }
 
     for i in DP::K..2 * DP::K {
-        prepare_g2_i_mle_list(
-            &mut g,
-            DP::B_SMALL,
-            &f_hat_mles[i],
-            mu_s[i],
-            beta_eq_x.clone(),
-        )?;
+        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i])?;
     }
 
     g.aux_info.max_degree = 2 * DP::B_SMALL;
@@ -311,13 +302,10 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     g: &mut VirtualPolynomial<NTT>,
-    _b: usize,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
-    _mu_i: NTT,
-    beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     for fi_hat_mle in fi_hat_mle_s.iter() {
-        g.add_mle_list(vec![beta_eq_x.clone(), fi_hat_mle.clone()])?;
+        g.add_mle_list(vec![fi_hat_mle.clone()])?;
     }
 
     Ok(())
