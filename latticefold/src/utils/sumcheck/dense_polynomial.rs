@@ -28,7 +28,7 @@ pub struct DensePolynomial<R: Ring> {
     pub aux_info: DPAuxInfo<R>,
     /// Stores multilinear extensions in which product multiplicand can refer
     /// to.
-    pub flattened_ml_extensions: Vec<RefCounter<DenseMultilinearExtension<R>>>,
+    pub mles: Vec<RefCounter<DenseMultilinearExtension<R>>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, CanonicalSerialize)]
@@ -53,7 +53,7 @@ impl<R: Ring> DensePolynomial<R> {
                 num_variables,
                 phantom: PhantomData,
             },
-            flattened_ml_extensions: Vec::new(),
+            mles: Vec::new(),
         }
     }
 
@@ -66,8 +66,8 @@ impl<R: Ring> DensePolynomial<R> {
                 num_variables: mle.num_vars,
                 phantom: PhantomData,
             },
-            // here `0` points to the first polynomial of `flattened_ml_extensions`
-            flattened_ml_extensions: vec![mle.clone()],
+            // here `0` points to the first polynomial of `mles`
+            mles: vec![mle.clone()],
         }
     }
 
@@ -97,7 +97,7 @@ impl<R: Ring> DensePolynomial<R> {
                 )));
             }
 
-            self.flattened_ml_extensions.push(mle);
+            self.mles.push(mle);
         }
 
         Ok(())
@@ -119,7 +119,7 @@ impl<R: Ring> DensePolynomial<R> {
             )));
         }
 
-        self.flattened_ml_extensions.push(mle);
+        self.mles.push(mle);
 
         // increase the max degree by one as the MLE has degree 1.
         self.aux_info.max_degree += 1;
@@ -141,7 +141,7 @@ impl<R: Ring> DensePolynomial<R> {
         }
 
         let _evals: Vec<R> = self
-            .flattened_ml_extensions
+            .mles
             .iter()
             .map(|x| {
                 x.evaluate(point).unwrap() // safe unwrap here since we have

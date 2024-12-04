@@ -22,7 +22,7 @@ pub struct ProverState<R: OverField> {
     /// sampled randomness given by the verifier
     pub randomness: Vec<R::BaseRing>,
     /// Stores a list of multilinear extensions in which `self.list_of_products` points to
-    pub flattened_ml_extensions: Vec<DenseMultilinearExtension<R>>,
+    pub mles: Vec<DenseMultilinearExtension<R>>,
     /// Number of variables
     pub num_vars: usize,
     /// Max number of multiplicands in a product
@@ -65,13 +65,13 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         }
 
         // create a deep copy of all unique MLExtensions
-        let flattened_ml_extensions = ark_std::cfg_iter!(polynomial.flattened_ml_extensions)
+        let mles = ark_std::cfg_iter!(polynomial.mles)
             .map(|x| x.as_ref().clone())
             .collect();
 
         ProverState {
             randomness: Vec::with_capacity(polynomial.aux_info.num_variables),
-            flattened_ml_extensions,
+            mles,
             num_vars: polynomial.aux_info.num_variables,
             max_multiplicands: polynomial.aux_info.max_degree,
             round: 0,
@@ -95,7 +95,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             // fix argument
             let i = prover_state.round;
             let r = prover_state.randomness[i - 1];
-            cfg_iter_mut!(prover_state.flattened_ml_extensions).for_each(|multiplicand| {
+            cfg_iter_mut!(prover_state.mles).for_each(|multiplicand| {
                 *multiplicand = multiplicand.fix_variables(&[r.into()]);
             });
         } else if prover_state.round > 0 {
@@ -112,7 +112,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
         let nv = prover_state.num_vars;
         let degree = prover_state.max_multiplicands;
 
-        let polys = &prover_state.flattened_ml_extensions;
+        let polys = &prover_state.mles;
 
         let iter = cfg_into_iter!(0..1 << (nv - i)).map(|b| {
             let index = b << 1;
