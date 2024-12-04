@@ -2,7 +2,7 @@ use crate::arith::utils::mat_vec_mul;
 use crate::arith::{Instance, CCS, LCCCS};
 use crate::ark_base::Vec;
 use crate::decomposition_parameters::test_params::{
-    BabyBearDP, FrogDP, GoldilocksDP, StarkFoldingDP, DP,
+    BabyBearDP, FrogDP, GoldilocksDP, StarkFoldingDP,
 };
 use crate::nifs::folding::utils::SqueezeAlphaBetaZetaMu;
 use crate::nifs::folding::{
@@ -69,6 +69,7 @@ where
     DP: DecompositionParams,
 {
     let ccs = get_test_ccs::<RqNTT>(W, DP::L);
+
     let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_ntt_split::<RqNTT>();
 
@@ -130,7 +131,7 @@ where
     };
 
     let folding_proof = if generate_proof {
-        Some(generate_folding_proof(
+        Some(generate_folding_proof::<_, _, C, DP>(
             &ccs,
             &mut prover_transcript,
             &lcccs,
@@ -143,7 +144,7 @@ where
     (lcccs, wit_s, verifier_transcript, ccs, folding_proof)
 }
 
-fn generate_folding_proof<RqNTT, CS, const C: usize>(
+fn generate_folding_proof<RqNTT, CS, const C: usize, DP>(
     ccs: &CCS<RqNTT>,
     prover_transcript: &mut PoseidonTranscript<RqNTT, CS>,
     lcccs: &[LCCCS<C, RqNTT>],
@@ -152,6 +153,7 @@ fn generate_folding_proof<RqNTT, CS, const C: usize>(
 where
     RqNTT: SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
+    DP: DecompositionParams,
 {
     let (_, _, folding_proof) = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<
         C,
