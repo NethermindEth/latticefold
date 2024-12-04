@@ -176,3 +176,187 @@ fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[macro_use]
+mod tests {
+    use core::fmt::Debug;
+
+    use ark_ff::UniformRand;
+    use cyclotomic_rings::{
+        challenge_set::LatticefoldChallengeSet,
+        rings::SuitableRing,
+        rings::{GoldilocksChallengeSet, GoldilocksRingNTT},
+    };
+
+    use crate::{
+        arith::{
+            r1cs::{get_test_dummy_r1cs, get_test_dummy_z_split},
+            Arith, Witness, CCCS, CCS,
+        },
+        commitment::AjtaiCommitmentScheme,
+        decomposition_parameters::DecompositionParams,
+        nifs::NIFSVerifier,
+        transcript::poseidon::PoseidonTranscript,
+    };
+
+    use super::{
+        linearization::{
+            LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
+            LinearizationVerifier,
+        },
+        NIFSProver,
+    };
+
+    #[macro_export]
+    macro_rules! define_params {
+        ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+            paste::paste! {
+                #[derive(Clone)]
+                struct [<DecompParamsWithB $b W $w b $b_small K $k>];
+
+                impl DecompositionParams for [<DecompParamsWithB $b W $w b $b_small K $k>] {
+                    const B: u128 = $b;
+                    const L: usize = $l;
+                    const B_SMALL: usize = $b_small;
+                    const K: usize = $k;
+                }
+            }
+        };
+    }
+    #[allow(unused_macros)]
+    macro_rules! run_single_goldilocks_e2e {
+        ($io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+            define_params!($w, $b, $l, $b_small, $k);
+            paste::paste! {
+                e2e::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>();
+            }
+        };
+    }
+
+    #[test]
+    fn test_e2e() {
+        // X_LEN, C, WIT_LEN, B, L, B_SMALL, K
+        run_single_goldilocks_e2e!(1, 39, 512, 4294967296, 2, 2, 32);
+    }
+    fn e2e<
+        const X_LEN: usize,
+        const C: usize,
+        const WIT_LEN: usize,
+        const W: usize,
+        CS: LatticefoldChallengeSet<R> + Clone + 'static,
+        R: SuitableRing,
+        P: DecompositionParams,
+    >() {
+        let (cm_i, wit, ccs, scheme) =
+            wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(X_LEN + WIT_LEN + 1);
+        verify_e2e::<C, W, P, R, CS>(&cm_i, &wit, &ccs, &scheme);
+    }
+
+    fn verify_e2e<
+        const C: usize,
+        const W: usize,
+        P: DecompositionParams,
+        R: SuitableRing,
+        CS: LatticefoldChallengeSet<R> + Clone,
+    >(
+        cm_i: &CCCS<C, R>,
+        wit: &Witness<R>,
+        ccs: &CCS<R>,
+        scheme: &AjtaiCommitmentScheme<C, W, R>,
+    ) {
+        let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+        let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
+
+        let (prover_lcccs_acc, acc_linearization_proof) = LFLinearizationProver::<
+            _,
+            PoseidonTranscript<R, CS>,
+        >::prove(
+            cm_i, wit, &mut prover_transcript, ccs
+        )
+        .expect("Failed to generate acc linearization proof");
+
+        let verifier_lcccs_acc = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+            cm_i,
+            &acc_linearization_proof,
+            &mut verifier_transcript,
+            ccs,
+        )
+        .expect("Failed to verify acc linearization");
+
+        let (_, _, proof) = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
+            &prover_lcccs_acc,
+            wit,
+            cm_i,
+            wit,
+            &mut prover_transcript,
+            ccs,
+            scheme,
+        )
+        .expect("Failed to generate proof");
+
+        NIFSVerifier::<C, R, P, PoseidonTranscript<R, CS>>::verify(
+            &verifier_lcccs_acc,
+            cm_i,
+            &proof,
+            &mut verifier_transcript,
+            ccs,
+        )
+        .expect("Failed to verify NIFS proof");
+    }
+
+    #[allow(dead_code)]
+    pub fn wit_and_ccs_gen<
+        const X_LEN: usize,
+        const C: usize,
+        const WIT_LEN: usize,
+        const W: usize,
+        P: DecompositionParams,
+        R: Clone + UniformRand + Debug + SuitableRing,
+    >(
+        r1cs_rows: usize,
+    ) -> (
+        CCCS<C, R>,
+        Witness<R>,
+        CCS<R>,
+        AjtaiCommitmentScheme<C, W, R>,
+    ) {
+        let mut rng = ark_std::test_rng();
+
+        let new_r1cs_rows = if P::L == 1 && (WIT_LEN > 0 && (WIT_LEN & (WIT_LEN - 1)) == 0) {
+            r1cs_rows - 2
+        } else {
+            r1cs_rows // This makes a square matrix but is too much memory
+        };
+        let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(new_r1cs_rows, P::L);
+        let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
+        let mut z = vec![one];
+        z.extend(&x_ccs);
+        z.extend(&w_ccs);
+        ccs.check_relation(&z).expect("R1CS invalid!");
+
+        let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
+        let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
+
+        let cm_i: CCCS<C, R> = CCCS {
+            cm: wit.commit::<C, W, P>(&scheme).unwrap(),
+            x_ccs,
+        };
+
+        (cm_i, wit, ccs, scheme)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_test_dummy_ccs<
+        R: Clone + UniformRand + Debug + SuitableRing,
+        const X_LEN: usize,
+        const WIT_LEN: usize,
+        const W: usize,
+    >(
+        r1cs_rows: usize,
+        L: usize,
+    ) -> CCS<R> {
+        let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(r1cs_rows);
+        CCS::<R>::from_r1cs_padded(r1cs, W, L)
+    }
+}
