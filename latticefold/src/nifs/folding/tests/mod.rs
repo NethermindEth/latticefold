@@ -17,7 +17,7 @@ use crate::utils::sumcheck::{
     MLSumcheck,
 };
 use crate::{
-    arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS},
+    arith::{r1cs::get_test_z_ntt_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::{
@@ -48,7 +48,6 @@ use lattirust_ring::cyclotomic_ring::models::{
 use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
 use lattirust_ring::Ring;
 use num_traits::{One, Zero};
-use rand::Rng;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
@@ -69,7 +68,7 @@ where
 {
     let ccs = get_test_ccs::<RqNTT>(W, DP::L);
     let mut rng = test_rng();
-    let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(rng.gen_range(0..64));
+    let (_, x_ccs, w_ccs) = get_test_z_ntt_split::<RqNTT>();
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 
     let wit = Witness::from_w_ccs::<DP>(w_ccs);
