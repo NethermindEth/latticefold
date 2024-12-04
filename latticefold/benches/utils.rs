@@ -73,11 +73,12 @@ pub fn wit_and_ccs_gen_non_scalar<
         r1cs_rows // This makes a square matrix but is too much memory
     };
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split_ntt::<R, X_LEN, WIT_LEN>();
-    let ccs: CCS<R> =
-        get_test_dummy_ccs_non_scalar::<R, X_LEN, WIT_LEN, W>(new_r1cs_rows, P::L, &w_ccs);
+
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
+    let ccs: CCS<R> =
+        get_test_dummy_ccs_non_scalar::<R, X_LEN, WIT_LEN, W>(new_r1cs_rows, P::L, &z);
     ccs.check_relation(&z).expect("R1CS invalid!");
 
     let scheme: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
