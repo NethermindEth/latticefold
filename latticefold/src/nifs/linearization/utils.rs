@@ -70,7 +70,7 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
 ) -> Result<DensePolynomial<NTT>, LinearizationError<NTT>> {
     let mut g = DensePolynomial::new(log_m);
 
-    for (i, coefficient) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
+    for (i, _) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
         let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> =
             Vec::with_capacity(S[i].len());
 

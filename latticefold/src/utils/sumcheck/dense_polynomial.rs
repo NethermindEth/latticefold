@@ -14,7 +14,7 @@ use ark_std::{
     string::ToString,
     vec::*,
 };
-use ark_std::{cmp::max, marker::PhantomData, ops::Add};
+use ark_std::{cmp::max, marker::PhantomData};
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_poly::polynomials::{random_mle_list, random_zero_mle_list, ArithErrors, RefCounter};
 
@@ -59,8 +59,6 @@ impl<R: Ring> DensePolynomial<R> {
 
     /// Creates an new DensePolynomial from a MLE.
     pub fn new_from_mle(mle: &RefCounter<DenseMultilinearExtension<R>>) -> Self {
-        let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(mle);
-
         DensePolynomial {
             aux_info: DPAuxInfo {
                 // The max degree is the max degree of any individual variable
@@ -142,7 +140,7 @@ impl<R: Ring> DensePolynomial<R> {
             )));
         }
 
-        let evals: Vec<R> = self
+        let _evals: Vec<R> = self
             .flattened_ml_extensions
             .iter()
             .map(|x| {
@@ -171,12 +169,12 @@ impl<R: Ring> DensePolynomial<R> {
     ) -> Result<(Self, R), ArithErrors> {
         let start = start_timer!(|| "sample random dense polynomial");
 
-        let mut sum = R::zero();
+        let sum = R::zero();
         let mut poly = DensePolynomial::new(nv);
         for _ in 0..num_products {
             let num_multiplicands =
                 rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
-            let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
+            let (product, _product_sum) = random_mle_list(nv, num_multiplicands, rng);
             //let coefficient = R::rand(rng);
             //poly.add_mle_list(product.into_iter(), coefficient)?;
             poly.add_mles(product.into_iter())?;

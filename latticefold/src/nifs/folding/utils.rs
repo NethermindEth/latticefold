@@ -152,21 +152,21 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
     prepare_g1_and_3_k_mles_list(
         &mut g,
-        r_i_eq.clone(),
+        r_i_eq,
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
         challenged_Ms_2,
     )?;
 
-    // G2
-    g.mul_mle(beta_eq_x.clone())?;
+    // g2
+    g.mul_mle(beta_eq_x)?;
 
-    for i in 0..DP::K {
-        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i])?;
+    for mles in f_hat_mles.iter().take(DP::K) {
+        prepare_g2_i_mle_list(&mut g, mles)?;
     }
 
-    for i in DP::K..2 * DP::K {
-        prepare_g2_i_mle_list(&mut g, &f_hat_mles[i])?;
+    for mles in f_hat_mles.iter().take(2 * DP::K).skip(DP::K) {
+        prepare_g2_i_mle_list(&mut g, mles)?;
     }
 
     g.aux_info.max_degree = 2 * DP::B_SMALL;
@@ -296,7 +296,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
     combined_mle += challenged_Ms;
 
-    g.add_mles(vec![r_i_eq.clone(), RefCounter::from(combined_mle)])?;
+    g.add_mles([r_i_eq, RefCounter::from(combined_mle)])?;
 
     Ok(())
 }
