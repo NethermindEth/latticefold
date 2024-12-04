@@ -159,7 +159,7 @@ pub fn create_dummy_identity_sparse_matrix<R: Ring>(
 }
 
 pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
-    // z = (1, io, w)
+    // z = (io, 1, w)
     to_F_vec(vec![
         input, // io
         1,
@@ -173,7 +173,7 @@ pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
 pub fn get_test_z_ntt<R: SuitableRing>() -> Vec<R> {
     let mut res = Vec::new();
     for input in 0..R::dimension() {
-        // z = (1, io, w)
+        // z = (io, 1, w)
         res.push(to_F_vec::<R::BaseRing>(vec![
             input, // io
             1,
@@ -197,19 +197,8 @@ pub fn get_test_z_ntt<R: SuitableRing>() -> Vec<R> {
 }
 
 pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
-    // z = (1, io, w)
-    (
-        R::one(),
-        to_F_vec(vec![
-            input, // io
-        ]),
-        to_F_vec(vec![
-            input * input * input + input + 5, // x^3 + x + 5
-            input * input,                     // x^2
-            input * input * input,             // x^2 * x
-            input * input * input + input,     // x^3 + x
-        ]),
-    )
+    let z = get_test_z(input);
+    (z[1], vec![z[0]], z[2..].to_vec())
 }
 
 pub fn get_test_z_ntt_split<R: SuitableRing>() -> (R, Vec<R>, Vec<R>) {
