@@ -309,7 +309,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // Godlilocks
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding Godlilocks");
+        let mut group = c.benchmark_group("E2E Goldilocks");
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
@@ -337,7 +337,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // BabyBear
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding BabyBear");
+        let mut group = c.benchmark_group("E2E BabyBear");
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
@@ -351,7 +351,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // // StarkPrime
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding StarkPrime");
+        let mut group = c.benchmark_group("E2E StarkPrime");
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K 3052596316
@@ -368,7 +368,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // Frog
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding Frog");
+        let mut group = c.benchmark_group("E2E Frog");
         group.plot_config(plot_config.clone());
 
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K

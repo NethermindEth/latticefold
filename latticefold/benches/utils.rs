@@ -60,3 +60,20 @@ pub fn get_test_dummy_ccs<
     let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(r1cs_rows);
     CCS::<R>::from_r1cs_padded(r1cs, W, L)
 }
+
+#[macro_export]
+macro_rules! define_params {
+    ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        paste::paste! {
+            #[derive(Clone)]
+            struct [<DecompParamsWithB $b W $w b $b_small K $k>];
+
+            impl DecompositionParams for [<DecompParamsWithB $b W $w b $b_small K $k>] {
+                const B: u128 = $b;
+                const L: usize = $l;
+                const B_SMALL: usize = $b_small;
+                const K: usize = $k;
+            }
+        }
+    };
+}

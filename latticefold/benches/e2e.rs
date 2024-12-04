@@ -14,6 +14,9 @@ mod utils;
 use ark_std::UniformRand;
 
 use crate::utils::wit_and_ccs_gen;
+use latticefold::nifs::linearization::{
+    LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
+};
 use latticefold::{
     arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -21,7 +24,6 @@ use latticefold::{
     nifs::{NIFSProver, NIFSVerifier},
     transcript::poseidon::PoseidonTranscript,
 };
-use latticefold::nifs::linearization::{LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier};
 
 fn prover_e2e_benchmark<
     const C: usize,
@@ -39,19 +41,22 @@ fn prover_e2e_benchmark<
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let (acc_lcccs, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-        cm_i,
-        wit,
-        &mut prover_transcript,
-        ccs,
-    ).expect("Failed to generate linearization proof");
+    let (acc_lcccs, linearization_proof) =
+        LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+            cm_i,
+            wit,
+            &mut prover_transcript,
+            ccs,
+        )
+        .expect("Failed to generate linearization proof");
 
     let _ = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
         &mut verifier_transcript,
         ccs,
-    ).expect("Failed to verify linearization");
+    )
+    .expect("Failed to verify linearization");
 
     c.bench_with_input(
         BenchmarkId::new(
@@ -66,7 +71,13 @@ fn prover_e2e_benchmark<
                 P::K
             ),
         ),
-        &(acc_lcccs.clone(), wit.clone(), cm_i.clone(), ccs.clone(), scheme.clone()),
+        &(
+            acc_lcccs.clone(),
+            wit.clone(),
+            cm_i.clone(),
+            ccs.clone(),
+            scheme.clone(),
+        ),
         |b, (lcccs, wit, cm_i, ccs, scheme)| {
             b.iter_batched(
                 || prover_transcript.clone(),
@@ -80,7 +91,7 @@ fn prover_e2e_benchmark<
                         ccs,
                         scheme,
                     )
-                        .expect("Failed to generate proof");
+                    .expect("Failed to generate proof");
                 },
                 criterion::BatchSize::SmallInput,
             )
@@ -104,19 +115,21 @@ fn verifier_e2e_benchmark<
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let (prover_lcccs_acc, acc_linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-        cm_i,
-        wit,
-        &mut prover_transcript,
-        ccs,
-    ).expect("Failed to generate acc linearization proof");
+    let (prover_lcccs_acc, acc_linearization_proof) = LFLinearizationProver::<
+        _,
+        PoseidonTranscript<R, CS>,
+    >::prove(
+        cm_i, wit, &mut prover_transcript, ccs
+    )
+    .expect("Failed to generate acc linearization proof");
 
     let verifier_lcccs_acc = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &acc_linearization_proof,
         &mut verifier_transcript,
         ccs,
-    ).expect("Failed to verify acc linearization");
+    )
+    .expect("Failed to verify acc linearization");
 
     let (_, _, proof) = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
         &prover_lcccs_acc,
@@ -127,7 +140,7 @@ fn verifier_e2e_benchmark<
         ccs,
         scheme,
     )
-        .expect("Failed to generate proof");
+    .expect("Failed to generate proof");
 
     c.bench_with_input(
         BenchmarkId::new(
@@ -142,7 +155,12 @@ fn verifier_e2e_benchmark<
                 P::K
             ),
         ),
-        &(verifier_lcccs_acc.clone(), cm_i.clone(), proof.clone(), ccs.clone()),
+        &(
+            verifier_lcccs_acc.clone(),
+            cm_i.clone(),
+            proof.clone(),
+            ccs.clone(),
+        ),
         |b, (acc, cm_i, proof, ccs)| {
             b.iter_batched(
                 || verifier_transcript.clone(),
@@ -181,22 +199,6 @@ fn e2e_benchmarks<
     verifier_e2e_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 }
 
-macro_rules! define_params {
-    ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        paste::paste! {
-            #[derive(Clone)]
-            struct [<DecompParamsWithB $b W $w b $b_small K $k>];
-
-            impl DecompositionParams for [<DecompParamsWithB $b W $w b $b_small K $k>] {
-                const B: u128 = $b;
-                const L: usize = $l;
-                const B_SMALL: usize = $b_small;
-                const K: usize = $k;
-            }
-        }
-    };
-}
-
 #[allow(unused_macros)]
 macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
@@ -217,6 +219,7 @@ macro_rules! run_single_babybear_benchmark {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
