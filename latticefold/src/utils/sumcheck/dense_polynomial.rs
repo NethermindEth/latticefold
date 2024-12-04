@@ -57,8 +57,8 @@ impl<R: Ring> DensePolynomial<R> {
         }
     }
 
-    /// Creates an new DensePolynomial from a MLE and its coefficient.
-    pub fn new_from_mle(mle: &RefCounter<DenseMultilinearExtension<R>>, coefficient: R) -> Self {
+    /// Creates an new DensePolynomial from a MLE.
+    pub fn new_from_mle(mle: &RefCounter<DenseMultilinearExtension<R>>) -> Self {
         let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(mle);
 
         DensePolynomial {
@@ -99,12 +99,13 @@ impl<R: Ring> DensePolynomial<R> {
                 )));
             }
 
-            self.flattened_ml_extensions.push(mle.clone());
+            self.flattened_ml_extensions.push(mle);
         }
+
         Ok(())
     }
 
-    /// Adds an MLE, incrementing also the degree:
+    /// Adds an MLE, incrementing also the degree.
     ///
     /// Returns an error if the MLE has a different `num_vars` from self.
     pub fn mul_mle(
@@ -119,8 +120,6 @@ impl<R: Ring> DensePolynomial<R> {
                 mle.num_vars, self.aux_info.num_variables
             )));
         }
-
-        let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(&mle);
 
         self.flattened_ml_extensions.push(mle);
 
@@ -232,20 +231,6 @@ impl<R: Ring> DensePolynomial<R> {
 
         end_timer!(start);
         Ok(res)
-    }
-
-    /// Print out the evaluation map for testing. Panic if the num_vars > 5.
-    #[cfg(feature = "std")]
-    pub fn print_evals(&self) {
-        if self.aux_info.num_variables > 5 {
-            panic!("this function is used for testing only. cannot print more than 5 num_vars");
-        }
-        for i in 0..1 << self.aux_info.num_variables {
-            let point = bit_decompose(i, self.aux_info.num_variables);
-            let point_fr: Vec<R> = point.iter().map(|&x| R::from(x)).collect();
-            println!("{} {}", i, self.evaluate(point_fr.as_ref()).unwrap());
-        }
-        println!()
     }
 }
 
