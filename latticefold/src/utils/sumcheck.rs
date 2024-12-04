@@ -235,7 +235,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_sumcheck_proof_serialization() {
             super::test_sumcheck_proof_serialization::<RqNTT, CS>();
         }
@@ -260,7 +259,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_sumcheck_proof_serialization() {
             super::test_sumcheck_proof_serialization::<RqNTT, CS>();
         }
@@ -285,7 +283,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_sumcheck_proof_serialization() {
             super::test_sumcheck_proof_serialization::<RqNTT, CS>();
         }
@@ -310,7 +307,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_sumcheck_proof_serialization() {
             super::test_sumcheck_proof_serialization::<RqNTT, CS>();
         }
