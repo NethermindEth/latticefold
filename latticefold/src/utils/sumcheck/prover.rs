@@ -21,9 +21,6 @@ pub struct ProverMsg<R1: Ring> {
 pub struct ProverState<R: OverField> {
     /// sampled randomness given by the verifier
     pub randomness: Vec<R::BaseRing>,
-    /// Stores the list of products that is meant to be added together. Each multiplicand is represented by
-    /// the index in flattened_ml_extensions
-    pub list_of_products: Vec<(R, Vec<usize>)>,
     /// Stores a list of multilinear extensions in which `self.list_of_products` points to
     pub flattened_ml_extensions: Vec<DenseMultilinearExtension<R>>,
     /// Number of variables
@@ -34,19 +31,19 @@ pub struct ProverState<R: OverField> {
     pub round: usize,
 }
 
-impl<R: OverField> ProverState<R> {
-    pub fn combine_product(&self, vals: &[R]) -> R {
-        let mut sum = R::zero();
-        for (coefficient, products) in &self.list_of_products {
-            let mut prod = *coefficient;
-            for j in products {
-                prod *= vals[*j];
-            }
-            sum += prod;
-        }
-        sum
-    }
-}
+//impl<R: OverField> ProverState<R> {
+//    pub fn combine_product(&self, vals: &[R]) -> R {
+//        let mut sum = R::zero();
+//        for (coefficient, products) in &self.list_of_products {
+//            let mut prod = *coefficient;
+//            for j in products {
+//                prod *= vals[*j];
+//            }
+//            sum += prod;
+//        }
+//        sum
+//    }
+//}
 
 impl<R: OverField, T> IPForMLSumcheck<R, T> {
     /// initialize the prover to argue for the sum of polynomial over {0,1}^`num_vars`
@@ -74,7 +71,6 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
 
         ProverState {
             randomness: Vec::with_capacity(polynomial.aux_info.num_variables),
-            list_of_products: polynomial.products.clone(),
             flattened_ml_extensions,
             num_vars: polynomial.aux_info.num_variables,
             max_multiplicands: polynomial.aux_info.max_degree,

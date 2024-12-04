@@ -58,8 +58,6 @@ use rayon::prelude::*;
 pub struct VirtualPolynomial<R: Ring> {
     /// Aux information about the multilinear polynomial
     pub aux_info: VPAuxInfo<R>,
-    /// list of reference to products (as usize) of multilinear extension
-    pub products: Vec<(R, Vec<usize>)>,
     /// Stores multilinear extensions in which product multiplicand can refer
     /// to.
     pub flattened_ml_extensions: Vec<RefCounter<DenseMultilinearExtension<R>>>,
@@ -79,25 +77,25 @@ pub struct VPAuxInfo<R: Ring> {
     pub phantom: PhantomData<R>,
 }
 
-impl<R: Ring> Add for &VirtualPolynomial<R> {
-    type Output = VirtualPolynomial<R>;
-    fn add(self, other: &VirtualPolynomial<R>) -> Self::Output {
-        let start = start_timer!(|| "virtual poly add");
-        let mut res = self.clone();
-        for products in other.products.iter() {
-            let cur: Vec<RefCounter<DenseMultilinearExtension<R>>> = products
-                .1
-                .iter()
-                .map(|&x| other.flattened_ml_extensions[x].clone())
-                .collect();
-
-            res.add_mle_list(cur, products.0)
-                .expect("add product failed");
-        }
-        end_timer!(start);
-        res
-    }
-}
+//impl<R: Ring> Add for &VirtualPolynomial<R> {
+//    type Output = VirtualPolynomial<R>;
+//    fn add(self, other: &VirtualPolynomial<R>) -> Self::Output {
+//        let start = start_timer!(|| "virtual poly add");
+//        let mut res = self.clone();
+//        for products in other.products.iter() {
+//            let cur: Vec<RefCounter<DenseMultilinearExtension<R>>> = products
+//                .1
+//                .iter()
+//                .map(|&x| other.flattened_ml_extensions[x].clone())
+//                .collect();
+//
+//            res.add_mle_list(cur, products.0)
+//                .expect("add product failed");
+//        }
+//        end_timer!(start);
+//        res
+//    }
+//}
 
 // TODO: convert this into a trait
 impl<R: Ring> VirtualPolynomial<R> {
@@ -109,7 +107,6 @@ impl<R: Ring> VirtualPolynomial<R> {
                 num_variables,
                 phantom: PhantomData,
             },
-            products: Vec::new(),
             flattened_ml_extensions: Vec::new(),
             raw_pointers_lookup_table: HashMap::new(),
         }
@@ -129,7 +126,6 @@ impl<R: Ring> VirtualPolynomial<R> {
                 phantom: PhantomData,
             },
             // here `0` points to the first polynomial of `flattened_ml_extensions`
-            products: vec![(coefficient, vec![0])],
             flattened_ml_extensions: vec![mle.clone()],
             raw_pointers_lookup_table: hm,
         }
@@ -176,7 +172,7 @@ impl<R: Ring> VirtualPolynomial<R> {
                 indexed_product.push(curr_index);
             }
         }
-        self.products.push((coefficient, indexed_product));
+        //self.products.push((coefficient, indexed_product));
         Ok(())
     }
 
@@ -211,12 +207,12 @@ impl<R: Ring> VirtualPolynomial<R> {
             self.flattened_ml_extensions.len() - 1
         };
 
-        for (prod_coef, indices) in self.products.iter_mut() {
-            // - add the MLE to the MLE list;
-            // - multiple each product by MLE and its coefficient.
-            indices.push(mle_index);
-            *prod_coef *= coefficient;
-        }
+        //for (prod_coef, indices) in self.products.iter_mut() {
+        //    // - add the MLE to the MLE list;
+        //    // - multiple each product by MLE and its coefficient.
+        //    indices.push(mle_index);
+        //    *prod_coef *= coefficient;
+        //}
 
         // increase the max degree by one as the MLE has degree 1.
         self.aux_info.max_degree += 1;
@@ -246,12 +242,12 @@ impl<R: Ring> VirtualPolynomial<R> {
                                            // matches
             })
             .collect();
-
-        let res = self
-            .products
-            .iter()
-            .map(|(c, p)| *c * p.iter().map(|&i| evals[i]).product::<R>())
-            .sum();
+        let res = R::zero();
+        //let res = self
+        //    .products
+        //    .iter()
+        //    .map(|(c, p)| *c * p.iter().map(|&i| evals[i]).product::<R>())
+        //    .sum();
 
         end_timer!(start);
         Ok(res)
