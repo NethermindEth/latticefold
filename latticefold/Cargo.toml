@@ -76,3 +76,7 @@ harness = false
 [[bench]]
 name = "folding"
 harness = false
+
+[[bench]]
+name = "operations"
+harness = false
