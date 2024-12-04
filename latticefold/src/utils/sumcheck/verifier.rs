@@ -3,7 +3,7 @@ use ark_ff::{Field, One, Zero};
 use ark_std::vec::Vec;
 use lattirust_ring::OverField;
 
-use super::{prover::ProverMsg, DPAuxInfo, IPForMLSumcheck, SumCheckError};
+use super::{prover::ProverMsg, IPForMLSumcheck, SumCheckError};
 use crate::transcript::Transcript;
 
 pub const SQUEEZE_NATIVE_ELEMENTS_NUM: usize = 1;
@@ -37,14 +37,14 @@ pub struct SubClaim<R: OverField> {
 
 impl<R: OverField, T: Transcript<R>> IPForMLSumcheck<R, T> {
     /// initialize the verifier
-    pub fn verifier_init(poly_info: &DPAuxInfo<R>) -> VerifierState<R> {
+    pub fn verifier_init(nvars: usize, degree: usize) -> VerifierState<R> {
         VerifierState {
             round: 1,
-            nv: poly_info.num_variables,
-            max_multiplicands: poly_info.max_degree,
+            nv: nvars,
+            max_multiplicands: degree,
             finished: false,
-            polynomials_received: Vec::with_capacity(poly_info.num_variables),
-            randomness: Vec::with_capacity(poly_info.num_variables),
+            polynomials_received: Vec::with_capacity(nvars),
+            randomness: Vec::with_capacity(nvars),
         }
     }
 

@@ -1,5 +1,5 @@
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::mle::DenseMultilinearExtension;
+use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
 use lattirust_ring::OverField;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial};
 
@@ -10,7 +10,7 @@ use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
     utils::sumcheck::{
-        dense_polynomial::{eq_eval, DPAuxInfo, DensePolynomial},
+        dense_polynomial::{eq_eval, DensePolynomial},
         MLSumcheck,
         SumCheckError::SumCheckFailed,
     },
@@ -102,12 +102,14 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
     /// Step 2: Run linearization sum-check protocol.
     fn generate_sumcheck_proof(
-        g: &DensePolynomial<NTT>,
         transcript: &mut impl Transcript<NTT>,
+        mles: &[RefCounter<DenseMultilinearExtension<NTT>>],
+        nvars: usize,
+        degree: usize,
         comb_fn: impl Fn(&[NTT]) -> NTT + Sync + Send,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         let (sum_check_proof, prover_state) =
-            MLSumcheck::prove_as_subprotocol(transcript, g, comb_fn);
+            MLSumcheck::prove_as_subprotocol(transcript, mles, nvars, degree, comb_fn);
         let point_r = prover_state
             .randomness
             .into_iter()
@@ -172,7 +174,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         };
 
         // Run sumcheck protocol.
-        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(&g, transcript, comb_fn)?;
+        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(
+            transcript,
+            &g.mles,
+            g.aux_info.num_variables,
+            g.aux_info.max_degree,
+            comb_fn,
+        )?;
 
         // Step 3: Compute v, u_vector.
         let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;
@@ -208,11 +216,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         ccs: &CCS<NTT>,
     ) -> Result<(Vec<NTT>, NTT), LinearizationError<NTT>> {
         // The polynomial has degree <= ccs.d + 1 and log_m (ccs.s) vars.
-        let poly_info = DPAuxInfo::new(ccs.s, ccs.d + 1);
+        let nvars = ccs.s;
+        let degree = ccs.d + 1;
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,
-            &poly_info,
+            nvars,
+            degree,
             NTT::zero(),
             &proof.linearization_sumcheck,
         )?;

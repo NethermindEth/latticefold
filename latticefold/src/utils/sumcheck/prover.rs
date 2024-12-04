@@ -2,10 +2,13 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
-use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
+use lattirust_poly::{
+    mle::MultilinearExtension,
+    polynomials::{DenseMultilinearExtension, RefCounter},
+};
 use lattirust_ring::{OverField, Ring};
 
-use super::{dense_polynomial::DensePolynomial, verifier::VerifierMsg, IPForMLSumcheck};
+use super::{verifier::VerifierMsg, IPForMLSumcheck};
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -21,59 +24,37 @@ pub struct ProverMsg<R1: Ring> {
 pub struct ProverState<R: OverField> {
     /// sampled randomness given by the verifier
     pub randomness: Vec<R::BaseRing>,
-    /// Stores a list of multilinear extensions in which `self.list_of_products` points to
+    /// Stores a list of multilinear extensions
     pub mles: Vec<DenseMultilinearExtension<R>>,
     /// Number of variables
     pub num_vars: usize,
-    /// Max number of multiplicands in a product
-    pub max_multiplicands: usize,
+    /// Max degree
+    pub max_degree: usize,
     /// The current round number
     pub round: usize,
 }
 
-//impl<R: OverField> ProverState<R> {
-//    pub fn combine_product(&self, vals: &[R]) -> R {
-//        let mut sum = R::zero();
-//        for (coefficient, products) in &self.list_of_products {
-//            let mut prod = *coefficient;
-//            for j in products {
-//                prod *= vals[*j];
-//            }
-//            sum += prod;
-//        }
-//        sum
-//    }
-//}
-
 impl<R: OverField, T> IPForMLSumcheck<R, T> {
     /// initialize the prover to argue for the sum of polynomial over {0,1}^`num_vars`
-    ///
-    /// The polynomial is represented by a list of products of polynomials along with its coefficient that is meant to be added together.
-    ///
-    /// This data structure of the polynomial is a list of list of `(coefficient, DenseMultilinearExtension)`.
-    /// * Number of products n = `polynomial.products.len()`,
-    /// * Number of multiplicands of ith product m_i = `polynomial.products[i].1.len()`,
-    /// * Coefficient of ith product c_i = `polynomial.products[i].0`
-    ///
-    /// The resulting polynomial is
-    ///
-    /// $$\sum_{i=0}^{n}C_i\cdot\prod_{j=0}^{m_i}P_{ij}$$
-    ///
-    pub fn prover_init(polynomial: &DensePolynomial<R>) -> ProverState<R> {
-        if polynomial.aux_info.num_variables == 0 {
+    pub fn prover_init(
+        mles: &[RefCounter<DenseMultilinearExtension<R>>],
+        nvars: usize,
+        degree: usize,
+    ) -> ProverState<R> {
+        if nvars == 0 {
             panic!("Attempt to prove a constant.")
         }
 
         // create a deep copy of all unique MLExtensions
-        let mles = ark_std::cfg_iter!(polynomial.mles)
+        let mles = ark_std::cfg_iter!(mles)
             .map(|x| x.as_ref().clone())
             .collect();
 
         ProverState {
-            randomness: Vec::with_capacity(polynomial.aux_info.num_variables),
+            randomness: Vec::with_capacity(nvars),
             mles,
-            num_vars: polynomial.aux_info.num_variables,
-            max_multiplicands: polynomial.aux_info.max_degree,
+            num_vars: nvars,
+            max_degree: degree,
             round: 0,
         }
     }
@@ -110,7 +91,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
 
         let i = prover_state.round;
         let nv = prover_state.num_vars;
-        let degree = prover_state.max_multiplicands;
+        let degree = prover_state.max_degree;
 
         let polys = &prover_state.mles;
 

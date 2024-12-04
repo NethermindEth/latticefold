@@ -138,8 +138,10 @@ fn test_generate_sumcheck() {
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
-            &g,
             &mut transcript,
+            &g.mles,
+            g.aux_info.num_variables,
+            g.aux_info.max_degree,
             comb_fn,
         )
         .unwrap();
@@ -168,8 +170,10 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
-            &g,
             &mut transcript,
+            &g.mles,
+            g.aux_info.num_variables,
+            g.aux_info.max_degree,
             comb_fn,
         )
         .unwrap();

@@ -1,12 +1,11 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{fmt::Display, marker::PhantomData};
-use lattirust_poly::polynomials::ArithErrors;
+use lattirust_poly::polynomials::{ArithErrors, DenseMultilinearExtension, RefCounter};
 use lattirust_ring::{OverField, Ring};
 use thiserror::Error;
 
 use crate::ark_base::*;
 use crate::transcript::Transcript;
-use dense_polynomial::{DPAuxInfo, DensePolynomial};
 use prover::{ProverMsg, ProverState};
 use verifier::SubClaim;
 
@@ -54,16 +53,18 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     /// Both of these allow this sumcheck to be better used as a part of a larger protocol.
     pub fn prove_as_subprotocol(
         transcript: &mut T,
-        polynomial: &DensePolynomial<R>,
+        mles: &[RefCounter<DenseMultilinearExtension<R>>],
+        nvars: usize,
+        degree: usize,
         comb_fn: impl Fn(&[R]) -> R + Sync + Send,
     ) -> (Proof<R>, ProverState<R>) {
         // TODO: return this back
         // transcript.absorb(&polynomial.info());
 
-        let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(polynomial);
+        let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(mles, nvars, degree);
         let mut verifier_msg = None;
-        let mut prover_msgs = Vec::with_capacity(polynomial.aux_info.num_variables);
-        for _ in 0..polynomial.aux_info.num_variables {
+        let mut prover_msgs = Vec::with_capacity(nvars);
+        for _ in 0..nvars {
             let prover_msg =
                 IPForMLSumcheck::<R, T>::prove_round(&mut prover_state, &verifier_msg, &comb_fn);
             transcript.absorb_slice(&prover_msg.evaluations);
@@ -84,15 +85,16 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     /// verifier challenges. This allows this sumcheck to be used as a part of a larger protocol.
     pub fn verify_as_subprotocol(
         transcript: &mut T,
-        polynomial_info: &DPAuxInfo<R>,
+        nvars: usize,
+        degree: usize,
         claimed_sum: R,
         proof: &Proof<R>,
     ) -> Result<SubClaim<R>, SumCheckError<R>> {
         // TODO: bring this back
         //transcript.absorb(polynomial_info);
 
-        let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(polynomial_info);
-        for i in 0..polynomial_info.num_variables {
+        let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(nvars, degree);
+        for i in 0..nvars {
             let prover_msg = proof.0.get(i).expect("proof is incomplete");
             transcript.absorb_slice(&prover_msg.evaluations);
             let verifier_msg = IPForMLSumcheck::verify_round(
@@ -142,7 +144,13 @@ mod tests {
             result
         };
 
-        let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly, comb_fn);
+        let (proof, _) = MLSumcheck::prove_as_subprotocol(
+            &mut transcript,
+            &poly.mles,
+            poly.aux_info.num_variables,
+            poly.aux_info.max_degree,
+            comb_fn,
+        );
         (poly, sum, proof)
     }
 
@@ -157,8 +165,13 @@ mod tests {
             let (poly, sum, proof) = generate_sumcheck_proof::<R, CS>(&mut rng);
 
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
+            let res = MLSumcheck::verify_as_subprotocol(
+                &mut transcript,
+                poly.aux_info.num_variables,
+                poly.aux_info.max_degree,
+                sum,
+                &proof,
+            );
             assert!(res.is_ok())
         }
     }
@@ -210,14 +223,25 @@ mod tests {
                 result
             };
 
-            let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly, comb_fn);
+            let (proof, _) = MLSumcheck::prove_as_subprotocol(
+                &mut transcript,
+                &poly.mles,
+                poly.aux_info.num_variables,
+                poly.aux_info.max_degree,
+                comb_fn,
+            );
 
             let not_sum = poly
                 .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
                 .unwrap();
 
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
+            let res = MLSumcheck::verify_as_subprotocol(
+                &mut transcript,
+                poly.aux_info.num_variables,
+                poly.aux_info.max_degree,
+                not_sum,
+                &proof,
+            );
             assert!(res.is_err());
         }
     }

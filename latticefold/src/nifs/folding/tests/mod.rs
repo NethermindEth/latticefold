@@ -11,7 +11,7 @@ use crate::nifs::folding::{
 };
 use crate::nifs::FoldingProof;
 use crate::transcript::{Transcript, TranscriptWithShortChallenges};
-use crate::utils::sumcheck::{dense_polynomial::DPAuxInfo, MLSumcheck};
+use crate::utils::sumcheck::MLSumcheck;
 use crate::{
     arith::{r1cs::get_test_z_ntt_split, tests::get_test_ccs, Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
@@ -324,7 +324,13 @@ fn test_get_sumcheck_randomness() {
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
     // Compute sumcheck proof
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
+        &mut transcript,
+        &g.mles,
+        g.aux_info.num_variables,
+        g.aux_info.max_degree,
+        comb_fn,
+    );
     // Derive randomness
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
@@ -380,7 +386,13 @@ fn test_get_thetas() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
+        &mut transcript,
+        &g.mles,
+        g.aux_info.num_variables,
+        g.aux_info.max_degree,
+        comb_fn,
+    );
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -450,7 +462,13 @@ fn test_get_etas() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
+        &mut transcript,
+        &g.mles,
+        g.aux_info.num_variables,
+        g.aux_info.max_degree,
+        comb_fn,
+    );
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -548,7 +566,13 @@ fn test_prepare_public_output() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
+        &mut transcript,
+        &g.mles,
+        g.aux_info.num_variables,
+        g.aux_info.max_degree,
+        comb_fn,
+    );
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -627,7 +651,13 @@ fn test_compute_f_0() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(&mut transcript, &g, comb_fn);
+    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
+        &mut transcript,
+        &g.mles,
+        g.aux_info.num_variables,
+        g.aux_info.max_degree,
+        comb_fn,
+    );
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -727,7 +757,8 @@ fn test_verify_evaluation() {
 
     let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
 
-    let poly_info = DPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
+    let nvars = ccs.s;
+    let degree = 2 * DP::B_SMALL;
 
     let (claim_g1, claim_g3) =
         LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
@@ -737,7 +768,8 @@ fn test_verify_evaluation() {
     let (r_0, expected_evaluation) =
         LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_sumcheck_proof(
             &mut transcript,
-            &poly_info,
+            nvars,
+            degree,
             claim_g1 + claim_g3,
             &proof,
         )
@@ -806,7 +838,8 @@ fn test_verify_sumcheck_proof() {
 
     let (alpha_s, _, zeta_s, _) = transcript.squeeze_alpha_beta_zeta_mu::<DP>(ccs.s);
 
-    let poly_info = DPAuxInfo::new(ccs.s, 2 * DP::B_SMALL);
+    let nvars = ccs.s;
+    let degree = 2 * DP::B_SMALL;
 
     let (claim_g1, claim_g3) =
         LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_claims::<C>(
@@ -815,7 +848,8 @@ fn test_verify_sumcheck_proof() {
 
     let result = LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_sumcheck_proof(
         &mut transcript,
-        &poly_info,
+        nvars,
+        degree,
         claim_g1 + claim_g3,
         &proof,
     );

@@ -13,9 +13,7 @@ use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::mle_helpers::evaluate_mles;
 use crate::utils::sumcheck::{
-    dense_polynomial::{eq_eval, DPAuxInfo},
-    MLSumcheck,
-    SumCheckError::SumCheckFailed,
+    dense_polynomial::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed,
 };
 use crate::{
     arith::{error::CSError, Witness, CCS, LCCCS},
@@ -226,8 +224,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         };
 
         // Step 5: Run sum check prover
-        let (sum_check_proof, prover_state) =
-            MLSumcheck::prove_as_subprotocol(transcript, &g, comb_fn);
+        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
+            transcript,
+            &g.mles,
+            g.aux_info.num_variables,
+            g.aux_info.max_degree,
+            comb_fn,
+        );
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
 
@@ -346,7 +349,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
 
     fn verify_sumcheck_proof(
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
-        poly_info: &DPAuxInfo<NTT>,
+        nvars: usize,
+        degree: usize,
         total_claim: NTT,
         proof: &FoldingProof<NTT>,
     ) -> Result<(Vec<NTT>, NTT), FoldingError<NTT>> {
@@ -354,7 +358,8 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         // Verify the sumcheck proof.
         let sub_claim = MLSumcheck::verify_as_subprotocol(
             transcript,
-            poly_info,
+            nvars,
+            degree,
             total_claim,
             &proof.pointshift_sumcheck_proof,
         )?;
@@ -386,11 +391,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         // Calculate claims for sumcheck verification
         let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
 
-        let poly_info = DPAuxInfo::new(ccs.s, 2 * P::B_SMALL);
+        let nvars = ccs.s;
+        let degree = 2 * P::B_SMALL;
 
         //Step 2: The sumcheck.
         let (r_0, expected_evaluation) =
-            Self::verify_sumcheck_proof(transcript, &poly_info, claim_g1 + claim_g3, proof)?;
+            Self::verify_sumcheck_proof(transcript, nvars, degree, claim_g1 + claim_g3, proof)?;
 
         // Verify evaluation claim
         Self::verify_evaluation::<C, P>(
