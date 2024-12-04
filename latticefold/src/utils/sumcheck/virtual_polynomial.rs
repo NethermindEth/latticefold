@@ -18,11 +18,6 @@ use ark_std::{cmp::max, marker::PhantomData, ops::Add};
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_poly::polynomials::{random_mle_list, random_zero_mle_list, ArithErrors, RefCounter};
 
-#[cfg(feature = "std")]
-use ark_std::collections::HashSet;
-#[cfg(not(feature = "std"))]
-use hashbrown::HashSet;
-
 use lattirust_ring::Ring;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -92,8 +87,6 @@ impl<R: Ring> VirtualPolynomial<R> {
     /// Creates an new virtual polynomial from a MLE and its coefficient.
     pub fn new_from_mle(mle: &RefCounter<DenseMultilinearExtension<R>>, coefficient: R) -> Self {
         let mle_ptr: *const DenseMultilinearExtension<R> = RefCounter::as_ptr(mle);
-        let mut hm = HashSet::new();
-        hm.insert(mle_ptr);
 
         VirtualPolynomial {
             aux_info: VPAuxInfo {
