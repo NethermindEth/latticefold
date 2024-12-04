@@ -137,77 +137,66 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
+        println!("\tSanity check passed.");
 
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
+        println!("\tLength check passed.");
 
         let log_m = ccs.s;
 
-        // Step 1: Generate alpha, zeta, mu, beta challenges
         let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<P>(log_m);
+        println!("\tChallenges generated.");
 
-        // Step 2: Compute g polynomial and sumcheck on it
-        // Setup f_hat_mle for later evaluation of thetas
         let f_hat_mles = Self::setup_f_hat_mles(&mut w_s);
-
         let zis = Self::get_zis(cm_i_s, &w_s);
         let ris = Self::get_ris(cm_i_s);
-
         let Mz_mles_vec: Vec<Vec<DenseMultilinearExtension<NTT>>> =
             Self::calculate_Mz_mles(ccs, &zis)?;
+        println!("\tPolynomial setup completed.");
 
         let g = create_sumcheck_polynomial::<_, P>(
-            log_m,
-            &f_hat_mles,
-            &alpha_s,
-            &Mz_mles_vec,
-            &zeta_s,
-            &ris,
-            &beta_s,
-            &mu_s,
+            log_m, &f_hat_mles, &alpha_s, &Mz_mles_vec, &zeta_s, &ris, &beta_s, &mu_s,
         )?;
+        println!("\tSumcheck polynomial created.");
 
-        // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
             transcript,
             &g,
             #[cfg(feature = "jolt-sumcheck")]
             ProverState::combine_product,
         );
+        println!("\tSumcheck prover run successfully.");
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
 
-        // Step 3: Evaluate thetas and etas
         let theta_s = Self::get_thetas(&f_hat_mles, &r_0)?;
         let eta_s = Self::get_etas(&Mz_mles_vec, &r_0)?;
+        println!("\tThetas and etas evaluated.");
 
-        // Absorb them into the transcript
-        theta_s
-            .iter()
-            .for_each(|thetas| transcript.absorb_slice(thetas));
+        theta_s.iter().for_each(|thetas| transcript.absorb_slice(thetas));
         eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
+        println!("\tThetas and etas absorbed into transcript.");
 
-        // Step 5 get rho challenges
         let rho_s = get_rhos::<_, _, P>(transcript);
+        println!("\tRho challenges obtained.");
 
-        // Step 6 compute v0, u0, y0, x_w0
         let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(&rho_s, &theta_s, cm_i_s, &eta_s, ccs);
+        println!("\tv0, u0, y0, x_w0 computed.");
 
-        // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
-
         let lcccs = prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h);
-
         let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, &w_s);
-
         let w_0 = Witness::from_f::<P>(f_0);
+        println!("\tf0 and Witness_0 computed.");
 
         let folding_proof = FoldingProof {
             pointshift_sumcheck_proof: sum_check_proof,
             theta_s,
             eta_s,
         };
+        println!("Folding proof created.");
 
         Ok((lcccs, w_0, folding_proof))
     }

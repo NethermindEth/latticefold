@@ -61,11 +61,16 @@ impl<
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
+        println!("Starting NIFS proving process...");
 
         let (linearized_cm_i, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
+        println!("Linearization completed successfully.");
+
         let (decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
+        println!("Left decomposition completed successfully.");
+
         let (decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
             LFDecompositionProver::<_, T>::prove::<W, C, P>(
                 &linearized_cm_i,
@@ -74,6 +79,7 @@ impl<
                 ccs,
                 scheme,
             )?;
+        println!("Right decomposition completed successfully.");
 
         let (lcccs, wit_s) = {
             let mut lcccs = decomposed_lcccs_l;
@@ -86,9 +92,13 @@ impl<
 
             (lcccs, wit_s)
         };
+        println!("LCCCS and witness concatenation completed successfully.");
 
         let (folded_lcccs, wit, folding_proof) =
             LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, wit_s, transcript, ccs)?;
+        println!("Folding completed successfully.");
+
+        println!("NIFS proving process completed.");
 
         Ok((
             folded_lcccs,
@@ -181,6 +191,7 @@ fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
 #[macro_use]
 mod tests {
     use core::fmt::Debug;
+    use std::time::Instant;
 
     use ark_ff::UniformRand;
     use cyclotomic_rings::{
@@ -237,7 +248,7 @@ mod tests {
     #[test]
     fn test_e2e() {
         // X_LEN, C, WIT_LEN, B, L, B_SMALL, K
-        run_single_goldilocks_e2e!(1, 39, 512, 4294967296, 2, 2, 32);
+        run_single_goldilocks_e2e!(1, 47, 65536, 4294967296, 2, 2, 32);
     }
     fn e2e<
         const X_LEN: usize,
@@ -284,6 +295,7 @@ mod tests {
         )
         .expect("Failed to verify acc linearization");
 
+        let proof_time = Instant::now();
         let (_, _, proof) = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
             &prover_lcccs_acc,
             wit,
@@ -294,6 +306,7 @@ mod tests {
             scheme,
         )
         .expect("Failed to generate proof");
+        println!("Proof time: {:?}", proof_time.elapsed());
 
         NIFSVerifier::<C, R, P, PoseidonTranscript<R, CS>>::verify(
             &verifier_lcccs_acc,
@@ -326,7 +339,7 @@ mod tests {
         let new_r1cs_rows = if P::L == 1 && (WIT_LEN > 0 && (WIT_LEN & (WIT_LEN - 1)) == 0) {
             r1cs_rows - 2
         } else {
-            r1cs_rows // This makes a square matrix but is too much memory
+            r1cs_rows
         };
         let ccs: CCS<R> = get_test_dummy_ccs::<R, X_LEN, WIT_LEN, W>(new_r1cs_rows, P::L);
         let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, X_LEN, WIT_LEN>();
