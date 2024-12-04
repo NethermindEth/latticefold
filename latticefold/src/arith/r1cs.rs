@@ -135,6 +135,23 @@ pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
         C: R1CS_C,
     }
 }
+
+pub fn get_test_dummy_r1cs_non_scalar<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
+    rows: usize,
+    witness: &[R],
+) -> R1CS<R> {
+    let R1CS_A = create_dummy_identity_sparse_matrix(rows, X_LEN + WIT_LEN + 1);
+    let R1CS_B = R1CS_A.clone();
+    let R1CS_C = create_dummy_squaring_sparse_matrix(rows, X_LEN + WIT_LEN + 1, witness);
+
+    R1CS::<R> {
+        l: 1,
+        A: R1CS_A,
+        B: R1CS_B,
+        C: R1CS_C,
+    }
+}
+
 pub fn create_dummy_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
     let mut matrix = vec![vec![0; columns]; rows];
     for (i, item) in matrix.iter_mut().enumerate().take(rows) {
@@ -154,6 +171,28 @@ pub fn create_dummy_identity_sparse_matrix<R: Ring>(
     };
     for (i, row) in matrix.coeffs.iter_mut().enumerate() {
         row.push((R::one(), i));
+    }
+    matrix
+}
+
+// Takes a vector and returns a matrix that will square the vector
+pub fn create_dummy_squaring_sparse_matrix<R: Ring>(
+    rows: usize,
+    columns: usize,
+    witness: &[R],
+) -> SparseMatrix<R> {
+    assert_eq!(
+        rows,
+        witness.len(),
+        "Length of witness vector must be equal to ccs width"
+    );
+    let mut matrix = SparseMatrix {
+        n_rows: rows,
+        n_cols: columns,
+        coeffs: vec![vec![]; rows],
+    };
+    for (i, row) in matrix.coeffs.iter_mut().enumerate() {
+        row.push((witness[i], i));
     }
     matrix
 }
