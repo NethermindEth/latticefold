@@ -166,23 +166,30 @@ impl<R: Ring> DensePolynomial<R> {
         num_multiplicands_range: (usize, usize),
         num_products: usize,
         rng: &mut Rn,
-    ) -> Result<(Self, R), ArithErrors> {
+    ) -> Result<(Self, Vec<(R, Vec<usize>)>, R), ArithErrors> {
         let start = start_timer!(|| "sample random dense polynomial");
 
-        let sum = R::zero();
+        let mut sum = R::zero();
         let mut poly = DensePolynomial::new(nv);
+        let mut products = Vec::with_capacity(num_products);
+        let mut current_mle_index = 0;
         for _ in 0..num_products {
             let num_multiplicands =
                 rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
-            let (product, _product_sum) = random_mle_list(nv, num_multiplicands, rng);
-            //let coefficient = R::rand(rng);
-            //poly.add_mle_list(product.into_iter(), coefficient)?;
+            let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
+
+            let coefficient = R::rand(rng);
             poly.add_mles(product.into_iter())?;
-            //sum += product_sum * coefficient;
+            sum += product_sum * coefficient;
+
+            let indices: Vec<usize> =
+                (current_mle_index..current_mle_index + num_multiplicands).collect();
+            products.push((coefficient, indices));
+            current_mle_index += num_multiplicands;
         }
 
         end_timer!(start);
-        Ok((poly, sum))
+        Ok((poly, products, sum))
     }
 
     /// Sample a random dense polynomial that evaluates to zero everywhere
@@ -198,8 +205,6 @@ impl<R: Ring> DensePolynomial<R> {
             let num_multiplicands =
                 rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
             let product = random_zero_mle_list(nv, num_multiplicands, rng);
-            //let coefficient = R::rand(rng);
-            //poly.add_mle_list(product.into_iter(), coefficient)?;
             poly.add_mles(product.into_iter())?;
         }
 

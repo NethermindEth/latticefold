@@ -127,20 +127,20 @@ mod tests {
     {
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (poly, sum) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+        let (poly, products, sum) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
 
-        //let comb_fn = |vals: &[R]| -> R {
-        //    let mut sum = R::zero();
-        //    for (coefficient, products) in &poly.products {
-        //        let mut prod = *coefficient;
-        //        for j in products {
-        //            prod *= vals[*j];
-        //        }
-        //        sum += prod;
-        //    }
-        //    sum
-        //};
-        let comb_fn = |_: &[R]| -> R { R::zero() };
+        let comb_fn = |vals: &[R]| -> R {
+            let mut result = R::zero();
+            for (coef, indices) in &products {
+                let mut term = *coef;
+                for &i in indices {
+                    term *= vals[i];
+                }
+                result += term;
+            }
+
+            result
+        };
 
         let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly, comb_fn);
         (poly, sum, proof)
@@ -195,20 +195,20 @@ mod tests {
         for _ in 0..20 {
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
 
-            let (poly, _) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+            let (poly, products, _) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
 
-            //let comb_fn = |vals: &[R]| -> R {
-            //    let mut sum = R::zero();
-            //    for (coefficient, products) in &poly.products {
-            //        let mut prod = *coefficient;
-            //        for j in products {
-            //            prod *= vals[*j];
-            //        }
-            //        sum += prod;
-            //    }
-            //    sum
-            //};
-            let comb_fn = |_: &[R]| -> R { R::zero() };
+            let comb_fn = |vals: &[R]| -> R {
+                let mut result = R::zero();
+                for (coef, indices) in &products {
+                    let mut term = *coef;
+                    for &i in indices {
+                        term *= vals[i];
+                    }
+                    result += term;
+                }
+
+                result
+            };
 
             let (proof, _) = MLSumcheck::prove_as_subprotocol(&mut transcript, &poly, comb_fn);
 
@@ -229,7 +229,6 @@ mod tests {
         type CS = StarkChallengeSet;
 
         #[test]
-        #[ignore]
         fn test_sumcheck() {
             super::test_sumcheck::<RqNTT, CS>();
         }
@@ -240,7 +239,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_failing_sumcheck() {
             super::test_failing_sumcheck::<RqNTT, CS>();
         }
@@ -253,7 +251,6 @@ mod tests {
         type CS = FrogChallengeSet;
 
         #[test]
-        #[ignore]
         fn test_sumcheck() {
             super::test_sumcheck::<RqNTT, CS>();
         }
@@ -264,7 +261,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_failing_sumcheck() {
             super::test_failing_sumcheck::<RqNTT, CS>();
         }
@@ -277,7 +273,6 @@ mod tests {
         type CS = GoldilocksChallengeSet;
 
         #[test]
-        #[ignore]
         fn test_sumcheck() {
             super::test_sumcheck::<RqNTT, CS>();
         }
@@ -288,7 +283,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_failing_sumcheck() {
             super::test_failing_sumcheck::<RqNTT, CS>();
         }
@@ -301,7 +295,6 @@ mod tests {
         type CS = BabyBearChallengeSet;
 
         #[test]
-        #[ignore]
         fn test_sumcheck() {
             super::test_sumcheck::<RqNTT, CS>();
         }
@@ -312,7 +305,6 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn test_failing_sumcheck() {
             super::test_failing_sumcheck::<RqNTT, CS>();
         }
