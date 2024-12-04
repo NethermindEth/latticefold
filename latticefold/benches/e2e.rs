@@ -37,20 +37,19 @@ fn prover_e2e_benchmark<
     scheme: &AjtaiCommitmentScheme<C, W, R>,
 ) {
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
+    let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let mut linearization_transcript = PoseidonTranscript::<R, CS>::default();
-    let (acc, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+    let (acc_lcccs, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
-        &mut linearization_transcript,
+        &mut prover_transcript,
         ccs,
     ).expect("Failed to generate linearization proof");
 
-    let mut linearization_verifier_transcript = PoseidonTranscript::<R, CS>::default();
-    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+    let _ = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
-        &mut linearization_verifier_transcript,
+        &mut verifier_transcript,
         ccs,
     ).expect("Failed to verify linearization");
 
@@ -67,12 +66,12 @@ fn prover_e2e_benchmark<
                 P::K
             ),
         ),
-        &(lcccs.clone(), wit.clone(), cm_i.clone(), ccs.clone(), scheme.clone()),
+        &(acc_lcccs.clone(), wit.clone(), cm_i.clone(), ccs.clone(), scheme.clone()),
         |b, (lcccs, wit, cm_i, ccs, scheme)| {
             b.iter_batched(
                 || prover_transcript.clone(),
                 |mut bench_prover_transcript| {
-                    let (_, _, proof) = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
+                    let _ = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
                         lcccs,
                         wit,
                         cm_i,
@@ -105,24 +104,22 @@ fn verifier_e2e_benchmark<
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let mut linearization_transcript = PoseidonTranscript::<R, CS>::default();
-    let (acc, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+    let (prover_lcccs_acc, acc_linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
         cm_i,
         wit,
-        &mut linearization_transcript,
+        &mut prover_transcript,
         ccs,
-    ).expect("Failed to generate linearization proof");
+    ).expect("Failed to generate acc linearization proof");
 
-    let mut linearization_verifier_transcript = PoseidonTranscript::<R, CS>::default();
-    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+    let verifier_lcccs_acc = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
-        &linearization_proof,
-        &mut linearization_verifier_transcript,
+        &acc_linearization_proof,
+        &mut verifier_transcript,
         ccs,
-    ).expect("Failed to verify linearization");
+    ).expect("Failed to verify acc linearization");
 
     let (_, _, proof) = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
-        &lcccs,
+        &prover_lcccs_acc,
         wit,
         cm_i,
         wit,
@@ -131,33 +128,6 @@ fn verifier_e2e_benchmark<
         scheme,
     )
         .expect("Failed to generate proof");
-
-    let mut linearization_transcript = PoseidonTranscript::<R, CS>::default();
-    let (acc, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-        cm_i,
-        wit,
-        &mut linearization_transcript,
-        ccs,
-    ).expect("Failed to generate linearization proof");
-
-    // Then verify it to get LCCCS
-    let mut linearization_verifier_transcript = PoseidonTranscript::<R, CS>::default();
-    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-        cm_i,
-        &linearization_proof,
-        &mut linearization_verifier_transcript,
-        ccs,
-    ).expect("Failed to verify linearization");
-
-    let (acc, _, proof) = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
-        &lcccs,
-        wit,
-        cm_i,
-        wit,
-        &mut prover_transcript,
-        ccs,
-        scheme,
-    ).expect("Failed to generate proof");
 
     c.bench_with_input(
         BenchmarkId::new(
@@ -172,7 +142,7 @@ fn verifier_e2e_benchmark<
                 P::K
             ),
         ),
-        &(acc.clone(), cm_i.clone(), proof.clone(), ccs.clone()),
+        &(verifier_lcccs_acc.clone(), cm_i.clone(), proof.clone(), ccs.clone()),
         |b, (acc, cm_i, proof, ccs)| {
             b.iter_batched(
                 || verifier_transcript.clone(),
