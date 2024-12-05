@@ -6,7 +6,9 @@ use crate::decomposition_parameters::test_params::{
 use crate::nifs::folding::utils::SqueezeAlphaBetaZetaMu;
 use crate::nifs::folding::{
     prepare_public_output,
-    utils::{compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_rhos},
+    utils::{
+        compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_rhos, sumcheck_polynomial_comb_fn,
+    },
     FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
 use crate::nifs::FoldingProof;
@@ -43,7 +45,7 @@ use lattirust_ring::cyclotomic_ring::models::{
     stark_prime::RqNTT as StarkRqNTT,
 };
 use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
-use lattirust_ring::{PolyRing, Ring};
+use lattirust_ring::Ring;
 use num_traits::{One, Zero};
 
 const C: usize = 4;
@@ -227,60 +229,6 @@ fn test_get_ris() {
     );
 }
 
-macro_rules! make_comb_fn {
-    ($R:ty, $P:ty, $mu_s:expr) => {
-        |vals: &[$R]| -> $R {
-            let extension_degree =
-                <$R as SuitableRing>::CoefficientRepresentation::dimension() / <$R>::dimension();
-
-            // Add eq_r * g1 * g3 for first k
-            let mut result = vals[0] * vals[1];
-
-            // Add eq_r * g1 * g3 for second k
-            result += vals[2] * vals[3];
-
-            // We have k * extension degree mles of b
-            // each one consists of (2 * small_b) -1 extensions
-            // We start at index 5
-            // Multiply each group of (2 * small_b) -1 extensions
-            // Then multiply by the eq_beta evaluation at index 4
-            for (k, mu) in $mu_s.iter().enumerate() {
-                let mut inter_result = <$R>::zero();
-                for d in (0..extension_degree).rev() {
-                    let i = k * extension_degree + d;
-
-                    let f_i = vals[5 + i];
-
-                    if f_i.is_zero() {
-                        inter_result *= mu;
-                        continue;
-                    }
-
-                    // start with eq_b
-                    let mut eval = vals[4];
-
-                    let f_i_squared = f_i * f_i;
-
-                    for b in 1..<$P>::B_SMALL {
-                        let multiplicand = f_i_squared - <$R>::from(b as u128 * b as u128);
-                        if multiplicand.is_zero() {
-                            eval = <$R>::zero();
-                            break;
-                        }
-                        eval *= multiplicand
-                    }
-                    eval *= f_i;
-                    inter_result += eval;
-                    inter_result *= mu
-                }
-                result += inter_result;
-            }
-
-            result
-        }
-    };
-}
-
 #[test]
 fn test_get_sumcheck_randomness() {
     type RqNTT = BabyBearRingNTT;
@@ -321,7 +269,8 @@ fn test_get_sumcheck_randomness() {
     )
     .unwrap();
 
-    let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
+    let comb_fn =
+        |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT, DP>(vals, &mu_s) };
 
     // Compute sumcheck proof
     let (_, prover_state) =
@@ -375,7 +324,8 @@ fn test_get_thetas() {
     )
     .unwrap();
 
-    let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
+    let comb_fn =
+        |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT, DP>(vals, &mu_s) };
 
     let (_, prover_state) =
         MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
@@ -446,7 +396,8 @@ fn test_get_etas() {
     )
     .unwrap();
 
-    let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
+    let comb_fn =
+        |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT, DP>(vals, &mu_s) };
 
     let (_, prover_state) =
         MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
@@ -545,7 +496,8 @@ fn test_prepare_public_output() {
     )
     .unwrap();
 
-    let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
+    let comb_fn =
+        |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT, DP>(vals, &mu_s) };
 
     let (_, prover_state) =
         MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
@@ -625,7 +577,8 @@ fn test_compute_f_0() {
     )
     .unwrap();
 
-    let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
+    let comb_fn =
+        |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT, DP>(vals, &mu_s) };
 
     let (_, prover_state) =
         MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);

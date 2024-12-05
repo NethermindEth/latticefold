@@ -1,7 +1,7 @@
 use super::*;
 use crate::arith::utils::mat_vec_mul;
 use crate::decomposition_parameters::test_params::{BabyBearDP, FrogDP, GoldilocksDP, StarkDP};
-use crate::nifs::linearization::utils::SqueezeBeta;
+use crate::nifs::linearization::utils::{sumcheck_polynomial_comb_fn, SqueezeBeta};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs},
     commitment::AjtaiCommitmentScheme,
@@ -17,7 +17,7 @@ use lattirust_ring::cyclotomic_ring::models::{
     babybear::RqNTT as BabyBearRqNTT, frog_ring::RqNTT as FrogRqNTT,
     goldilocks::RqNTT as GoldilocksRqNTT, stark_prime::RqNTT as StarkRqNTT,
 };
-use num_traits::{One, Zero};
+use num_traits::One;
 use rand::Rng;
 
 const C: usize = 4;
@@ -92,29 +92,6 @@ fn test_construct_polynomial() {
     assert!(g_degree <= ccs.q + 1)
 }
 
-macro_rules! make_comb_fn {
-    ($R:ty, $ccs:expr) => {
-        |vals: &[$R]| -> $R {
-            let mut result = <$R>::zero();
-            'outer: for (i, &c) in $ccs.c.iter().enumerate() {
-                if c.is_zero() {
-                    continue;
-                }
-                let mut term = c;
-                for &j in &$ccs.S[i] {
-                    if vals[j].is_zero() {
-                        continue 'outer;
-                    }
-                    term *= vals[j];
-                }
-                result += term;
-            }
-            // eq() is the last term added
-            result * vals[vals.len() - 1]
-        }
-    };
-}
-
 #[test]
 fn test_generate_sumcheck() {
     type RqNTT = FrogRqNTT;
@@ -134,7 +111,7 @@ fn test_generate_sumcheck() {
         )
         .unwrap();
 
-    let comb_fn = make_comb_fn!(RqNTT, ccs);
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT>(vals, &ccs) };
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
@@ -166,7 +143,7 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
         )
         .unwrap();
 
-    let comb_fn = make_comb_fn!(RqNTT, ccs);
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT>(vals, ccs) };
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(

@@ -113,7 +113,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use crate::ark_base::*;
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::sumcheck::utils::rand_poly;
+    use crate::utils::sumcheck::utils::{rand_poly, rand_poly_comb_fn};
     use crate::utils::sumcheck::{DenseMultilinearExtension, MLSumcheck, Proof, RefCounter};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
@@ -138,18 +138,7 @@ mod tests {
         let ((poly_mles, poly_degree), products, sum) =
             rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
 
-        let comb_fn = |vals: &[R]| -> R {
-            let mut result = R::zero();
-            for (coef, indices) in &products {
-                let mut term = *coef;
-                for &i in indices {
-                    term *= vals[i];
-                }
-                result += term;
-            }
-
-            result
-        };
+        let comb_fn = |vals: &[R]| -> R { rand_poly_comb_fn(vals, &products) };
 
         let (proof, _) = MLSumcheck::prove_as_subprotocol(
             &mut transcript,
@@ -216,18 +205,7 @@ mod tests {
             let ((poly_mles, poly_degree), products, _) =
                 rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
 
-            let comb_fn = |vals: &[R]| -> R {
-                let mut result = R::zero();
-                for (coef, indices) in &products {
-                    let mut term = *coef;
-                    for &i in indices {
-                        term *= vals[i];
-                    }
-                    result += term;
-                }
-
-                result
-            };
+            let comb_fn = |vals: &[R]| -> R { rand_poly_comb_fn(vals, &products) };
 
             let (proof, _) = MLSumcheck::prove_as_subprotocol(
                 &mut transcript,

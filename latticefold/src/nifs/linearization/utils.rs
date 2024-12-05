@@ -4,7 +4,7 @@ use ark_ff::PrimeField;
 use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
 use lattirust_ring::OverField;
 
-use crate::nifs::error::LinearizationError;
+use crate::nifs::{error::LinearizationError, CCS};
 use crate::transcript::Transcript;
 use crate::utils::sumcheck::utils::build_eq_x_r;
 use ark_ff::Field;
@@ -84,6 +84,25 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     mles.push(build_eq_x_r(beta_s)?);
 
     Ok((mles, 3))
+}
+
+pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing>(vals: &[NTT], ccs: &CCS<NTT>) -> NTT {
+    let mut result = NTT::zero();
+    'outer: for (i, &c) in ccs.c.iter().enumerate() {
+        if c.is_zero() {
+            continue;
+        }
+        let mut term = c;
+        for &j in &ccs.S[i] {
+            if vals[j].is_zero() {
+                continue 'outer;
+            }
+            term *= vals[j];
+        }
+        result += term;
+    }
+    // eq() is the last term added
+    result * vals[vals.len() - 1]
 }
 
 pub(crate) trait SqueezeBeta<NTT: SuitableRing> {

@@ -1,7 +1,7 @@
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
 use lattirust_ring::OverField;
-use utils::{compute_u, prepare_lin_sumcheck_polynomial};
+use utils::{compute_u, prepare_lin_sumcheck_polynomial, sumcheck_polynomial_comb_fn};
 
 use super::error::LinearizationError;
 use crate::ark_base::*;
@@ -157,24 +157,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
         let (g_mles, g_degree, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
 
-        let comb_fn = |vals: &[NTT]| -> NTT {
-            let mut result = NTT::zero();
-            'outer: for (i, &c) in ccs.c.iter().enumerate() {
-                if c.is_zero() {
-                    continue;
-                }
-                let mut term = c;
-                for &j in &ccs.S[i] {
-                    if vals[j].is_zero() {
-                        continue 'outer;
-                    }
-                    term *= vals[j];
-                }
-                result += term;
-            }
-            // eq() is the last term added
-            result * vals[vals.len() - 1]
-        };
+        let comb_fn = |vals: &[NTT]| -> NTT { sumcheck_polynomial_comb_fn(vals, ccs) };
 
         // Run sumcheck protocol.
         let (sumcheck_proof, point_r) =

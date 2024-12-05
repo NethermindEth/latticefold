@@ -56,6 +56,19 @@ pub fn rand_poly<R: Ring>(
     Ok(((mles, degree), products, sum))
 }
 
+pub fn rand_poly_comb_fn<R: Ring>(vals: &[R], products: &[(R, Vec<usize>)]) -> R {
+    let mut result = R::zero();
+    for (coef, indices) in products {
+        let mut term = *coef;
+        for &i in indices {
+            term *= vals[i];
+        }
+        result += term;
+    }
+
+    result
+}
+
 /// Evaluate eq polynomial.
 pub fn eq_eval<R: Ring>(x: &[R], y: &[R]) -> Result<R, ArithErrors> {
     if x.len() != y.len() {
