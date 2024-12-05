@@ -6,7 +6,7 @@ use lattirust_ring::OverField;
 
 use crate::nifs::error::LinearizationError;
 use crate::transcript::Transcript;
-use crate::utils::sumcheck::dense_polynomial::{build_eq_x_r, DensePolynomial};
+use crate::utils::sumcheck::dense_polynomial::build_eq_x_r;
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 
@@ -44,8 +44,6 @@ pub fn compute_u<NTT: OverField>(
 ///  
 /// # Parameters:
 ///
-/// * `log_m` (`usize`): The number of variables in the polynomial
-///
 /// * `c` (`&[NTT]`): The second multiplicand of the polynomial is a linear combination of products of lists of MLEs, c is the coefficients of the lists
 ///
 /// * `M_mles` (`&[DenseMultilinearExtension<NTT>]`): MLEs that the polynomial is constructed from
@@ -56,34 +54,36 @@ pub fn compute_u<NTT: OverField>(
 ///
 /// # Returns:
 ///
-/// * `DensePolynomial<NTT>`: The linearization sumcheck polynomial
+/// * The MLEs which form the polynomial
+/// * The max degree of the polynomial
 ///
 /// # Errors:
 /// * Will return an error if any of the MLEs are of the wrong size
 ///
 pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
-    log_m: usize,
     c: &[NTT],
     M_mles: &[DenseMultilinearExtension<NTT>],
     S: &[Vec<usize>],
     beta_s: &[NTT],
-) -> Result<DensePolynomial<NTT>, LinearizationError<NTT>> {
-    let mut g = DensePolynomial::new(log_m);
+) -> Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), LinearizationError<NTT>> {
+    let len = 1 + c
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| !c.is_zero())
+        .map(|(i, _)| S[i].len())
+        .sum::<usize>();
+
+    let mut mles = Vec::with_capacity(len);
 
     for (i, _) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
-        let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> =
-            Vec::with_capacity(S[i].len());
-
         for &j in &S[i] {
-            mle_list.push(RefCounter::new(M_mles[j].clone()));
+            mles.push(RefCounter::new(M_mles[j].clone()));
         }
-
-        g.add_mles(mle_list)?;
     }
 
-    g.mul_mle(build_eq_x_r(beta_s)?)?;
+    mles.push(build_eq_x_r(beta_s)?);
 
-    Ok(g)
+    Ok((mles, 3))
 }
 
 pub(crate) trait SqueezeBeta<NTT: SuitableRing> {

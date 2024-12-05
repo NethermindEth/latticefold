@@ -77,7 +77,7 @@ fn test_construct_polynomial() {
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let (g, mz_mles) =
+    let (_, g_degree, mz_mles) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
@@ -89,7 +89,7 @@ fn test_construct_polynomial() {
     assert_eq!(mz_mles.len(), ccs.t);
 
     // Check degree of g
-    assert!(g.aux_info.max_degree <= ccs.q + 1)
+    assert!(g_degree <= ccs.q + 1)
 }
 
 macro_rules! make_comb_fn {
@@ -126,7 +126,7 @@ fn test_generate_sumcheck() {
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let (g, _) =
+    let (g_mles, g_degree, _) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
@@ -139,9 +139,9 @@ fn test_generate_sumcheck() {
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &mut transcript,
-            &g.mles,
-            g.aux_info.num_variables,
-            g.aux_info.max_degree,
+            &g_mles,
+            ccs.s,
+            g_degree,
             comb_fn,
         )
         .unwrap();
@@ -158,7 +158,7 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let (g, Mz_mles) =
+    let (g_mles, g_degree, Mz_mles) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
@@ -171,9 +171,9 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
             &mut transcript,
-            &g.mles,
-            g.aux_info.num_variables,
-            g.aux_info.max_degree,
+            &g_mles,
+            ccs.s,
+            g_degree,
             comb_fn,
         )
         .unwrap();

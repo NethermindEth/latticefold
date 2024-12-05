@@ -9,11 +9,7 @@ use crate::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{
-        dense_polynomial::{eq_eval, DensePolynomial},
-        MLSumcheck,
-        SumCheckError::SumCheckFailed,
-    },
+    utils::sumcheck::{dense_polynomial::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed},
 };
 
 use crate::arith::Instance;
@@ -86,8 +82,14 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(DensePolynomial<NTT>, Vec<DenseMultilinearExtension<NTT>>), LinearizationError<NTT>>
-    {
+    ) -> Result<
+        (
+            Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
+            usize,
+            Vec<DenseMultilinearExtension<NTT>>,
+        ),
+        LinearizationError<NTT>,
+    > {
         // Generate beta challenges from Step 1
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 
@@ -95,9 +97,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         let Mz_mles = calculate_Mz_mles::<NTT, LinearizationError<NTT>>(ccs, z_ccs)?;
 
         // Construct the sumcheck polynomial g
-        let g = prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+        let (g_mles, g_degree) =
+            prepare_lin_sumcheck_polynomial(&ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
 
-        Ok((g, Mz_mles))
+        Ok((g_mles, g_degree, Mz_mles))
     }
 
     /// Step 2: Run linearization sum-check protocol.
@@ -152,7 +155,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         // Step 2: Sum check protocol.
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
-        let (g, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
+        let (g_mles, g_degree, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
 
         let comb_fn = |vals: &[NTT]| -> NTT {
             let mut result = NTT::zero();
@@ -174,13 +177,8 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         };
 
         // Run sumcheck protocol.
-        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(
-            transcript,
-            &g.mles,
-            g.aux_info.num_variables,
-            g.aux_info.max_degree,
-            comb_fn,
-        )?;
+        let (sumcheck_proof, point_r) =
+            Self::generate_sumcheck_proof(transcript, &g_mles, ccs.s, g_degree, comb_fn)?;
 
         // Step 3: Compute v, u_vector.
         let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;
