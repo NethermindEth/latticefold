@@ -11,8 +11,8 @@ use cyclotomic_rings::{
         GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
-mod utils;
 mod macros;
+mod utils;
 
 use crate::utils::wit_and_ccs_gen;
 use latticefold::nifs::linearization::{

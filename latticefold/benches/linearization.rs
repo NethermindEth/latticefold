@@ -10,6 +10,7 @@ use cyclotomic_rings::{
     },
 };
 use std::time::Duration;
+use utils::wit_and_ccs_gen_non_scalar;
 
 mod macros;
 mod utils;
@@ -150,13 +151,12 @@ fn linearization_benchmarks_non_scalar<
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
-    let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
+    let (cm_i, wit, ccs, _) = wit_and_ccs_gen_non_scalar::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
     let proof = prover_linearization_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs);
 
     verifier_linearization_benchmark::<C, W, P, R, CS>(group, &cm_i, &ccs, proof);
 }
-
 
 // Macros
 #[allow(unused_macros)]
