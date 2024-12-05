@@ -27,12 +27,12 @@ macro_rules! run_goldilocks_benchmarks {
 macro_rules! run_goldilocks_non_scalar_benchmarks {
     ($group: ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 6, 512, 128, 9, 2, 7);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 7, 512, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 512, 512, 7, 2, 9);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 1024, 512, 7, 2, 9);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 2048, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 1024, 1024, 7, 2, 10);
+        // run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 6, 512, 128, 10, 2, 7);
+        // run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 7, 512, 256, 8, 2, 8);
+        // run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 512, 512, 8, 2, 9);
+        // run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 1024, 512, 8, 2, 9);
+        // run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 2048, 256, 8, 2, 8);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 1024, 1024, 8, 2, 10);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 2048, 512, 7, 2, 9);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 512, 2048, 6, 2, 11);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 1024, 2048, 6, 2, 11);
