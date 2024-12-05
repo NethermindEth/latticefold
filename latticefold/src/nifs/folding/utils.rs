@@ -201,7 +201,9 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
             let f_i = vals[5 + i];
 
             if f_i.is_zero() {
-                inter_result *= mu;
+                if !inter_result.is_zero() {
+                    inter_result *= mu;
+                }
                 continue;
             }
 
