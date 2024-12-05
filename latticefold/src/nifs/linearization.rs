@@ -136,7 +136,6 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         Mz_mles: &[DenseMultilinearExtension<NTT>],
     ) -> Result<(Vec<NTT>, Vec<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         // Compute v
-
         let v: Vec<NTT> = evaluate_mles::<NTT, _, _, LinearizationError<NTT>>(&wit.f_hat, point_r)?;
 
         // Compute u_j

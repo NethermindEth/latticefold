@@ -76,3 +76,7 @@ harness = false
 [[bench]]
 name = "folding"
 harness = false
+
+[[bench]]
+name = "single_operations"
+harness = false
