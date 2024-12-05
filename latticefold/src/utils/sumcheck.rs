@@ -113,7 +113,8 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use crate::ark_base::*;
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::sumcheck::{dense_polynomial::DensePolynomial, MLSumcheck, Proof};
+    use crate::utils::sumcheck::dense_polynomial::rand_poly;
+    use crate::utils::sumcheck::{DenseMultilinearExtension, MLSumcheck, Proof, RefCounter};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
     use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
@@ -121,15 +122,21 @@ mod tests {
     use rand::Rng;
 
     fn generate_sumcheck_proof<R, CS>(
+        nvars: usize,
         mut rng: &mut (impl Rng + Sized),
-    ) -> (DensePolynomial<R>, R, Proof<R>)
+    ) -> (
+        (Vec<RefCounter<DenseMultilinearExtension<R>>>, usize),
+        R,
+        Proof<R>,
+    )
     where
         R: SuitableRing,
         CS: LatticefoldChallengeSet<R>,
     {
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (poly, products, sum) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+        let ((poly_mles, poly_degree), products, sum) =
+            rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
 
         let comb_fn = |vals: &[R]| -> R {
             let mut result = R::zero();
@@ -146,12 +153,12 @@ mod tests {
 
         let (proof, _) = MLSumcheck::prove_as_subprotocol(
             &mut transcript,
-            &poly.mles,
-            poly.aux_info.num_variables,
-            poly.aux_info.max_degree,
+            &poly_mles,
+            nvars,
+            poly_degree,
             comb_fn,
         );
-        (poly, sum, proof)
+        ((poly_mles, poly_degree), sum, proof)
     }
 
     fn test_sumcheck<R, CS>()
@@ -160,18 +167,14 @@ mod tests {
         CS: LatticefoldChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
+        let nvars = 5;
 
         for _ in 0..20 {
-            let (poly, sum, proof) = generate_sumcheck_proof::<R, CS>(&mut rng);
+            let ((_, poly_degree), sum, proof) = generate_sumcheck_proof::<R, CS>(nvars, &mut rng);
 
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
-            let res = MLSumcheck::verify_as_subprotocol(
-                &mut transcript,
-                poly.aux_info.num_variables,
-                poly.aux_info.max_degree,
-                sum,
-                &proof,
-            );
+            let res =
+                MLSumcheck::verify_as_subprotocol(&mut transcript, nvars, poly_degree, sum, &proof);
             assert!(res.is_ok())
         }
     }
@@ -182,8 +185,9 @@ mod tests {
         CS: LatticefoldChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
+        let nvars = 5;
 
-        let proof = generate_sumcheck_proof::<R, CS>(&mut rng).2;
+        let proof = generate_sumcheck_proof::<R, CS>(nvars, &mut rng).2;
 
         let mut serialized = Vec::new();
         proof
@@ -208,7 +212,9 @@ mod tests {
         for _ in 0..20 {
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
 
-            let (poly, products, _) = DensePolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+            let nvars = 5;
+            let ((poly_mles, poly_degree), products, sum) =
+                rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
 
             let comb_fn = |vals: &[R]| -> R {
                 let mut result = R::zero();
@@ -225,20 +231,18 @@ mod tests {
 
             let (proof, _) = MLSumcheck::prove_as_subprotocol(
                 &mut transcript,
-                &poly.mles,
-                poly.aux_info.num_variables,
-                poly.aux_info.max_degree,
+                &poly_mles,
+                nvars,
+                poly_degree,
                 comb_fn,
             );
 
-            let not_sum = poly
-                .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
-                .unwrap();
+            let not_sum = R::zero();
 
             let res = MLSumcheck::verify_as_subprotocol(
                 &mut transcript,
-                poly.aux_info.num_variables,
-                poly.aux_info.max_degree,
+                nvars,
+                poly_degree,
                 not_sum,
                 &proof,
             );

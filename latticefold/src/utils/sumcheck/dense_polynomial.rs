@@ -237,6 +237,42 @@ impl<R: Ring> DensePolynomial<R> {
     }
 }
 
+pub fn rand_poly<R: Ring>(
+    nv: usize,
+    num_multiplicands_range: (usize, usize),
+    num_products: usize,
+    rng: &mut impl RngCore,
+) -> Result<
+    (
+        (Vec<RefCounter<DenseMultilinearExtension<R>>>, usize),
+        Vec<(R, Vec<usize>)>,
+        R,
+    ),
+    ArithErrors,
+> {
+    let mut sum = R::zero();
+    let mut mles = vec![];
+    let mut products = Vec::with_capacity(num_products);
+    let mut degree = 0;
+    let mut current_mle_index = 0;
+    for _ in 0..num_products {
+        let num_multiplicands = rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
+        degree = num_multiplicands.max(degree);
+        let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
+
+        let coefficient = R::rand(rng);
+        mles.extend(product);
+        sum += product_sum * coefficient;
+
+        let indices: Vec<usize> =
+            (current_mle_index..current_mle_index + num_multiplicands).collect();
+        products.push((coefficient, indices));
+        current_mle_index += num_multiplicands;
+    }
+
+    Ok(((mles, degree), products, sum))
+}
+
 impl<R: Ring> DPAuxInfo<R> {
     pub fn new(num_variables: usize, max_degree: usize) -> Self {
         DPAuxInfo {
