@@ -1,7 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::type_complexity)]
 #![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 #![allow(non_snake_case)]
 #![forbid(unsafe_code)]
 

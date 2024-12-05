@@ -1,3 +1,4 @@
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::sparse_matrix::dense_matrix_u64_to_sparse;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
@@ -134,6 +135,23 @@ pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
         C: R1CS_C,
     }
 }
+
+pub fn get_test_dummy_r1cs_non_scalar<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
+    rows: usize,
+    witness: &[R],
+) -> R1CS<R> {
+    let R1CS_A = create_dummy_identity_sparse_matrix(rows, X_LEN + WIT_LEN + 1);
+    let R1CS_B = R1CS_A.clone();
+    let R1CS_C = create_dummy_squaring_sparse_matrix(rows, X_LEN + WIT_LEN + 1, witness);
+
+    R1CS::<R> {
+        l: 1,
+        A: R1CS_A,
+        B: R1CS_B,
+        C: R1CS_C,
+    }
+}
+
 pub fn create_dummy_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
     let mut matrix = vec![vec![0; columns]; rows];
     for (i, item) in matrix.iter_mut().enumerate().take(rows) {
@@ -157,8 +175,30 @@ pub fn create_dummy_identity_sparse_matrix<R: Ring>(
     matrix
 }
 
+// Takes a vector and returns a matrix that will square the vector
+pub fn create_dummy_squaring_sparse_matrix<R: Ring>(
+    rows: usize,
+    columns: usize,
+    witness: &[R],
+) -> SparseMatrix<R> {
+    assert_eq!(
+        rows,
+        witness.len(),
+        "Length of witness vector must be equal to ccs width"
+    );
+    let mut matrix = SparseMatrix {
+        n_rows: rows,
+        n_cols: columns,
+        coeffs: vec![vec![]; rows],
+    };
+    for (i, row) in matrix.coeffs.iter_mut().enumerate() {
+        row.push((witness[i], i));
+    }
+    matrix
+}
+
 pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
-    // z = (1, io, w)
+    // z = (io, 1, w)
     to_F_vec(vec![
         input, // io
         1,
@@ -169,20 +209,40 @@ pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
     ])
 }
 
-pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
-    // z = (1, io, w)
-    (
-        R::one(),
-        to_F_vec(vec![
+pub fn get_test_z_ntt<R: SuitableRing>() -> Vec<R> {
+    let mut res = Vec::new();
+    for input in 0..R::dimension() {
+        // z = (io, 1, w)
+        res.push(to_F_vec::<R::BaseRing>(vec![
             input, // io
-        ]),
-        to_F_vec(vec![
+            1,
             input * input * input + input + 5, // x^3 + x + 5
             input * input,                     // x^2
             input * input * input,             // x^2 * x
             input * input * input + input,     // x^3 + x
-        ]),
-    )
+        ]))
+    }
+
+    let mut ret: Vec<R> = Vec::new();
+    for j in 0..res[0].len() {
+        let mut vec = Vec::new();
+        for witness in &res {
+            vec.push(witness[j]);
+        }
+        ret.push(R::from(vec));
+    }
+
+    ret
+}
+
+pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
+    let z = get_test_z(input);
+    (z[1], vec![z[0]], z[2..].to_vec())
+}
+
+pub fn get_test_z_ntt_split<R: SuitableRing>() -> (R, Vec<R>, Vec<R>) {
+    let z = get_test_z_ntt();
+    (z[1], vec![z[0]], z[2..].to_vec())
 }
 
 pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
@@ -192,6 +252,23 @@ pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>
         to_F_vec(vec![1; X_LEN]),
         to_F_vec(vec![1; WIT_LEN]),
     )
+}
+
+pub fn get_test_dummy_z_split_ntt<R: SuitableRing, const X_LEN: usize, const WIT_LEN: usize>(
+) -> (R, Vec<R>, Vec<R>) {
+    let statement_vec = (0..X_LEN).map(|_| R::one()).collect();
+
+    let witness_vec = (0..WIT_LEN)
+        .map(|_| {
+            R::from(
+                (0..R::dimension())
+                    .map(|i| R::BaseRing::from(i as u128))
+                    .collect::<Vec<R::BaseRing>>(),
+            )
+        })
+        .collect();
+
+    (R::one(), statement_vec, witness_vec)
 }
 
 #[cfg(test)]

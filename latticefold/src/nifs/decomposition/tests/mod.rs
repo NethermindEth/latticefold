@@ -102,7 +102,7 @@ where
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, decomposition_proof) =
+    let (_, _, _, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, 4, DP>(
             &lcccs,
             &wit,
@@ -266,10 +266,14 @@ fn test_compute_u_s() {
         lcccs.x_w.clone(),
         lcccs.h,
     );
-    let u_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_u_s(
-        &wit_vec, &ccs.M, &x_s, &lcccs.r, ccs.s,
+    let mz_mles = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_mz_mles(
+        &wit_vec, &ccs.M, &x_s, ccs.s,
     )
     .unwrap();
+
+    let u_s =
+        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_u_s(&mz_mles, &lcccs.r)
+            .unwrap();
 
     // Compute expected result
     let expected_u_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
@@ -331,7 +335,7 @@ fn test_recompose_commitment() {
     let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
         &lcccs,
         &wit,
         &mut prover_transcript,
@@ -361,8 +365,7 @@ fn test_recompose_u() {
 
     let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
-
-    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
         &lcccs,
         &wit,
         &mut prover_transcript,
@@ -393,7 +396,7 @@ fn test_recompose_v() {
     let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
         &lcccs,
         &wit,
         &mut prover_transcript,
@@ -425,7 +428,7 @@ fn test_recompose_xw_and_h() {
     let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
         &lcccs,
         &wit,
         &mut prover_transcript,
@@ -457,7 +460,7 @@ fn test_verify_full() {
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
         &lcccs,
         &wit,
         &mut prover_transcript,
@@ -484,7 +487,7 @@ fn test_verify_invalid_proof() {
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
         generate_decomposition_args::<RqNTT, CS, DP, WIT_LEN, W>();
 
-    let (_, _, mut proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
+    let (_, _, _, mut proof) = LFDecompositionProver::<_, T>::prove::<W, C, DP>(
         &lcccs,
         &wit,
         &mut prover_transcript,

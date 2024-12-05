@@ -1,6 +1,7 @@
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::mle::DenseMultilinearExtension;
-use utils::{compute_u, prepare_lin_sumcheck_polynomial};
+use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
+use lattirust_ring::OverField;
+use utils::{compute_u, prepare_lin_sumcheck_polynomial, sumcheck_polynomial_comb_fn};
 
 use super::error::LinearizationError;
 use crate::ark_base::*;
@@ -8,15 +9,8 @@ use crate::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{
-        virtual_polynomial::{eq_eval, VPAuxInfo, VirtualPolynomial},
-        MLSumcheck,
-        SumCheckError::SumCheckFailed,
-    },
+    utils::sumcheck::{utils::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed},
 };
-
-#[cfg(feature = "jolt-sumcheck")]
-use crate::utils::sumcheck::prover::ProverState;
 
 use crate::arith::Instance;
 use crate::nifs::linearization::utils::SqueezeBeta;
@@ -29,6 +23,59 @@ mod structs;
 mod tests;
 pub mod utils;
 
+/// Prover for the Linearization subprotocol
+pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
+    /// Generates a proof for the linearization subprotocol
+    ///
+    /// # Arguments
+    ///
+    /// * `cm_i` - A reference to a committed CCS statement to be linearized, i.e. a CCCS<C, NTT>.
+    /// * `wit` - A reference to a CCS witness for the statement cm_i.
+    /// * `transcript` - A mutable reference to a sponge for generating NI challenges.
+    /// * `ccs` - A reference to a Customizable Constraint System circuit representation.
+    ///
+    /// # Returns
+    ///
+    /// On success, returns a tuple `(LCCCS<C, NTT>, LinearizationProof<NTT>)` where:
+    ///   * `LCCCS<C, NTT>` is a linearized version of the CCS witness commitment.
+    ///   * `LinearizationProof<NTT>` is a proof that the linearization subprotocol was executed correctly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if asked to evaluate MLEs with incorrect number of variables
+    ///
+    fn prove<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
+        wit: &Witness<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
+}
+
+/// Verifier for the Linearization subprotocol.
+pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
+    /// Verifies a proof for the linearization subprotocol.
+    ///
+    /// # Arguments
+    ///
+    /// * `cm_i` - A reference to a `CCCS<C, NTT>`, which represents a CCS statement and a commitment to a witness.
+    /// * `proof` - A reference to a `LinearizationProof<NTT>` containing the linearization proof.
+    /// * `transcript` - A mutable reference to a sponge for generating NI challenges.
+    /// * `ccs` - A reference to a Customizable Constraint System instance used in the protocol.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(LCCCS<C, NTT>)` - On success, returns a linearized version of the CCS witness commitment.
+    /// * `Err(LinearizationError<NTT>)` - If verification fails, returns a `LinearizationError<NTT>`.
+    ///
+    fn verify<const C: usize>(
+        cm_i: &CCCS<C, NTT>,
+        proof: &LinearizationProof<NTT>,
+        transcript: &mut impl Transcript<NTT>,
+        ccs: &CCS<NTT>,
+    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
+}
+
 impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     /// Step 2 of Fig 5: Construct polynomial $g$ and generate $\beta$ challenges.
     fn construct_polynomial_g(
@@ -36,7 +83,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<
-        (VirtualPolynomial<NTT>, Vec<DenseMultilinearExtension<NTT>>),
+        (
+            Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
+            usize,
+            Vec<DenseMultilinearExtension<NTT>>,
+        ),
         LinearizationError<NTT>,
     > {
         // Generate beta challenges from Step 1
@@ -46,25 +97,22 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         let Mz_mles = calculate_Mz_mles::<NTT, LinearizationError<NTT>>(ccs, z_ccs)?;
 
         // Construct the sumcheck polynomial g
-        let g = prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+        let (g_mles, g_degree) =
+            prepare_lin_sumcheck_polynomial(&ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
 
-        Ok((g, Mz_mles))
+        Ok((g_mles, g_degree, Mz_mles))
     }
 
     /// Step 2: Run linearization sum-check protocol.
     fn generate_sumcheck_proof(
-        g: &VirtualPolynomial<NTT>,
         transcript: &mut impl Transcript<NTT>,
-        #[cfg(feature = "jolt-sumcheck")] comb_fn: impl Fn(&ProverState<NTT>, &[NTT]) -> NTT
-            + Sync
-            + Send,
+        mles: &[RefCounter<DenseMultilinearExtension<NTT>>],
+        nvars: usize,
+        degree: usize,
+        comb_fn: impl Fn(&[NTT]) -> NTT + Sync + Send,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
-        let (sum_check_proof, prover_state) = MLSumcheck::prove_as_subprotocol(
-            transcript,
-            g,
-            #[cfg(feature = "jolt-sumcheck")]
-            comb_fn,
-        );
+        let (sum_check_proof, prover_state) =
+            MLSumcheck::prove_as_subprotocol(transcript, mles, nvars, degree, comb_fn);
         let point_r = prover_state
             .randomness
             .into_iter()
@@ -107,35 +155,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         // Step 2: Sum check protocol.
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
-        let (g, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
+        let (g_mles, g_degree, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
 
-        #[cfg(feature = "jolt-sumcheck")]
-        let comb_fn = |_: &ProverState<NTT>, vals: &[NTT]| -> NTT {
-            let mut result = NTT::zero();
-            'outer: for (i, &c) in ccs.c.iter().enumerate() {
-                if c.is_zero() {
-                    continue;
-                }
-                let mut term = c;
-                for &j in &ccs.S[i] {
-                    if vals[j].is_zero() {
-                        continue 'outer;
-                    }
-                    term *= vals[j];
-                }
-                result += term;
-            }
-            // eq() is the last term added
-            result * vals[vals.len() - 1]
-        };
+        let comb_fn = |vals: &[NTT]| -> NTT { sumcheck_polynomial_comb_fn(vals, ccs) };
 
         // Run sumcheck protocol.
-        let (sumcheck_proof, point_r) = Self::generate_sumcheck_proof(
-            &g,
-            transcript,
-            #[cfg(feature = "jolt-sumcheck")]
-            comb_fn,
-        )?;
+        let (sumcheck_proof, point_r) =
+            Self::generate_sumcheck_proof(transcript, &g_mles, ccs.s, g_degree, comb_fn)?;
 
         // Step 3: Compute v, u_vector.
         let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;
@@ -171,11 +197,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         ccs: &CCS<NTT>,
     ) -> Result<(Vec<NTT>, NTT), LinearizationError<NTT>> {
         // The polynomial has degree <= ccs.d + 1 and log_m (ccs.s) vars.
-        let poly_info = VPAuxInfo::new(ccs.s, ccs.d + 1);
+        let nvars = ccs.s;
+        let degree = ccs.d + 1;
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,
-            &poly_info,
+            nvars,
+            degree,
             NTT::zero(),
             &proof.linearization_sumcheck,
         )?;

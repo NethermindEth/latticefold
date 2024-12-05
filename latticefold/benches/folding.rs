@@ -1,5 +1,4 @@
 #![allow(incomplete_features)]
-#![feature(generic_const_exprs)]
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
@@ -17,6 +16,8 @@ use latticefold::nifs::folding::{
     FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
 use std::{fmt::Debug, time::Duration};
+use utils::wit_and_ccs_gen_non_scalar;
+mod macros;
 mod utils;
 use ark_std::UniformRand;
 
@@ -63,7 +64,7 @@ fn prover_folding_benchmark<
     )
     .unwrap();
 
-    let (_, wit_vec, decomposition_proof) =
+    let (mz_mles, _, wit_vec, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
             &lcccs,
             wit,
@@ -80,8 +81,7 @@ fn prover_folding_benchmark<
         ccs,
     )
     .unwrap();
-
-    let (lcccs, wit_s) = {
+    let (lcccs, wit_s, mz_mles) = {
         let mut lcccs = lcccs_vec.clone();
         let mut lcccs_r = lcccs_vec;
         lcccs.append(&mut lcccs_r);
@@ -90,8 +90,12 @@ fn prover_folding_benchmark<
         let mut wit_s_r = wit_vec;
         wit_s.append(&mut wit_s_r);
 
-        (lcccs, wit_s)
+        let mut mz_mles_vec = mz_mles.clone();
+        let mut mz_mles_r = mz_mles;
+        mz_mles_vec.append(&mut mz_mles_r);
+        (lcccs, wit_s, mz_mles_vec)
     };
+
     c.bench_with_input(
         BenchmarkId::new(
             "Folding Prover",
@@ -115,6 +119,7 @@ fn prover_folding_benchmark<
                         wit_vec,
                         &mut prover_transcript,
                         ccs,
+                        &mz_mles,
                     )
                     .unwrap();
                 },
@@ -156,7 +161,7 @@ fn verifier_folding_benchmark<
     )
     .expect("Failed to verify linearization proof");
 
-    let (_, wit_vec, decomposition_proof) =
+    let (mz_mles, _, wit_vec, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
             &lcccs,
             wit,
@@ -174,7 +179,7 @@ fn verifier_folding_benchmark<
     )
     .expect("Failed to verify decomposition proof");
 
-    let (lcccs, wit_s) = {
+    let (lcccs, wit_s, mz_mles) = {
         let mut lcccs = lcccs_vec.clone();
         let mut lcccs_r = lcccs_vec;
         lcccs.append(&mut lcccs_r);
@@ -183,7 +188,10 @@ fn verifier_folding_benchmark<
         let mut wit_s_r = wit_vec;
         wit_s.append(&mut wit_s_r);
 
-        (lcccs, wit_s)
+        let mut mz_mles_vec = mz_mles.clone();
+        let mut mz_mles_r = mz_mles;
+        mz_mles_vec.append(&mut mz_mles_r);
+        (lcccs, wit_s, mz_mles_vec)
     };
 
     let (_, _, folding_proof) = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<C, P>(
@@ -191,6 +199,7 @@ fn verifier_folding_benchmark<
         wit_s,
         &mut prover_transcript,
         ccs,
+        &mz_mles,
     )
     .expect("Failed to generate folding proof");
 
@@ -226,7 +235,7 @@ fn verifier_folding_benchmark<
     );
 }
 
-fn folding_benchmarks<
+fn folding_benchmarks_scalar<
     const X_LEN: usize,
     const C: usize,
     const WIT_LEN: usize,
@@ -240,6 +249,27 @@ fn folding_benchmarks<
     let r1cs_rows = X_LEN + WIT_LEN + 1; // This makes a square matrix but is too much memory;
 
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
+
+    prover_folding_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
+
+    verifier_folding_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
+}
+
+fn folding_benchmarks_non_scalar<
+    const X_LEN: usize,
+    const C: usize,
+    const WIT_LEN: usize,
+    const W: usize,
+    CS: LatticefoldChallengeSet<R> + Clone,
+    R: SuitableRing,
+    P: DecompositionParams,
+>(
+    group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
+) {
+    let r1cs_rows = X_LEN + WIT_LEN + 1; // This makes a square matrix but is too much memory;
+
+    let (cm_i, wit, ccs, scheme) =
+        wit_and_ccs_gen_non_scalar::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
     prover_folding_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 
@@ -268,7 +298,17 @@ macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            folding_benchmarks::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            folding_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+#[allow(unused_macros)]
+macro_rules! run_single_goldilocks_non_scalar_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            folding_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -279,7 +319,18 @@ macro_rules! run_single_babybear_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            folding_benchmarks::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            folding_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+// Baybear parameters
+#[allow(unused_macros)]
+macro_rules! run_single_babybear_non_scalar_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            folding_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -289,7 +340,17 @@ macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            folding_benchmarks::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            folding_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+// Stark parameters
+macro_rules! run_single_starkprime_non_scalar_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            folding_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -300,7 +361,18 @@ macro_rules! run_single_frog_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            folding_benchmarks::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            folding_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+// Frog parameters
+#[allow(unused_macros)]
+macro_rules! run_single_frog_non_scalar_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            folding_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -311,27 +383,19 @@ fn benchmarks_main(c: &mut Criterion) {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Folding Goldilocks");
         group.plot_config(plot_config.clone());
+        #[allow(clippy::identity_op)]
+        {
+            run_goldilocks_benchmarks!(group);
+        }
+    }
 
-        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        run_single_goldilocks_benchmark!(&mut group, 1, 6, 512, 120, 9, 2, 7);
-        run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut group, 1, 7, 512, 256, 8, 4, 4);
-        run_single_goldilocks_benchmark!(&mut group, 1, 8, 512, 512, 7, 2, 9);
-        run_single_goldilocks_benchmark!(&mut group, 1, 8, 1024, 512, 7, 2, 9);
-        run_single_goldilocks_benchmark!(&mut group, 1, 8, 2048, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut group, 1, 9, 1024, 1024, 7, 2, 10);
-        run_single_goldilocks_benchmark!(&mut group, 1, 9, 2048, 512, 7, 2, 9);
-        run_single_goldilocks_benchmark!(&mut group, 1, 10, 512, 2048, 6, 2, 11);
-        run_single_goldilocks_benchmark!(&mut group, 1, 10, 1024, 2048, 6, 2, 11);
-        run_single_goldilocks_benchmark!(&mut group, 1, 11, 1024, 4096, 6, 2, 12);
-        run_single_goldilocks_benchmark!(&mut group, 1, 11, 2048, 2048, 6, 2, 12);
-        run_single_goldilocks_benchmark!(&mut group, 1, 12, 1024, 8192, 6, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 13, 1024, 16384, 5, 2, 14);
-        run_single_goldilocks_benchmark!(&mut group, 1, 13, 2048, 8192, 5, 2, 13);
-        run_single_goldilocks_benchmark!(&mut group, 1, 14, 1024, 32768, 5, 2, 15);
-        run_single_goldilocks_benchmark!(&mut group, 1, 14, 2048, 16384, 5, 2, 14);
-        run_single_goldilocks_benchmark!(&mut group, 1, 15, 2048, 32768, 4, 2, 15);
-        run_single_goldilocks_benchmark!(&mut group, 1, 16, 2048, 65536, 4, 2, 16);
+    // Godlilocks non scalar
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Folding Goldilocks non scalar");
+        group.plot_config(plot_config.clone());
+
+        run_goldilocks_non_scalar_benchmarks!(group);
     }
 
     // BabyBear
@@ -339,30 +403,40 @@ fn benchmarks_main(c: &mut Criterion) {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Folding BabyBear");
         group.plot_config(plot_config.clone());
-
-        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        run_single_babybear_benchmark!(&mut group, 1, 6, 1024, 512, 4, 2, 9);
-        run_single_babybear_benchmark!(&mut group, 1, 7, 1024, 2048, 3, 2, 11);
-        run_single_babybear_benchmark!(&mut group, 1, 8, 4096, 2048, 3, 2, 11);
-        run_single_babybear_benchmark!(&mut group, 1, 9, 2048, 8192, 3, 2, 13);
-        run_single_babybear_benchmark!(&mut group, 1, 10, 4096, 16384, 3, 2, 14);
+        #[allow(clippy::identity_op)]
+        {
+            run_babybear_benchmarks!(group);
+        }
     }
 
-    // // StarkPrime
+    // BabyBear non scalar
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Folding BabyBear non scalar");
+        group.plot_config(plot_config.clone());
+
+        run_babybear_non_scalar_benchmarks!(group);
+    }
+
+    // StarkPrime
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Folding StarkPrime");
         group.plot_config(plot_config.clone());
 
-        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K 3052596316
         #[allow(clippy::identity_op)]
         {
-            run_single_starkprime_benchmark!(&mut group, 1, 15, 1024, 3052596316u128, 1, 2, 30);
-            run_single_starkprime_benchmark!(&mut group, 1, 16, 1024, 4294967296u128, 1, 2, 32);
-            run_single_starkprime_benchmark!(&mut group, 1, 17, 2048, 8589934592u128, 1, 2, 33);
-            run_single_starkprime_benchmark!(&mut group, 1, 18, 2048, 20833367754u128, 1, 2, 34);
-            run_single_starkprime_benchmark!(&mut group, 1, 19, 2048, 34359738368u128, 1, 2, 35);
+            run_starkprime_benchmarks!(group);
         }
+    }
+
+    // StarkPrime non scalar
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Folding StarkPrime non scalar");
+        group.plot_config(plot_config.clone());
+
+        run_starkprime_non_scalar_benchmarks!(group);
     }
 
     // Frog
@@ -370,13 +444,18 @@ fn benchmarks_main(c: &mut Criterion) {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Folding Frog");
         group.plot_config(plot_config.clone());
+        #[allow(clippy::identity_op)]
+        {
+            run_frog_benchmarks!(group);
+        }
+    }
 
-        // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        run_single_frog_benchmark!(&mut group, 1, 5, 512, 8, 23, 2, 3);
-        run_single_frog_benchmark!(&mut group, 1, 9, 1024, 128, 10, 2, 7);
-        run_single_frog_benchmark!(&mut group, 1, 10, 1024, 256, 9, 2, 8);
-        run_single_frog_benchmark!(&mut group, 1, 12, 512, 1024, 7, 2, 10);
-        run_single_frog_benchmark!(&mut group, 1, 15, 1024, 4096, 6, 2, 12);
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Folding Frog non scalar");
+        group.plot_config(plot_config.clone());
+
+        run_frog_non_scalar_benchmarks!(group);
     }
 }
 

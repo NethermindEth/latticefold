@@ -1,6 +1,6 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{fmt::Display, marker::PhantomData};
-use lattirust_poly::polynomials::ArithErrors;
+use lattirust_poly::polynomials::{ArithErrors, DenseMultilinearExtension, RefCounter};
 use lattirust_ring::{OverField, Ring};
 use thiserror::Error;
 
@@ -8,11 +8,10 @@ use crate::ark_base::*;
 use crate::transcript::Transcript;
 use prover::{ProverMsg, ProverState};
 use verifier::SubClaim;
-use virtual_polynomial::{VPAuxInfo, VirtualPolynomial};
 
 pub mod prover;
+pub mod utils;
 pub mod verifier;
-pub mod virtual_polynomial;
 
 /// Interactive Proof for Multilinear Sumcheck
 pub struct IPForMLSumcheck<R, T> {
@@ -54,22 +53,20 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     /// Both of these allow this sumcheck to be better used as a part of a larger protocol.
     pub fn prove_as_subprotocol(
         transcript: &mut T,
-        polynomial: &VirtualPolynomial<R>,
-        #[cfg(feature = "jolt-sumcheck")] comb_fn: impl Fn(&ProverState<R>, &[R]) -> R + Sync + Send,
+        mles: &[RefCounter<DenseMultilinearExtension<R>>],
+        nvars: usize,
+        degree: usize,
+        comb_fn: impl Fn(&[R]) -> R + Sync + Send,
     ) -> (Proof<R>, ProverState<R>) {
         // TODO: return this back
         // transcript.absorb(&polynomial.info());
 
-        let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(polynomial);
+        let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(mles, nvars, degree);
         let mut verifier_msg = None;
-        let mut prover_msgs = Vec::with_capacity(polynomial.aux_info.num_variables);
-        for _ in 0..polynomial.aux_info.num_variables {
-            let prover_msg = IPForMLSumcheck::<R, T>::prove_round(
-                &mut prover_state,
-                &verifier_msg,
-                #[cfg(feature = "jolt-sumcheck")]
-                &comb_fn,
-            );
+        let mut prover_msgs = Vec::with_capacity(nvars);
+        for _ in 0..nvars {
+            let prover_msg =
+                IPForMLSumcheck::<R, T>::prove_round(&mut prover_state, &verifier_msg, &comb_fn);
             transcript.absorb_slice(&prover_msg.evaluations);
             prover_msgs.push(prover_msg);
             let next_verifier_msg = IPForMLSumcheck::<R, T>::sample_round(transcript);
@@ -88,15 +85,16 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
     /// verifier challenges. This allows this sumcheck to be used as a part of a larger protocol.
     pub fn verify_as_subprotocol(
         transcript: &mut T,
-        polynomial_info: &VPAuxInfo<R>,
+        nvars: usize,
+        degree: usize,
         claimed_sum: R,
         proof: &Proof<R>,
     ) -> Result<SubClaim<R>, SumCheckError<R>> {
         // TODO: bring this back
         //transcript.absorb(polynomial_info);
 
-        let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(polynomial_info);
-        for i in 0..polynomial_info.num_variables {
+        let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(nvars, degree);
+        for i in 0..nvars {
             let prover_msg = proof.0.get(i).expect("proof is incomplete");
             transcript.absorb_slice(&prover_msg.evaluations);
             let verifier_msg = IPForMLSumcheck::verify_round(
@@ -115,34 +113,41 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use crate::ark_base::*;
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::sumcheck::{virtual_polynomial::VirtualPolynomial, MLSumcheck, Proof};
+    use crate::utils::sumcheck::utils::{rand_poly, rand_poly_comb_fn};
+    use crate::utils::sumcheck::{DenseMultilinearExtension, MLSumcheck, Proof, RefCounter};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
     use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
     use cyclotomic_rings::rings::SuitableRing;
     use rand::Rng;
 
-    #[cfg(feature = "jolt-sumcheck")]
-    use crate::utils::sumcheck::prover::ProverState;
-
     fn generate_sumcheck_proof<R, CS>(
+        nvars: usize,
         mut rng: &mut (impl Rng + Sized),
-    ) -> (VirtualPolynomial<R>, R, Proof<R>)
+    ) -> (
+        (Vec<RefCounter<DenseMultilinearExtension<R>>>, usize),
+        R,
+        Proof<R>,
+    )
     where
         R: SuitableRing,
         CS: LatticefoldChallengeSet<R>,
     {
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
-        let (poly, sum) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+        let ((poly_mles, poly_degree), products, sum) =
+            rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
+
+        let comb_fn = |vals: &[R]| -> R { rand_poly_comb_fn(vals, &products) };
 
         let (proof, _) = MLSumcheck::prove_as_subprotocol(
             &mut transcript,
-            &poly,
-            #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            &poly_mles,
+            nvars,
+            poly_degree,
+            comb_fn,
         );
-        (poly, sum, proof)
+        ((poly_mles, poly_degree), sum, proof)
     }
 
     fn test_sumcheck<R, CS>()
@@ -151,13 +156,14 @@ mod tests {
         CS: LatticefoldChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
+        let nvars = 5;
 
         for _ in 0..20 {
-            let (poly, sum, proof) = generate_sumcheck_proof::<R, CS>(&mut rng);
+            let ((_, poly_degree), sum, proof) = generate_sumcheck_proof::<R, CS>(nvars, &mut rng);
 
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
             let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, sum, &proof);
+                MLSumcheck::verify_as_subprotocol(&mut transcript, nvars, poly_degree, sum, &proof);
             assert!(res.is_ok())
         }
     }
@@ -168,8 +174,9 @@ mod tests {
         CS: LatticefoldChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
+        let nvars = 5;
 
-        let proof = generate_sumcheck_proof::<R, CS>(&mut rng).2;
+        let proof = generate_sumcheck_proof::<R, CS>(nvars, &mut rng).2;
 
         let mut serialized = Vec::new();
         proof
@@ -194,20 +201,29 @@ mod tests {
         for _ in 0..20 {
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
 
-            let (poly, _) = VirtualPolynomial::<R>::rand(5, (2, 5), 3, &mut rng).unwrap();
+            let nvars = 5;
+            let ((poly_mles, poly_degree), products, _) =
+                rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
+
+            let comb_fn = |vals: &[R]| -> R { rand_poly_comb_fn(vals, &products) };
+
             let (proof, _) = MLSumcheck::prove_as_subprotocol(
                 &mut transcript,
-                &poly,
-                #[cfg(feature = "jolt-sumcheck")]
-                ProverState::combine_product,
+                &poly_mles,
+                nvars,
+                poly_degree,
+                comb_fn,
             );
 
-            let not_sum = poly
-                .evaluate(&[R::zero(), R::zero(), R::zero(), R::zero(), R::zero()])
-                .unwrap();
+            let not_sum = R::zero();
 
-            let res =
-                MLSumcheck::verify_as_subprotocol(&mut transcript, &poly.aux_info, not_sum, &proof);
+            let res = MLSumcheck::verify_as_subprotocol(
+                &mut transcript,
+                nvars,
+                poly_degree,
+                not_sum,
+                &proof,
+            );
             assert!(res.is_err());
         }
     }
