@@ -75,7 +75,7 @@ fn test_construct_polynomial() {
     let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
-    println!("ccs.s: {:?}", ccs.s);
+
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
     let (g, mz_mles) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
