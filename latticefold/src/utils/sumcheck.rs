@@ -9,8 +9,8 @@ use crate::transcript::Transcript;
 use prover::{ProverMsg, ProverState};
 use verifier::SubClaim;
 
-pub mod dense_polynomial;
 pub mod prover;
+pub mod utils;
 pub mod verifier;
 
 /// Interactive Proof for Multilinear Sumcheck
@@ -113,7 +113,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use crate::ark_base::*;
     use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::sumcheck::dense_polynomial::rand_poly;
+    use crate::utils::sumcheck::utils::rand_poly;
     use crate::utils::sumcheck::{DenseMultilinearExtension, MLSumcheck, Proof, RefCounter};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
@@ -213,7 +213,7 @@ mod tests {
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
 
             let nvars = 5;
-            let ((poly_mles, poly_degree), products, sum) =
+            let ((poly_mles, poly_degree), products, _) =
                 rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
 
             let comb_fn = |vals: &[R]| -> R {

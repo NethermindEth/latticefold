@@ -12,9 +12,7 @@ use super::error::FoldingError;
 use crate::ark_base::*;
 use crate::transcript::TranscriptWithShortChallenges;
 use crate::utils::mle_helpers::evaluate_mles;
-use crate::utils::sumcheck::{
-    dense_polynomial::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed,
-};
+use crate::utils::sumcheck::{utils::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed};
 use crate::{
     arith::{error::CSError, Witness, CCS, LCCCS},
     decomposition_parameters::DecompositionParams,

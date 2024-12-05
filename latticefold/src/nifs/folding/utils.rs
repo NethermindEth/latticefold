@@ -14,7 +14,7 @@ use crate::ark_base::*;
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::sumcheck::dense_polynomial::build_eq_x_r;
+use crate::utils::sumcheck::utils::build_eq_x_r;
 use crate::{
     arith::{CCS, LCCCS},
     decomposition_parameters::DecompositionParams,

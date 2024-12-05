@@ -6,7 +6,7 @@ use lattirust_ring::OverField;
 
 use crate::nifs::error::LinearizationError;
 use crate::transcript::Transcript;
-use crate::utils::sumcheck::dense_polynomial::build_eq_x_r;
+use crate::utils::sumcheck::utils::build_eq_x_r;
 use ark_ff::Field;
 use cyclotomic_rings::rings::SuitableRing;
 

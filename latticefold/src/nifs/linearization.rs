@@ -9,7 +9,7 @@ use crate::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::{
     arith::{Witness, CCCS, CCS, LCCCS},
     transcript::Transcript,
-    utils::sumcheck::{dense_polynomial::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed},
+    utils::sumcheck::{utils::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed},
 };
 
 use crate::arith::Instance;
