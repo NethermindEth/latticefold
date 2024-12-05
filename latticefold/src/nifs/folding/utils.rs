@@ -14,7 +14,7 @@ use crate::ark_base::*;
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::sumcheck::dense_polynomial::{build_eq_x_r, DensePolynomial};
+use crate::utils::sumcheck::dense_polynomial::build_eq_x_r;
 use crate::{
     arith::{CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
@@ -104,7 +104,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     r_s: &[Vec<NTT>],
     beta_s: &[NTT],
     mu_s: &[NTT],
-) -> Result<DensePolynomial<NTT>, FoldingError<NTT>> {
+) -> Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), FoldingError<NTT>> {
     if alpha_s.len() != 2 * DP::K
         || f_hat_mles.len() != 2 * DP::K
         || r_s.len() != 2 * DP::K
@@ -123,8 +123,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         }
     }
 
-    let mut g = DensePolynomial::<NTT>::new(log_m);
-
     let beta_eq_x = build_eq_x_r(beta_s)?;
 
     let f_hat_mles: Vec<Vec<RefCounter<DenseMultilinearExtension<NTT>>>> = f_hat_mles
@@ -138,11 +136,15 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         })
         .collect();
 
+    let len = 2 + 2 + // g1 + g3
+        1 + DP::K + DP::K; // g2
+    let mut mles = Vec::with_capacity(len);
+
     // We assume here that decomposition subprotocol puts the same r challenge point
     // into all decomposed linearized commitments
     let r_i_eq = build_eq_x_r(&r_s[0])?;
     prepare_g1_and_3_k_mles_list(
-        &mut g,
+        &mut mles,
         r_i_eq.clone(),
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
@@ -151,7 +153,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
 
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
     prepare_g1_and_3_k_mles_list(
-        &mut g,
+        &mut mles,
         r_i_eq,
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
@@ -159,19 +161,19 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     )?;
 
     // g2
-    g.mul_mle(beta_eq_x)?;
+    mles.push(beta_eq_x);
 
-    for mles in f_hat_mles.iter().take(DP::K) {
-        prepare_g2_i_mle_list(&mut g, mles)?;
+    for f_hat_mles in f_hat_mles.iter().take(DP::K) {
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
     }
 
-    for mles in f_hat_mles.iter().take(2 * DP::K).skip(DP::K) {
-        prepare_g2_i_mle_list(&mut g, mles)?;
+    for f_hat_mles in f_hat_mles.iter().take(2 * DP::K).skip(DP::K) {
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
     }
 
-    g.aux_info.max_degree = 2 * DP::B_SMALL;
+    let degree = 2 * DP::B_SMALL;
 
-    Ok(g)
+    Ok((mles, degree))
 }
 
 /// The grand sum from point 4 of the Latticefold folding protocol.
@@ -277,7 +279,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 }
 
 fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
-    g: &mut DensePolynomial<NTT>,
+    mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
@@ -296,17 +298,18 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
     combined_mle += challenged_Ms;
 
-    g.add_mles([r_i_eq, RefCounter::from(combined_mle)])?;
+    mles.push(r_i_eq);
+    mles.push(RefCounter::from(combined_mle));
 
     Ok(())
 }
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
-    g: &mut DensePolynomial<NTT>,
+    mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
 ) -> Result<(), ArithErrors> {
     for fi_hat_mle in fi_hat_mle_s.iter() {
-        g.add_mles([fi_hat_mle.clone()])?;
+        mles.push(fi_hat_mle.clone());
     }
 
     Ok(())

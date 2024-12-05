@@ -309,7 +309,7 @@ fn test_get_sumcheck_randomness() {
             &zeta_s[DP::K..2 * DP::K],
         )
         .unwrap();
-    let g = create_sumcheck_polynomial::<_, DP>(
+    let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
@@ -324,24 +324,15 @@ fn test_get_sumcheck_randomness() {
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
     // Compute sumcheck proof
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g.mles,
-        g.aux_info.num_variables,
-        g.aux_info.max_degree,
-        comb_fn,
-    );
+    let (_, prover_state) =
+        MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
     // Derive randomness
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
 
     // Validate - Check dimensions
-    assert_eq!(
-        r_0.len(),
-        g.aux_info.num_variables,
-        "Randomness r_0 has the wrong length"
-    );
+    assert_eq!(r_0.len(), ccs.s, "Randomness r_0 has the wrong length");
 }
 
 #[test]
@@ -372,7 +363,7 @@ fn test_get_thetas() {
             &zeta_s[DP::K..2 * DP::K],
         )
         .unwrap();
-    let g = create_sumcheck_polynomial::<_, DP>(
+    let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
@@ -386,13 +377,8 @@ fn test_get_thetas() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g.mles,
-        g.aux_info.num_variables,
-        g.aux_info.max_degree,
-        comb_fn,
-    );
+    let (_, prover_state) =
+        MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -448,7 +434,7 @@ fn test_get_etas() {
             &zeta_s[DP::K..2 * DP::K],
         )
         .unwrap();
-    let g = create_sumcheck_polynomial::<_, DP>(
+    let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
@@ -462,13 +448,8 @@ fn test_get_etas() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g.mles,
-        g.aux_info.num_variables,
-        g.aux_info.max_degree,
-        comb_fn,
-    );
+    let (_, prover_state) =
+        MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -552,7 +533,7 @@ fn test_prepare_public_output() {
             &zeta_s[DP::K..2 * DP::K],
         )
         .unwrap();
-    let g = create_sumcheck_polynomial::<_, DP>(
+    let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
@@ -566,13 +547,8 @@ fn test_prepare_public_output() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g.mles,
-        g.aux_info.num_variables,
-        g.aux_info.max_degree,
-        comb_fn,
-    );
+    let (_, prover_state) =
+        MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
@@ -637,7 +613,7 @@ fn test_compute_f_0() {
             &zeta_s[DP::K..2 * DP::K],
         )
         .unwrap();
-    let g = create_sumcheck_polynomial::<_, DP>(
+    let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
         &alpha_s,
@@ -651,13 +627,8 @@ fn test_compute_f_0() {
 
     let comb_fn = make_comb_fn!(RqNTT, DP, mu_s);
 
-    let (_, prover_state) = MLSumcheck::prove_as_subprotocol(
-        &mut transcript,
-        &g.mles,
-        g.aux_info.num_variables,
-        g.aux_info.max_degree,
-        comb_fn,
-    );
+    let (_, prover_state) =
+        MLSumcheck::prove_as_subprotocol(&mut transcript, &g_mles, ccs.s, g_degree, comb_fn);
     let r_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_sumcheck_randomness(
         prover_state,
     );
