@@ -166,7 +166,7 @@ fn linearization_operations<
         |bench, (ccs, mz_mles, beta_s)| {
             bench.iter(|| {
                 // Construct the sumcheck polynomial g
-                let _ = prepare_lin_sumcheck_polynomial(ccs.s, &ccs.c, mz_mles, &ccs.S, beta_s).unwrap();
+                let _ = prepare_lin_sumcheck_polynomial(&ccs.c, mz_mles, &ccs.S, beta_s).unwrap();
             })
         },
     );

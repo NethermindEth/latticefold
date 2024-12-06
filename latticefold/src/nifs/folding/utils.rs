@@ -14,14 +14,14 @@ use crate::ark_base::*;
 use crate::commitment::Commitment;
 use crate::nifs::error::FoldingError;
 use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::sumcheck::virtual_polynomial::{build_eq_x_r, VirtualPolynomial};
+use crate::utils::sumcheck::utils::build_eq_x_r;
 use crate::{
     arith::{CCS, LCCCS},
     decomposition_parameters::DecompositionParams,
     transcript::Transcript,
 };
 use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::OverField;
+use lattirust_ring::{OverField, PolyRing};
 
 pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
     fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
@@ -99,16 +99,14 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     log_m: usize,
     f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     alpha_s: &[NTT],
-    Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-    zeta_s: &[NTT],
+    challenged_Ms_1: &DenseMultilinearExtension<NTT>,
+    challenged_Ms_2: &DenseMultilinearExtension<NTT>,
     r_s: &[Vec<NTT>],
     beta_s: &[NTT],
     mu_s: &[NTT],
-) -> Result<VirtualPolynomial<NTT>, FoldingError<NTT>> {
+) -> Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), FoldingError<NTT>> {
     if alpha_s.len() != 2 * DP::K
         || f_hat_mles.len() != 2 * DP::K
-        || Mz_mles.len() != 2 * DP::K
-        || zeta_s.len() != 2 * DP::K
         || r_s.len() != 2 * DP::K
         || beta_s.len() != log_m
         || mu_s.len() != 2 * DP::K
@@ -125,8 +123,6 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         }
     }
 
-    let mut g = VirtualPolynomial::<NTT>::new(log_m);
-
     let beta_eq_x = build_eq_x_r(beta_s)?;
 
     let f_hat_mles: Vec<Vec<RefCounter<DenseMultilinearExtension<NTT>>>> = f_hat_mles
@@ -140,51 +136,98 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         })
         .collect();
 
+    let len = 2 + 2 + // g1 + g3
+        1 + DP::K + DP::K; // g2
+    let mut mles = Vec::with_capacity(len);
+
     // We assume here that decomposition subprotocol puts the same r challenge point
     // into all decomposed linearized commitments
     let r_i_eq = build_eq_x_r(&r_s[0])?;
     prepare_g1_and_3_k_mles_list(
-        &mut g,
+        &mut mles,
         r_i_eq.clone(),
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
-        &Mz_mles[0..DP::K],
-        &zeta_s[0..DP::K],
+        challenged_Ms_1,
     )?;
 
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
     prepare_g1_and_3_k_mles_list(
-        &mut g,
-        r_i_eq.clone(),
+        &mut mles,
+        r_i_eq,
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
-        &Mz_mles[DP::K..2 * DP::K],
-        &zeta_s[DP::K..2 * DP::K],
+        challenged_Ms_2,
     )?;
 
-    for i in 0..DP::K {
-        prepare_g2_i_mle_list(
-            &mut g,
-            DP::B_SMALL,
-            &f_hat_mles[i],
-            mu_s[i],
-            beta_eq_x.clone(),
-        )?;
+    // g2
+    mles.push(beta_eq_x);
+
+    for f_hat_mles in f_hat_mles.iter().take(DP::K) {
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
     }
 
-    for i in DP::K..2 * DP::K {
-        prepare_g2_i_mle_list(
-            &mut g,
-            DP::B_SMALL,
-            &f_hat_mles[i],
-            mu_s[i],
-            beta_eq_x.clone(),
-        )?;
+    for f_hat_mles in f_hat_mles.iter().take(2 * DP::K).skip(DP::K) {
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
     }
 
-    g.aux_info.max_degree = 2 * DP::B_SMALL;
+    let degree = 2 * DP::B_SMALL;
 
-    Ok(g)
+    Ok((mles, degree))
+}
+
+pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionParams>(
+    vals: &[NTT],
+    mu_s: &[NTT],
+) -> NTT {
+    let extension_degree = NTT::CoefficientRepresentation::dimension() / <NTT>::dimension();
+
+    // Add eq_r * g1 * g3 for first k
+    let mut result = vals[0] * vals[1];
+
+    // Add eq_r * g1 * g3 for second k
+    result += vals[2] * vals[3];
+
+    // We have k * extension degree mles of b
+    // each one consists of (2 * small_b) -1 extensions
+    // We start at index 5
+    // Multiply each group of (2 * small_b) -1 extensions
+    // Then multiply by the eq_beta evaluation at index 4
+    for (k, mu) in mu_s.iter().enumerate() {
+        let mut inter_result = NTT::zero();
+        for d in (0..extension_degree).rev() {
+            let i = k * extension_degree + d;
+
+            let f_i = vals[5 + i];
+
+            if f_i.is_zero() {
+                if !inter_result.is_zero() {
+                    inter_result *= mu;
+                }
+                continue;
+            }
+
+            // start with eq_b
+            let mut eval = vals[4];
+
+            let f_i_squared = f_i * f_i;
+
+            for b in 1..<P>::B_SMALL {
+                let multiplicand = f_i_squared - NTT::from(b as u128 * b as u128);
+                if multiplicand.is_zero() {
+                    eval = NTT::zero();
+                    break;
+                }
+                eval *= multiplicand
+            }
+            eval *= f_i;
+            inter_result += eval;
+            inter_result *= mu
+        }
+        result += inter_result;
+    }
+
+    result
 }
 
 /// The grand sum from point 4 of the Latticefold folding protocol.
@@ -290,12 +333,11 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 }
 
 fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
-    g: &mut VirtualPolynomial<NTT>,
+    mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
-    Mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-    zeta_s: &[NTT],
+    challenged_Ms: &DenseMultilinearExtension<NTT>,
 ) -> Result<(), ArithErrors> {
     let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
 
@@ -308,58 +350,20 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
         combined_mle += mle;
     }
 
-    for (Mz_mle_s, zeta_i) in Mz_mles.iter().zip(zeta_s.iter()) {
-        let mut mle = DenseMultilinearExtension::zero();
-        for Mz_mle in Mz_mle_s.iter().rev() {
-            mle += Mz_mle;
-            mle *= *zeta_i;
-        }
-        combined_mle += mle;
-    }
-    g.add_mle_list(
-        vec![r_i_eq.clone(), RefCounter::from(combined_mle)],
-        NTT::one(),
-    )?;
-    Ok(())
-}
+    combined_mle += challenged_Ms;
 
-#[cfg(not(feature = "jolt-sumcheck"))]
-fn prepare_g2_i_mle_list<NTT: OverField>(
-    g: &mut VirtualPolynomial<NTT>,
-    b: usize,
-    fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
-    mu_i: NTT,
-    beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
-) -> Result<(), ArithErrors> {
-    for (mu, fi_hat_mle) in
-        successors(Some(mu_i), |mu_power| Some(mu_i * mu_power)).zip(fi_hat_mle_s.iter())
-    {
-        let mut mle_list: Vec<RefCounter<DenseMultilinearExtension<NTT>>> = Vec::new();
-        mle_list.push(beta_eq_x.clone());
-        for i in 1..b {
-            let i_hat = NTT::from(i as u128);
-            mle_list.push(RefCounter::from(fi_hat_mle.as_ref().clone() - i_hat));
-            mle_list.push(RefCounter::from(fi_hat_mle.as_ref().clone() + i_hat));
-        }
-
-        mle_list.push(fi_hat_mle.clone());
-
-        g.add_mle_list(mle_list, mu)?;
-    }
+    mles.push(r_i_eq);
+    mles.push(RefCounter::from(combined_mle));
 
     Ok(())
 }
 
-#[cfg(feature = "jolt-sumcheck")]
 fn prepare_g2_i_mle_list<NTT: OverField>(
-    g: &mut VirtualPolynomial<NTT>,
-    _b: usize,
+    mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
-    _mu_i: NTT,
-    beta_eq_x: RefCounter<DenseMultilinearExtension<NTT>>,
 ) -> Result<(), ArithErrors> {
     for fi_hat_mle in fi_hat_mle_s.iter() {
-        g.add_mle_list(vec![beta_eq_x.clone(), fi_hat_mle.clone()], NTT::one())?;
+        mles.push(fi_hat_mle.clone());
     }
 
     Ok(())

@@ -1,7 +1,7 @@
 use super::*;
 use crate::arith::utils::mat_vec_mul;
-use crate::decomposition_parameters::test_params::{StarkDP, DP};
-use crate::nifs::linearization::utils::SqueezeBeta;
+use crate::decomposition_parameters::test_params::{BabyBearDP, FrogDP, GoldilocksDP, StarkDP};
+use crate::nifs::linearization::utils::{sumcheck_polynomial_comb_fn, SqueezeBeta};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs},
     commitment::AjtaiCommitmentScheme,
@@ -22,12 +22,16 @@ use rand::Rng;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;
-const W: usize = WIT_LEN * DP::L;
-fn setup_test_environment<RqNTT: SuitableRing>(
+fn setup_test_environment<
+    RqNTT: SuitableRing,
+    DP: DecompositionParams,
+    const C: usize,
+    const W: usize,
+>(
     input: Option<usize>,
 ) -> (
     Witness<RqNTT>,
-    CCCS<4, RqNTT>,
+    CCCS<C, RqNTT>,
     CCS<RqNTT>,
     AjtaiCommitmentScheme<C, W, RqNTT>,
 ) {
@@ -48,7 +52,9 @@ fn setup_test_environment<RqNTT: SuitableRing>(
 #[test]
 fn test_compute_z_ccs() {
     type RqNTT = StarkRqNTT;
-    let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT>(None);
+    type DP = StarkDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT, DP, C, W>(None);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -64,12 +70,14 @@ fn test_compute_z_ccs() {
 fn test_construct_polynomial() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    type DP = GoldilocksDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let (g, beta_s) =
+    let (_, g_degree, mz_mles) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
@@ -78,22 +86,24 @@ fn test_construct_polynomial() {
         .unwrap();
 
     // Check dimensions
-    assert_eq!(beta_s.len(), ccs.s);
+    assert_eq!(mz_mles.len(), ccs.t);
 
     // Check degree of g
-    assert!(g.aux_info.max_degree <= ccs.q + 1)
+    assert!(g_degree <= ccs.q + 1)
 }
 
 #[test]
 fn test_generate_sumcheck() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    type DP = FrogDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let (g, _) =
+    let (g_mles, g_degree, _) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
@@ -101,12 +111,15 @@ fn test_generate_sumcheck() {
         )
         .unwrap();
 
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT>(vals, &ccs) };
+
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
-            &g,
             &mut transcript,
-            #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            &g_mles,
+            ccs.s,
+            g_degree,
+            comb_fn,
         )
         .unwrap();
 
@@ -122,7 +135,7 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let (g, Mz_mles) =
+    let (g_mles, g_degree, Mz_mles) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::construct_polynomial_g(
             &z_ccs,
             &mut transcript,
@@ -130,12 +143,15 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
         )
         .unwrap();
 
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT>(vals, ccs) };
+
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
-            &g,
             &mut transcript,
-            #[cfg(feature = "jolt-sumcheck")]
-            ProverState::combine_product,
+            &g_mles,
+            ccs.s,
+            g_degree,
+            comb_fn,
         )
         .unwrap();
 
@@ -146,9 +162,11 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
 fn test_compute_v() {
     type RqNTT = BabyBearRqNTT;
     type CS = BabyBearChallengeSet;
+    type DP = BabyBearDP;
+    const W: usize = WIT_LEN * DP::L;
 
     // Setup shared test state
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
     let (point_r, Mz_mles) = prepare_test_vectors::<RqNTT, CS>(&wit, &cm_i, &ccs);
 
     // Compute actual v vector
@@ -175,9 +193,10 @@ fn test_compute_v() {
 fn test_compute_u() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
-
+    type DP = FrogDP;
+    const W: usize = WIT_LEN * DP::L;
     // Setup shared test state
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
     let (point_r, Mz_mles) = prepare_test_vectors::<RqNTT, CS>(&wit, &cm_i, &ccs);
 
     // Compute actual u vector
@@ -206,7 +225,9 @@ fn test_compute_u() {
 fn test_full_prove() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    type DP = GoldilocksDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (lcccs, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
@@ -226,7 +247,9 @@ fn test_full_prove() {
 fn test_verify_sumcheck_proof() {
     type RqNTT = StarkRqNTT;
     type CS = StarkChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    type DP = StarkDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
     let mut prove_transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
@@ -266,7 +289,9 @@ fn test_verify_sumcheck_proof() {
 fn test_verify_evaluation_claim() {
     type RqNTT = BabyBearRqNTT;
     type CS = BabyBearChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    type DP = BabyBearDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
@@ -303,7 +328,9 @@ fn test_verify_evaluation_claim() {
 fn test_prepare_verifier_output() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    type DP = FrogDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
@@ -336,7 +363,9 @@ fn test_prepare_verifier_output() {
 fn test_verify_invalid_proof() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT>(None);
+    type DP = GoldilocksDP;
+    const W: usize = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (_, mut proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(

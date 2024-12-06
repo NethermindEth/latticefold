@@ -33,7 +33,6 @@ parallel = [
     "lattirust-ring/parallel",
 ]
 getrandom = [ "ark-std/getrandom" ]
-jolt-sumcheck = []
 
 # dev-only
 dhat-heap = []
@@ -75,6 +74,10 @@ harness = false
 
 [[bench]]
 name = "folding"
+harness = false
+
+[[bench]]
+name = "e2e"
 harness = false
 
 [[bench]]

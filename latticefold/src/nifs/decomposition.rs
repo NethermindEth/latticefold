@@ -31,32 +31,6 @@ mod tests;
 
 mod utils;
 
-pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
-    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
-        wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
-    ) -> Result<
-        (
-            Vec<LCCCS<C, NTT>>,
-            Vec<Witness<NTT>>,
-            DecompositionProof<C, NTT>,
-        ),
-        DecompositionError,
-    >;
-}
-
-pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
-        proof: &DecompositionProof<C, NTT>,
-        transcript: &mut impl Transcript<NTT>,
-        ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError>;
-}
-
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {
@@ -68,6 +42,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<
         (
+            Vec<Vec<DenseMultilinearExtension<NTT>>>,
             Vec<LCCCS<C, NTT>>,
             Vec<Witness<NTT>>,
             DecompositionProof<C, NTT>,
@@ -85,7 +60,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, &cm_i.r)?;
 
-        let u_s = Self::compute_u_s(&wit_s, &ccs.M, &x_s, &cm_i.r, log_m)?;
+        let mz_mles = Self::compute_mz_mles(&wit_s, &ccs.M, &x_s, log_m)?;
+
+        let u_s = Self::compute_u_s(&mz_mles, &cm_i.r)?;
 
         let mut lcccs_s = Vec::with_capacity(P::K);
 
@@ -111,7 +88,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let proof = DecompositionProof { u_s, v_s, x_s, y_s };
 
-        Ok((lcccs_s, wit_s, proof))
+        Ok((mz_mles, lcccs_s, wit_s, proof))
     }
 }
 
@@ -243,12 +220,26 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
 
     /// Compute CCS-linearization evaluation claims.
     fn compute_u_s(
-        wit_s: &[Witness<NTT>],
+        mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
+        point_r: &[NTT],
+    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+        cfg_iter!(mz_mles)
+            .map(|mles| {
+                let u_s_for_i =
+                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
+                        mles, point_r,
+                    )?;
+
+                Ok(u_s_for_i)
+            })
+            .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()
+    }
+    fn compute_mz_mles(
+        wit_s: &Vec<Witness<NTT>>,
         M: &[SparseMatrix<NTT>],
         decomposed_statements: &[Vec<NTT>],
-        point_r: &[NTT],
         num_mle_vars: usize,
-    ) -> Result<Vec<Vec<NTT>>, DecompositionError> {
+    ) -> Result<Vec<Vec<DenseMultilinearExtension<NTT>>>, DecompositionError> {
         cfg_iter!(wit_s)
             .enumerate()
             .map(|(i, wit)| {
@@ -267,14 +258,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
                     cfg_iter!(M).map(|M| mat_vec_mul(M, &z)),
                 )?;
 
-                let u_s_for_i =
-                    evaluate_mles::<NTT, &DenseMultilinearExtension<_>, _, DecompositionError>(
-                        &mles, point_r,
-                    )?;
-
-                Ok(u_s_for_i)
+                Ok(mles)
             })
-            .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()
+            .collect::<Result<Vec<Vec<_>>, DecompositionError>>()
     }
 }
 

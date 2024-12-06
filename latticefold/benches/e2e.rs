@@ -1,4 +1,6 @@
 #![allow(incomplete_features)]
+use std::time::Duration;
+
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
@@ -9,34 +11,28 @@ use cyclotomic_rings::{
         GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
-use std::{fmt::Debug, time::Duration};
+use utils::wit_and_ccs_gen_non_scalar;
 mod macros;
 mod utils;
-use ark_std::UniformRand;
+
+use crate::utils::wit_and_ccs_gen;
+use latticefold::nifs::linearization::{
+    LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
+};
 use latticefold::{
     arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
-    nifs::{
-        decomposition::{
-            DecompositionProver, DecompositionVerifier, LFDecompositionProver,
-            LFDecompositionVerifier,
-        },
-        linearization::{
-            LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
-            LinearizationVerifier,
-        },
-    },
+    nifs::{NIFSProver, NIFSVerifier},
     transcript::poseidon::PoseidonTranscript,
 };
-use utils::{wit_and_ccs_gen, wit_and_ccs_gen_non_scalar};
 
-fn prover_decomposition_benchmark<
+fn prover_e2e_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing,
-    CS: LatticefoldChallengeSet<R>,
+    R: SuitableRing,
+    CS: LatticefoldChallengeSet<R> + Clone + 'static,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
     cm_i: &CCCS<C, R>,
@@ -47,27 +43,28 @@ fn prover_decomposition_benchmark<
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-        cm_i,
-        wit,
-        &mut prover_transcript,
-        ccs,
-    )
-    .unwrap();
+    let (acc_lcccs, linearization_proof) =
+        LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+            cm_i,
+            wit,
+            &mut prover_transcript,
+            ccs,
+        )
+        .expect("Failed to generate linearization proof");
 
-    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+    let _ = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
         cm_i,
         &linearization_proof,
         &mut verifier_transcript,
         ccs,
     )
-    .unwrap();
+    .expect("Failed to verify linearization");
 
     c.bench_with_input(
         BenchmarkId::new(
-            "Decomposition Prover",
+            "E2E Prover",
             format!(
-                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                "Param. Kappa={}, Cols={}, B={}, L={}, B_small={}, K={}",
                 C,
                 { W / P::L },
                 P::B,
@@ -76,27 +73,39 @@ fn prover_decomposition_benchmark<
                 P::K
             ),
         ),
-        &(lcccs, wit, ccs),
-        |b, (lcccs, wit, ccs)| {
-            b.iter(|| {
-                let (_, _, _, _) = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<
-                    W,
-                    C,
-                    P,
-                >(
-                    lcccs, wit, &mut prover_transcript, ccs, scheme
-                )
-                .unwrap();
-            })
+        &(
+            acc_lcccs.clone(),
+            wit.clone(),
+            cm_i.clone(),
+            ccs.clone(),
+            scheme.clone(),
+        ),
+        |b, (lcccs, wit, cm_i, ccs, scheme)| {
+            b.iter_batched(
+                || prover_transcript.clone(),
+                |mut bench_prover_transcript| {
+                    let _ = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
+                        lcccs,
+                        wit,
+                        cm_i,
+                        wit,
+                        &mut bench_prover_transcript,
+                        ccs,
+                        scheme,
+                    )
+                    .expect("Failed to generate proof");
+                },
+                criterion::BatchSize::SmallInput,
+            )
         },
     );
 }
 
-fn verifier_decomposition_benchmark<
+fn verifier_e2e_benchmark<
     const C: usize,
     const W: usize,
     P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing,
+    R: SuitableRing,
     CS: LatticefoldChallengeSet<R> + Clone,
 >(
     c: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -108,37 +117,38 @@ fn verifier_decomposition_benchmark<
     let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
-    let (_, linearization_proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
+    let (prover_lcccs_acc, acc_linearization_proof) = LFLinearizationProver::<
+        _,
+        PoseidonTranscript<R, CS>,
+    >::prove(
+        cm_i, wit, &mut prover_transcript, ccs
+    )
+    .expect("Failed to generate acc linearization proof");
+
+    let verifier_lcccs_acc = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
+        cm_i,
+        &acc_linearization_proof,
+        &mut verifier_transcript,
+        ccs,
+    )
+    .expect("Failed to verify acc linearization");
+
+    let (_, _, proof) = NIFSProver::<C, W, R, P, PoseidonTranscript<R, CS>>::prove(
+        &prover_lcccs_acc,
+        wit,
         cm_i,
         wit,
         &mut prover_transcript,
         ccs,
+        scheme,
     )
-    .expect("Failed to generate linearization proof");
-
-    let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-        cm_i,
-        &linearization_proof,
-        &mut verifier_transcript,
-        ccs,
-    )
-    .expect("Failed to verify linearization proof");
-
-    let (_, _, _, decomposition_proof) =
-        LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<W, C, P>(
-            &lcccs,
-            wit,
-            &mut prover_transcript,
-            ccs,
-            scheme,
-        )
-        .expect("Failed to generate decomposition proof");
+    .expect("Failed to generate proof");
 
     c.bench_with_input(
         BenchmarkId::new(
-            "Decomposition Verifier",
+            "E2E Verifier",
             format!(
-                "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
+                "Param. Kappa={}, Cols={}, B={}, L={}, B_small={}, K={}",
                 C,
                 { W / P::L },
                 P::B,
@@ -147,19 +157,24 @@ fn verifier_decomposition_benchmark<
                 P::K
             ),
         ),
-        &(lcccs, decomposition_proof, ccs),
-        |b, (lcccs, proof, ccs)| {
+        &(
+            verifier_lcccs_acc.clone(),
+            cm_i.clone(),
+            proof.clone(),
+            ccs.clone(),
+        ),
+        |b, (acc, cm_i, proof, ccs)| {
             b.iter_batched(
                 || verifier_transcript.clone(),
                 |mut bench_verifier_transcript| {
-                    let _ =
-                        LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
-                            lcccs,
-                            proof,
-                            &mut bench_verifier_transcript,
-                            ccs,
-                        )
-                        .expect("Failed to verify decomposition proof");
+                    let result = NIFSVerifier::<C, R, P, PoseidonTranscript<R, CS>>::verify(
+                        acc,
+                        cm_i,
+                        proof,
+                        &mut bench_verifier_transcript,
+                        ccs,
+                    );
+                    assert!(result.is_ok());
                 },
                 criterion::BatchSize::SmallInput,
             );
@@ -167,52 +182,81 @@ fn verifier_decomposition_benchmark<
     );
 }
 
-fn decomposition_benchmarks_scalar<
+fn e2e_benchmarks_scalar<
     const X_LEN: usize,
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
-    CS: LatticefoldChallengeSet<R> + Clone,
-    R: Clone + UniformRand + Debug + SuitableRing,
-    P: DecompositionParams + Clone,
+    CS: LatticefoldChallengeSet<R> + Clone + 'static,
+    R: SuitableRing,
+    P: DecompositionParams,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
+
     let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
-    prover_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
-
-    verifier_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
+    prover_e2e_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
+    verifier_e2e_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 }
 
-fn decomposition_benchmarks_non_scalar<
+fn e2e_benchmarks_non_scalar<
     const X_LEN: usize,
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
-    CS: LatticefoldChallengeSet<R> + Clone,
-    R: Clone + UniformRand + Debug + SuitableRing,
-    P: DecompositionParams + Clone,
+    CS: LatticefoldChallengeSet<R> + Clone + 'static,
+    R: SuitableRing,
+    P: DecompositionParams,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
+
     let (cm_i, wit, ccs, scheme) =
         wit_and_ccs_gen_non_scalar::<X_LEN, C, WIT_LEN, W, P, R>(r1cs_rows);
 
-    prover_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
-
-    verifier_decomposition_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
+    prover_e2e_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
+    verifier_e2e_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 }
 
-// Macros
 #[allow(unused_macros)]
 macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            decomposition_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+#[allow(unused_macros)]
+macro_rules! run_single_babybear_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+#[allow(unused_macros)]
+macro_rules! run_single_starkprime_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+#[allow(unused_macros)]
+macro_rules! run_single_frog_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -222,71 +266,37 @@ macro_rules! run_single_goldilocks_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            decomposition_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            e2e_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
 
-// Baybear parameters
-#[allow(unused_macros)]
-macro_rules! run_single_babybear_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
-        paste::paste! {
-            decomposition_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-        }
-    };
-}
-
-// Baybear parameters
 #[allow(unused_macros)]
 macro_rules! run_single_babybear_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            decomposition_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            e2e_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
 
-// Stark parameters
-macro_rules! run_single_starkprime_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
-        paste::paste! {
-            decomposition_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-        }
-    };
-}
-
-// Stark parameters
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            decomposition_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            e2e_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
 
-// Frog parameters
-#[allow(unused_macros)]
-macro_rules! run_single_frog_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
-        paste::paste! {
-            decomposition_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-        }
-    };
-}
-
-// Frog parameters
 #[allow(unused_macros)]
 macro_rules! run_single_frog_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            decomposition_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+            e2e_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -295,7 +305,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // Goldilocks
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Goldilocks");
+        let mut group = c.benchmark_group("E2E Goldilocks");
         group.plot_config(plot_config.clone());
         #[allow(clippy::identity_op)]
         {
@@ -306,7 +316,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // Godlilocks non scalar
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Goldilocks non scalar");
+        let mut group = c.benchmark_group("E2E Goldilocks non scalar");
         group.plot_config(plot_config.clone());
 
         run_goldilocks_non_scalar_benchmarks!(group);
@@ -315,7 +325,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // BabyBear
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition BabyBear");
+        let mut group = c.benchmark_group("E2E BabyBear");
         group.plot_config(plot_config.clone());
         #[allow(clippy::identity_op)]
         {
@@ -326,7 +336,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // BabyBear non scalar
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition BabyBear non scalar");
+        let mut group = c.benchmark_group("E2E BabyBear non scalar");
         group.plot_config(plot_config.clone());
 
         run_babybear_non_scalar_benchmarks!(group);
@@ -335,7 +345,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // StarkPrime
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition StarkPrime");
+        let mut group = c.benchmark_group("E2E StarkPrime");
         group.plot_config(plot_config.clone());
 
         #[allow(clippy::identity_op)]
@@ -347,7 +357,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // StarkPrime non scalar
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition StarkPrime non scalar");
+        let mut group = c.benchmark_group("E2E StarkPrime non scalar");
         group.plot_config(plot_config.clone());
 
         run_starkprime_non_scalar_benchmarks!(group);
@@ -356,7 +366,7 @@ fn benchmarks_main(c: &mut Criterion) {
     // Frog
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Frog");
+        let mut group = c.benchmark_group("E2E Frog");
         group.plot_config(plot_config.clone());
         #[allow(clippy::identity_op)]
         {
@@ -366,7 +376,7 @@ fn benchmarks_main(c: &mut Criterion) {
 
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Decomposition Frog non scalar");
+        let mut group = c.benchmark_group("E2E Frog non scalar");
         group.plot_config(plot_config.clone());
 
         run_frog_non_scalar_benchmarks!(group);

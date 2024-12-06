@@ -72,7 +72,6 @@ macro_rules! run_single_starkprime_benchmark {
         ajtai_benchmark::<$cw, $w, StarkRingNTT>($crit);
     };
 }
-
 macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $cw:expr, $w:expr) => {
         ajtai_benchmark::<$cw, $w, GoldilocksRingNTT>($crit);
@@ -99,7 +98,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("Ajtai BabyBear");
         group.plot_config(plot_config.clone());
 
-        // Existing benchmarks
         run_single_babybear_benchmark!(&mut group, 1, 32768);
         run_single_babybear_benchmark!(&mut group, 2, 32768);
         run_single_babybear_benchmark!(&mut group, 3, 32768);
@@ -136,8 +134,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_babybear_benchmark!(&mut group, 4, 1048576);
         run_single_babybear_benchmark!(&mut group, 5, 1048576);
         run_single_babybear_benchmark!(&mut group, 6, 1048576);
-
-        // New benchmarks
         run_single_babybear_benchmark!(&mut group, 12, 32768);
         run_single_babybear_benchmark!(&mut group, 13, 65536);
         run_single_babybear_benchmark!(&mut group, 13, 131072);
@@ -154,7 +150,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("Ajtai Goldilocks");
         group.plot_config(plot_config.clone());
 
-        // Existing benchmarks
         run_single_goldilocks_benchmark!(&mut group, 1, 32768);
         run_single_goldilocks_benchmark!(&mut group, 2, 32768);
         run_single_goldilocks_benchmark!(&mut group, 3, 32768);
@@ -191,8 +186,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_goldilocks_benchmark!(&mut group, 4, 1048576);
         run_single_goldilocks_benchmark!(&mut group, 5, 1048576);
         run_single_goldilocks_benchmark!(&mut group, 6, 1048576);
-
-        // New benchmarks
         run_single_goldilocks_benchmark!(&mut group, 17, 32768);
         run_single_goldilocks_benchmark!(&mut group, 17, 65536);
         run_single_goldilocks_benchmark!(&mut group, 18, 131072);
@@ -209,7 +202,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("Ajtai StarkPrime");
         group.plot_config(plot_config.clone());
 
-        // Existing benchmarks
         run_single_starkprime_benchmark!(&mut group, 1, 32768);
         run_single_starkprime_benchmark!(&mut group, 2, 32768);
         run_single_starkprime_benchmark!(&mut group, 3, 32768);
@@ -246,8 +238,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_starkprime_benchmark!(&mut group, 4, 1048576);
         run_single_starkprime_benchmark!(&mut group, 5, 1048576);
         run_single_starkprime_benchmark!(&mut group, 6, 1048576);
-
-        // New benchmarks
         run_single_starkprime_benchmark!(&mut group, 7, 131072);
         run_single_starkprime_benchmark!(&mut group, 7, 262144);
         run_single_starkprime_benchmark!(&mut group, 7, 524288);
@@ -262,7 +252,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("Ajtai Frog");
         group.plot_config(plot_config.clone());
 
-        // Existing benchmarks
         run_single_frog_benchmark!(&mut group, 1, 32768);
         run_single_frog_benchmark!(&mut group, 2, 32768);
         run_single_frog_benchmark!(&mut group, 3, 32768);
@@ -299,8 +288,6 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         run_single_frog_benchmark!(&mut group, 4, 1048576);
         run_single_frog_benchmark!(&mut group, 5, 1048576);
         run_single_frog_benchmark!(&mut group, 6, 1048576);
-
-        // New benchmarks
         run_single_frog_benchmark!(&mut group, 17, 32768);
         run_single_frog_benchmark!(&mut group, 18, 65536);
         run_single_frog_benchmark!(&mut group, 19, 131072);
