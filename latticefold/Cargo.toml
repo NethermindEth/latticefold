@@ -83,3 +83,7 @@ harness = false
 [[bench]]
 name = "single_operations"
 harness = false
+
+[[bench]]
+name = "linearization_ops"
+harness = false
