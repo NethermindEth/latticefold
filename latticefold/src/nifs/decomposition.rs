@@ -29,7 +29,7 @@ mod structs;
 #[cfg(test)]
 mod tests;
 
-mod utils;
+pub mod utils;
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>

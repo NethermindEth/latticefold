@@ -87,3 +87,7 @@ harness = false
 [[bench]]
 name = "linearization_ops"
 harness = false
+
+[[bench]]
+name = "decomposition_ops"
+harness = false

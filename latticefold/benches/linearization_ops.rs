@@ -10,11 +10,11 @@ use latticefold::decomposition_parameters::DecompositionParams;
 use latticefold::nifs::error::LinearizationError;
 use latticefold::nifs::linearization::utils::prepare_lin_sumcheck_polynomial;
 use latticefold::utils::mle_helpers::calculate_Mz_mles;
-use utils::wit_and_ccs_gen;
 use std::fmt::Debug;
+use utils::wit_and_ccs_gen;
 
-mod utils;
 mod macros;
+mod utils;
 
 fn setup_test_environment<
     RqNTT: SuitableRing,

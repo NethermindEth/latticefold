@@ -10,10 +10,7 @@ use crate::decomposition_parameters::DecompositionParams;
 
 /// Decompose a vector of arbitrary norm in its NTT form into DP::K vectors
 /// and applies the gadget-B matrix again.
-pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
-    NTT: SuitableRing,
-    DP: DecompositionParams,
->(
+pub fn decompose_big_vec_into_k_vec_and_compose_back<NTT: SuitableRing, DP: DecompositionParams>(
     x: Vec<NTT>,
 ) -> Vec<Vec<NTT>> {
     // Allow x to have length m
@@ -42,7 +39,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 }
 
 /// Decompose a vector of norm B in its coefficient form into DP::K small vectors.
-pub(super) fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
+pub fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT::CoefficientRepresentation],
 ) -> Vec<Vec<NTT::CoefficientRepresentation>> {
     decompose_balanced_vec(x, DP::B_SMALL as u128, DP::K).transpose()
