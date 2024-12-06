@@ -116,7 +116,6 @@ where
     (lcccs, ccs, wit, wit_s, point_r, mz_mles, scheme)
 }
 
-
 fn decomposition_operations<
     const C: usize,
     const W: usize,

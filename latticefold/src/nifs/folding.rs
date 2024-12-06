@@ -30,7 +30,7 @@ use rayon::prelude::*;
 #[cfg(test)]
 mod tests;
 
-mod utils;
+pub mod utils;
 pub use structs::*;
 
 mod structs;
@@ -54,17 +54,17 @@ fn prepare_public_output<const C: usize, NTT: SuitableRing>(
 }
 
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<NTT, T> {
-    fn setup_f_hat_mles(w_s: &mut [Witness<NTT>]) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
+    pub fn setup_f_hat_mles(w_s: &mut [Witness<NTT>]) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
         cfg_iter_mut!(w_s)
             .map(|w| w.take_f_hat())
             .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>()
     }
 
-    fn get_ris<const C: usize>(cm_i_s: &[LCCCS<C, NTT>]) -> Vec<Vec<NTT>> {
+    pub fn get_ris<const C: usize>(cm_i_s: &[LCCCS<C, NTT>]) -> Vec<Vec<NTT>> {
         cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>()
     }
 
-    fn calculate_challenged_mz_mle(
+    pub fn calculate_challenged_mz_mle(
         Mz_mles_vec: &[Vec<DenseMultilinearExtension<NTT>>],
         zeta_s: &[NTT],
     ) -> Result<DenseMultilinearExtension<NTT>, FoldingError<NTT>> {
@@ -92,7 +92,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             .collect::<Vec<NTT>>()
     }
 
-    fn get_thetas(
+    pub fn get_thetas(
         f_hat_mles: &Vec<Vec<DenseMultilinearExtension<NTT>>>,
         r_0: &[NTT],
     ) -> Result<Vec<Vec<NTT>>, FoldingError<NTT>> {
@@ -103,7 +103,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         Ok(theta_s)
     }
 
-    fn get_etas(
+    pub fn get_etas(
         Mz_mles_vec: &[Vec<DenseMultilinearExtension<NTT>>],
         r_0: &[NTT],
     ) -> Result<Vec<Vec<NTT>>, FoldingError<NTT>> {
@@ -114,7 +114,10 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         Ok(eta_s)
     }
 
-    fn compute_f_0(rho_s: &Vec<NTT::CoefficientRepresentation>, w_s: &[Witness<NTT>]) -> Vec<NTT> {
+    pub fn compute_f_0(
+        rho_s: &Vec<NTT::CoefficientRepresentation>,
+        w_s: &[Witness<NTT>],
+    ) -> Vec<NTT> {
         rho_s
             .iter()
             .zip(w_s)

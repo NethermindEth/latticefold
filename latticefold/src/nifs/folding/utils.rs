@@ -77,11 +77,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
     }
 }
 
-pub(super) fn get_rhos<
-    R: SuitableRing,
-    T: TranscriptWithShortChallenges<R>,
-    P: DecompositionParams,
->(
+pub fn get_rhos<R: SuitableRing, T: TranscriptWithShortChallenges<R>, P: DecompositionParams>(
     transcript: &mut T,
 ) -> Vec<R::CoefficientRepresentation> {
     transcript.absorb_field_element(&<R::BaseRing as Field>::from_base_prime_field(
@@ -95,7 +91,7 @@ pub(super) fn get_rhos<
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
+pub fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     log_m: usize,
     f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     alpha_s: &[NTT],
@@ -176,7 +172,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     Ok((mles, degree))
 }
 
-pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionParams>(
+pub fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionParams>(
     vals: &[NTT],
     mu_s: &[NTT],
 ) -> NTT {
@@ -231,7 +227,7 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
 }
 
 /// The grand sum from point 4 of the Latticefold folding protocol.
-pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
+pub fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
     alpha_s: &[NTT],
     mu_s: &[NTT],
     theta_s: &[Vec<NTT>],
@@ -276,7 +272,7 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
         .sum()
 }
 
-pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
+pub fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     rho_s: &[NTT::CoefficientRepresentation],
     theta_s: &[Vec<NTT>],
     cm_i_s: &[LCCCS<C, NTT>],
