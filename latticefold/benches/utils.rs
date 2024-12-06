@@ -8,7 +8,6 @@ use latticefold::arith::{r1cs::get_test_dummy_r1cs, Arith, Witness, CCCS, CCS};
 use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::decomposition_parameters::DecompositionParams;
 
-#[allow(dead_code)]
 pub fn wit_and_ccs_gen<
     const X_LEN: usize,
     const C: usize, // rows
