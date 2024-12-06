@@ -1,0 +1,3 @@
+
+--- BabyBear prime modulus (d = 72) ---
+	Maximum kappa for which bound_2 < p/2: 15

@@ -10,21 +10,21 @@ def bound_inf(d, kappa, p, n):
     # Ensure bound_value is a power of two
     bound_value = 2**(bound_value.bit_length() - 1)
     # Iterate until bound_value^L > p/2 or L exceeds 50
-    while bound_value^L <= p / 2:
+    while bound_value^L <= p:
         if L > 8:
             return "unpractical", "unpractical"
-        L *= 2  # Ensure L is a power of two by doubling it
+        L += 1
         bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
         if bound_value & (bound_value - 1) != 0:  # Check if not a power of two
             bound_value = 2**(bound_value.bit_length() - 1)  # Reduce to previous power of two
             if find_smallest_L_log(bound_value, p) != L:
                 continue
     return bound_value, L
-# Function to find the smallest L such that B^L > p/2 using logarithms
+# Function to find the smallest L such that B^L > p using logarithms
 def find_smallest_L_log(B, p):
     if B <= 0:
         return "unpractical"
-    return ceil(log(p / 2) / log(B))
+    return ceil(log(p) / log(B))
 # Function to find all (b, k) pairs such that b^k = B
 def find_b_k_pairs(B):
     # Check if B is "unpractical"
@@ -38,12 +38,12 @@ def find_b_k_pairs(B):
 params = {
     "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
     "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
-    "Stark": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
+    "StarkPrime": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
     "Frog": {"p": 159120925213255836417, "d": 16},
 #    "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
 }
 # Range of num_cols values
-num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13, 2^14, 2^15, 2^16, 2^17, 2^18, 2^19, 2^20]
+num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13, 2^14]
 # Iterate over each prime and calculate the maximum kappa and perform bound calculations
 for prime_name, param in params.items():
     p = param["p"]
@@ -88,21 +88,6 @@ for prime_name, param in params.items():
         entries_by_n[entry[1]].append(entry)
     # Print results for each n
     for n, entries in entries_by_n.items():
-        min_entries = {}
         for entry in entries:
-            key = (entry[2], entry[3], entry[4], entry[5])  # B, L, b, k
-            if key not in min_entries or entry[0] < min_entries[key][0]:
-                min_entries[key] = entry
-        for entry in min_entries.values():
-            benchmark_function = f"run_single_{prime_name.lower()}_benchmark!"
-            print(f"\t{benchmark_function}(&mut $group, 1, {entry[0]}, {n}, {entry[2]}, {entry[3]}, {entry[4]}, {entry[5]});")
-    print("")
-    for n, entries in entries_by_n.items():
-        min_entries = {}
-        for entry in entries:
-            key = (entry[2], entry[3], entry[4], entry[5])  # B, L, b, k
-            if key not in min_entries or entry[0] < min_entries[key][0]:
-                min_entries[key] = entry
-        for entry in min_entries.values():
-            benchmark_function = f"run_single_{prime_name.lower()}_non_scalar_benchmark!"
-            print(f"\t{benchmark_function}(&mut $group, 1, {entry[0]}, {n}, {entry[2]}, {entry[3]}, {entry[4]}, {entry[5]});")
+            kappa, _, B, L, b, k = entry
+            print(f"\t{prime_name}, Kappa = {kappa},|w_ccs| = {n}, B = {B}, L = {L}, b = {b}, k = {k}")
