@@ -1,16 +1,18 @@
 #![allow(incomplete_features)]
 use ark_std::{test_rng, time::Duration, UniformRand};
-use criterion::{criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration};
+use criterion::{
+    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+};
 use cyclotomic_rings::rings::{GoldilocksRingNTT, SuitableRing};
-use std::fmt::Debug;
-use latticefold::arith::{Arith, Instance, Witness, CCCS, CCS};
 use latticefold::arith::r1cs::{get_test_dummy_r1cs, get_test_dummy_z_split};
+use latticefold::arith::{Arith, Instance, Witness, CCCS, CCS};
 use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::decomposition_parameters::DecompositionParams;
 use latticefold::nifs::error::LinearizationError;
-use latticefold::utils::mle_helpers::{calculate_Mz_mles};
-use lattirust_ring::Ring;
 use latticefold::nifs::linearization::utils::prepare_lin_sumcheck_polynomial;
+use latticefold::utils::mle_helpers::calculate_Mz_mles;
+use lattirust_ring::{PolyRing, Ring};
+use std::fmt::Debug;
 
 pub fn get_test_dummy_ccs<R: Ring, const X_LEN: usize, const WIT_LEN: usize, const W: usize>(
     rows_size: usize,
@@ -74,7 +76,7 @@ fn setup_test_environment<
     DP: DecompositionParams,
     const C: usize,
     const W: usize,
-    const WIT_LEN: usize
+    const WIT_LEN: usize,
 >() -> (
     Witness<RqNTT>,
     CCCS<C, RqNTT>,
@@ -89,45 +91,59 @@ fn setup_test_environment<
     (wit, cm_i, ccs, scheme)
 }
 
-fn single_op_benchmark<
-    R: Clone + UniformRand + Debug + SuitableRing,
->(
+fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     // Get random parameters
     let mut rng = test_rng();
     let a = R::rand(&mut rng);
     let b = R::rand(&mut rng);
+    let a_field = <R::CoefficientRepresentation as PolyRing>::BaseRing::rand(&mut rng);
+    let b_field = <R::CoefficientRepresentation as PolyRing>::BaseRing::rand(&mut rng);
+
+    group.bench_with_input("Addition Field", &(a_field, b_field), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = *a + *b;
+        })
+    });
 
     group.bench_with_input(
-        "Addition NTT",
-        &(a, b),
-        |bench, (a, b)| {
-            bench.iter(|| {
-                let _ = *a + *b;
-            })
-        },
-    );
-
-    group.bench_with_input(
-        "Substraction NTT",
-        &(a, b),
-        |bench, (a, b)| {
-            bench.iter(|| {
-                let _ = *a - *b;
-            })
-        },
-    );
-
-    group.bench_with_input(
-        "Multiplication NTT",
-        &(a, b),
+        "Substraction Field",
+        &(a_field, b_field),
         |bench, (a, b)| {
             bench.iter(|| {
                 let _ = *a * *b;
             })
         },
     );
+
+    group.bench_with_input(
+        "Multiplication Field",
+        &(a_field, b_field),
+        |bench, (a, b)| {
+            bench.iter(|| {
+                let _ = *a * *b;
+            })
+        },
+    );
+
+    group.bench_with_input("Addition NTT", &(a, b), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = *a + *b;
+        })
+    });
+
+    group.bench_with_input("Substraction NTT", &(a, b), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = *a - *b;
+        })
+    });
+
+    group.bench_with_input("Multiplication NTT", &(a, b), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = *a * *b;
+        })
+    });
 }
 
 fn linearization_operations<
@@ -135,13 +151,12 @@ fn linearization_operations<
     DP: DecompositionParams,
     const C: usize,
     const W: usize,
-    const WIT_LEN: usize
+    const WIT_LEN: usize,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
     let mut rng = test_rng();
-    let (wit, cm_i, ccs, _) =
-        setup_test_environment::<R, DP, C, W, WIT_LEN>();
+    let (wit, cm_i, ccs, _) = setup_test_environment::<R, DP, C, W, WIT_LEN>();
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     // Prepare MLEs
@@ -170,11 +185,9 @@ fn linearization_operations<
             })
         },
     );
-
 }
 
 fn single_operation_benchmarks(c: &mut Criterion) {
-
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
     let mut group = c.benchmark_group("Single Operations Goldilocks");
     group.plot_config(plot_config.clone());
@@ -198,7 +211,6 @@ fn single_operation_benchmarks(c: &mut Criterion) {
 
 pub fn benchmarks_main(c: &mut Criterion) {
     single_operation_benchmarks(c);
-
 }
 
 criterion_group!(
