@@ -78,7 +78,7 @@ pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     /// Step 2 of Fig 5: Construct polynomial $g$ and generate $\beta$ challenges.
-    fn construct_polynomial_g(
+    pub fn construct_polynomial_g(
         z_ccs: &[NTT],
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
@@ -124,7 +124,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
     /// Step 3: the mle evaluations that the prover sends to the verifier.
     /// I.e. f-hat rows mle evaluations and Mz mle evaluations.
-    fn compute_evaluation_vectors(
+    pub fn compute_evaluation_vectors(
         wit: &Witness<NTT>,
         point_r: &[NTT],
         Mz_mles: &[DenseMultilinearExtension<NTT>],

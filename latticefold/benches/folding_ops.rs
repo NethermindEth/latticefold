@@ -157,9 +157,8 @@ where
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas(&f_hat_mles, &r_0)
             .expect("Failed to get thetas");
 
-    let eta_s =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&mz_mles, &r_0)
-            .expect("Failed to get etas");
+    let eta_s = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&mz_mles, &r_0)
+        .expect("Failed to get etas");
 
     let rho_s = (0..ccs.s)
         .map(|_| RqNTT::CoefficientRepresentation::rand(&mut test_rng()))

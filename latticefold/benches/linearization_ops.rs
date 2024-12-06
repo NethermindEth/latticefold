@@ -3,12 +3,14 @@ use ark_std::{test_rng, time::Duration, UniformRand};
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
-use cyclotomic_rings::rings::{GoldilocksRingNTT, SuitableRing};
+use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
+use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
 use latticefold::arith::{Instance, Witness, CCCS, CCS};
 use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::decomposition_parameters::DecompositionParams;
 use latticefold::nifs::error::LinearizationError;
-use latticefold::nifs::linearization::utils::prepare_lin_sumcheck_polynomial;
+use latticefold::nifs::linearization::LFLinearizationProver;
+use latticefold::transcript::poseidon::PoseidonTranscript;
 use latticefold::utils::mle_helpers::calculate_Mz_mles;
 use std::fmt::Debug;
 use utils::wit_and_ccs_gen;
@@ -41,6 +43,7 @@ fn linearization_operations<
     const W: usize,
     const WIT_LEN: usize,
     R: Clone + UniformRand + Debug + SuitableRing,
+    CS: LatticefoldChallengeSet<R> + Clone,
     DP: DecompositionParams,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
@@ -66,12 +69,30 @@ fn linearization_operations<
 
     // Prepare the main linearization polynomial.
     group.bench_with_input(
-        BenchmarkId::new("Prepare Sumcheck Poly", format!("C= {}, W= {}", C, W)),
-        &(ccs, mz_mles, beta_s),
+        BenchmarkId::new("Construct Sumcheck Poly", format!("C= {}, W= {}", C, W)),
+        &(ccs.clone(), mz_mles, beta_s),
         |bench, (ccs, mz_mles, beta_s)| {
             bench.iter(|| {
                 // Construct the sumcheck polynomial g
-                let _ = prepare_lin_sumcheck_polynomial(&ccs.c, mz_mles, &ccs.S, beta_s).unwrap();
+                let _ =
+                    LFLinearizationProver::<R, PoseidonTranscript<R, CS>>::construct_polynomial_g(
+                        &z_ccs,
+                        &mut PoseidonTranscript::<R, CS>::default(),
+                        ccs,
+                    )
+                    .unwrap();
+            })
+        },
+    );
+
+    let point_r = (0..ccs.s).map(|_| R::rand(&mut rng)).collect::<Vec<R>>();
+    let Mz_mles = calculate_Mz_mles::<R, LinearizationError<R>>(&ccs, &z_ccs).unwrap();
+    group.bench_with_input(
+        BenchmarkId::new("Evaluate U and V", format!("C= {}, W= {}", C, W)),
+        &(wit.clone(), point_r.clone(), Mz_mles.clone()),
+        |bench, (wit, point_r, Mz_mles)| {
+            bench.iter(|| {
+                let _ = LFLinearizationProver::<R, PoseidonTranscript<R, CS>>::compute_evaluation_vectors(wit, point_r, &Mz_mles).expect("Failed to compute evaluation vectors");
             })
         },
     );
@@ -81,7 +102,7 @@ macro_rules! run_single_linearization_goldilocks_benchmark {
     ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            linearization_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group);
+            linearization_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group);
         }
     };
 }
