@@ -69,10 +69,10 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
 macro_rules! run_starkprime_benchmarks {
     ($group: ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
-        run_single_starkprime_benchmark!(&mut $group, 1, 15, 1024, 3052596316u128, 8, 2, 30);
+        run_single_starkprime_benchmark!(&mut $group, 1, 15, 1024, 1073741824u128, 9, 2, 30);
         run_single_starkprime_benchmark!(&mut $group, 1, 16, 1024, 4294967296u128, 8, 2, 32);
         run_single_starkprime_benchmark!(&mut $group, 1, 17, 2048, 8589934592u128, 8, 2, 33);
-        run_single_starkprime_benchmark!(&mut $group, 1, 18, 2048, 20833367754u128, 8, 2, 34);
+        run_single_starkprime_benchmark!(&mut $group, 1, 18, 2048, 17179869184u128, 8, 2, 34);
         run_single_starkprime_benchmark!(&mut $group, 1, 19, 2048, 34359738368u128, 8, 2, 35);
     };
 }
@@ -86,8 +86,8 @@ macro_rules! run_starkprime_non_scalar_benchmarks {
             1,
             15,
             1024,
-            3052596316u128,
-            8,
+            1073741824u128,
+            9,
             2,
             30
         );
@@ -116,7 +116,7 @@ macro_rules! run_starkprime_non_scalar_benchmarks {
             1,
             18,
             2048,
-            20833367754u128,
+            17179869184u128,
             8,
             2,
             34
