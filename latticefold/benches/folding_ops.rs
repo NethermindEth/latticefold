@@ -5,24 +5,23 @@ use criterion::{
 };
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
-use latticefold::arith::{Witness, CCCS, CCS, LCCCS};
-use latticefold::commitment::AjtaiCommitmentScheme;
+use latticefold::arith::{Witness, CCS, LCCCS};
 use latticefold::decomposition_parameters::DecompositionParams;
 use latticefold::nifs::decomposition::{
     DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
 };
 use latticefold::nifs::folding::utils::{
-    compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_rhos, sumcheck_polynomial_comb_fn,
+    compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, sumcheck_polynomial_comb_fn,
 };
-use latticefold::nifs::folding::{FoldingProof, FoldingProver, LFFoldingProver};
+use latticefold::nifs::folding::LFFoldingProver;
 use latticefold::nifs::linearization::{
     LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
 };
-use latticefold::transcript;
 use latticefold::transcript::poseidon::PoseidonTranscript;
 use latticefold::utils::sumcheck::MLSumcheck;
 use lattirust_poly::mle::DenseMultilinearExtension;
 use std::fmt::Debug;
+use std::sync::Arc;
 use utils::wit_and_ccs_gen;
 
 mod macros;
@@ -31,12 +30,22 @@ mod utils;
 fn setup_test_environment<RqNTT, CS, DP, const C: usize, const W: usize, const WIT_LEN: usize>() -> (
     Vec<LCCCS<C, RqNTT>>,
     Vec<Witness<RqNTT>>,
-    PoseidonTranscript<RqNTT, CS>,
     CCS<RqNTT>,
     Vec<Vec<DenseMultilinearExtension<RqNTT>>>,
+    (Vec<RqNTT>, Vec<RqNTT>, Vec<RqNTT>, Vec<RqNTT>),
+    Vec<Vec<DenseMultilinearExtension<RqNTT>>>,
+    Vec<Vec<RqNTT>>,
+    (
+        DenseMultilinearExtension<RqNTT>,
+        DenseMultilinearExtension<RqNTT>,
+    ),
+    (Vec<Arc<DenseMultilinearExtension<RqNTT>>>, usize),
     Vec<RqNTT>,
-    Vec<RqNTT>,
-    Vec<RqNTT>,
+    (
+        Vec<Vec<RqNTT>>,
+        Vec<Vec<RqNTT>>,
+        Vec<RqNTT::CoefficientRepresentation>,
+    ),
     Vec<RqNTT>,
 )
 where
@@ -85,7 +94,7 @@ where
     )
     .unwrap();
 
-    let (lcccs, wit_s, mz_mles) = {
+    let (lcccs, mut wit_s, mz_mles) = {
         let mut lcccs = lcccs_vec.clone();
         let mut lcccs_r = lcccs_vec;
         lcccs.append(&mut lcccs_r);
@@ -113,37 +122,58 @@ where
         .map(|_| RqNTT::rand(&mut test_rng()))
         .collect::<Vec<_>>();
 
+    let f_hat_mles =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::setup_f_hat_mles(&mut wit_s);
+    let ris = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_ris(&lcccs);
+    let prechallenged_m_s_1 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
+            &mz_mles[0..DP::K],
+            &zeta_s[0..DP::K],
+        )
+        .unwrap();
+    let prechallenged_m_s_2 =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
+            &mz_mles[DP::K..2 * DP::K],
+            &zeta_s[DP::K..2 * DP::K],
+        )
+        .unwrap();
+    let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
+        ccs.s,
+        &f_hat_mles,
+        &alpha_s,
+        &prechallenged_m_s_1,
+        &prechallenged_m_s_2,
+        &ris,
+        &beta_s,
+        &mu_s,
+    )
+    .unwrap();
+    let r_0 = (0..ccs.s)
+        .map(|_| RqNTT::rand(&mut test_rng()))
+        .collect::<Vec<_>>();
+    let theta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas(&f_hat_mles, &r_0)
+            .unwrap();
+    let eta_s =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&mz_mles, &r_0).unwrap();
+    let rho_s = (0..ccs.s)
+        .map(|_| RqNTT::CoefficientRepresentation::rand(&mut test_rng()))
+        .collect::<Vec<_>>();
+    let f_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_f_0(&rho_s, &wit_s);
     (
         lcccs,
         wit_s,
-        verifier_transcript,
         ccs,
         mz_mles,
-        alpha_s,
-        beta_s,
-        zeta_s,
-        mu_s,
+        (alpha_s, beta_s, zeta_s, mu_s),
+        f_hat_mles,
+        ris,
+        (prechallenged_m_s_1, prechallenged_m_s_2),
+        (g_mles, g_degree),
+        r_0,
+        (theta_s, eta_s, rho_s),
+        f_0,
     )
-}
-
-fn setup_linear_test_environment<
-    RqNTT: SuitableRing,
-    DP: DecompositionParams,
-    const C: usize,
-    const W: usize,
-    const WIT_LEN: usize,
->() -> (
-    Witness<RqNTT>,
-    CCCS<C, RqNTT>,
-    CCS<RqNTT>,
-    AjtaiCommitmentScheme<C, W, RqNTT>,
-) {
-    let mut rng = test_rng();
-    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-    let r1cs_rows = 1 + WIT_LEN + 1;
-    let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
-
-    (wit, cm_i, ccs, scheme)
 }
 
 fn folding_operations<
@@ -156,9 +186,20 @@ fn folding_operations<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let (cm_i_s, wit_s, _, ccs, mz_mles, alpha_s, beta_s, zeta_s, mu_s) =
-        setup_test_environment::<R, CS, DP, C, W, WIT_LEN>();
-    let mut wit_s = wit_s;
+    let (
+        cm_i_s,
+        wit_s,
+        ccs,
+        mz_mles,
+        (alpha_s, beta_s, zeta_s, mu_s),
+        f_hat_mles,
+        ris,
+        (prechallenged_m_s_1, prechallenged_m_s_2),
+        (g_mles, g_degree),
+        r_0,
+        (theta_s, eta_s, rho_s),
+        f_0,
+    ) = setup_test_environment::<R, CS, DP, C, W, WIT_LEN>();
 
     // MZ mles
     group.bench_with_input(
@@ -192,21 +233,6 @@ fn folding_operations<
             })
         },
     );
-
-    let f_hat_mles = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::setup_f_hat_mles(&mut wit_s);
-    let ris = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::get_ris(&cm_i_s);
-    let prechallenged_m_s_1 =
-        LFFoldingProver::<R, PoseidonTranscript<R, CS>>::calculate_challenged_mz_mle(
-            &mz_mles[0..DP::K],
-            &zeta_s[0..DP::K],
-        )
-        .unwrap();
-    let prechallenged_m_s_2 =
-        LFFoldingProver::<R, PoseidonTranscript<R, CS>>::calculate_challenged_mz_mle(
-            &mz_mles[DP::K..2 * DP::K],
-            &zeta_s[DP::K..2 * DP::K],
-        )
-        .unwrap();
 
     group.bench_with_input(
         BenchmarkId::new(
@@ -258,17 +284,6 @@ fn folding_operations<
         },
     );
 
-    let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
-        ccs.s,
-        &f_hat_mles,
-        &alpha_s,
-        &prechallenged_m_s_1,
-        &prechallenged_m_s_2,
-        &ris,
-        &beta_s,
-        &mu_s,
-    )
-    .unwrap();
     let comb_fn = |vals: &[R]| -> R { sumcheck_polynomial_comb_fn::<R, DP>(vals, &mu_s) };
     group.bench_with_input(
         BenchmarkId::new(
@@ -303,9 +318,6 @@ fn folding_operations<
         },
     );
 
-    let r_0 = (0..ccs.s)
-        .map(|_| R::rand(&mut test_rng()))
-        .collect::<Vec<_>>();
     group.bench_with_input(
         BenchmarkId::new(
             "Folding get theta's",
@@ -350,12 +362,6 @@ fn folding_operations<
         },
     );
 
-    let theta_s =
-        LFFoldingProver::<R, PoseidonTranscript<R, CS>>::get_thetas(&f_hat_mles, &r_0).unwrap();
-    let eta_s = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::get_etas(&mz_mles, &r_0).unwrap();
-    let rho_s = (0..ccs.s)
-        .map(|_| R::CoefficientRepresentation::rand(&mut test_rng()))
-        .collect::<Vec<_>>();
     group.bench_with_input(
         BenchmarkId::new(
             "Folding compute v0, u0, x0, cm0",
@@ -402,7 +408,6 @@ fn folding_operations<
             })
         },
     );
-    let f_0 = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::compute_f_0(&rho_s, &wit_s);
     group.bench_with_input(
         BenchmarkId::new(
             "Folding compute w0",
