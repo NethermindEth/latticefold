@@ -210,28 +210,24 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
             // start with eq_b
             let mut eval = vals[4];
 
-            let f_i_squared = f_i * f_i;
-
             let products: NTT = NTT::from(
-                f_i_squared
-                    .coeffs()
+                f_i.coeffs()
                     .iter()
-                    .map(|f_i_squared_coeff| {
-                        if f_i_squared_coeff.is_zero() {
+                    .map(|f_i_coeff| {
+                        if f_i_coeff.is_zero() {
                             return NTT::BaseRing::zero();
                         }
-                        (1..<P>::B_SMALL)
-                            .map(|b| {
-                                *f_i_squared_coeff - NTT::BaseRing::from(b as u128 * b as u128)
-                            })
-                            .product()
+                        let f_i_coeff_squared = *f_i_coeff * f_i_coeff;
+                        let squared_products: NTT::BaseRing = (1..<P>::B_SMALL)
+                            .map(|b| f_i_coeff_squared - NTT::BaseRing::from(b as u128 * b as u128))
+                            .product();
+                        squared_products * f_i_coeff
                     })
                     .collect::<Vec<NTT::BaseRing>>(),
             );
 
             eval *= products;
 
-            eval *= f_i;
             inter_result += eval;
             inter_result *= mu
         }
