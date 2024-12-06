@@ -59,15 +59,15 @@ where
     let single_mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
         .M
         .iter()
-        .map(|m| DenseMultilinearExtension::from_slice(log_m, &mat_vec_mul(m, &z).unwrap()))
+        .map(|m| DenseMultilinearExtension::from_slice(log_m, &mat_vec_mul(m, &z).expect("Matrix-vector multiplication failed")))
         .collect();
 
-    let u = compute_u(&single_mz_mles, &r).unwrap();
+    let u = compute_u(&single_mz_mles, &r).expect("Failed to compute u");
 
     let v = evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, DecompositionError>(
         &wit.f_hat, &r,
     )
-    .unwrap();
+    .expect("Failed to evaluate MLEs");
 
     let lcccs = LCCCS {
         r,
@@ -107,7 +107,7 @@ where
                 ccs.s,
                 cfg_iter!(ccs.M).map(|m| mat_vec_mul(m, &z)),
             )
-            .unwrap();
+            .expect("Failed to convert to MLEs");
 
             mles
         })
@@ -115,6 +115,7 @@ where
 
     (lcccs, ccs, wit, wit_s, point_r, mz_mles, scheme)
 }
+
 
 fn decomposition_operations<
     const C: usize,
