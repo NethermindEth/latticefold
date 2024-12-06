@@ -1,6 +1,6 @@
 #![allow(incomplete_features)]
 use ark_ff::Zero;
-use ark_std::{cfg_into_iter, cfg_iter};
+use ark_std::cfg_iter;
 use ark_std::{test_rng, time::Duration, UniformRand};
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
@@ -9,17 +9,15 @@ use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
 use latticefold::arith::r1cs::get_test_dummy_z_split;
 use latticefold::arith::utils::mat_vec_mul;
-use latticefold::arith::{Instance, Witness, CCCS, CCS, LCCCS};
+use latticefold::arith::{Witness, CCS, LCCCS};
 use latticefold::commitment::{AjtaiCommitmentScheme, Commitment};
 use latticefold::decomposition_parameters::DecompositionParams;
 use latticefold::nifs::decomposition::utils::{
     decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back,
 };
-use latticefold::nifs::decomposition::LFDecompositionProver;
-use latticefold::nifs::error::{DecompositionError, LinearizationError};
-use latticefold::nifs::linearization::utils::{compute_u, prepare_lin_sumcheck_polynomial};
-use latticefold::transcript::poseidon::PoseidonTranscript;
-use latticefold::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles, to_mles_err};
+use latticefold::nifs::error::DecompositionError;
+use latticefold::nifs::linearization::utils::compute_u;
+use latticefold::utils::mle_helpers::{evaluate_mles, to_mles_err};
 use lattirust_poly::mle::DenseMultilinearExtension;
 use std::fmt::Debug;
 use utils::wit_and_ccs_gen;
@@ -36,10 +34,11 @@ fn generate_decomposition_args<
     const W: usize,
 >() -> (
     LCCCS<C, RqNTT>,
-    PoseidonTranscript<RqNTT, CS>,
-    PoseidonTranscript<RqNTT, CS>,
     CCS<RqNTT>,
     Witness<RqNTT>,
+    Vec<Witness<RqNTT>>,
+    Vec<RqNTT>,
+    Vec<Vec<DenseMultilinearExtension<RqNTT>>>,
     AjtaiCommitmentScheme<C, W, RqNTT>,
 )
 where
@@ -57,13 +56,13 @@ where
 
     let log_m = ccs.s;
     let r: Vec<RqNTT> = (0..log_m).map(|_| RqNTT::rand(&mut rng)).collect();
-    let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
+    let single_mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
         .M
         .iter()
-        .map(|M| DenseMultilinearExtension::from_slice(log_m, &mat_vec_mul(M, &z).unwrap()))
+        .map(|m| DenseMultilinearExtension::from_slice(log_m, &mat_vec_mul(m, &z).unwrap()))
         .collect();
 
-    let u = compute_u(&Mz_mles, &r).unwrap();
+    let u = compute_u(&single_mz_mles, &r).unwrap();
 
     let v = evaluate_mles::<RqNTT, &DenseMultilinearExtension<RqNTT>, _, DecompositionError>(
         &wit.f_hat, &r,
@@ -79,35 +78,44 @@ where
         h: RqNTT::one(),
     };
 
-    (
-        lcccs,
-        PoseidonTranscript::<RqNTT, CS>::default(),
-        PoseidonTranscript::<RqNTT, CS>::default(),
-        ccs,
-        wit,
-        scheme,
-    )
+    let wit_s = decompose_B_vec_into_k_vec::<RqNTT, DP>(&wit.f_coeff)
+        .into_iter()
+        .map(Witness::from_f_coeff::<DP>)
+        .collect::<Vec<_>>();
+    let point_r = (0..ccs.s)
+        .map(|_| RqNTT::rand(&mut test_rng()))
+        .collect::<Vec<RqNTT>>();
+
+    let x_s = {
+        let mut x_ccs = lcccs.x_w.clone();
+        x_ccs.push(lcccs.h);
+        decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, DP>(x_ccs)
+    };
+    let mz_mles = cfg_iter!(wit_s)
+        .enumerate()
+        .map(|(i, wit)| {
+            let z: Vec<_> = {
+                let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
+
+                z.extend_from_slice(&x_s[i]);
+                z.extend_from_slice(&wit.w_ccs);
+
+                z
+            };
+
+            let mles = to_mles_err::<_, _, DecompositionError, _>(
+                ccs.s,
+                cfg_iter!(ccs.M).map(|m| mat_vec_mul(m, &z)),
+            )
+            .unwrap();
+
+            mles
+        })
+        .collect::<Vec<Vec<_>>>();
+
+    (lcccs, ccs, wit, wit_s, point_r, mz_mles, scheme)
 }
 
-fn setup_test_environment<
-    RqNTT: SuitableRing,
-    DP: DecompositionParams,
-    const C: usize,
-    const W: usize,
-    const WIT_LEN: usize,
->() -> (
-    Witness<RqNTT>,
-    CCCS<C, RqNTT>,
-    CCS<RqNTT>,
-    AjtaiCommitmentScheme<C, W, RqNTT>,
-) {
-    let mut rng = test_rng();
-    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
-    let r1cs_rows = 1 + WIT_LEN + 1;
-    let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
-
-    (wit, cm_i, ccs, scheme)
-}
 
 fn decomposition_operations<
     const C: usize,
@@ -119,7 +127,8 @@ fn decomposition_operations<
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
-    let (lcccs, _, _, ccs, wit, scheme) = generate_decomposition_args::<R, CS, DP, WIT_LEN, C, W>();
+    let (lcccs, _, wit, wit_s, point_r, mz_mles, scheme) =
+        generate_decomposition_args::<R, CS, DP, WIT_LEN, C, W>();
 
     group.bench_with_input(
         BenchmarkId::new(
@@ -170,11 +179,6 @@ fn decomposition_operations<
         },
     );
 
-    let wit_s = decompose_B_vec_into_k_vec::<R, DP>(&wit.f_coeff)
-        .into_iter()
-        .map(Witness::from_f_coeff::<DP>)
-        .collect::<Vec<_>>();
-
     group.bench_with_input(
         BenchmarkId::new(
             "Commit witnesses",
@@ -210,9 +214,6 @@ fn decomposition_operations<
         },
     );
 
-    let point_r = (0..ccs.s)
-        .map(|_| R::rand(&mut test_rng()))
-        .collect::<Vec<R>>();
     group.bench_with_input(
         BenchmarkId::new(
             "compute v's",
@@ -236,31 +237,6 @@ fn decomposition_operations<
         },
     );
 
-    let x_s = {
-        let mut x_ccs = lcccs.x_w.clone();
-        x_ccs.push(lcccs.h);
-        decompose_big_vec_into_k_vec_and_compose_back::<R, DP>(x_ccs)
-    };
-    let mz_mles = cfg_iter!(wit_s)
-        .enumerate()
-        .map(|(i, wit)| {
-            let z: Vec<_> = {
-                let mut z = Vec::with_capacity(x_s[i].len() + wit.w_ccs.len());
-
-                z.extend_from_slice(&x_s[i]);
-                z.extend_from_slice(&wit.w_ccs);
-
-                z
-            };
-
-            let mles = to_mles_err::<_, _, DecompositionError, _>(
-                ccs.s,
-                cfg_iter!(ccs.M).map(|M| mat_vec_mul(M, &z)),
-            ).unwrap();
-
-            mles
-        })
-        .collect::<Vec<Vec<_>>>();
     group.bench_with_input(
         BenchmarkId::new(
             "compute u's",
