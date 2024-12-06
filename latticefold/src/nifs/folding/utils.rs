@@ -230,14 +230,6 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
             );
 
             eval *= products;
-            // for b in 1..<P>::B_SMALL {
-            //     let multiplicand = f_i_squared - NTT::from(b as u128 * b as u128);
-            //     if multiplicand.is_zero() {
-            //         eval = NTT::zero();
-            //         break;
-            //     }
-            //     eval *= multiplicand
-            // }
 
             eval *= f_i;
             inter_result += eval;
