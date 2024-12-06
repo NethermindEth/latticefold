@@ -58,9 +58,8 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         degree: usize,
         comb_fn: impl Fn(&[R]) -> R + Sync + Send,
     ) -> (Proof<R>, ProverState<R>) {
-        // TODO: return this back
-        // transcript.absorb(&polynomial.info());
-
+        transcript.absorb(&R::from(nvars as u128));
+        transcript.absorb(&R::from(degree as u128));
         let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(mles, nvars, degree);
         let mut verifier_msg = None;
         let mut prover_msgs = Vec::with_capacity(nvars);
@@ -90,8 +89,8 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         claimed_sum: R,
         proof: &Proof<R>,
     ) -> Result<SubClaim<R>, SumCheckError<R>> {
-        // TODO: bring this back
-        //transcript.absorb(polynomial_info);
+        transcript.absorb(&R::from(nvars as u128));
+        transcript.absorb(&R::from(degree as u128));
 
         let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(nvars, degree);
         for i in 0..nvars {
