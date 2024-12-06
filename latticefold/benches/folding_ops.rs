@@ -66,7 +66,7 @@ where
             &mut prover_transcript,
             &ccs,
         )
-        .unwrap();
+        .expect("Linearization proof generation failed");
 
     let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify(
         &cm_i,
@@ -74,7 +74,7 @@ where
         &mut verifier_transcript,
         &ccs,
     )
-    .unwrap();
+    .expect("Linearization verification failed");
 
     let (mz_mles, _, wit_vec, decomposition_proof) =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<W, C, DP>(
@@ -84,7 +84,7 @@ where
             &ccs,
             &scheme,
         )
-        .unwrap();
+        .expect("Decomposition proof generation failed");
 
     let lcccs_vec = LFDecompositionVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify::<C, DP>(
         &lcccs,
@@ -92,7 +92,7 @@ where
         &mut verifier_transcript,
         &ccs,
     )
-    .unwrap();
+    .expect("Decomposition verification failed");
 
     let (lcccs, mut wit_s, mz_mles) = {
         let mut lcccs = lcccs_vec.clone();
@@ -112,7 +112,7 @@ where
     let alpha_s = (0..2 * DP::K)
         .map(|_| RqNTT::rand(&mut test_rng()))
         .collect::<Vec<_>>();
-    let beta_s = (0..2 * DP::K)
+    let beta_s = (0..ccs.s)
         .map(|_| RqNTT::rand(&mut test_rng()))
         .collect::<Vec<_>>();
     let zeta_s = (0..2 * DP::K)
@@ -130,13 +130,13 @@ where
             &mz_mles[0..DP::K],
             &zeta_s[0..DP::K],
         )
-        .unwrap();
+        .expect("Failed to calculate first prechallenged_m_s");
     let prechallenged_m_s_2 =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::calculate_challenged_mz_mle(
             &mz_mles[DP::K..2 * DP::K],
             &zeta_s[DP::K..2 * DP::K],
         )
-        .unwrap();
+        .expect("Failed to calculate second prechallenged_m_s");
     let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
         &f_hat_mles,
@@ -147,19 +147,26 @@ where
         &beta_s,
         &mu_s,
     )
-    .unwrap();
+    .expect("Failed to create sumcheck polynomial");
+
     let r_0 = (0..ccs.s)
         .map(|_| RqNTT::rand(&mut test_rng()))
         .collect::<Vec<_>>();
+
     let theta_s =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_thetas(&f_hat_mles, &r_0)
-            .unwrap();
+            .expect("Failed to get thetas");
+
     let eta_s =
-        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&mz_mles, &r_0).unwrap();
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&mz_mles, &r_0)
+            .expect("Failed to get etas");
+
     let rho_s = (0..ccs.s)
         .map(|_| RqNTT::CoefficientRepresentation::rand(&mut test_rng()))
         .collect::<Vec<_>>();
+
     let f_0 = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_f_0(&rho_s, &wit_s);
+
     (
         lcccs,
         wit_s,
@@ -191,13 +198,13 @@ fn folding_operations<
         wit_s,
         ccs,
         mz_mles,
-        (alpha_s, beta_s, zeta_s, mu_s),
+        alphas_betas_zetas_mus,
         f_hat_mles,
         ris,
-        (prechallenged_m_s_1, prechallenged_m_s_2),
-        (g_mles, g_degree),
+        prechallenged_m_s,
+        g_data,
         r_0,
-        (theta_s, eta_s, rho_s),
+        theta_eta_rho,
         f_0,
     ) = setup_test_environment::<R, CS, DP, C, W, WIT_LEN>();
 
@@ -215,7 +222,7 @@ fn folding_operations<
                 DP::K
             ),
         ),
-        &(mz_mles.clone(), zeta_s.clone()),
+        &(mz_mles.clone(), alphas_betas_zetas_mus.2.clone()),
         |bench, (mz_mles, zeta_s)| {
             bench.iter(|| {
                 let _ =
@@ -250,41 +257,29 @@ fn folding_operations<
         &(
             ccs.s,
             f_hat_mles.clone(),
-            alpha_s.clone(),
-            prechallenged_m_s_1.clone(),
-            prechallenged_m_s_2.clone(),
+            alphas_betas_zetas_mus.clone(),
+            prechallenged_m_s.clone(),
             ris.clone(),
-            beta_s.clone(),
-            mu_s.clone(),
         ),
-        |bench,
-         (
-            log_m,
-            f_hat_mles,
-            alpha_s,
-            prechallenged_m_s_1,
-            prechallenged_m_s_2,
-            ris,
-            beta_s,
-            mu_s,
-        )| {
+        |bench, (log_m, f_hat_mles, alphas_betas_zetas_mus, prechallenged_m_s, ris)| {
             bench.iter(|| {
                 let _ = create_sumcheck_polynomial::<_, DP>(
                     *log_m,
                     f_hat_mles,
-                    alpha_s,
-                    prechallenged_m_s_1,
-                    prechallenged_m_s_2,
+                    &alphas_betas_zetas_mus.0,
+                    &prechallenged_m_s.0,
+                    &prechallenged_m_s.1,
                     ris,
-                    beta_s,
-                    mu_s,
+                    &alphas_betas_zetas_mus.1,
+                    &alphas_betas_zetas_mus.3,
                 )
                 .unwrap();
             })
         },
     );
 
-    let comb_fn = |vals: &[R]| -> R { sumcheck_polynomial_comb_fn::<R, DP>(vals, &mu_s) };
+    let comb_fn =
+        |vals: &[R]| -> R { sumcheck_polynomial_comb_fn::<R, DP>(vals, &alphas_betas_zetas_mus.3) };
     group.bench_with_input(
         BenchmarkId::new(
             "Folding sumcheck",
@@ -300,17 +295,16 @@ fn folding_operations<
         ),
         &(
             PoseidonTranscript::<R, CS>::default(),
-            g_mles.clone(),
+            g_data.clone(),
             ccs.s,
-            g_degree,
             comb_fn,
         ),
-        |bench, (transcript, g_mles, log_m, g_degree, comb_fn)| {
+        |bench, (transcript, g_data, log_m, comb_fn)| {
             bench.iter_batched(
                 || transcript.clone(),
                 |mut t| {
                     let _ = MLSumcheck::prove_as_subprotocol(
-                        &mut t, &g_mles, *log_m, *g_degree, comb_fn,
+                        &mut t, &g_data.0, *log_m, g_data.1, comb_fn,
                     );
                 },
                 criterion::BatchSize::LargeInput,
@@ -375,16 +369,16 @@ fn folding_operations<
                 DP::K
             ),
         ),
-        &(
-            rho_s.clone(),
-            theta_s.clone(),
-            cm_i_s.clone(),
-            eta_s.clone(),
-            ccs.clone(),
-        ),
-        |bench, (rho_s, theta_s, cm_i_s, eta_s, ccs)| {
+        &(theta_eta_rho.clone(), cm_i_s.clone(), ccs.clone()),
+        |bench, (theta_eta_rho, cm_i_s, ccs)| {
             bench.iter(|| {
-                let _ = compute_v0_u0_x0_cm_0(rho_s, theta_s, cm_i_s, eta_s, ccs);
+                let _ = compute_v0_u0_x0_cm_0(
+                    &theta_eta_rho.2,
+                    &theta_eta_rho.0,
+                    cm_i_s,
+                    &theta_eta_rho.1,
+                    ccs,
+                );
             })
         },
     );
@@ -401,7 +395,7 @@ fn folding_operations<
                 DP::K
             ),
         ),
-        &(rho_s.clone(), wit_s.clone()),
+        &(theta_eta_rho.2.clone(), wit_s.clone()),
         |bench, (rho_s, wit_s)| {
             bench.iter(|| {
                 let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::compute_f_0(rho_s, wit_s);
