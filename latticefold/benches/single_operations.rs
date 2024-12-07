@@ -1,10 +1,24 @@
 #![allow(incomplete_features)]
 use ark_std::{test_rng, time::Duration, UniformRand};
-use criterion::{criterion_group, criterion_main, AxisScale, Criterion, PlotConfiguration};
+use criterion::{
+    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+};
 use cyclotomic_rings::rings::{GoldilocksRingNTT, SuitableRing};
-use lattirust_ring::PolyRing;
-use std::fmt::Debug;
+use lattirust_ring::{
+    cyclotomic_ring::{CRT, ICRT},
+    PolyRing,
+};
+use std::{fmt::Debug, vec};
 
+fn ring_crt_icrt_benchmark<R: SuitableRing>(c: &mut Criterion, ring_name: &str, nv: usize) {
+    let mut rng = rand::thread_rng();
+    let vec_ntt_form = (0..(1 << nv))
+        .map(|_| R::rand(&mut rng))
+        .collect::<Vec<R>>();
+    let vec_coeff_form = (0..(1 << nv))
+        .map(|_| R::rand(&mut rng).icrt())
+        .collect::<Vec<_>>();
+}
 fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
@@ -58,6 +72,44 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
             let _ = *a * *b;
         })
     });
+
+    for nv in 0..20 {
+        let vec_ntt_form = (0..(1 << nv))
+            .map(|_| R::rand(&mut rng))
+            .collect::<Vec<R>>();
+        let vec_coeff_form = (0..(1 << nv))
+            .map(|_| R::CoefficientRepresentation::rand(&mut rng))
+            .collect::<Vec<_>>();
+
+        group.bench_with_input(
+            BenchmarkId::new(
+                "Elementwise CRT",
+                format!("{} of size = {}", "Goldilocks", 1 << nv),
+            ),
+            &vec_coeff_form,
+            |b, input| {
+                b.iter_batched(
+                    || input.clone(),
+                    |input| CRT::elementwise_crt(input),
+                    criterion::BatchSize::SmallInput,
+                )
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new(
+                "Elementwise ICRT",
+                format!("{} of size = {}", "Goldilocks", 1 << nv),
+            ),
+            &vec_ntt_form,
+            |b, input| {
+                b.iter_batched(
+                    || input.clone(),
+                    |input| ICRT::elementwise_icrt(input),
+                    criterion::BatchSize::SmallInput,
+                )
+            },
+        );
+    }
 }
 fn single_operation_benchmarks(c: &mut Criterion) {
     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
