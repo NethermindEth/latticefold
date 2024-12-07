@@ -333,6 +333,7 @@ fn folding_operations<
             })
         },
     );
+
     group.bench_with_input(
         BenchmarkId::new(
             "Folding get eta's",
@@ -381,6 +382,7 @@ fn folding_operations<
             })
         },
     );
+
     group.bench_with_input(
         BenchmarkId::new(
             "Folding compute f0",
