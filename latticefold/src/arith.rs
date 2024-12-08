@@ -22,6 +22,7 @@ use error::CSError as Error;
 use r1cs::R1CS;
 use utils::{hadamard, mat_vec_mul, vec_add, vec_scalar_mul};
 
+pub mod ccs;
 pub mod error;
 pub mod r1cs;
 pub mod utils;
