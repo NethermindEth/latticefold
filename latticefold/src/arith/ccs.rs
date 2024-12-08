@@ -1,4 +1,4 @@
-use ark_std::log2;
+use ark_std::{log2, vec::Vec};
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
@@ -121,6 +121,7 @@ pub fn create_dummy_cubing_sparse_matrix<R: Ring>(
     }
     matrix
 }
+#[allow(clippy::upper_case_acronyms)]
 #[cfg(test)]
 mod tests {
     use cyclotomic_rings::rings::GoldilocksRingNTT;
