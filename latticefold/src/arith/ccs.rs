@@ -2,7 +2,10 @@ use ark_std::log2;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
-use super::{r1cs::create_dummy_identity_sparse_matrix, CCS};
+use super::{
+    r1cs::{create_dummy_identity_sparse_matrix, to_F_matrix, to_F_vec},
+    CCS,
+};
 
 pub fn get_test_dummy_degree_three_ccs_non_scalar<
     R: Ring,
@@ -32,6 +35,61 @@ pub fn get_test_dummy_degree_three_ccs_non_scalar<
     }
 }
 
+pub fn get_test_degree_three_z<R: Ring>(input: usize) -> Vec<R> {
+    // z = (io, 1, w)
+    to_F_vec(vec![
+        input, // io
+        1,
+        input * input * input,             // x^3
+        input * input * input + input,     // x^3 + x
+        input * input * input + input + 5, // x^3 +x + 5
+    ])
+}
+
+pub fn get_test_degree_three_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
+    let z = get_test_degree_three_z(input);
+    (z[1], vec![z[0]], z[2..].to_vec())
+}
+
+pub fn get_test_degree_three_ccs<R: Ring>() -> CCS<R> {
+    // Degree 3 CCS for: x^3 + x + 5 = y
+    let A = to_F_matrix::<R>(vec![
+        vec![1, 0, 0, 0, 0],
+        vec![1, 0, 1, 0, 0],
+        vec![0, 5, 0, 1, 0],
+    ]);
+    let B = to_F_matrix::<R>(vec![
+        vec![1, 0, 0, 0, 0],
+        vec![0, 1, 0, 0, 0],
+        vec![0, 1, 0, 0, 0],
+    ]);
+
+    let C = to_F_matrix::<R>(vec![
+        vec![1, 0, 0, 0, 0],
+        vec![0, 1, 0, 0, 0],
+        vec![0, 1, 0, 0, 0],
+    ]);
+    let D = to_F_matrix::<R>(vec![
+        vec![0, 0, 1, 0, 0],
+        vec![0, 0, 0, 1, 0],
+        vec![0, 0, 0, 0, 1],
+    ]);
+
+    CCS {
+        m: 3,
+        n: 5,
+        l: 1,
+        t: 4,
+        q: 2,
+        d: 3,
+        s: log2(3) as usize,
+        s_prime: log2(5) as usize,
+        M: vec![A, B, C, D],
+        S: vec![vec![0, 1, 2], vec![3]],
+        c: vec![R::one(), R::one().neg()],
+    }
+}
+
 // Takes a vector and returns a matrix that will square the vector
 pub fn create_dummy_cubing_sparse_matrix<R: Ring>(
     rows: usize,
@@ -52,4 +110,21 @@ pub fn create_dummy_cubing_sparse_matrix<R: Ring>(
         row.push((witness[i] * witness[i], i));
     }
     matrix
+}
+#[cfg(test)]
+mod tests {
+    use cyclotomic_rings::rings::GoldilocksRingNTT;
+
+    use crate::arith::{ccs::get_test_degree_three_z, Arith, CCS};
+
+    use super::get_test_degree_three_ccs;
+    type NTT = GoldilocksRingNTT;
+
+    #[test]
+    fn test_degree_three_ccs() {
+        let input = 5;
+        let ccs: CCS<NTT> = get_test_degree_three_ccs();
+        let z = get_test_degree_three_z(input);
+        assert!(ccs.check_relation(&z).is_ok())
+    }
 }
