@@ -62,6 +62,7 @@ pub fn compute_u<NTT: OverField>(
 ///
 pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     c: &[NTT],
+    d: &usize,
     M_mles: &[DenseMultilinearExtension<NTT>],
     S: &[Vec<usize>],
     beta_s: &[NTT],
@@ -83,7 +84,7 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
 
     mles.push(build_eq_x_r(beta_s)?);
 
-    Ok((mles, 3))
+    Ok((mles, d + 1))
 }
 
 pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing>(vals: &[NTT], ccs: &CCS<NTT>) -> NTT {

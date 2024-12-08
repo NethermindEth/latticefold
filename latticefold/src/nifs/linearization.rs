@@ -98,7 +98,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
         // Construct the sumcheck polynomial g
         let (g_mles, g_degree) =
-            prepare_lin_sumcheck_polynomial(&ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+            prepare_lin_sumcheck_polynomial(&ccs.c, &ccs.d, &Mz_mles, &ccs.S, &beta_s)?;
 
         Ok((g_mles, g_degree, Mz_mles))
     }
