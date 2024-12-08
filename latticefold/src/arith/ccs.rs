@@ -90,6 +90,16 @@ pub fn get_test_degree_three_ccs<R: Ring>() -> CCS<R> {
     }
 }
 
+pub fn get_test_degree_three_ccs_padded<R: Ring>(W: usize, L: usize) -> CCS<R> {
+    let mut ccs = get_test_degree_three_ccs();
+
+    ccs.m = W;
+    ccs.s = log2(W) as usize;
+    let len = usize::max((ccs.n - ccs.l - 1) * L, ccs.m).next_power_of_two();
+    ccs.pad_rows_to(len);
+    ccs
+}
+
 // Takes a vector and returns a matrix that will square the vector
 pub fn create_dummy_cubing_sparse_matrix<R: Ring>(
     rows: usize,
