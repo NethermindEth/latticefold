@@ -30,10 +30,8 @@ fn setup_test_environment<
     CCS<RqNTT>,
     AjtaiCommitmentScheme<C, W, RqNTT>,
 ) {
-    let mut rng = test_rng();
-    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
     let r1cs_rows = 1 + WIT_LEN + 1;
-    let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
+    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
 
     (wit, cm_i, ccs, scheme)
 }
@@ -51,10 +49,6 @@ fn linearization_operations<
     let mut rng = test_rng();
     let (wit, cm_i, ccs, _) = setup_test_environment::<R, DP, C, W, WIT_LEN>();
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
-
-    // Prepare MLEs
-    let mz_mles = calculate_Mz_mles::<R, LinearizationError<R>>(&ccs, &z_ccs).unwrap();
-    let beta_s = (0..ccs.s).map(|_| R::rand(&mut rng)).collect::<Vec<R>>();
 
     // MZ mles
     group.bench_with_input(
@@ -94,13 +88,13 @@ fn linearization_operations<
                 DP::K
             ),
         ),
-        &(ccs.clone(), mz_mles, beta_s),
-        |bench, (ccs, mz_mles, beta_s)| {
+        &(ccs.clone(), z_ccs.clone()),
+        |bench, (ccs, z_ccs)| {
             bench.iter(|| {
                 // Construct the sumcheck polynomial g
                 let _ =
                     LFLinearizationProver::<R, PoseidonTranscript<R, CS>>::construct_polynomial_g(
-                        &z_ccs,
+                        z_ccs,
                         &mut PoseidonTranscript::<R, CS>::default(),
                         ccs,
                     )
@@ -110,13 +104,13 @@ fn linearization_operations<
     );
 
     let point_r = (0..ccs.s).map(|_| R::rand(&mut rng)).collect::<Vec<R>>();
-    let Mz_mles = calculate_Mz_mles::<R, LinearizationError<R>>(&ccs, &z_ccs).unwrap();
+    let mz_mles = calculate_Mz_mles::<R, LinearizationError<R>>(&ccs, &z_ccs).unwrap();
     group.bench_with_input(
         BenchmarkId::new("Evaluate U and V", format!("Kappa={}, W_CCS={}, W={}, L={}, B={}, B_SMALL={}, K={}", C, WIT_LEN, W, DP::L, DP::B, DP::B_SMALL, DP::K)),
-        &(wit.clone(), point_r.clone(), Mz_mles.clone()),
-        |bench, (wit, point_r, Mz_mles)| {
+        &(wit.clone(), point_r.clone(), mz_mles.clone()),
+        |bench, (wit, point_r, mz_mles)| {
             bench.iter(|| {
-                let _ = LFLinearizationProver::<R, PoseidonTranscript<R, CS>>::compute_evaluation_vectors(wit, point_r, &Mz_mles).expect("Failed to compute evaluation vectors");
+                let _ = LFLinearizationProver::<R, PoseidonTranscript<R, CS>>::compute_evaluation_vectors(wit, point_r, &mz_mles).expect("Failed to compute evaluation vectors");
             })
         },
     );
