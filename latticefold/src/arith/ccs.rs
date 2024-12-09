@@ -1,4 +1,5 @@
 use ark_std::{log2, vec::Vec};
+use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;
 use lattirust_ring::Ring;
 
@@ -36,14 +37,39 @@ pub fn get_test_dummy_degree_three_ccs_non_scalar<
 }
 
 pub fn get_test_degree_three_z<R: Ring>(input: usize) -> Vec<R> {
-    // z = (io, 1, w)
+    // z = (x, 1, w)
     to_F_vec(vec![
-        input, // io
+        input, // x
         1,
         input * input * input,             // x^3
         input * input * input + input,     // x^3 + x
         input * input * input + input + 5, // x^3 +x + 5
     ])
+}
+
+pub fn get_test_degree_three_z_non_scalar<R: SuitableRing>() -> Vec<R> {
+    let mut res = Vec::new();
+    for input in 0..R::dimension() {
+        // z = (io, 1, w)
+        res.push(to_F_vec::<R::BaseRing>(vec![
+            input, // x
+            1,
+            input * input * input,             // x^3
+            input * input * input + input,     // x^3 + x
+            input * input * input + input + 5, // x^3 +x + 5
+        ]))
+    }
+
+    let mut ret: Vec<R> = Vec::new();
+    for j in 0..res[0].len() {
+        let mut vec = Vec::new();
+        for witness in &res {
+            vec.push(witness[j]);
+        }
+        ret.push(R::from(vec));
+    }
+
+    ret
 }
 
 pub fn get_test_degree_three_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
@@ -126,7 +152,10 @@ pub fn create_dummy_cubing_sparse_matrix<R: Ring>(
 mod tests {
     use cyclotomic_rings::rings::GoldilocksRingNTT;
 
-    use crate::arith::{ccs::get_test_degree_three_z, Arith, CCS};
+    use crate::arith::{
+        ccs::{get_test_degree_three_z, get_test_degree_three_z_non_scalar},
+        Arith, CCS,
+    };
 
     use super::get_test_degree_three_ccs;
     type NTT = GoldilocksRingNTT;
@@ -136,6 +165,13 @@ mod tests {
         let input = 5;
         let ccs: CCS<NTT> = get_test_degree_three_ccs();
         let z = get_test_degree_three_z(input);
+        assert!(ccs.check_relation(&z).is_ok())
+    }
+
+    #[test]
+    fn test_degree_three_ccs_non_scalar() {
+        let ccs: CCS<NTT> = get_test_degree_three_ccs();
+        let z = get_test_degree_three_z_non_scalar();
         assert!(ccs.check_relation(&z).is_ok())
     }
 }
