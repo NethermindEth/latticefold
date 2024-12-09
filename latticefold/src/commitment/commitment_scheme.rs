@@ -75,7 +75,9 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
             .map(|row| {
                 row.iter()
                     .zip(f.iter())
-                    .fold(NTT::zero(), |acc, (row_j, f_j)| acc + *row_j * f_j)
+                    .fold(NTT::zero(), |acc, (row_j, f_j)| {
+                        acc + (*row_j).mul_unchecked(*f_j)
+                    })
             })
             .collect();
 
