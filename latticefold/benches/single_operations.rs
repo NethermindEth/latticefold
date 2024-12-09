@@ -73,6 +73,18 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
         })
     });
 
+    group.bench_with_input("CRT", &a.icrt(), |bench, a| {
+        bench.iter(|| {
+            let _ = a.crt();
+        })
+    });
+
+    group.bench_with_input("ICRT", &a, |bench, a| {
+        bench.iter(|| {
+            let _ = a.icrt();
+        })
+    });
+
     for nv in 0..20 {
         let vec_ntt_form = (0..(1 << nv))
             .map(|_| R::rand(&mut rng))
