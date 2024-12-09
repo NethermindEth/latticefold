@@ -1,3 +1,6 @@
+use crate::arith::ccs::{
+    get_test_degree_three_ccs_padded, get_test_degree_three_z_non_scalar_split,
+};
 use crate::arith::{CCS, LCCCS};
 use crate::ark_base::Vec;
 use crate::decomposition_parameters::test_params::{
@@ -15,7 +18,7 @@ use crate::nifs::FoldingProof;
 use crate::transcript::{Transcript, TranscriptWithShortChallenges};
 use crate::utils::sumcheck::MLSumcheck;
 use crate::{
-    arith::{r1cs::get_test_z_ntt_split, tests::get_test_ccs, Witness, CCCS},
+    arith::{Witness, CCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     nifs::{
@@ -49,7 +52,7 @@ use lattirust_ring::Ring;
 use num_traits::{One, Zero};
 
 const C: usize = 4;
-const WIT_LEN: usize = 4;
+const WIT_LEN: usize = 3;
 
 fn setup_test_environment<RqNTT, CS, DP, const C: usize, const W: usize>(
     generate_proof: bool,
@@ -66,10 +69,10 @@ where
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
-    let ccs = get_test_ccs::<RqNTT>(W, DP::L);
+    let ccs = get_test_degree_three_ccs_padded::<RqNTT>(W, DP::L);
 
     let mut rng = test_rng();
-    let (_, x_ccs, w_ccs) = get_test_z_ntt_split::<RqNTT>();
+    let (_, x_ccs, w_ccs) = get_test_degree_three_z_non_scalar_split();
 
     let scheme = AjtaiCommitmentScheme::rand(&mut rng);
 

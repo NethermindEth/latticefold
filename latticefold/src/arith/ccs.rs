@@ -77,6 +77,11 @@ pub fn get_test_degree_three_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R
     (z[1], vec![z[0]], z[2..].to_vec())
 }
 
+pub fn get_test_degree_three_z_non_scalar_split<R: SuitableRing>() -> (R, Vec<R>, Vec<R>) {
+    let z = get_test_degree_three_z_non_scalar();
+    (z[1], vec![z[0]], z[2..].to_vec())
+}
+
 pub fn get_test_degree_three_ccs<R: Ring>() -> CCS<R> {
     // Degree 3 CCS for: x^3 + x + 5 = y
     let A = to_F_matrix::<R>(vec![
