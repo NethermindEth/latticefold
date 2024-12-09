@@ -159,10 +159,11 @@ mod tests {
 
     use crate::arith::{
         ccs::{get_test_degree_three_z, get_test_degree_three_z_non_scalar},
+        r1cs::get_test_dummy_z_split_ntt,
         Arith, CCS,
     };
 
-    use super::get_test_degree_three_ccs;
+    use super::{get_test_degree_three_ccs, get_test_dummy_degree_three_ccs_non_scalar};
     type NTT = GoldilocksRingNTT;
 
     #[test]
@@ -177,6 +178,15 @@ mod tests {
     fn test_degree_three_ccs_non_scalar() {
         let ccs: CCS<NTT> = get_test_degree_three_ccs();
         let z = get_test_degree_three_z_non_scalar();
+        assert!(ccs.check_relation(&z).is_ok())
+    }
+    #[test]
+    fn test_degree_three_dummy_ccs_non_scalar() {
+        let (one, x_ccs, w_ccs) = get_test_dummy_z_split_ntt::<NTT, 1, 2048>();
+        let mut z = vec![one];
+        z.extend(&x_ccs);
+        z.extend(&w_ccs);
+        let ccs = get_test_dummy_degree_three_ccs_non_scalar::<NTT, 1, 2048>(z.len(), &z);
         assert!(ccs.check_relation(&z).is_ok())
     }
 }
