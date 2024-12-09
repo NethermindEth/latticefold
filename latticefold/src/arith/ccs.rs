@@ -12,28 +12,33 @@ pub fn get_test_dummy_degree_three_ccs_non_scalar<
     R: Ring,
     const X_LEN: usize,
     const WIT_LEN: usize,
+    const W: usize,
 >(
-    rows: usize,
     witness: &[R],
+    L: usize,
+    n_rows: usize,
 ) -> CCS<R> {
-    let A = create_dummy_identity_sparse_matrix(rows, X_LEN + WIT_LEN + 1);
+    let A = create_dummy_identity_sparse_matrix(n_rows, X_LEN + WIT_LEN + 1);
     let B = A.clone();
     let C = A.clone();
-    let D = create_dummy_cubing_sparse_matrix(rows, X_LEN + WIT_LEN + 1, witness);
+    let D = create_dummy_cubing_sparse_matrix(n_rows, X_LEN + WIT_LEN + 1, witness);
 
-    CCS {
-        m: rows,
+    let mut ccs = CCS {
+        m: W,
         n: X_LEN + WIT_LEN + 1,
         l: 1,
         t: 4,
         q: 2,
         d: 3,
-        s: log2(rows) as usize,
+        s: log2(W) as usize,
         s_prime: (X_LEN + WIT_LEN + 1),
         M: vec![A, B, C, D],
         S: vec![vec![0, 1, 2], vec![3]],
         c: vec![R::one(), R::one().neg()],
-    }
+    };
+    let len = usize::max((ccs.n - ccs.l - 1) * L, ccs.m).next_power_of_two();
+    ccs.pad_rows_to(len);
+    ccs
 }
 
 pub fn get_test_degree_three_z<R: Ring>(input: usize) -> Vec<R> {
@@ -186,7 +191,7 @@ mod tests {
         let mut z = vec![one];
         z.extend(&x_ccs);
         z.extend(&w_ccs);
-        let ccs = get_test_dummy_degree_three_ccs_non_scalar::<NTT, 1, 2048>(z.len(), &z);
+        let ccs = get_test_dummy_degree_three_ccs_non_scalar::<NTT, 1, 2048, 2050>(&z, 1, 2050);
         assert!(ccs.check_relation(&z).is_ok())
     }
 }
