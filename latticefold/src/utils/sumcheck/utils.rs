@@ -27,7 +27,7 @@ pub fn rand_poly<R: Ring>(
     rng: &mut impl RngCore,
 ) -> Result<
     (
-        (Vec<RefCounter<DenseMultilinearExtension<R>>>, usize),
+        (Vec<DenseMultilinearExtension<R>>, usize),
         Vec<(R, Vec<usize>)>,
         R,
     ),
@@ -42,6 +42,10 @@ pub fn rand_poly<R: Ring>(
         let num_multiplicands = rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
         degree = num_multiplicands.max(degree);
         let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
+        let product = product
+            .into_iter()
+            .map(|p| RefCounter::into_inner(p).unwrap())
+            .collect::<Vec<_>>();
 
         let coefficient = R::rand(rng);
         mles.extend(product);
@@ -92,13 +96,11 @@ pub fn eq_eval<R: Ring>(x: &[R], y: &[R]) -> Result<R, ArithErrors> {
 ///      eq(x,y) = \prod_i=1^num_var (x_i * y_i + (1-x_i)*(1-y_i))
 /// over r, which is
 ///      eq(x,y) = \prod_i=1^num_var (x_i * r_i + (1-x_i)*(1-r_i))
-pub fn build_eq_x_r<R: Ring>(
-    r: &[R],
-) -> Result<RefCounter<DenseMultilinearExtension<R>>, ArithErrors> {
+pub fn build_eq_x_r<R: Ring>(r: &[R]) -> Result<DenseMultilinearExtension<R>, ArithErrors> {
     let evals = build_eq_x_r_vec(r)?;
     let mle = DenseMultilinearExtension::from_evaluations_vec(r.len(), evals);
 
-    Ok(RefCounter::new(mle))
+    Ok(mle)
 }
 /// This function build the eq(x, r) polynomial for any given r, and output the
 /// evaluation of eq(x, r) in its vector form.
