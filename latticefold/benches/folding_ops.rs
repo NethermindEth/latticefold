@@ -160,7 +160,7 @@ where
     let eta_s = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::get_etas(&mz_mles, &r_0)
         .expect("Failed to get etas");
 
-    let rho_s = (0..ccs.s)
+    let rho_s = (0..2 * DP::K)
         .map(|_| RqNTT::CoefficientRepresentation::rand(&mut test_rng()))
         .collect::<Vec<_>>();
 
