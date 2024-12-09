@@ -16,6 +16,34 @@ macro_rules! define_params {
 }
 
 #[macro_export]
+macro_rules! run_goldilocks_ajai_benchmarks {
+    ($group: ident) => {
+        run_single_goldilocks_benchmark!(&mut $group, 1, 32768);
+    };
+}
+
+#[macro_export]
+macro_rules! run_babybear_ajai_benchmarks {
+    ($group: ident) => {
+        run_single_babybear_benchmark!(&mut $group, 1, 32768);
+    };
+}
+
+#[macro_export]
+macro_rules! run_starkprime_ajai_benchmarks {
+    ($group: ident) => {
+        run_single_starkprime_benchmark!(&mut $group, 1, 32768);
+    };
+}
+
+#[macro_export]
+macro_rules! run_frog_ajai_benchmarks {
+    ($group: ident) => {
+        run_single_frog_benchmark!(&mut $group, 1, 32768);
+    };
+}
+
+#[macro_export]
 macro_rules! run_goldilocks_benchmarks {
     ($group: ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
