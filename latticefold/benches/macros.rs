@@ -607,10 +607,29 @@ macro_rules! run_goldilocks_decomposition_degree_three_non_scalar_benchmarks {
 
 #[macro_export]
 macro_rules! run_goldilocks_folding_benchmarks {
-    ($group:ident) => {};
+    ($group:ident) => {
+        run_single_folding_goldilocks_benchmark!(&mut $group, 9, 512, 512, 7, 2, 9);
+    };
 }
 
 #[macro_export]
 macro_rules! run_goldilocks_folding_non_scalar_benchmarks {
-    ($group:ident) => {};
+    ($group:ident) => {
+        run_single_folding_non_scalar_goldilocks_benchmark!(&mut $group, 9, 512, 512, 7, 2, 9);
+    };
+}
+
+#[macro_export]
+macro_rules! run_goldilocks_folding_degree_three_non_scalar_benchmarks {
+    ($group:ident) => {
+        run_single_folding_degree_three_non_scalar_goldilocks_benchmark!(
+            &mut $group,
+            9,
+            512,
+            512,
+            7,
+            2,
+            9
+        );
+    };
 }

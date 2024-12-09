@@ -172,7 +172,7 @@ where
     decomposition_setup::<RqNTT, CS, DP, WIT_LEN, C, W>(ccs, wit, cm_i, scheme, x_ccs, z)
 }
 
-fn setup_decomposition_degree_threenon_scalar_test_environment<
+fn setup_decomposition_degree_three_non_scalar_test_environment<
     RqNTT,
     CS,
     DP,

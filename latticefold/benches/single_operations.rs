@@ -8,17 +8,8 @@ use lattirust_ring::{
     cyclotomic_ring::{CRT, ICRT},
     PolyRing,
 };
-use std::{fmt::Debug, vec};
+use std::fmt::Debug;
 
-fn ring_crt_icrt_benchmark<R: SuitableRing>(c: &mut Criterion, ring_name: &str, nv: usize) {
-    let mut rng = rand::thread_rng();
-    let vec_ntt_form = (0..(1 << nv))
-        .map(|_| R::rand(&mut rng))
-        .collect::<Vec<R>>();
-    let vec_coeff_form = (0..(1 << nv))
-        .map(|_| R::rand(&mut rng).icrt())
-        .collect::<Vec<_>>();
-}
 fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
 ) {
