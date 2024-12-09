@@ -224,7 +224,7 @@ fn linearization_operations<
     );
 }
 
-macro_rules! run_single_linearization_goldilocks_benchmark {
+macro_rules! run_single_operations_goldilocks_benchmark {
     ($crit_group:expr, $kappa:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
@@ -234,7 +234,7 @@ macro_rules! run_single_linearization_goldilocks_benchmark {
     };
 }
 
-macro_rules! run_single_linearization_non_scalar_goldilocks_benchmark {
+macro_rules! run_single_operations_non_scalar_goldilocks_benchmark {
     ($crit_group:expr, $kappa:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
@@ -244,7 +244,7 @@ macro_rules! run_single_linearization_non_scalar_goldilocks_benchmark {
     };
 }
 
-macro_rules! run_single_linearization_degree_three_non_scalar_goldilocks_benchmark {
+macro_rules! run_single_operations_degree_three_non_scalar_goldilocks_benchmark {
     ($crit_group:expr, $kappa:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
@@ -260,7 +260,7 @@ fn single_operation_benchmarks(c: &mut Criterion) {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Single Linearization Operations Goldilocks");
         group.plot_config(plot_config.clone());
-        run_goldilocks_linearization_benchmarks!(group);
+        run_goldilocks_operations_benchmarks!(group);
     }
 
     // Goldilocks non-scalar
@@ -268,17 +268,17 @@ fn single_operation_benchmarks(c: &mut Criterion) {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Single Linearization Operations Goldilocks Non-Scalar");
         group.plot_config(plot_config.clone());
-        run_goldilocks_linearization_non_scalar_benchmarks!(group);
+        run_goldilocks_operations_non_scalar_benchmarks!(group);
     }
 
-    // Goldilocks degree three non-scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group =
-            c.benchmark_group("Single Linearization Operations Goldilocks Degree Three Non-Scalar");
-        group.plot_config(plot_config.clone());
-        run_goldilocks_linearization_degree_three_non_scalar_benchmarks!(group);
-    }
+    // // Goldilocks degree three non-scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group =
+    //         c.benchmark_group("Single Linearization Operations Goldilocks Degree Three Non-Scalar");
+    //     group.plot_config(plot_config.clone());
+    //     run_goldilocks_operations_degree_three_non_scalar_benchmarks!(group);
+    // }
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {

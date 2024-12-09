@@ -398,65 +398,65 @@ fn benchmarks_main(c: &mut Criterion) {
         run_goldilocks_non_scalar_benchmarks!(group);
     }
 
-    // BabyBear
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding BabyBear");
-        group.plot_config(plot_config.clone());
-        #[allow(clippy::identity_op)]
-        {
-            run_babybear_benchmarks!(group);
-        }
-    }
+    // // BabyBear
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Folding BabyBear");
+    //     group.plot_config(plot_config.clone());
+    //     #[allow(clippy::identity_op)]
+    //     {
+    //         run_babybear_benchmarks!(group);
+    //     }
+    // }
 
-    // BabyBear non scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding BabyBear non scalar");
-        group.plot_config(plot_config.clone());
+    // // BabyBear non scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Folding BabyBear non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_babybear_non_scalar_benchmarks!(group);
-    }
+    //     run_babybear_non_scalar_benchmarks!(group);
+    // }
 
-    // StarkPrime
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding StarkPrime");
-        group.plot_config(plot_config.clone());
+    // // StarkPrime
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Folding StarkPrime");
+    //     group.plot_config(plot_config.clone());
 
-        #[allow(clippy::identity_op)]
-        {
-            run_starkprime_benchmarks!(group);
-        }
-    }
+    //     #[allow(clippy::identity_op)]
+    //     {
+    //         run_starkprime_benchmarks!(group);
+    //     }
+    // }
 
-    // StarkPrime non scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding StarkPrime non scalar");
-        group.plot_config(plot_config.clone());
+    // // StarkPrime non scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Folding StarkPrime non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_starkprime_non_scalar_benchmarks!(group);
-    }
+    //     run_starkprime_non_scalar_benchmarks!(group);
+    // }
 
-    // Frog
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding Frog");
-        group.plot_config(plot_config.clone());
-        #[allow(clippy::identity_op)]
-        {
-            run_frog_benchmarks!(group);
-        }
-    }
+    // // Frog
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Folding Frog");
+    //     group.plot_config(plot_config.clone());
+    //     #[allow(clippy::identity_op)]
+    //     {
+    //         run_frog_benchmarks!(group);
+    //     }
+    // }
 
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Folding Frog non scalar");
-        group.plot_config(plot_config.clone());
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Folding Frog non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_frog_non_scalar_benchmarks!(group);
-    }
+    //     run_frog_non_scalar_benchmarks!(group);
+    // }
 }
 
 criterion_group!(

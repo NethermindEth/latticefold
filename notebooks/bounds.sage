@@ -36,10 +36,10 @@ def find_b_k_pairs(B):
     return [2, B.bit_length() - 1, B]
 # Primes with their corresponding d values
 params = {
-#    "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
+    "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
     "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
-#    "StarkPrime": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
-#    "Frog": {"p": 159120925213255836417, "d": 16},
+    "StarkPrime": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
+    "Frog": {"p": 159120925213255836417, "d": 16},
 #    "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
 }
 # Range of num_cols values

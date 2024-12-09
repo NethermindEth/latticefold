@@ -239,6 +239,7 @@ macro_rules! run_single_babybear_degree_three_non_scalar_benchmark {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
@@ -248,6 +249,7 @@ macro_rules! run_single_starkprime_benchmark {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
@@ -257,6 +259,7 @@ macro_rules! run_single_starkprime_non_scalar_benchmark {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_degree_three_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
@@ -319,101 +322,101 @@ fn benchmarks_main(c: &mut Criterion) {
         run_goldilocks_non_scalar_benchmarks!(group);
     }
 
-    // Godlilocks degree three non scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization Goldilocks degree three non scalar");
-        group.plot_config(plot_config.clone());
+    // // Godlilocks degree three non scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization Goldilocks degree three non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_goldilocks_degree_three_non_scalar_benchmarks!(group);
-    }
+    //     run_goldilocks_degree_three_non_scalar_benchmarks!(group);
+    // }
 
-    // BabyBear
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization BabyBear");
-        group.plot_config(plot_config.clone());
-        #[allow(clippy::identity_op)]
-        {
-            run_babybear_benchmarks!(group);
-        }
-    }
+    // // BabyBear
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization BabyBear");
+    //     group.plot_config(plot_config.clone());
+    //     #[allow(clippy::identity_op)]
+    //     {
+    //         run_babybear_benchmarks!(group);
+    //     }
+    // }
 
-    // BabyBear non scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization BabyBear non scalar");
-        group.plot_config(plot_config.clone());
+    // // BabyBear non scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization BabyBear non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_babybear_non_scalar_benchmarks!(group);
-    }
+    //     run_babybear_non_scalar_benchmarks!(group);
+    // }
 
-    // BabyBear non scalar degree three
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization BabyBear non scalar");
-        group.plot_config(plot_config.clone());
+    // // BabyBear non scalar degree three
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization BabyBear non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_babybear_degree_three_non_scalar_benchmarks!(group);
-    }
+    //     run_babybear_degree_three_non_scalar_benchmarks!(group);
+    // }
 
-    // StarkPrime
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization StarkPrime");
-        group.plot_config(plot_config.clone());
+    // // StarkPrime
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization StarkPrime");
+    //     group.plot_config(plot_config.clone());
 
-        #[allow(clippy::identity_op)]
-        {
-            run_starkprime_benchmarks!(group);
-        }
-    }
+    //     #[allow(clippy::identity_op)]
+    //     {
+    //         run_starkprime_benchmarks!(group);
+    //     }
+    // }
 
-    // StarkPrime non scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization StarkPrime non scalar");
-        group.plot_config(plot_config.clone());
+    // // StarkPrime non scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization StarkPrime non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_starkprime_non_scalar_benchmarks!(group);
-    }
+    //     run_starkprime_non_scalar_benchmarks!(group);
+    // }
 
-    // StarkPrime non scalar degree three
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization StarkPrime degree three non scalar");
-        group.plot_config(plot_config.clone());
+    // // StarkPrime non scalar degree three
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization StarkPrime degree three non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_starkprime_degree_three_non_scalar_benchmarks!(group);
-    }
-    // Frog
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization Frog");
-        group.plot_config(plot_config.clone());
-        #[allow(clippy::identity_op)]
-        {
-            run_frog_benchmarks!(group);
-        }
-    }
+    //     run_starkprime_degree_three_non_scalar_benchmarks!(group);
+    // }
+    // // Frog
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization Frog");
+    //     group.plot_config(plot_config.clone());
+    //     #[allow(clippy::identity_op)]
+    //     {
+    //         run_frog_benchmarks!(group);
+    //     }
+    // }
 
-    // Frog non scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization Frog non scalar");
-        group.plot_config(plot_config.clone());
+    // // Frog non scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization Frog non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_frog_non_scalar_benchmarks!(group);
-    }
+    //     run_frog_non_scalar_benchmarks!(group);
+    // }
 
-    // Frog degree three non scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Linearization Frog  degree three non scalar");
-        group.plot_config(plot_config.clone());
+    // // Frog degree three non scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Linearization Frog  degree three non scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_frog_degree_three_non_scalar_benchmarks!(group);
-    }
+    //     run_frog_degree_three_non_scalar_benchmarks!(group);
+    // }
 }
 
 criterion_group!(

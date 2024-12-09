@@ -126,74 +126,74 @@ fn decomposition_setup<
 }
 
 fn setup_decomposition_test_environment<
-    RqNTT,
-    CS,
-    DP,
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
->() -> DecompositionSetup<RqNTT, C, W>
+    R,
+    CS,
+    DP,
+>() -> DecompositionSetup<R, C, W>
 where
-    RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT> + Clone,
+    R: SuitableRing,
+    CS: LatticefoldChallengeSet<R> + Clone,
     DP: DecompositionParams,
 {
     let r1cs_rows = 1 + WIT_LEN + 1;
-    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
-    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<RqNTT, 1, WIT_LEN>();
+    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, R>(r1cs_rows);
+    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, 1, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
 
-    decomposition_setup::<RqNTT, CS, DP, WIT_LEN, C, W>(ccs, wit, cm_i, scheme, x_ccs, z)
+    decomposition_setup::<R, CS, DP, WIT_LEN, C, W>(ccs, wit, cm_i, scheme, x_ccs, z)
 }
 
 fn setup_decomposition_non_scalar_test_environment<
-    RqNTT,
+    const C: usize,
+    const WIT_LEN: usize,
+    const W: usize,
+    R,
     CS,
     DP,
-    const WIT_LEN: usize,
-    const C: usize,
-    const W: usize,
->() -> DecompositionSetup<RqNTT, C, W>
+>() -> DecompositionSetup<R, C, W>
 where
-    RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT> + Clone,
+    R: SuitableRing,
+    CS: LatticefoldChallengeSet<R> + Clone,
     DP: DecompositionParams,
 {
     let r1cs_rows = 1 + WIT_LEN + 1;
     let (cm_i, wit, ccs, scheme) =
-        wit_and_ccs_gen_non_scalar::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
-    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<RqNTT, 1, WIT_LEN>();
+        wit_and_ccs_gen_non_scalar::<1, C, WIT_LEN, W, DP, R>(r1cs_rows);
+    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, 1, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
 
-    decomposition_setup::<RqNTT, CS, DP, WIT_LEN, C, W>(ccs, wit, cm_i, scheme, x_ccs, z)
+    decomposition_setup::<R, CS, DP, WIT_LEN, C, W>(ccs, wit, cm_i, scheme, x_ccs, z)
 }
 
 fn setup_decomposition_degree_three_non_scalar_test_environment<
-    RqNTT,
-    CS,
-    DP,
     const C: usize,
     const WIT_LEN: usize,
     const W: usize,
->() -> DecompositionSetup<RqNTT, C, W>
+    R,
+    CS,
+    DP,
+>() -> DecompositionSetup<R, C, W>
 where
-    RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT> + Clone,
+    R: SuitableRing,
+    CS: LatticefoldChallengeSet<R> + Clone,
     DP: DecompositionParams,
 {
     let r1cs_rows = 1 + WIT_LEN + 1;
     let (cm_i, wit, ccs, scheme) =
-        wit_and_ccs_gen_degree_three_non_scalar::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
-    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<RqNTT, 1, WIT_LEN>();
+        wit_and_ccs_gen_degree_three_non_scalar::<1, C, WIT_LEN, W, DP, R>(r1cs_rows);
+    let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, 1, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
 
-    decomposition_setup::<RqNTT, CS, DP, WIT_LEN, C, W>(ccs, wit, cm_i, scheme, x_ccs, z)
+    decomposition_setup::<R, CS, DP, WIT_LEN, C, W>(ccs, wit, cm_i, scheme, x_ccs, z)
 }
 
 fn decomposition_operations<
@@ -361,31 +361,31 @@ fn decomposition_operations<
     );
 }
 
-macro_rules! run_single_decomposition_goldilocks_benchmark {
+macro_rules! run_single_operations_goldilocks_benchmark {
     ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            let setup = setup_decomposition_test_environment::<GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>], $cw, $w, {$w * $l}>();
+            let setup = setup_decomposition_test_environment::<$cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>();
             decomposition_operations::<$cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, setup);
         }
     };
 }
 
-macro_rules! run_single_decomposition_non_scalar_goldilocks_benchmark {
+macro_rules! run_single_operations_non_scalar_goldilocks_benchmark {
     ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            let setup = setup_decomposition_test_environment::<GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>], $cw, $w, {$w * $l}>();
+            let setup = setup_decomposition_non_scalar_test_environment::<$cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>();
             decomposition_operations::<$cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, setup);
         }
     };
 }
 
-macro_rules! run_single_decomposition_degree_three_non_scalar_goldilocks_benchmark {
+macro_rules! run_single_operations_degree_three_non_scalar_goldilocks_benchmark {
     ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            let setup = setup_decomposition_test_environment::<GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>], $cw, $w, {$w * $l}>();
+            let setup = setup_decomposition_degree_three_non_scalar_test_environment::<$cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>();
             decomposition_operations::<$cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, setup);
         }
     };
@@ -398,7 +398,7 @@ fn single_operation_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("Single Decomposition Operations Goldilocks");
         group.plot_config(plot_config.clone());
 
-        run_goldilocks_decomposition_benchmarks!(group);
+        run_goldilocks_operations_benchmarks!(group);
     }
 
     // Goldilocks non-scalar
@@ -407,18 +407,18 @@ fn single_operation_benchmarks(c: &mut Criterion) {
         let mut group = c.benchmark_group("Single Decomposition Operations Goldilocks Non-Scalar");
         group.plot_config(plot_config.clone());
 
-        run_goldilocks_decomposition_non_scalar_benchmarks!(group);
+        run_goldilocks_operations_non_scalar_benchmarks!(group);
     }
 
-    // Goldilocks degree three non-scalar
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group =
-            c.benchmark_group("Single Decomposition Operations Goldilocks Degree Three Non-Scalar");
-        group.plot_config(plot_config.clone());
+    // // Goldilocks degree three non-scalar
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group =
+    //         c.benchmark_group("Single Decomposition Operations Goldilocks Degree Three Non-Scalar");
+    //     group.plot_config(plot_config.clone());
 
-        run_goldilocks_decomposition_degree_three_non_scalar_benchmarks!(group);
-    }
+    //     run_goldilocks_operations_degree_three_non_scalar_benchmarks!(group);
+    // }
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {
