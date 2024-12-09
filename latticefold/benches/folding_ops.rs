@@ -212,8 +212,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Evaluate Folding Mz_MLEs",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -244,8 +245,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Folding create sumcheck polynomial",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -283,8 +285,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Folding sumcheck",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -315,8 +318,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Folding get theta's",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -338,8 +342,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Folding get eta's",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -360,8 +365,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Folding compute v0, u0, x0, cm0",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -387,8 +393,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Folding compute f0",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -407,8 +414,9 @@ fn folding_operations<
         BenchmarkId::new(
             "Folding compute w0",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,

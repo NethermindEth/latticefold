@@ -61,7 +61,7 @@ fn linearization_operations<
         BenchmarkId::new(
             "Evaluate Mz_MLEs",
             format!(
-                "Kappa = {}, W_CCS= {}, W= {}, L= {}, B= {}, B_SMALL= {}, K= {}",
+                "Kappa={}, W_CCS={}, W={}, L={}, B={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -84,7 +84,7 @@ fn linearization_operations<
         BenchmarkId::new(
             "Construct Sumcheck Poly",
             format!(
-                "Kappa = {}, W_CCS= {}, W= {}, L= {}, B= {}, B_SMALL= {}, K= {}",
+                "Kappa={}, W_CCS={}, W={}, L={}, B={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -112,7 +112,7 @@ fn linearization_operations<
     let point_r = (0..ccs.s).map(|_| R::rand(&mut rng)).collect::<Vec<R>>();
     let Mz_mles = calculate_Mz_mles::<R, LinearizationError<R>>(&ccs, &z_ccs).unwrap();
     group.bench_with_input(
-        BenchmarkId::new("Evaluate U and V", format!("Kappa = {}, W_CCS= {}, W= {}, L= {}, B= {}, B_SMALL= {}, K= {}", C, WIT_LEN, W, DP::L, DP::B, DP::B_SMALL, DP::K)),
+        BenchmarkId::new("Evaluate U and V", format!("Kappa={}, W_CCS={}, W={}, L={}, B={}, B_SMALL={}, K={}", C, WIT_LEN, W, DP::L, DP::B, DP::B_SMALL, DP::K)),
         &(wit.clone(), point_r.clone(), Mz_mles.clone()),
         |bench, (wit, point_r, Mz_mles)| {
             bench.iter(|| {

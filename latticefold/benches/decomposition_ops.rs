@@ -138,8 +138,9 @@ fn decomposition_operations<
         BenchmarkId::new(
             "Decompose witness",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -161,8 +162,9 @@ fn decomposition_operations<
         BenchmarkId::new(
             "Decompose x",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -187,8 +189,9 @@ fn decomposition_operations<
         BenchmarkId::new(
             "Commit witnesses",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -222,8 +225,9 @@ fn decomposition_operations<
         BenchmarkId::new(
             "compute v's",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
@@ -245,8 +249,9 @@ fn decomposition_operations<
         BenchmarkId::new(
             "compute u's",
             format!(
-                "Kappa={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
                 C,
+                WIT_LEN,
                 W,
                 DP::B,
                 DP::L,
