@@ -557,6 +557,7 @@ macro_rules! run_goldilocks_folding_benchmarks {
     };
 }
 
+#[macro_export]
 macro_rules! run_babybear_degree_three_non_scalar_benchmarks {
     ($group:ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
