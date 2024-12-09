@@ -284,20 +284,20 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     ccs: &CCS<NTT>,
 ) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
     let v_0: Vec<NTT> = rot_lin_combination(rho_s, theta_s);
-
-    let cm_0: Commitment<C, NTT> = rho_s
+    let rho_s_crt: Vec<_> = rho_s.iter().map(|rho_i| rho_i.crt()).collect();
+    let cm_0: Commitment<C, NTT> = rho_s_crt
         .iter()
         .zip(cm_i_s.iter())
-        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i.crt())
+        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i)
         .sum();
 
-    let u_0: Vec<NTT> = rho_s
+    let u_0: Vec<NTT> = rho_s_crt
         .iter()
         .zip(eta_s.iter())
         .map(|(&rho_i, etas_i)| {
             etas_i
                 .iter()
-                .map(|etas_i_j| rho_i.crt() * etas_i_j)
+                .map(|etas_i_j| rho_i * etas_i_j)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
@@ -310,13 +310,13 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
             acc
         });
 
-    let x_0: Vec<NTT> = rho_s
+    let x_0: Vec<NTT> = rho_s_crt
         .iter()
         .zip(cm_i_s.iter())
         .map(|(&rho_i, cm_i)| {
             cm_i.x_w
                 .iter()
-                .map(|x_w_i| rho_i.crt() * x_w_i)
+                .map(|x_w_i| rho_i * x_w_i)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {
