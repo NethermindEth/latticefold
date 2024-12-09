@@ -5,15 +5,14 @@ use criterion::{
 };
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
-use latticefold::arith::{Instance, Witness, CCCS, CCS};
-use latticefold::commitment::AjtaiCommitmentScheme;
+use latticefold::arith::{Instance, Witness, CCS};
 use latticefold::decomposition_parameters::DecompositionParams;
 use latticefold::nifs::error::LinearizationError;
 use latticefold::nifs::linearization::LFLinearizationProver;
 use latticefold::transcript::poseidon::PoseidonTranscript;
 use latticefold::utils::mle_helpers::calculate_Mz_mles;
 use std::fmt::Debug;
-use utils::wit_and_ccs_gen;
+use utils::{wit_and_ccs_gen, wit_and_ccs_gen_degree_three_non_scalar, wit_and_ccs_gen_non_scalar};
 
 mod macros;
 mod utils;
@@ -24,16 +23,41 @@ fn setup_test_environment<
     const C: usize,
     const W: usize,
     const WIT_LEN: usize,
->() -> (
-    Witness<RqNTT>,
-    CCCS<C, RqNTT>,
-    CCS<RqNTT>,
-    AjtaiCommitmentScheme<C, W, RqNTT>,
-) {
+>() -> (Witness<RqNTT>, Vec<RqNTT>, CCS<RqNTT>) {
     let r1cs_rows = 1 + WIT_LEN + 1;
-    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
+    let (cm_i, wit, ccs, _) = wit_and_ccs_gen::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
-    (wit, cm_i, ccs, scheme)
+    (wit, z_ccs, ccs)
+}
+
+fn setup_non_scalar_test_environment<
+    RqNTT: SuitableRing,
+    DP: DecompositionParams,
+    const C: usize,
+    const W: usize,
+    const WIT_LEN: usize,
+>() -> (Witness<RqNTT>, Vec<RqNTT>, CCS<RqNTT>) {
+    let r1cs_rows = 1 + WIT_LEN + 1;
+    let (cm_i, wit, ccs, _) = wit_and_ccs_gen_non_scalar::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
+
+    (wit, z_ccs, ccs)
+}
+
+fn setup_degree_three_non_scalar_test_environment<
+    RqNTT: SuitableRing,
+    DP: DecompositionParams,
+    const C: usize,
+    const W: usize,
+    const WIT_LEN: usize,
+>() -> (Witness<RqNTT>, Vec<RqNTT>, CCS<RqNTT>) {
+    let r1cs_rows = 1 + WIT_LEN + 1;
+    let (cm_i, wit, ccs, _) =
+        wit_and_ccs_gen_degree_three_non_scalar::<1, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
+    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
+
+    (wit, z_ccs, ccs)
 }
 
 fn linearization_operations<
@@ -45,10 +69,11 @@ fn linearization_operations<
     DP: DecompositionParams,
 >(
     group: &mut criterion::BenchmarkGroup<criterion::measurement::WallTime>,
+    ccs: CCS<R>,
+    z_ccs: Vec<R>,
+    wit: Witness<R>,
 ) {
     let mut rng = test_rng();
-    let (wit, cm_i, ccs, _) = setup_test_environment::<R, DP, C, W, WIT_LEN>();
-    let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
     // MZ mles
     group.bench_with_input(
@@ -120,21 +145,57 @@ macro_rules! run_single_linearization_goldilocks_benchmark {
     ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            linearization_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group);
+            let (wit, z_ccs, ccs) = setup_test_environment::<GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>], $cw, {$w * $l}, $w>();
+            linearization_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, ccs, z_ccs, wit);
+        }
+    };
+}
+
+macro_rules! run_single_linearization_non_scalar_goldilocks_benchmark {
+    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            let (wit, z_ccs, ccs) = setup_non_scalar_test_environment::<GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>], $cw, {$w * $l}, $w>();
+            linearization_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, ccs, z_ccs, wit);
+        }
+    };
+}
+
+macro_rules! run_single_linearization_degree_three_non_scalar_goldilocks_benchmark {
+    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            let (wit, z_ccs, ccs) = setup_degree_three_non_scalar_test_environment::<GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>], $cw, {$w * $l}, $w>();
+            linearization_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, ccs, z_ccs, wit);
         }
     };
 }
 
 fn single_operation_benchmarks(c: &mut Criterion) {
-    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-    let mut group = c.benchmark_group("Single Linearization Operations Goldilocks");
-    group.plot_config(plot_config.clone());
+    // Goldilocks
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Single Linearization Operations Goldilocks");
+        group.plot_config(plot_config.clone());
+        run_goldilocks_linearization_benchmarks!(group);
+    }
 
-    // Linearization
-    // Please note that C is not used until decomposition.
-    // The only parameter that we are interested on varying for linearization is W (as it already includes WIT_LEN and DP::L)
-    // We explore parameters in the range  W = 2^9-2^16
-    run_goldilocks_linearization_benchmarks!(group);
+    // Goldilocks non-scalar
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group = c.benchmark_group("Single Linearization Operations Goldilocks Non-Scalar");
+        group.plot_config(plot_config.clone());
+        run_goldilocks_linearization_non_scalar_benchmarks!(group);
+    }
+
+    // Goldilocks degree three non-scalar
+    {
+        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+        let mut group =
+            c.benchmark_group("Single Linearization Operations Goldilocks Degree Three Non-Scalar");
+        group.plot_config(plot_config.clone());
+        run_goldilocks_linearization_degree_three_non_scalar_benchmarks!(group);
+    }
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {
