@@ -1,6 +1,7 @@
 use ark_serialize::{CanonicalSerialize, Compress};
 use ark_std::rand::Rng;
 use ark_std::test_rng;
+use ark_std::vec::Vec;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
 use latticefold::arith::r1cs::{get_test_z_split, to_F_matrix, R1CS};

@@ -17,9 +17,9 @@ The examples in this repository support customization via environment variables.
     - Default: `2`
 - **`DECOMPOSITION_K`**: Sets the value of `K` in `DecompositionParams`.
     - Default: `15`
-- **`C_PARAMETER`**: Sets the value of `C`, controlling challenge set parameters.
+- **`DECOMPOSITION_C`**: Sets the value of `C`, controlling challenge set parameters.
     - Default: `4`
-- **`WITNESS_LENGTH`**: Sets the witness length.
+- **`DECOMPOSITION_WIT_LEN`**: Sets the witness length.
     - Default: `4`
 
 These parameters influence the behavior and output of the examples.
@@ -36,8 +36,8 @@ These parameters influence the behavior and output of the examples.
    export DECOMPOSITION_L=6
    export DECOMPOSITION_B_SMALL=3
    export DECOMPOSITION_K=16
-   export C_PARAMETER=5
-   export WITNESS_LENGTH=5
+   export DECOMPOSITION_C=5
+   export DECOMPOSITION_WIT_LEN=5
 
    cargo run --example <example_name>
    ```
@@ -50,12 +50,12 @@ These parameters influence the behavior and output of the examples.
 2. Set the desired environment variables before running the examples. For example:
 
    ```powershell
-   $env:PARAM_B=65536
-   $env:PARAM_L=6
-   $env:PARAM_B_SMALL=3
-   $env:PARAM_K=16
-   $env:PARAM_C=5
-   $env:PARAM_WIT_LEN=5
+   $env:DECOMPOSITION_B=65536
+   $env:DECOMPOSITION_L=6
+   $env:DECOMPOSITION_B_SMALL=3
+   $env:DECOMPOSITION_K=16
+   $env:DECOMPOSITION_C=5
+   $env:DECOMPOSITION_WIT_LEN=5
 
    cargo run --example <example_name>
    ```
@@ -70,12 +70,12 @@ When you modify environment variables, the generated parameters are automaticall
 
 If no environment variables are specified, the examples will run with the following defaults:
 
-- `PARAM_B`: `32768`
-- `PARAM_L`: `5`
-- `PARAM_B_SMALL`: `2`
-- `PARAM_K`: `15`
-- `PARAM_C`: `4`
-- `PARAM_WIT_LEN`: `4`
+- `DECOMPOSITION_B`: `32768`
+- `DECOMPOSITION_L`: `5`
+- `DECOMPOSITION_B_SMALL`: `2`
+- `DECOMPOSITION_K`: `15`
+- `DECOMPOSITION_C`: `4`
+- `DECOMPOSITION_WIT_LEN`: `4`
 
 ## Notes
 

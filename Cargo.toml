@@ -19,7 +19,7 @@ lattirust-ring = { git = "ssh://git@github.com/NethermindEth/lattirust.git", bra
 num-bigint = { version = "0.4.5", default-features = false }
 rand = { version = "0.8.5", default-features = false }
 thiserror = { version = "2.0.3", default-features = false }
-
+cyclotomic-rings = { path = "cyclotomic-rings", default-features = false }
 [workspace.metadata.docs.rs]
 # To build locally, use 
 # RUSTDOCFLAGS="--html-in-header docs-header.html" cargo doc --no-deps --document-private-items --open
