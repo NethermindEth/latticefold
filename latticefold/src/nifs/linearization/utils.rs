@@ -87,7 +87,10 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     Ok((mles, d + 1))
 }
 
-pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing>(vals: &[NTT], ccs: &CCS<NTT>) -> NTT {
+pub fn linearization_sumcheck_polynomial_comb_fn<NTT: SuitableRing>(
+    vals: &[NTT],
+    ccs: &CCS<NTT>,
+) -> NTT {
     let mut result = NTT::zero();
     'outer: for (i, &c) in ccs.c.iter().enumerate() {
         if c.is_zero() {

@@ -413,7 +413,8 @@ fn single_operation_benchmarks(c: &mut Criterion) {
     // Goldilocks degree three non-scalar
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Single Decomposition Operations Goldilocks Degree Three Non-Scalar");
+        let mut group =
+            c.benchmark_group("Single Decomposition Operations Goldilocks Degree Three Non-Scalar");
         group.plot_config(plot_config.clone());
 
         run_goldilocks_decomposition_degree_three_non_scalar_benchmarks!(group);

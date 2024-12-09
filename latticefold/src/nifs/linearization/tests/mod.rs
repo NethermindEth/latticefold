@@ -1,7 +1,7 @@
 use super::*;
 use crate::arith::utils::mat_vec_mul;
 use crate::decomposition_parameters::test_params::{BabyBearDP, FrogDP, GoldilocksDP, StarkDP};
-use crate::nifs::linearization::utils::{sumcheck_polynomial_comb_fn, SqueezeBeta};
+use crate::nifs::linearization::utils::{linearization_sumcheck_polynomial_comb_fn, SqueezeBeta};
 use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs},
     commitment::AjtaiCommitmentScheme,
@@ -111,7 +111,9 @@ fn test_generate_sumcheck() {
         )
         .unwrap();
 
-    let comb_fn = |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT>(vals, &ccs) };
+    let comb_fn = |vals: &[RqNTT]| -> RqNTT {
+        linearization_sumcheck_polynomial_comb_fn::<RqNTT>(vals, &ccs)
+    };
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
@@ -143,7 +145,8 @@ fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>
         )
         .unwrap();
 
-    let comb_fn = |vals: &[RqNTT]| -> RqNTT { sumcheck_polynomial_comb_fn::<RqNTT>(vals, ccs) };
+    let comb_fn =
+        |vals: &[RqNTT]| -> RqNTT { linearization_sumcheck_polynomial_comb_fn::<RqNTT>(vals, ccs) };
 
     let (_, point_r) =
         LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::generate_sumcheck_proof(
