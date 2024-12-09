@@ -1,3 +1,4 @@
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 
 use cyclotomic_rings::rings::SuitableRing;
@@ -27,7 +28,7 @@ mod tests;
 
 /// `C` is the length of Ajtai commitment vectors.
 /// `NTT` is a cyclotomic ring in the NTT form.
-#[derive(Clone)]
+#[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct LFProof<const C: usize, NTT: OverField> {
     pub linearization_proof: LinearizationProof<NTT>,
     pub decomposition_proof_l: DecompositionProof<C, NTT>,
