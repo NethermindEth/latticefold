@@ -517,7 +517,7 @@ fn test_prepare_public_output() {
     eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
     let rho_s = get_rhos::<_, _, DP>(&mut transcript);
-    let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(&rho_s, &theta_s, &lccs, &eta_s, &ccs);
+    let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(rho_s, &theta_s, &lccs, &eta_s, &ccs);
     let expected_x_0 = x_0[0..x_0.len() - 1].to_vec();
     let h = x_0.last().copied().unwrap();
 
