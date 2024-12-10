@@ -6,7 +6,6 @@ use ark_std::iter::successors;
 
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
 use crate::ark_base::*;
@@ -114,13 +113,11 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         Ok(eta_s)
     }
 
-    fn compute_f_0(rho_s: &Vec<NTT::CoefficientRepresentation>, w_s: &[Witness<NTT>]) -> Vec<NTT> {
+    fn compute_f_0(rho_s: &[NTT], w_s: &[Witness<NTT>]) -> Vec<NTT> {
         rho_s
             .iter()
             .zip(w_s)
             .fold(vec![NTT::ZERO; w_s[0].f.len()], |acc, (&rho_i, w_i)| {
-                let rho_i: NTT = rho_i.crt();
-
                 acc.into_iter()
                     .zip(w_i.f.iter())
                     .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
@@ -192,7 +189,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Step 5 get rho challenges
         let (rho_s_coeff, rho_s) = get_rhos::<_, _, P>(transcript);
 
-        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s_coeff, &w_s);
+        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, &w_s);
 
         // Step 6 compute v0, u0, y0, x_w0
         let (v_0, cm_0, u_0, x_0) =
