@@ -178,7 +178,7 @@ fn linearization_benchmarks_degree_three_non_scalar<
     verifier_linearization_benchmark::<C, W, P, R, CS>(group, &cm_i, &ccs, proof);
 }
 
-// Macros
+// Goldilocks macros
 #[allow(unused_macros)]
 macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
@@ -209,6 +209,7 @@ macro_rules! run_single_goldilocks_degree_three_non_scalar_benchmark {
     };
 }
 
+// Babybear macros
 #[allow(unused_macros)]
 macro_rules! run_single_babybear_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
@@ -234,11 +235,13 @@ macro_rules! run_single_babybear_degree_three_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            linearization_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+           linearization_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
 
+// StarkPrime macros
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
@@ -248,6 +251,7 @@ macro_rules! run_single_starkprime_benchmark {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
@@ -257,15 +261,17 @@ macro_rules! run_single_starkprime_non_scalar_benchmark {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_degree_three_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            linearization_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+           linearization_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
 
+// Frog macros
 #[allow(unused_macros)]
 macro_rules! run_single_frog_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
@@ -276,7 +282,6 @@ macro_rules! run_single_frog_benchmark {
     };
 }
 
-// Frog parameters
 #[allow(unused_macros)]
 macro_rules! run_single_frog_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
@@ -287,13 +292,12 @@ macro_rules! run_single_frog_non_scalar_benchmark {
     };
 }
 
-// Frog parameters
 #[allow(unused_macros)]
 macro_rules! run_single_frog_degree_three_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            linearization_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+           linearization_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -397,7 +401,6 @@ fn benchmarks_main(c: &mut Criterion) {
         }
     }
 
-    // Frog non scalar
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("Linearization Frog non scalar");

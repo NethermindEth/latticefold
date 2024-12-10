@@ -40,7 +40,6 @@ params = {
     "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
     "StarkPrime": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
     "Frog": {"p": 159120925213255836417, "d": 16},
-#    "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
 }
 
 # Range of num_cols values
@@ -77,13 +76,13 @@ def generate_macros_file():
             max_kappa = kappa - 1  # The last kappa where bound_2 was less than p / 2
             f.write(f"//\tMaximum kappa for which bound_{{l_2}} < p/2: {max_kappa}")
             prime_lowercase = prime_name.lower()
-            scalar_bench = f"{prime_lowercase}_benchmarks"
-            non_scalar_bench = f"{prime_lowercase}_non_scalar_benchmarks"
-            degree_three_non_scalar_bench = f"{prime_lowercase}_degree_three_non_scalar_benchmarks"
+            scalar_bench = f"{prime_lowercase}"
+            non_scalar_bench = f"{prime_lowercase}_non_scalar"
+            degree_three_non_scalar_bench = f"{prime_lowercase}_degree_three_non_scalar"
             bench_types = [scalar_bench, non_scalar_bench, degree_three_non_scalar_bench]
             for bench_type in bench_types:
                 f.write("\n#[macro_export]\n")
-                f.write(f"macro_rules! run_{bench_type} {{\n")
+                f.write(f"macro_rules! run_{bench_type}_benchmarks {{\n")
                 f.write("   ($group:ident) => {\n")
                 f.write("        // Parameters: Criterion group, X_LEN, Kappa, W_CCS, B, L, b, k")
                 kappa_values = range(1, max_kappa + 1)
@@ -119,7 +118,7 @@ def generate_macros_file():
                 for n, entries in entries_by_n.items():
                     min_by_kappa_entries = {entry[2:]: entry for entry in entries}
                     for entry in min_by_kappa_entries.values():
-                        f.write(f"\n\t\trun_single_{bench_type}(&mut $group, 1, {entry[0]}, {n}, {entry[2]}, {entry[3]}, {entry[4]}, {entry[5]});")
+                        f.write(f"\n\t\trun_single_{bench_type}_benchmark!(&mut $group, 1, {entry[0]}, {n}, {entry[2]}, {entry[3]}, {entry[4]}, {entry[5]});")
                 f.write("\n")
                 f.write("   };\n")
                 f.write("}\n")

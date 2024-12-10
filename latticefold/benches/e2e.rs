@@ -241,42 +241,13 @@ fn e2e_benchmarks_degree_three_non_scalar<
     verifier_e2e_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 }
 
+// Goldilocks macros
 #[allow(unused_macros)]
 macro_rules! run_single_goldilocks_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
             e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, GoldilocksChallengeSet, GoldilocksRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-        }
-    };
-}
-
-#[allow(unused_macros)]
-macro_rules! run_single_babybear_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
-        paste::paste! {
-            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-        }
-    };
-}
-
-#[allow(unused_macros)]
-macro_rules! run_single_starkprime_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
-        paste::paste! {
-            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
-        }
-    };
-}
-
-#[allow(unused_macros)]
-macro_rules! run_single_frog_benchmark {
-    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
-        paste::paste! {
-            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -301,6 +272,17 @@ macro_rules! run_single_goldilocks_degree_three_non_scalar_benchmark {
     };
 }
 
+// Babybear macros
+#[allow(unused_macros)]
+macro_rules! run_single_babybear_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, BabyBearChallengeSet, BabyBearRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
 #[allow(unused_macros)]
 macro_rules! run_single_babybear_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
@@ -321,6 +303,17 @@ macro_rules! run_single_babybear_degree_three_non_scalar_benchmark {
     };
 }
 
+// StarkPrime macros
+#[allow(unused_macros)]
+macro_rules! run_single_starkprime_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
 #[allow(unused_macros)]
 macro_rules! run_single_starkprime_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
@@ -331,11 +324,23 @@ macro_rules! run_single_starkprime_non_scalar_benchmark {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! run_single_starkprime_degree_three_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            e2e_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+           e2e_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, StarkChallengeSet, StarkRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+        }
+    };
+}
+
+// Frog macros
+#[allow(unused_macros)]
+macro_rules! run_single_frog_benchmark {
+    ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_small, $k);
+        paste::paste! {
+            e2e_benchmarks_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
@@ -355,7 +360,7 @@ macro_rules! run_single_frog_degree_three_non_scalar_benchmark {
     ($crit:expr, $io:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
         define_params!($w, $b, $l, $b_small, $k);
         paste::paste! {
-            e2e_benchmarks_non_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
+           e2e_benchmarks_degree_three_non_scalar::<$io, $cw, $w, {$w * $l}, FrogChallengeSet, FrogRingNTT, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit);
         }
     };
 }
