@@ -276,7 +276,6 @@ fn folding_benchmarks_non_scalar<
     verifier_folding_benchmark::<C, W, P, R, CS>(group, &cm_i, &wit, &ccs, &scheme);
 }
 
-
 // Goldilocks macros
 #[allow(unused_macros)]
 macro_rules! run_single_goldilocks_benchmark {
