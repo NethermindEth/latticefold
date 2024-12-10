@@ -344,5 +344,5 @@ fn prepare_g2_i_mle_list<NTT: OverField>(
     mles.push(beta_eq_x);
     f_hat_mles
         .into_iter()
-        .for_each(|fhms| fhms.into_iter().for_each(|fhm| mles.push(fhm)))
+        .for_each(|mut fhms| mles.append(&mut fhms))
 }
