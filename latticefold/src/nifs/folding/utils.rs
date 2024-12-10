@@ -23,6 +23,9 @@ use crate::{
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::{OverField, PolyRing};
 
+#[cfg(feature = "parallel")]
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
     fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
         &mut self,
@@ -90,7 +93,7 @@ pub(super) fn get_rhos<
 
     let mut rhos_coeff = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
     rhos_coeff.push(R::CoefficientRepresentation::ONE);
-    let rhos = rhos_coeff.iter().map(|rho| rho.crt()).collect();
+    let rhos = cfg_iter!(rhos_coeff).map(|rho| rho.crt()).collect();
     (rhos_coeff, rhos)
 }
 
