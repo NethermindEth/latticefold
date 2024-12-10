@@ -44,7 +44,7 @@ use lattirust_ring::cyclotomic_ring::models::{
     frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
     stark_prime::RqNTT as StarkRqNTT,
 };
-use lattirust_ring::cyclotomic_ring::{CRT, ICRT};
+use lattirust_ring::cyclotomic_ring::ICRT;
 use lattirust_ring::Ring;
 use num_traits::{One, Zero};
 
@@ -438,7 +438,7 @@ fn test_get_rhos() {
     let (_, _, mut transcript, _, _, _) = setup_test_environment::<RqNTT, CS, DP, C, W>(false);
     let mut transcript_clone = transcript.clone();
 
-    let rho_s = get_rhos::<_, _, DP>(&mut transcript);
+    let (rho_s_coeff, rho_s) = get_rhos::<_, _, DP>(&mut transcript);
 
     // Compute expected result
     transcript_clone.absorb_field_element(&<_>::from_base_prime_field(
@@ -451,7 +451,7 @@ fn test_get_rhos() {
     assert!(!rho_s.is_empty(), "Rhos vector should not be empty");
     assert_eq!(rho_s.len(), 2 * DP::K, "Mismatch in Rhos length");
     assert_eq!(
-        rho_s, expected_rhos,
+        rho_s_coeff, expected_rhos,
         "Rhosvector does not match expected evaluations"
     );
 }
@@ -516,8 +516,9 @@ fn test_prepare_public_output() {
         .for_each(|thetas| transcript.absorb_slice(thetas));
     eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
-    let rho_s = get_rhos::<_, _, DP>(&mut transcript);
-    let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(rho_s, &theta_s, &lccs, &eta_s, &ccs);
+    let (rho_s_coeff, rho_s) = get_rhos::<_, _, DP>(&mut transcript);
+    let (v_0, cm_0, u_0, x_0) =
+        compute_v0_u0_x0_cm_0(rho_s_coeff, rho_s, &theta_s, &lccs, &eta_s, &ccs);
     let expected_x_0 = x_0[0..x_0.len() - 1].to_vec();
     let h = x_0.last().copied().unwrap();
 
@@ -596,7 +597,7 @@ fn test_compute_f_0() {
         .for_each(|thetas| transcript.absorb_slice(thetas));
     eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
-    let rho_s = get_rhos::<_, _, DP>(&mut transcript);
+    let (_, rho_s) = get_rhos::<_, _, DP>(&mut transcript);
 
     let f_0: Vec<RqNTT> =
         LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::compute_f_0(&rho_s, &wit_s);
@@ -606,8 +607,6 @@ fn test_compute_f_0() {
             .iter()
             .zip(&wit_s)
             .fold(vec![RqNTT::ZERO; wit_s[0].f.len()], |acc, (&rho_i, w_i)| {
-                let rho_i: RqNTT = rho_i.crt();
-
                 acc.into_iter()
                     .zip(w_i.f.iter())
                     .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
