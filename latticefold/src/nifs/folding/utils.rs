@@ -7,7 +7,7 @@ use ark_std::iterable::Iterable;
 
 // use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
-use lattirust_poly::polynomials::{ArithErrors, RefCounter};
+use lattirust_poly::polynomials::RefCounter;
 use lattirust_ring::{cyclotomic_ring::CRT, Ring};
 
 use crate::ark_base::*;
@@ -83,15 +83,15 @@ pub(super) fn get_rhos<
     P: DecompositionParams,
 >(
     transcript: &mut T,
-) -> Vec<R::CoefficientRepresentation> {
+) -> (Vec<R::CoefficientRepresentation>, Vec<R>) {
     transcript.absorb_field_element(&<R::BaseRing as Field>::from_base_prime_field(
         <R::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"rho_s"),
     ));
 
-    let mut rhos = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
-    rhos.push(R::CoefficientRepresentation::ONE);
-
-    rhos
+    let mut rhos_coeff = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
+    rhos_coeff.push(R::CoefficientRepresentation::ONE);
+    let rhos = CRT::elementwise_crt(rhos_coeff.clone());
+    (rhos_coeff, rhos)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -149,7 +149,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
         challenged_Ms_1,
-    )?;
+    );
 
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
     prepare_g1_and_3_k_mles_list(
@@ -158,17 +158,17 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
         challenged_Ms_2,
-    )?;
+    );
 
     // g2
     mles.push(beta_eq_x);
 
     for f_hat_mles in f_hat_mles.iter().take(DP::K) {
-        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles);
     }
 
     for f_hat_mles in f_hat_mles.iter().take(2 * DP::K).skip(DP::K) {
-        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles);
     }
 
     let degree = 2 * DP::B_SMALL;
@@ -277,18 +277,19 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 }
 
 pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
-    rho_s: &[NTT::CoefficientRepresentation],
+    rho_s_coeff: Vec<NTT::CoefficientRepresentation>,
+    rho_s: Vec<NTT>,
     theta_s: &[Vec<NTT>],
     cm_i_s: &[LCCCS<C, NTT>],
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
 ) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
-    let v_0: Vec<NTT> = rot_lin_combination(rho_s, theta_s);
+    let v_0: Vec<NTT> = rot_lin_combination(&rho_s_coeff, theta_s);
 
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()
         .zip(cm_i_s.iter())
-        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i.crt())
+        .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i)
         .sum();
 
     let u_0: Vec<NTT> = rho_s
@@ -297,7 +298,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .map(|(&rho_i, etas_i)| {
             etas_i
                 .iter()
-                .map(|etas_i_j| rho_i.crt() * etas_i_j)
+                .map(|etas_i_j| rho_i * etas_i_j)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
@@ -316,7 +317,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
         .map(|(&rho_i, cm_i)| {
             cm_i.x_w
                 .iter()
-                .map(|x_w_i| rho_i.crt() * x_w_i)
+                .map(|x_w_i| rho_i * x_w_i)
                 .collect::<Vec<NTT>>()
         })
         .fold(vec![NTT::zero(); ccs.n], |mut acc, rho_i_times_x_w_i| {
@@ -338,7 +339,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
     challenged_Ms: &DenseMultilinearExtension<NTT>,
-) -> Result<(), ArithErrors> {
+) {
     let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
 
     for (fi_hat_mle_s, alpha_i) in f_hat_mle_s.iter().zip(alpha_s.iter()) {
@@ -354,17 +355,13 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
     mles.push(r_i_eq);
     mles.push(RefCounter::from(combined_mle));
-
-    Ok(())
 }
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
-) -> Result<(), ArithErrors> {
+) {
     for fi_hat_mle in fi_hat_mle_s.iter() {
         mles.push(fi_hat_mle.clone());
     }
-
-    Ok(())
 }
