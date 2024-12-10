@@ -1,7 +1,9 @@
 #![allow(incomplete_features)]
 use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+    criterion_group, criterion_main, AxisScale, BenchmarkGroup, BenchmarkId, Criterion,
+    PlotConfiguration,
 };
+
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{
@@ -19,9 +21,9 @@ use std::{fmt::Debug, time::Duration};
 use utils::wit_and_ccs_gen_non_scalar;
 mod macros;
 mod utils;
-use ark_std::UniformRand;
-
 use crate::utils::wit_and_ccs_gen;
+use ark_std::UniformRand;
+use criterion::measurement::WallTime;
 use latticefold::{
     arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -73,7 +75,6 @@ fn prover_folding_benchmark<
             scheme,
         )
         .unwrap();
-
     let lcccs_vec = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<C, P>(
         &lcccs,
         &decomposition_proof,
@@ -377,6 +378,8 @@ macro_rules! run_single_frog_non_scalar_benchmark {
     };
 }
 
+include!(concat!(env!("OUT_DIR"), "/generated_benchmarks.rs"));
+
 fn benchmarks_main(c: &mut Criterion) {
     // Goldilocks
     {
@@ -395,7 +398,7 @@ fn benchmarks_main(c: &mut Criterion) {
         let mut group = c.benchmark_group("Folding Goldilocks non scalar");
         group.plot_config(plot_config.clone());
 
-        run_goldilocks_non_scalar_benchmarks!(group);
+        folding_single_goldilocks_non_scalar_benchmark(&mut group);
     }
 
     // BabyBear

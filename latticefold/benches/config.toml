@@ -1,0 +1,8 @@
+[benchmarks]
+single_non_scalar_goldilocks = [
+  {id = 1, X_LEN = 1, C = 6, W = 512, B = 128, L = 10, B_small = 2, K = 7},
+  {id = 2, X_LEN = 1, C = 7, W = 512, B = 256, L = 8, B_small = 2, K = 8},
+  {id = 3, X_LEN = 1, C = 8, W = 512, B = 512, L = 8, B_small = 2, K = 9},
+  {id = 4, X_LEN = 1, C = 8, W = 1024, B = 512, L = 8, B_small = 2, K = 9},
+  {id = 5, X_LEN = 1, C = 8, W = 2048, B = 256, L = 8, B_small = 2, K = 8},
+]
