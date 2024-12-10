@@ -83,15 +83,15 @@ pub(super) fn get_rhos<
     P: DecompositionParams,
 >(
     transcript: &mut T,
-) -> Vec<R::CoefficientRepresentation> {
+) -> (Vec<R::CoefficientRepresentation>, Vec<R>) {
     transcript.absorb_field_element(&<R::BaseRing as Field>::from_base_prime_field(
         <R::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"rho_s"),
     ));
 
-    let mut rhos = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
-    rhos.push(R::CoefficientRepresentation::ONE);
-
-    rhos
+    let mut rhos_coeff = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
+    rhos_coeff.push(R::CoefficientRepresentation::ONE);
+    let rhos = rhos_coeff.iter().map(|rho| rho.crt()).collect();
+    (rhos_coeff, rhos)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -277,21 +277,22 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 }
 
 pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
-    rho_s: Vec<NTT::CoefficientRepresentation>,
+    rho_s_coeff: Vec<NTT::CoefficientRepresentation>,
+    rho_s: Vec<NTT>,
     theta_s: &[Vec<NTT>],
     cm_i_s: &[LCCCS<C, NTT>],
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
 ) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
-    let v_0: Vec<NTT> = rot_lin_combination(&rho_s, theta_s);
-    let rho_s_crt: Vec<_> = CRT::elementwise_crt(rho_s);
-    let cm_0: Commitment<C, NTT> = rho_s_crt
+    let v_0: Vec<NTT> = rot_lin_combination(&rho_s_coeff, theta_s);
+
+    let cm_0: Commitment<C, NTT> = rho_s
         .iter()
         .zip(cm_i_s.iter())
         .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i)
         .sum();
 
-    let u_0: Vec<NTT> = rho_s_crt
+    let u_0: Vec<NTT> = rho_s
         .iter()
         .zip(eta_s.iter())
         .map(|(&rho_i, etas_i)| {
@@ -310,7 +311,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
             acc
         });
 
-    let x_0: Vec<NTT> = rho_s_crt
+    let x_0: Vec<NTT> = rho_s
         .iter()
         .zip(cm_i_s.iter())
         .map(|(&rho_i, cm_i)| {

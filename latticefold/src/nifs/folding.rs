@@ -190,11 +190,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
         // Step 5 get rho challenges
-        let rho_s = get_rhos::<_, _, P>(transcript);
+        let (rho_s_coeff, rho_s) = get_rhos::<_, _, P>(transcript);
 
-        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, &w_s);
+        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s_coeff, &w_s);
+
         // Step 6 compute v0, u0, y0, x_w0
-        let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(rho_s, &theta_s, cm_i_s, &eta_s, ccs);
+        let (v_0, cm_0, u_0, x_0) =
+            compute_v0_u0_x0_cm_0(rho_s_coeff, rho_s, &theta_s, cm_i_s, &eta_s, ccs);
 
         // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
@@ -363,11 +365,17 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             .eta_s
             .iter()
             .for_each(|etas| transcript.absorb_slice(etas));
-        let rho_s = get_rhos::<_, _, P>(transcript);
+        let (rho_s_coeff, rho_s) = get_rhos::<_, _, P>(transcript);
 
         // Step 6
-        let (v_0, cm_0, u_0, x_0) =
-            compute_v0_u0_x0_cm_0(rho_s, &proof.theta_s, cm_i_s, &proof.eta_s, ccs);
+        let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(
+            rho_s_coeff,
+            rho_s,
+            &proof.theta_s,
+            cm_i_s,
+            &proof.eta_s,
+            ccs,
+        );
 
         // Step 7: Compute f0 and Witness_0
 
