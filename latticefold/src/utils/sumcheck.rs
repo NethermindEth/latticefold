@@ -113,7 +113,7 @@ mod tests {
     use crate::ark_base::*;
     use crate::transcript::poseidon::PoseidonTranscript;
     use crate::utils::sumcheck::utils::{rand_poly, rand_poly_comb_fn};
-    use crate::utils::sumcheck::{DenseMultilinearExtension, MLSumcheck, Proof};
+    use crate::utils::sumcheck::{MLSumcheck, Proof};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
     use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
@@ -123,7 +123,7 @@ mod tests {
     fn generate_sumcheck_proof<R, CS>(
         nvars: usize,
         mut rng: &mut (impl Rng + Sized),
-    ) -> ((Vec<DenseMultilinearExtension<R>>, usize), R, Proof<R>)
+    ) -> (usize, R, Proof<R>)
     where
         R: SuitableRing,
         CS: LatticefoldChallengeSet<R>,
@@ -137,12 +137,12 @@ mod tests {
 
         let (proof, _) = MLSumcheck::prove_as_subprotocol(
             &mut transcript,
-            poly_mles.clone(),
+            poly_mles,
             nvars,
             poly_degree,
             comb_fn,
         );
-        ((poly_mles, poly_degree), sum, proof)
+        (poly_degree, sum, proof)
     }
 
     fn test_sumcheck<R, CS>()
@@ -154,7 +154,7 @@ mod tests {
         let nvars = 5;
 
         for _ in 0..20 {
-            let ((_, poly_degree), sum, proof) = generate_sumcheck_proof::<R, CS>(nvars, &mut rng);
+            let (poly_degree, sum, proof) = generate_sumcheck_proof::<R, CS>(nvars, &mut rng);
 
             let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
             let res =
