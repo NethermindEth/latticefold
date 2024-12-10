@@ -8,15 +8,18 @@ def bound_inf(d, kappa, p, n):
     L = 1
     bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
     # Ensure bound_value is a power of two
-    bound_value = 2**(bound_value.bit_length() - 1)
+    if bound_value & (bound_value - 1) != 0:  # Check if not a power of two
+        bound_value = 2**floor(log(bound_value, 2))  # Use log with base 2
     # Iterate until bound_value^L > p/2 or L exceeds 50
-    while bound_value^L <= p:
+    while bound_value**L <= p:
         if L > 8:
             return "unpractical", "unpractical"
         L += 1
         bound_value = floor(bound_2(d, kappa, p) / sqrt(d * (n * L)).n())
         if bound_value & (bound_value - 1) != 0:  # Check if not a power of two
-            bound_value = 2**(bound_value.bit_length() - 1)  # Reduce to previous power of two
+            # Find the largest power of two less than or equal to bound_value
+            power_of_two = 2**floor(log(bound_value, 2))  # Use log with base 2
+            bound_value = power_of_two  # Reduce to previous power of two
             if find_smallest_L_log(bound_value, p) != L:
                 continue
     return bound_value, L
@@ -30,10 +33,12 @@ def find_b_k_pairs(B):
     # Check if B is "unpractical"
     if B == "unpractical":
         return [("unpractical", "unpractical", "unpractical")]
-    if 2^(B.bit_length()-1) != B:
+    # Check if B is a power of two
+    if B <= 0 or (B & (B - 1)) != 0:
         print("B is not a power of two")
         return [("unpractical", "unpractical", "unpractical")]
-    return [2, B.bit_length() - 1, B]
+    k = int(log(B, 2))  # Calculate k such that 2^k = B using log with base 2
+    return [2, k, B]
 # Primes with their corresponding d values
 params = {
     "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
