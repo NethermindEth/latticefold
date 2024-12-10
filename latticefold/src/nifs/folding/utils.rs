@@ -393,6 +393,53 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
         .sum()
 }
 
+/// Computes `v0`, `u0`, `x0`, and `cm_0` as folding subprotocol.
+///
+/// # Type Parameters
+///
+/// - `C`: Length of the Ajtai commitment.
+/// - `NTT`: A ring suitable to be used in the LatticeFold protocol.
+///
+/// # Arguments
+///
+/// - `rho_s: &[NTT::CoefficientRepresentation]`  
+///
+///     $\rho$ challenges
+///
+/// - `theta_s: &[Vec<NTT>]`
+///     $$
+///     \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
+///     $$
+/// - `cm_i_s: &[LCCCS<C, NTT>]`
+///
+///     Decomposed linearized commitments
+///
+/// - `eta_s: &[Vec<NTT>]`  
+///
+///     $$
+///     \eta[i] :=
+///     \sum\_{
+///     \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
+///     }
+///     \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+///     $$
+///
+/// - `ccs: &CCS<NTT>`  
+///
+///     A reference to a Customizable Constraint System instance used in the protocol.
+///
+/// # Returns
+///
+/// - `(Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>)`  
+///   A tuple containing:
+///   - `v0: Vec<NTT>`  
+///     Evaluation of linearized folded witness at $\vec{r}\_o$
+///   - `u_0: Commitment<C, NTT>`
+///      A linear combination of $\left[ eta_s[i] \right]\_{i=1}^{2k}$
+///   - `x0: Vec<NTT>`
+///     Folded CCS statement
+///   - `cm_0: Vec<NTT>`
+///     Folded commitment
 pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     rho_s: &[NTT::CoefficientRepresentation],
     theta_s: &[Vec<NTT>],
