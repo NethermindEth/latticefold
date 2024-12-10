@@ -99,6 +99,13 @@ type T = PoseidonTranscript<RqNTT, CS>;
 
 fn main() {
     println!("Setting up example environment...");
+
+    println!("Decomposition parameters:");
+    println!("\tB: {}", ExampleDP::B);
+    println!("\tL: {}", ExampleDP::L);
+    println!("\tB_SMALL: {}", ExampleDP::B_SMALL);
+    println!("\tK: {}", ExampleDP::K);
+
     let (acc, wit_acc, cm_i, wit_i, ccs, scheme) =
         setup_example_environment::<C, RqNTT, ExampleDP, W, WIT_LEN, CS>();
 

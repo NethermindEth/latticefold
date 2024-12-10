@@ -1,5 +1,5 @@
 [workspace] 
-members = [ "latticefold", "cyclotomic-rings", "examples"]
+members = [ "latticefold", "cyclotomic-rings", "latticefold-examples"]
 resolver = "2"
 
 [workspace.package]
