@@ -93,7 +93,32 @@ pub(super) fn get_rhos<
 
     rhos
 }
-
+/// Creates sumcheck polynomial
+///
+/// $$
+/// g(\vec{x}) := \sum_{i=1}^{2k} \left[\alpha_i g_{1,i}(\vec{x}) + \mu_i g_{2,i}(\vec{x}) + \zeta_i g_{3,i}(\vec{x})\right]
+/// $$
+///
+/// where, for all $i \in \[2k\]$,
+///
+/// $$
+/// g_{1,i}(\vec{x}) := eq(\vec{r}_i, \vec{x}) \cdot \mathrm{mle} \[\hat{f}_i\](\vec{x}),
+/// $$
+///
+/// $$
+/// g_{2,i}(\vec{x}) := eq(\vec{\beta}, \vec{x}) \cdot
+/// \prod_{j=-(b-1)}^{b-1} \( \mathrm{mle} \[\hat{f}_i\](\vec{x}) - j \),
+/// $$
+///
+/// $$
+/// g_{3,i}(\vec{x}) := eq(\vec{r}_i, \vec{x}) \cdot
+/// \left(
+/// \sum\_{
+/// \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
+/// }
+/// \text{mle}\[M_1\]\(\vec{x}, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+/// \right).
+/// $$
 #[allow(clippy::too_many_arguments)]
 pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     log_m: usize,
