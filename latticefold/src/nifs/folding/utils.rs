@@ -7,7 +7,7 @@ use ark_std::iterable::Iterable;
 
 // use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
-use lattirust_poly::polynomials::{ArithErrors, RefCounter};
+use lattirust_poly::polynomials::RefCounter;
 use lattirust_ring::{cyclotomic_ring::CRT, Ring};
 
 use crate::ark_base::*;
@@ -149,7 +149,7 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         &f_hat_mles[0..DP::K],
         &alpha_s[0..DP::K],
         challenged_Ms_1,
-    )?;
+    );
 
     let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
     prepare_g1_and_3_k_mles_list(
@@ -158,17 +158,17 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         &f_hat_mles[DP::K..2 * DP::K],
         &alpha_s[DP::K..2 * DP::K],
         challenged_Ms_2,
-    )?;
+    );
 
     // g2
     mles.push(beta_eq_x);
 
     for f_hat_mles in f_hat_mles.iter().take(DP::K) {
-        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles);
     }
 
     for f_hat_mles in f_hat_mles.iter().take(2 * DP::K).skip(DP::K) {
-        prepare_g2_i_mle_list(&mut mles, f_hat_mles)?;
+        prepare_g2_i_mle_list(&mut mles, f_hat_mles);
     }
 
     let degree = 2 * DP::B_SMALL;
@@ -339,7 +339,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
     alpha_s: &[NTT],
     challenged_Ms: &DenseMultilinearExtension<NTT>,
-) -> Result<(), ArithErrors> {
+) {
     let mut combined_mle: DenseMultilinearExtension<NTT> = DenseMultilinearExtension::zero();
 
     for (fi_hat_mle_s, alpha_i) in f_hat_mle_s.iter().zip(alpha_s.iter()) {
@@ -355,17 +355,13 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
 
     mles.push(r_i_eq);
     mles.push(RefCounter::from(combined_mle));
-
-    Ok(())
 }
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
     mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
     fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
-) -> Result<(), ArithErrors> {
+) {
     for fi_hat_mle in fi_hat_mle_s.iter() {
         mles.push(fi_hat_mle.clone());
     }
-
-    Ok(())
 }
