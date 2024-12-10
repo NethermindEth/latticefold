@@ -7,7 +7,6 @@ use ark_std::iterable::Iterable;
 
 // use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
-use lattirust_poly::polynomials::RefCounter;
 use lattirust_ring::{cyclotomic_ring::CRT, Ring};
 
 use crate::ark_base::*;
@@ -97,14 +96,14 @@ pub(super) fn get_rhos<
 #[allow(clippy::too_many_arguments)]
 pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
     log_m: usize,
-    f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>],
+    f_hat_mles: Vec<Vec<DenseMultilinearExtension<NTT>>>,
     alpha_s: &[NTT],
     challenged_Ms_1: &DenseMultilinearExtension<NTT>,
     challenged_Ms_2: &DenseMultilinearExtension<NTT>,
     r_s: &[Vec<NTT>],
     beta_s: &[NTT],
     mu_s: &[NTT],
-) -> Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), FoldingError<NTT>> {
+) -> Result<(Vec<DenseMultilinearExtension<NTT>>, usize), FoldingError<NTT>> {
     if alpha_s.len() != 2 * DP::K
         || f_hat_mles.len() != 2 * DP::K
         || r_s.len() != 2 * DP::K
@@ -123,21 +122,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
         }
     }
 
-    let beta_eq_x = build_eq_x_r(beta_s)?;
-
-    let f_hat_mles: Vec<Vec<RefCounter<DenseMultilinearExtension<NTT>>>> = f_hat_mles
-        .iter()
-        .map(|f_hat_mles_i| {
-            f_hat_mles_i
-                .clone()
-                .into_iter()
-                .map(RefCounter::from)
-                .collect::<Vec<_>>()
-        })
-        .collect();
-
     let len = 2 + 2 + // g1 + g3
-        1 + DP::K + DP::K; // g2
+        1 + f_hat_mles.len() * f_hat_mles[0].len(); // g2
     let mut mles = Vec::with_capacity(len);
 
     // We assume here that decomposition subprotocol puts the same r challenge point
@@ -161,15 +147,8 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     );
 
     // g2
-    mles.push(beta_eq_x);
-
-    for f_hat_mles in f_hat_mles.iter().take(DP::K) {
-        prepare_g2_i_mle_list(&mut mles, f_hat_mles);
-    }
-
-    for f_hat_mles in f_hat_mles.iter().take(2 * DP::K).skip(DP::K) {
-        prepare_g2_i_mle_list(&mut mles, f_hat_mles);
-    }
+    let beta_eq_x = build_eq_x_r(beta_s)?;
+    prepare_g2_i_mle_list(&mut mles, beta_eq_x, f_hat_mles);
 
     let degree = 2 * DP::B_SMALL;
 
@@ -334,9 +313,9 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
 }
 
 fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
-    mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
-    r_i_eq: RefCounter<DenseMultilinearExtension<NTT>>,
-    f_hat_mle_s: &[Vec<RefCounter<DenseMultilinearExtension<NTT>>>],
+    mles: &mut Vec<DenseMultilinearExtension<NTT>>,
+    r_i_eq: DenseMultilinearExtension<NTT>,
+    f_hat_mle_s: &[Vec<DenseMultilinearExtension<NTT>>],
     alpha_s: &[NTT],
     challenged_Ms: &DenseMultilinearExtension<NTT>,
 ) {
@@ -345,7 +324,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     for (fi_hat_mle_s, alpha_i) in f_hat_mle_s.iter().zip(alpha_s.iter()) {
         let mut mle = DenseMultilinearExtension::zero();
         for fi_hat_mle in fi_hat_mle_s.iter().rev() {
-            mle += fi_hat_mle.as_ref();
+            mle += fi_hat_mle;
             mle *= *alpha_i;
         }
         combined_mle += mle;
@@ -354,14 +333,16 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     combined_mle += challenged_Ms;
 
     mles.push(r_i_eq);
-    mles.push(RefCounter::from(combined_mle));
+    mles.push(combined_mle);
 }
 
 fn prepare_g2_i_mle_list<NTT: OverField>(
-    mles: &mut Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
-    fi_hat_mle_s: &[RefCounter<DenseMultilinearExtension<NTT>>],
+    mles: &mut Vec<DenseMultilinearExtension<NTT>>,
+    beta_eq_x: DenseMultilinearExtension<NTT>,
+    f_hat_mles: Vec<Vec<DenseMultilinearExtension<NTT>>>,
 ) {
-    for fi_hat_mle in fi_hat_mle_s.iter() {
-        mles.push(fi_hat_mle.clone());
-    }
+    mles.push(beta_eq_x);
+    f_hat_mles
+        .into_iter()
+        .for_each(|mut fhms| mles.append(&mut fhms))
 }

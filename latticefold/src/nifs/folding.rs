@@ -159,7 +159,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             Self::calculate_challenged_mz_mle(&mz_mles[P::K..2 * P::K], &zeta_s[P::K..2 * P::K])?;
         let (g_mles, g_degree) = create_sumcheck_polynomial::<_, P>(
             log_m,
-            &f_hat_mles,
+            f_hat_mles.clone(),
             &alpha_s,
             &prechallenged_Ms_1,
             &prechallenged_Ms_2,
@@ -172,7 +172,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) =
-            MLSumcheck::prove_as_subprotocol(transcript, &g_mles, log_m, g_degree, comb_fn);
+            MLSumcheck::prove_as_subprotocol(transcript, g_mles, log_m, g_degree, comb_fn);
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
 

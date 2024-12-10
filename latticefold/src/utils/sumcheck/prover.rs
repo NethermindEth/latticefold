@@ -2,10 +2,7 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
-use lattirust_poly::{
-    mle::MultilinearExtension,
-    polynomials::{DenseMultilinearExtension, RefCounter},
-};
+use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
 use lattirust_ring::{OverField, Ring};
 
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
@@ -37,18 +34,13 @@ pub struct ProverState<R: OverField> {
 impl<R: OverField, T> IPForMLSumcheck<R, T> {
     /// initialize the prover to argue for the sum of polynomial over {0,1}^`num_vars`
     pub fn prover_init(
-        mles: &[RefCounter<DenseMultilinearExtension<R>>],
+        mles: Vec<DenseMultilinearExtension<R>>,
         nvars: usize,
         degree: usize,
     ) -> ProverState<R> {
         if nvars == 0 {
             panic!("Attempt to prove a constant.")
         }
-
-        // create a deep copy of all unique MLExtensions
-        let mles = ark_std::cfg_iter!(mles)
-            .map(|x| x.as_ref().clone())
-            .collect();
 
         ProverState {
             randomness: Vec::with_capacity(nvars),
@@ -77,7 +69,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             let i = prover_state.round;
             let r = prover_state.randomness[i - 1];
             cfg_iter_mut!(prover_state.mles).for_each(|multiplicand| {
-                *multiplicand = multiplicand.fix_variables(&[r.into()]);
+                multiplicand.fix_variables(&[r.into()]);
             });
         } else if prover_state.round > 0 {
             panic!("verifier message is empty");
