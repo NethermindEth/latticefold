@@ -37,9 +37,9 @@ def find_b_k_pairs(B):
 # Primes with their corresponding d values
 params = {
     "BabyBear": {"p": 15 * 2^27 + 1, "d": 72},
-#    "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
-#    "StarkPrime": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
-#    "Frog": {"p": 159120925213255836417, "d": 16},
+    "Goldilocks": {"p": 2^64 - 2^32 + 1, "d": 24},
+    "StarkPrime": {"p": 2^251 + (17 * 2^192) + 1, "d": 16},
+    "Frog": {"p": 159120925213255836417, "d": 16},
 #    "Dilithium": {"p": 2^23 - 2^13 + 1, "d": 256}
 }
 
@@ -48,7 +48,7 @@ num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13]
 
 # Function to generate Rust macros and write to a file
 def generate_macros_file():
-    with open("../latticefold/benches/macros_bounds.rs", "w") as f:
+    with open("latticefold/benches/macros.rs", "w") as f:
         f.write("#[macro_export]\n")
         f.write("macro_rules! define_params {\n")
         f.write("    ($w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {\n")
@@ -117,16 +117,12 @@ def generate_macros_file():
                     entries_by_n[entry[1]].append(entry)
                 # Print results for each n
                 for n, entries in entries_by_n.items():
-                    min_by_kappa_entries = {}
-                    for entry in entries:
-                        key = (entry[2], entry[3], entry[4], entry[5])  # B, L, b, k
-                        if key not in min_by_kappa_entries or entry[0] < min_by_kappa_entries[key][0]:
-                            min_by_kappa_entries[key] = entry
+                    min_by_kappa_entries = {entry[2:]: entry for entry in entries}
                     for entry in min_by_kappa_entries.values():
                         f.write(f"\n\t\trun_single_{bench_type}(&mut $group, 1, {entry[0]}, {n}, {entry[2]}, {entry[3]}, {entry[4]}, {entry[5]});")
                 f.write("\n")
                 f.write("   };\n")
-                f.write("}\n\n")
+                f.write("}\n")
 
 # Call the function to generate the macros file
 generate_macros_file()
