@@ -533,21 +533,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
-name = "examples"
-version = "0.1.0"
-dependencies = [
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "cyclotomic-rings",
- "humansize",
- "latticefold",
- "lattirust-linear-algebra",
- "lattirust-poly",
- "lattirust-ring",
-]
-
-[[package]]
 name = "foldhash"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -673,6 +658,7 @@ dependencies = [
  "cyclotomic-rings",
  "dhat",
  "hashbrown 0.15.2",
+ "humansize",
  "lattirust-linear-algebra",
  "lattirust-poly",
  "lattirust-ring",

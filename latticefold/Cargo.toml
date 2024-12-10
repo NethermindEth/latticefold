@@ -59,6 +59,7 @@ implicit_clone = "warn"
 [dev-dependencies]
 criterion = "0.5.1"
 dhat = "0.3.2"
+humansize = "2.1.3"
 
 [[bench]]
 name = "ajtai"
