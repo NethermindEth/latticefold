@@ -240,6 +240,18 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
     Ok((mles, degree))
 }
 
+/// Combines evaluations of MLE into evaluation of folding sumcheck polynomial
+///
+/// # Arguments
+///
+/// - `vals: &[NTT]`:
+///   The evluations of the multilinear extensions produced by the `create_sumcheck_polynomial` function
+/// - `mu_s: &[NTT]`
+///   The $\mu$ challenges
+///
+///  # Returns
+///  - NTT:
+///  The value of the same evaluation point evaluated by the folding sumcheck polynomial
 pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionParams>(
     vals: &[NTT],
     mu_s: &[NTT],
