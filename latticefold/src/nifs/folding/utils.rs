@@ -118,6 +118,45 @@ pub(super) fn get_rhos<
 /// }
 /// \text{mle}\[M_1\]\(\vec{x}, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
 /// \right).
+///
+///
+/// # Arguments
+///
+/// - `log_m: usize`  
+///   The number of variables in the final polynomial.
+///
+/// - `f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>]`  
+///   A reference to the multilinear extension of the decomposed NTT witnesses
+///
+/// - `alpha_s: &[NTT]`  
+///   A slice containing the $\alpha$ challenges.
+///
+/// - `challenged_Ms_1: &DenseMultilinearExtension<NTT>`  
+///   A reference to the M matrices multiplied by the first $k$ decomposed vectors, and then taken a linear combination of.
+///
+/// - `challenged_Ms_2: &DenseMultilinearExtension<NTT>`  
+///    A reference to the M matrices multiplied by the second $k$ decomposed vectors, and then taken a linear combination of.
+///
+/// - `r_s: &[Vec<NTT>]`  
+///    The linearization challenge vectors
+///
+/// - `beta_s: &[NTT]`  
+///   The $\beta$ challenges
+///
+/// - `mu_s: &[NTT]`  
+///   The $\mu$ challenges
+///
+/// # Returns
+///
+/// - `Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), FoldingError<NTT>>`  
+///   - On success, returns a tuple containing:
+///     - A `Vec<RefCounter<DenseMultilinearExtension<NTT>>>`, the MLEs that make up the polynomial.
+///     - A `usize` of the degree of the final polynomial.
+///
+/// # Errors
+///
+/// This function will return a `FoldingError<NTT>` if any of the multilinear extensions or vectors are of the wrong size.
+///
 /// $$
 #[allow(clippy::too_many_arguments)]
 pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
