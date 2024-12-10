@@ -118,7 +118,7 @@ pub(super) fn get_rhos<
 /// }
 /// \text{mle}\[M_1\]\(\vec{x}, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
 /// \right).
-///
+/// $$
 ///
 /// # Arguments
 ///
@@ -306,7 +306,48 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
     result
 }
 
-/// The grand sum from point 4 of the Latticefold folding protocol.
+/// Computes the grand sum from point 4 of the Latticefold folding protocol.
+///
+/// # Arguments
+///
+/// - `alpha_s: &[NTT]`  
+///     A slice containing the $\alpha$ challenges.
+///
+/// - `mu_s: &[NTT]`  
+///     A slice containing the $\mu$ challenges.
+///
+/// - `theta_s: &[Vec<NTT>]`  
+///     $$
+///     \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
+///     $$
+///
+/// - `e_asterisk: NTT`  
+///     $$
+///     \mathbf{e}^* := eq(\boldsymbol{\beta}, \mathbf{r}_o)
+///     $$
+///
+/// - `e_s: &[NTT]`  
+///     $$
+///     \left[ e_i := eq(\vec{r}\_i, \vec{r}\_o) \right]\_{i=1}^{2k}
+///     $$
+/// - `zeta_s: &[NTT]`  
+///
+///     A slice containing the $\zeta$ challenges.
+///
+/// - `eta_s: &[Vec<NTT>]`  
+///     $$
+///     \eta[i] :=
+///     \sum\_{
+///     \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
+///     }
+///     \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+///     $$
+///
+/// # Returns
+///
+/// - `NTT`  
+///     Returns the expected value of the sumcheck claim.
+///
 pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
     alpha_s: &[NTT],
     mu_s: &[NTT],
