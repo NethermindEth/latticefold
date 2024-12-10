@@ -149,6 +149,9 @@ jobs:
       - name: Install SageMath
         run: sudo apt-get install -y sagemath
 
+      - name: Check SageMath installation
+        run: sage --version
+
       - name: Run Sage script
         run: sage notebooks/bounds.sage
 
