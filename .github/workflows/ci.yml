@@ -139,3 +139,29 @@ jobs:
       uses: crate-ci/typos@master
       with: 
         config: .github/workflows/typos.toml
+
+  check_macros_generation:
+    name: Check Macros Generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install SageMath
+        run: sudo apt-get install -y sagemath
+
+      - name: Run Sage script
+        run: sage notebooks/bounds.sage
+
+      - name: Verify macros.rs generation
+        run: |
+          if [ ! -f "latticefold/benches/macros.rs" ]; then
+            echo "Error: macros.rs file was not generated."
+            exit 1
+          fi
+
+      - name: Compare with committed macros.rs
+        run: |
+          if ! git diff --exit-code latticefold/benches/macros.rs; then
+            echo "Error: Generated macros.rs does not match the committed version."
+            exit 1
+          fi
