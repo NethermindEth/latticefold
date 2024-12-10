@@ -88,6 +88,21 @@ for prime_name, param in params.items():
         entries_by_n[entry[1]].append(entry)
     # Print results for each n
     for n, entries in entries_by_n.items():
+        min_entries = {}
         for entry in entries:
-            kappa, _, B, L, b, k = entry
-            print(f"\t{prime_name}, Kappa = {kappa},|w_ccs| = {n}, B = {B}, L = {L}, b = {b}, k = {k}")
+            key = (entry[2], entry[3], entry[4], entry[5])  # B, L, b, k
+            if key not in min_entries or entry[0] < min_entries[key][0]:
+                min_entries[key] = entry
+        for entry in min_entries.values():
+            benchmark_function = f"run_single_{prime_name.lower()}_benchmark!"
+            print(f"\t{benchmark_function}(&mut $group, 1, {entry[0]}, {n}, {entry[2]}, {entry[3]}, {entry[4]}, {entry[5]});")
+    print("")
+    for n, entries in entries_by_n.items():
+        min_entries = {}
+        for entry in entries:
+            key = (entry[2], entry[3], entry[4], entry[5])  # B, L, b, k
+            if key not in min_entries or entry[0] < min_entries[key][0]:
+                min_entries[key] = entry
+        for entry in min_entries.values():
+            benchmark_function = f"run_single_{prime_name.lower()}_non_scalar_benchmark!"
+            print(f"\t{benchmark_function}(&mut $group, 1, {entry[0]}, {n}, {entry[2]}, {entry[3]}, {entry[4]}, {entry[5]});")

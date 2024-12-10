@@ -20,46 +20,46 @@ macro_rules! run_goldilocks_benchmarks {
     ($group: ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         run_single_goldilocks_benchmark!(&mut $group, 1, 7, 512, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 9, 512, 512, 7, 2, 9);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 9, 512, 512, 8, 2, 9);
         run_single_goldilocks_benchmark!(&mut $group, 1, 10, 512, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut $group, 1, 12, 512, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut $group, 1, 15, 512, 65536, 4, 2, 16);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 22, 512, 2097152, 3, 2, 21);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 22, 512, 2097152, 4, 2, 21);
         run_single_goldilocks_benchmark!(&mut $group, 1, 39, 512, 4294967296, 2, 2, 32);
         run_single_goldilocks_benchmark!(&mut $group, 1, 8, 1024, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 9, 1024, 512, 7, 2, 9);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 9, 1024, 512, 8, 2, 9);
         run_single_goldilocks_benchmark!(&mut $group, 1, 10, 1024, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut $group, 1, 12, 1024, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut $group, 1, 15, 1024, 65536, 4, 2, 16);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 23, 1024, 2097152, 3, 2, 21);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 23, 1024, 2097152, 4, 2, 21);
         run_single_goldilocks_benchmark!(&mut $group, 1, 40, 1024, 4294967296, 2, 2, 32);
         run_single_goldilocks_benchmark!(&mut $group, 1, 8, 2048, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 10, 2048, 512, 7, 2, 9);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 10, 2048, 512, 8, 2, 9);
         run_single_goldilocks_benchmark!(&mut $group, 1, 11, 2048, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut $group, 1, 13, 2048, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut $group, 1, 16, 2048, 65536, 4, 2, 16);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 24, 2048, 2097152, 3, 2, 21);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 24, 2048, 2097152, 4, 2, 21);
         run_single_goldilocks_benchmark!(&mut $group, 1, 41, 2048, 4294967296, 2, 2, 32);
         run_single_goldilocks_benchmark!(&mut $group, 1, 8, 4096, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 10, 4096, 512, 7, 2, 9);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 10, 4096, 512, 8, 2, 9);
         run_single_goldilocks_benchmark!(&mut $group, 1, 11, 4096, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut $group, 1, 13, 4096, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut $group, 1, 17, 4096, 65536, 4, 2, 16);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 25, 4096, 2097152, 3, 2, 21);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 25, 4096, 2097152, 4, 2, 21);
         run_single_goldilocks_benchmark!(&mut $group, 1, 42, 4096, 4294967296, 2, 2, 32);
         run_single_goldilocks_benchmark!(&mut $group, 1, 9, 8192, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 11, 8192, 512, 7, 2, 9);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 11, 8192, 512, 8, 2, 9);
         run_single_goldilocks_benchmark!(&mut $group, 1, 12, 8192, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut $group, 1, 14, 8192, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut $group, 1, 17, 8192, 65536, 4, 2, 16);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 26, 8192, 2097152, 3, 2, 21);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 26, 8192, 2097152, 4, 2, 21);
         run_single_goldilocks_benchmark!(&mut $group, 1, 43, 8192, 4294967296, 2, 2, 32);
         run_single_goldilocks_benchmark!(&mut $group, 1, 9, 16384, 256, 8, 2, 8);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 11, 16384, 512, 7, 2, 9);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 11, 16384, 512, 8, 2, 9);
         run_single_goldilocks_benchmark!(&mut $group, 1, 12, 16384, 2048, 6, 2, 11);
         run_single_goldilocks_benchmark!(&mut $group, 1, 14, 16384, 8192, 5, 2, 13);
         run_single_goldilocks_benchmark!(&mut $group, 1, 18, 16384, 65536, 4, 2, 16);
-        run_single_goldilocks_benchmark!(&mut $group, 1, 26, 16384, 2097152, 3, 2, 21);
+        run_single_goldilocks_benchmark!(&mut $group, 1, 26, 16384, 2097152, 4, 2, 21);
         run_single_goldilocks_benchmark!(&mut $group, 1, 44, 16384, 4294967296, 2, 2, 32);
     };
 }
@@ -69,46 +69,46 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
     ($group: ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 7, 512, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 512, 512, 7, 2, 9);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 512, 512, 8, 2, 9);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 512, 2048, 6, 2, 11);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 12, 512, 8192, 5, 2, 13);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 15, 512, 65536, 4, 2, 16);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 22, 512, 2097152, 3, 2, 21);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 22, 512, 2097152, 4, 2, 21);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 39, 512, 4294967296, 2, 2, 32);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 1024, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 1024, 512, 7, 2, 9);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 1024, 512, 8, 2, 9);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 1024, 2048, 6, 2, 11);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 12, 1024, 8192, 5, 2, 13);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 15, 1024, 65536, 4, 2, 16);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 23, 1024, 2097152, 3, 2, 21);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 23, 1024, 2097152, 4, 2, 21);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 40, 1024, 4294967296, 2, 2, 32);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 2048, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 2048, 512, 7, 2, 9);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 2048, 512, 8, 2, 9);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 11, 2048, 2048, 6, 2, 11);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 13, 2048, 8192, 5, 2, 13);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 16, 2048, 65536, 4, 2, 16);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 24, 2048, 2097152, 3, 2, 21);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 24, 2048, 2097152, 4, 2, 21);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 41, 2048, 4294967296, 2, 2, 32);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 8, 4096, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 4096, 512, 7, 2, 9);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 10, 4096, 512, 8, 2, 9);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 11, 4096, 2048, 6, 2, 11);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 13, 4096, 8192, 5, 2, 13);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 17, 4096, 65536, 4, 2, 16);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 25, 4096, 2097152, 3, 2, 21);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 25, 4096, 2097152, 4, 2, 21);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 42, 4096, 4294967296, 2, 2, 32);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 8192, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 11, 8192, 512, 7, 2, 9);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 11, 8192, 512, 8, 2, 9);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 12, 8192, 2048, 6, 2, 11);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 14, 8192, 8192, 5, 2, 13);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 17, 8192, 65536, 4, 2, 16);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 26, 8192, 2097152, 3, 2, 21);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 26, 8192, 2097152, 4, 2, 21);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 43, 8192, 4294967296, 2, 2, 32);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 9, 16384, 256, 8, 2, 8);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 11, 16384, 512, 7, 2, 9);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 11, 16384, 512, 8, 2, 9);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 12, 16384, 2048, 6, 2, 11);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 14, 16384, 8192, 5, 2, 13);
         run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 18, 16384, 65536, 4, 2, 16);
-        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 26, 16384, 2097152, 3, 2, 21);
+        run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 26, 16384, 2097152, 4, 2, 21);
         run_single_goldilocks_non_scalar_benchmark!(
             &mut $group,
             1,
@@ -271,6 +271,16 @@ macro_rules! run_starkprime_benchmarks {
             3,
             2,
             84
+        );
+        run_single_starkprime_benchmark!(
+            &mut $group,
+            1,
+            177,
+            16384,
+            85070591730234615865843651857942052864,
+            2,
+            2,
+            126
         );
     };
 }
@@ -769,35 +779,35 @@ macro_rules! run_babybear_benchmarks {
     ($group:ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         run_single_babybear_benchmark!(&mut $group, 1, 3, 512, 16, 8, 2, 4);
-        run_single_babybear_benchmark!(&mut $group, 1, 4, 512, 32, 6, 2, 5);
+        run_single_babybear_benchmark!(&mut $group, 1, 4, 512, 32, 7, 2, 5);
         run_single_babybear_benchmark!(&mut $group, 1, 5, 512, 256, 4, 2, 8);
-        run_single_babybear_benchmark!(&mut $group, 1, 7, 512, 1024, 3, 2, 10);
-        run_single_babybear_benchmark!(&mut $group, 1, 11, 512, 32768, 2, 2, 15);
-        run_single_babybear_benchmark!(&mut $group, 1, 4, 1024, 32, 6, 2, 5);
-        run_single_babybear_benchmark!(&mut $group, 1, 5, 1024, 64, 5, 2, 6);
+        run_single_babybear_benchmark!(&mut $group, 1, 7, 512, 1024, 4, 2, 10);
+        run_single_babybear_benchmark!(&mut $group, 1, 11, 512, 32768, 3, 2, 15);
+        run_single_babybear_benchmark!(&mut $group, 1, 4, 1024, 32, 7, 2, 5);
+        run_single_babybear_benchmark!(&mut $group, 1, 5, 1024, 64, 6, 2, 6);
         run_single_babybear_benchmark!(&mut $group, 1, 6, 1024, 256, 4, 2, 8);
-        run_single_babybear_benchmark!(&mut $group, 1, 7, 1024, 1024, 3, 2, 10);
-        run_single_babybear_benchmark!(&mut $group, 1, 11, 1024, 32768, 2, 2, 15);
-        run_single_babybear_benchmark!(&mut $group, 1, 4, 2048, 32, 6, 2, 5);
-        run_single_babybear_benchmark!(&mut $group, 1, 5, 2048, 64, 5, 2, 6);
+        run_single_babybear_benchmark!(&mut $group, 1, 7, 1024, 1024, 4, 2, 10);
+        run_single_babybear_benchmark!(&mut $group, 1, 11, 1024, 32768, 3, 2, 15);
+        run_single_babybear_benchmark!(&mut $group, 1, 4, 2048, 32, 7, 2, 5);
+        run_single_babybear_benchmark!(&mut $group, 1, 5, 2048, 64, 6, 2, 6);
         run_single_babybear_benchmark!(&mut $group, 1, 6, 2048, 256, 4, 2, 8);
-        run_single_babybear_benchmark!(&mut $group, 1, 8, 2048, 1024, 3, 2, 10);
-        run_single_babybear_benchmark!(&mut $group, 1, 11, 2048, 32768, 2, 2, 15);
+        run_single_babybear_benchmark!(&mut $group, 1, 8, 2048, 1024, 4, 2, 10);
+        run_single_babybear_benchmark!(&mut $group, 1, 11, 2048, 32768, 3, 2, 15);
         run_single_babybear_benchmark!(&mut $group, 1, 4, 4096, 16, 8, 2, 4);
-        run_single_babybear_benchmark!(&mut $group, 1, 5, 4096, 32, 6, 2, 5);
+        run_single_babybear_benchmark!(&mut $group, 1, 5, 4096, 32, 7, 2, 5);
         run_single_babybear_benchmark!(&mut $group, 1, 6, 4096, 256, 4, 2, 8);
-        run_single_babybear_benchmark!(&mut $group, 1, 8, 4096, 1024, 3, 2, 10);
-        run_single_babybear_benchmark!(&mut $group, 1, 12, 4096, 32768, 2, 2, 15);
+        run_single_babybear_benchmark!(&mut $group, 1, 8, 4096, 1024, 4, 2, 10);
+        run_single_babybear_benchmark!(&mut $group, 1, 12, 4096, 32768, 3, 2, 15);
         run_single_babybear_benchmark!(&mut $group, 1, 4, 8192, 16, 8, 2, 4);
-        run_single_babybear_benchmark!(&mut $group, 1, 5, 8192, 32, 6, 2, 5);
+        run_single_babybear_benchmark!(&mut $group, 1, 5, 8192, 32, 7, 2, 5);
         run_single_babybear_benchmark!(&mut $group, 1, 6, 8192, 256, 4, 2, 8);
-        run_single_babybear_benchmark!(&mut $group, 1, 8, 8192, 1024, 3, 2, 10);
-        run_single_babybear_benchmark!(&mut $group, 1, 12, 8192, 32768, 2, 2, 15);
-        run_single_babybear_benchmark!(&mut $group, 1, 5, 16384, 32, 6, 2, 5);
-        run_single_babybear_benchmark!(&mut $group, 1, 6, 16384, 64, 5, 2, 6);
+        run_single_babybear_benchmark!(&mut $group, 1, 8, 8192, 1024, 4, 2, 10);
+        run_single_babybear_benchmark!(&mut $group, 1, 12, 8192, 32768, 3, 2, 15);
+        run_single_babybear_benchmark!(&mut $group, 1, 5, 16384, 32, 7, 2, 5);
+        run_single_babybear_benchmark!(&mut $group, 1, 6, 16384, 64, 6, 2, 6);
         run_single_babybear_benchmark!(&mut $group, 1, 7, 16384, 256, 4, 2, 8);
-        run_single_babybear_benchmark!(&mut $group, 1, 9, 16384, 1024, 3, 2, 10);
-        run_single_babybear_benchmark!(&mut $group, 1, 13, 16384, 32768, 2, 2, 15);
+        run_single_babybear_benchmark!(&mut $group, 1, 9, 16384, 1024, 4, 2, 10);
+        run_single_babybear_benchmark!(&mut $group, 1, 13, 16384, 32768, 3, 2, 15);
     };
 }
 
@@ -806,34 +816,34 @@ macro_rules! run_babybear_non_scalar_benchmarks {
     ($group:ident) => {
         // Parameters Criterion, X_LEN, C, W, B, L, B_small, K
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 3, 512, 16, 8, 2, 4);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 512, 32, 6, 2, 5);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 512, 32, 7, 2, 5);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 512, 256, 4, 2, 8);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 7, 512, 1024, 3, 2, 10);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 11, 512, 32768, 2, 2, 15);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 1024, 32, 6, 2, 5);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 1024, 64, 5, 2, 6);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 7, 512, 1024, 4, 2, 10);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 11, 512, 32768, 3, 2, 15);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 1024, 32, 7, 2, 5);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 1024, 64, 6, 2, 6);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 6, 1024, 256, 4, 2, 8);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 7, 1024, 1024, 3, 2, 10);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 11, 1024, 32768, 2, 2, 15);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 2048, 32, 6, 2, 5);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 2048, 64, 5, 2, 6);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 7, 1024, 1024, 4, 2, 10);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 11, 1024, 32768, 3, 2, 15);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 2048, 32, 7, 2, 5);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 2048, 64, 6, 2, 6);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 6, 2048, 256, 4, 2, 8);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 8, 2048, 1024, 3, 2, 10);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 11, 2048, 32768, 2, 2, 15);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 8, 2048, 1024, 4, 2, 10);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 11, 2048, 32768, 3, 2, 15);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 4096, 16, 8, 2, 4);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 4096, 32, 6, 2, 5);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 4096, 32, 7, 2, 5);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 6, 4096, 256, 4, 2, 8);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 8, 4096, 1024, 3, 2, 10);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 12, 4096, 32768, 2, 2, 15);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 8, 4096, 1024, 4, 2, 10);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 12, 4096, 32768, 3, 2, 15);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 4, 8192, 16, 8, 2, 4);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 8192, 32, 6, 2, 5);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 8192, 32, 7, 2, 5);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 6, 8192, 256, 4, 2, 8);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 8, 8192, 1024, 3, 2, 10);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 12, 8192, 32768, 2, 2, 15);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 16384, 32, 6, 2, 5);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 6, 16384, 64, 5, 2, 6);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 8, 8192, 1024, 4, 2, 10);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 12, 8192, 32768, 3, 2, 15);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 5, 16384, 32, 7, 2, 5);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 6, 16384, 64, 6, 2, 6);
         run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 7, 16384, 256, 4, 2, 8);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 9, 16384, 1024, 3, 2, 10);
-        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 13, 16384, 32768, 2, 2, 15);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 9, 16384, 1024, 4, 2, 10);
+        run_single_babybear_non_scalar_benchmark!(&mut $group, 1, 13, 16384, 32768, 3, 2, 15);
     };
 }
