@@ -15,7 +15,7 @@ use latticefold::transcript::poseidon::PoseidonTranscript;
 use std::fmt::Debug;
 use std::time::Instant;
 
-include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+include!(concat!(env!("OUT_DIR"), "/examples_generated.rs"));
 
 #[allow(dead_code)]
 pub fn wit_and_ccs_gen_degree_three_non_scalar<
