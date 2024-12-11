@@ -256,14 +256,14 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 }
 
 pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
-    rho_s_coeff: Vec<NTT::CoefficientRepresentation>,
-    rho_s: Vec<NTT>,
+    rho_s_coeff: &[NTT::CoefficientRepresentation],
+    rho_s: &[NTT],
     theta_s: &[Vec<NTT>],
     cm_i_s: &[LCCCS<C, NTT>],
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
 ) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
-    let v_0: Vec<NTT> = rot_lin_combination(&rho_s_coeff, theta_s);
+    let v_0: Vec<NTT> = rot_lin_combination(rho_s_coeff, theta_s);
 
     let cm_0: Commitment<C, NTT> = rho_s
         .iter()

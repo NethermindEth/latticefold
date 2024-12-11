@@ -96,11 +96,8 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         for i in 0..nvars {
             let prover_msg = proof.0.get(i).expect("proof is incomplete");
             transcript.absorb_slice(&prover_msg.evaluations);
-            let verifier_msg = IPForMLSumcheck::verify_round(
-                (*prover_msg).clone(),
-                &mut verifier_state,
-                transcript,
-            );
+            let verifier_msg =
+                IPForMLSumcheck::verify_round(prover_msg.clone(), &mut verifier_state, transcript);
             transcript.absorb(&verifier_msg.randomness.into());
         }
 
