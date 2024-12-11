@@ -1,3 +1,5 @@
+//! Provide test and benchmark utility for CCS
+
 use ark_std::{log2, vec::Vec};
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::SparseMatrix;

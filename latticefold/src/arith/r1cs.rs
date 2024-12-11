@@ -1,3 +1,5 @@
+//! Defines bahaviour of R1CS, a degree two constraint system
+
 use cyclotomic_rings::rings::SuitableRing;
 use lattirust_linear_algebra::sparse_matrix::dense_matrix_u64_to_sparse;
 use lattirust_linear_algebra::SparseMatrix;

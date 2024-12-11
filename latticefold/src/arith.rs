@@ -378,7 +378,9 @@ impl<NTT: SuitableRing> Witness<NTT> {
 ///
 /// # Types
 ///  - `R: Ring` - the ring in which the constraint system is operating.
+///
 pub trait Instance<R: Ring> {
+    /// Given a witness vector, produce a concatonation of the statement and the witness
     fn get_z_vector(&self, w: &[R]) -> Vec<R>;
 }
 

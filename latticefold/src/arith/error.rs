@@ -1,3 +1,4 @@
+//! Provides error functionality for constraint systems.
 use crate::ark_base::*;
 use thiserror::Error;
 

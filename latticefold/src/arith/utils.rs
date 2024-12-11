@@ -1,3 +1,5 @@
+//! Provides operations used for working with constraint systems
+
 use crate::ark_base::*;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
