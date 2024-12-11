@@ -1,3 +1,8 @@
+//! The folding module defines the behaviour for the folding subprotocol
+//! of the LatticeFold protocol.
+//!
+//! <https://eprint.iacr.org/2024/257.pdf#page=45>
+
 #![allow(non_snake_case)]
 
 use ark_ff::Zero;
