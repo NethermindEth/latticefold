@@ -1,7 +1,7 @@
 //! The NIFS module defines the behaviour of the [LatticeFold](https://eprint.iacr.org/2024/257.pdf) protocol
 //!
 //! NIFS = Non Interactive Folding Scheme
-//! <>
+
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use ark_std::vec::Vec;
