@@ -92,8 +92,21 @@ fn main() -> Result<(), String> {
 
     fs::write(&dest_path, generated_code).unwrap();
 
-    // Optionally tell Cargo when to rerun the build script
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-env-changed=PARAM_B");
+    println!("cargo:rerun-if-env-changed=PARAM_L");
+    println!("cargo:rerun-if-env-changed=PARAM_B_SMALL");
+    println!("cargo:rerun-if-env-changed=PARAM_K");
+    println!("cargo:rerun-if-env-changed=PARAM_C");
+    println!("cargo:rerun-if-env-changed=PARAM_WIT_LEN");
+    println!("cargo:rerun-if-env-changed=PARAM_X_LEN");
+    println!("cargo:rerun-if-env-changed=PARAM_X_LEN_STARK");
+    println!("cargo:rerun-if-env-changed=PARAM_C_STARK");
+    println!("cargo:rerun-if-env-changed=PARAM_B_STARK");
+    println!("cargo:rerun-if-env-changed=PARAM_L_STARK");
+    println!("cargo:rerun-if-env-changed=PARAM_B_SMALL_STARK");
+    println!("cargo:rerun-if-env-changed=PARAM_WIT_LEN_STARK");
+    println!("cargo:rerun-if-env-changed=PARAM_K_STARK");
 
     Ok(())
 }
