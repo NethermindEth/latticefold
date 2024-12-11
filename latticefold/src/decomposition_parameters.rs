@@ -1,3 +1,8 @@
+//! Provides utility for decomposition parameters.
+//!
+//! Decomposition parameters dictate how higher-bound witness are
+//! decomposed into lower-bound witnesses.
+
 use ark_std::fmt::Display;
 
 /// Decomposition parameters.

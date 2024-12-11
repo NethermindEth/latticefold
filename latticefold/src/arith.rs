@@ -1,3 +1,5 @@
+//! The arith module provides utility for operating with arithmetic constraint systems.
+
 #![allow(non_snake_case)]
 
 use core::mem;
@@ -27,6 +29,11 @@ pub mod error;
 pub mod r1cs;
 pub mod utils;
 
+/// A trait for defining the behaviour of an arithmetic constraint system.
+///
+/// ## Type Parameters
+///
+///  * `R: Ring` - the ring algebra over which the constraint system operates
 pub trait Arith<R: Ring> {
     /// Checks that the given Arith structure is satisfied by a z vector. Used only for testing.
     fn check_relation(&self, z: &[R]) -> Result<(), Error>;
@@ -56,7 +63,6 @@ pub struct CCS<R: Ring> {
     pub s: usize,
     /// s_prime = log(n), dimension of y
     pub s_prime: usize,
-
     /// vector of matrices
     pub M: Vec<SparseMatrix<R>>,
     /// vector of multisets
@@ -162,29 +168,56 @@ impl<R: Ring> CCS<R> {
     }
 }
 
+/// A representation a CCS witness commitment and statement.
+///
+/// # Type Parameters
+/// - `C`: The length of the commitment vector.
+/// - `R`: The ring in which the CCS is operating.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct CCCS<const C: usize, R: Ring> {
+    /// A commitment to the B-decomposed CCS witness.
     pub cm: Commitment<C, R>,
+    /// A CCS statement
     pub x_ccs: Vec<R>,
 }
 
+/// A representation a linearized CCS witness commitment and statement.
+///
+/// # Type Parameters
+/// - `C`: The length of the commitment vector.
+/// - `R`: The ring in which the CCS is operating.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct LCCCS<const C: usize, R: Ring> {
+    /// The linearization sumcheck challenge vector
     pub r: Vec<R>,
+    /// The evaluation of the linearized CCS commitment at `r`.
     pub v: Vec<R>,
+    /// The commitment to the B-decomposed CCS witness.
     pub cm: Commitment<C, R>,
+    /// The evaluation of the MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$ at `r`.
     pub u: Vec<R>,
+    /// The CCS statement
     pub x_w: Vec<R>,
+    // TODO fill this in
     pub h: R,
 }
 
+/// A representation a CCS witness.
+///
+/// # Type Parameters
+/// - `NTT`: The ring in which the CCS is operating.
+///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Witness<NTT: SuitableRing> {
-    /// f is B-decomposed CCS witness
+    /// `f` is B-decomposed CCS witness in NTT form
     pub f: Vec<NTT>,
+    /// `f_coeff` is B-decomposed CCS witness in coefficient form   
     pub f_coeff: Vec<NTT::CoefficientRepresentation>,
     /// NTT(f_hat) = Coeff(coefficient representation of f)
     pub f_hat: Vec<DenseMultilinearExtension<NTT>>,
+    /// `w_ccs` is the original CCS witness.
     pub w_ccs: Vec<NTT>,
 }
 
@@ -310,6 +343,9 @@ impl<NTT: SuitableRing> Witness<NTT> {
         Self::from_w_ccs::<P>((0..w_ccs_len).map(|_| NTT::rand(rng)).collect())
     }
 
+    /// Produces a commitment from a witness
+    ///
+    /// Ajtai commitments are produced by multiplying an Ajtai matrix by the witness vector
     pub fn commit<const C: usize, const W: usize, P: DecompositionParams>(
         &self,
         ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
@@ -338,6 +374,10 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 }
 
+/// A trait for defining the behaviour of a satisfying instance of a constraint system
+///
+/// # Types
+///  - `R: Ring` - the ring in which the constraint system is operating.
 pub trait Instance<R: Ring> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R>;
 }

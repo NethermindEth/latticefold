@@ -16,6 +16,7 @@ pub mod nifs;
 pub mod transcript;
 pub mod utils;
 
+#[doc(hidden)]
 mod ark_base {
     pub use ark_std::clone::Clone;
     pub use ark_std::convert::From;

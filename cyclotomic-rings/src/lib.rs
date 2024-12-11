@@ -14,6 +14,7 @@ pub mod challenge_set;
 pub mod rings;
 pub mod rotation;
 
+#[doc(hidden)]
 mod ark_base {
     pub use ark_std::clone::Clone;
     pub use ark_std::convert::From;

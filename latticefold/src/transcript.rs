@@ -1,3 +1,7 @@
+//! Provides utility for generating non-interactive challenges
+//!
+//! Transcripts allow provers and verifiers to independently draw the same challenges.
+
 use ark_std::fmt::Debug;
 use lattirust_ring::OverField;
 

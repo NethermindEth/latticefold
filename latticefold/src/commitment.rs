@@ -1,3 +1,5 @@
+//! Provides utility for committing to witnesses.
+
 use thiserror::Error;
 
 mod commitment_scheme;
