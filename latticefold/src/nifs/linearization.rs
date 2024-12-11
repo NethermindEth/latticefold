@@ -1,5 +1,5 @@
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial, sumcheck_polynomial_comb_fn};
 
@@ -84,7 +84,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         ccs: &CCS<NTT>,
     ) -> Result<
         (
-            Vec<RefCounter<DenseMultilinearExtension<NTT>>>,
+            Vec<DenseMultilinearExtension<NTT>>,
             usize,
             Vec<DenseMultilinearExtension<NTT>>,
         ),
@@ -98,7 +98,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
         // Construct the sumcheck polynomial g
         let (g_mles, g_degree) =
-            prepare_lin_sumcheck_polynomial(&ccs.c, &Mz_mles, &ccs.S, &beta_s)?;
+            prepare_lin_sumcheck_polynomial(&ccs.c, &ccs.d, &Mz_mles, &ccs.S, &beta_s)?;
 
         Ok((g_mles, g_degree, Mz_mles))
     }
@@ -106,7 +106,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     /// Step 2: Run linearization sum-check protocol.
     fn generate_sumcheck_proof(
         transcript: &mut impl Transcript<NTT>,
-        mles: &[RefCounter<DenseMultilinearExtension<NTT>>],
+        mles: Vec<DenseMultilinearExtension<NTT>>,
         nvars: usize,
         degree: usize,
         comb_fn: impl Fn(&[NTT]) -> NTT + Sync + Send,
@@ -161,7 +161,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
 
         // Run sumcheck protocol.
         let (sumcheck_proof, point_r) =
-            Self::generate_sumcheck_proof(transcript, &g_mles, ccs.s, g_degree, comb_fn)?;
+            Self::generate_sumcheck_proof(transcript, g_mles, ccs.s, g_degree, comb_fn)?;
 
         // Step 3: Compute v, u_vector.
         let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;

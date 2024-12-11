@@ -9,6 +9,7 @@ use ark_std::ops::MulAssign;
 use lattirust_ring::{
     balanced_decomposition::Decompose,
     cyclotomic_ring::{CRT, ICRT},
+    traits::MulUnchecked,
     Cyclotomic, OverField, PolyRing,
 };
 
@@ -53,7 +54,10 @@ pub use stark::*;
 ///
 /// In addition to the data above a suitable ring has to provide Poseidon hash parameters for its base prime field (i.e. $\mathbb{Z}\_p$).
 pub trait SuitableRing:
-    OverField + ICRT<ICRTForm = Self::CoefficientRepresentation> + for<'a> MulAssign<&'a u128>
+    OverField
+    + ICRT<ICRTForm = Self::CoefficientRepresentation>
+    + for<'a> MulAssign<&'a u128>
+    + MulUnchecked<Output = Self>
 where
     <<Self as PolyRing>::BaseRing as Field>::BasePrimeField: Absorb,
 {

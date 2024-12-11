@@ -1,7 +1,7 @@
 use crate::{ark_base::Vec, utils::mle_helpers::evaluate_mles};
 use ark_ff::PrimeField;
 
-use lattirust_poly::{mle::DenseMultilinearExtension, polynomials::RefCounter};
+use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::OverField;
 
 use crate::nifs::{error::LinearizationError, CCS};
@@ -62,10 +62,11 @@ pub fn compute_u<NTT: OverField>(
 ///
 pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
     c: &[NTT],
+    d: &usize,
     M_mles: &[DenseMultilinearExtension<NTT>],
     S: &[Vec<usize>],
     beta_s: &[NTT],
-) -> Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), LinearizationError<NTT>> {
+) -> Result<(Vec<DenseMultilinearExtension<NTT>>, usize), LinearizationError<NTT>> {
     let len = 1 + c
         .iter()
         .enumerate()
@@ -77,13 +78,13 @@ pub fn prepare_lin_sumcheck_polynomial<NTT: OverField>(
 
     for (i, _) in c.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
         for &j in &S[i] {
-            mles.push(RefCounter::new(M_mles[j].clone()));
+            mles.push(M_mles[j].clone());
         }
     }
 
     mles.push(build_eq_x_r(beta_s)?);
 
-    Ok((mles, 3))
+    Ok((mles, d + 1))
 }
 
 pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing>(vals: &[NTT], ccs: &CCS<NTT>) -> NTT {
