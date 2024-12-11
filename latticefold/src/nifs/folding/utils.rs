@@ -76,6 +76,24 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
     }
 }
 
+/// Generates `rho` values based on the provided transcript and decomposition parameters.
+///
+/// This function is used within the module to extract or compute values required for further
+/// operations, based on the interaction with a transcript that supports short challenges.
+///
+/// # Type Parameters
+/// - `R`: A ring suitable to be used in the LatticeFold protocol.
+/// - `T`: A type implementing a cryptographic sponge construction.
+/// - `P`: The decomposition parameters of the protocol.
+///
+/// # Arguments
+/// - `transcript`: A mutable reference to the transcript `T` from which we squeeze the challenges.
+///
+/// # Returns
+/// - `(Vec<R::CoefficientRepresentation>, Vec<R>)`:
+///   - The first element is a vector of challenges in coefficient form.
+///   - The second element is the same vector of challenges in NTT form.
+///
 pub(super) fn get_rhos<
     R: SuitableRing,
     T: TranscriptWithShortChallenges<R>,
@@ -92,6 +110,7 @@ pub(super) fn get_rhos<
     let rhos = CRT::elementwise_crt(rhos_coeff.clone());
     (rhos_coeff, rhos)
 }
+
 /// Creates sumcheck polynomial
 ///
 /// $$
