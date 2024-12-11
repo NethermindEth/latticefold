@@ -245,7 +245,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Evaluate Mz_MLEs",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -278,7 +278,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Create sumcheck polynomial",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -317,7 +317,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Sumcheck",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C, WIT_LEN, W, DP::B, DP::L, DP::B_SMALL, DP::K
             ),
         ),
@@ -343,7 +343,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Get theta's",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -369,7 +369,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Get eta's",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -394,7 +394,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Compute v0, u0, x0, cm0",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -427,7 +427,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Compute f0",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -451,7 +451,7 @@ fn folding_operations<
         BenchmarkId::new(
             "Compute w0",
             format!(
-                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
+                "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
                 C,
                 WIT_LEN,
                 W,
@@ -475,31 +475,31 @@ fn folding_operations<
 }
 
 macro_rules! run_single_operations_goldilocks_benchmark {
-    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
+    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_SMALL:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_SMALL, $k);
         paste::paste! {
-            let setup = setup_folding_test_environment::< $cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>();
-            folding_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, &setup);
+            let setup = setup_folding_test_environment::< $cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_SMALL K $k>]>();
+            folding_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_SMALL K $k>]>($crit_group, &setup);
         }
     };
 }
 
 macro_rules! run_single_operations_non_scalar_goldilocks_benchmark {
-    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
+    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_SMALL:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_SMALL, $k);
         paste::paste! {
-            let setup = setup_folding_non_scalar_test_environment::< $cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>();
-            folding_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, &setup);
+            let setup = setup_folding_non_scalar_test_environment::< $cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_SMALL K $k>]>();
+            folding_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_SMALL K $k>]>($crit_group, &setup);
         }
     };
 }
 
 macro_rules! run_single_operations_degree_three_non_scalar_goldilocks_benchmark {
-    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_small:expr, $k:expr) => {
-        define_params!($w, $b, $l, $b_small, $k);
+    ($crit_group:expr, $cw:expr, $w:expr, $b:expr, $l:expr, $b_SMALL:expr, $k:expr) => {
+        define_params!($w, $b, $l, $b_SMALL, $k);
         paste::paste! {
-            let setup = setup_folding_degree_three_non_scalar_test_environment::< $cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>();
-            folding_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_small K $k>]>($crit_group, &setup);
+            let setup = setup_folding_degree_three_non_scalar_test_environment::< $cw, $w, {$w * $l}, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_SMALL K $k>]>();
+            folding_operations::<$cw, {$w * $l}, $w, GoldilocksRingNTT, GoldilocksChallengeSet, [<DecompParamsWithB $b W $w b $b_SMALL K $k>]>($crit_group, &setup);
         }
     };
 }

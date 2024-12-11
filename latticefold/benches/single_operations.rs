@@ -87,7 +87,7 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
         group.bench_with_input(
             BenchmarkId::new(
                 "Elementwise CRT",
-                format!("{} of size = {}", "Goldilocks", 1 << nv),
+                format!("{} W = {}", "Goldilocks", 1 << nv),
             ),
             &vec_coeff_form,
             |b, input| {
@@ -101,7 +101,7 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
         group.bench_with_input(
             BenchmarkId::new(
                 "Elementwise ICRT",
-                format!("{} of size = {}", "Goldilocks", 1 << nv),
+                format!("{} W = {}", "Goldilocks", 1 << nv),
             ),
             &vec_ntt_form,
             |b, input| {

@@ -18,7 +18,27 @@ macro_rules! define_params {
 #[macro_export]
 macro_rules! run_goldilocks_ajai_benchmarks {
     ($group: ident) => {
-//         run_single_goldilocks_benchmark!(&mut $group, 1, 32768);
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 0});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 1});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 2});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 3});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 4});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 5});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 6});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 7});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 8});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 9});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 10});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 11});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 12});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 13});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 14});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 15});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 16});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 17});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 18});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 19});
+         run_single_goldilocks_benchmark!(&mut $group, 1, {1 << 20});
     };
 }
 

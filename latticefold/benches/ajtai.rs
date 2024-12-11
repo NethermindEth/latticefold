@@ -24,7 +24,7 @@ fn ajtai_benchmark<
     let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
 
     group.bench_with_input(
-        BenchmarkId::new("CommitNTT", format!("C={}, W={}", C, W)),
+        BenchmarkId::new("AjtaiCommitNTT", format!("KAPPA={}, W={}", C, W)),
         &(ajtai_data.clone(), witness),
         |b, (ajtai_data, witness)| {
             b.iter(|| {
@@ -58,16 +58,16 @@ macro_rules! run_single_frog_benchmark {
 }
 
 fn ajtai_benchmarks(c: &mut Criterion) {
-    // BabyBear
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Ajtai BabyBear");
-        group.plot_config(plot_config.clone());
+    // // BabyBear
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Ajtai BabyBear");
+    //     group.plot_config(plot_config.clone());
 
-        run_babybear_ajai_benchmarks!(group);
+    //     run_babybear_ajai_benchmarks!(group);
 
-        group.finish();
-    }
+    //     group.finish();
+    // }
 
     // Goldilocks
     {
@@ -80,27 +80,27 @@ fn ajtai_benchmarks(c: &mut Criterion) {
         group.finish();
     }
 
-    // StarkPrime
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Ajtai StarkPrime");
-        group.plot_config(plot_config.clone());
+    // // StarkPrime
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Ajtai StarkPrime");
+    //     group.plot_config(plot_config.clone());
 
-        run_starkprime_ajai_benchmarks!(group);
+    //     run_starkprime_ajai_benchmarks!(group);
 
-        group.finish();
-    }
+    //     group.finish();
+    // }
 
-    // Frog
-    {
-        let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
-        let mut group = c.benchmark_group("Ajtai Frog");
-        group.plot_config(plot_config.clone());
+    // // Frog
+    // {
+    //     let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    //     let mut group = c.benchmark_group("Ajtai Frog");
+    //     group.plot_config(plot_config.clone());
 
-        run_frog_ajai_benchmarks!(group);
+    //     run_frog_ajai_benchmarks!(group);
 
-        group.finish();
-    }
+    //     group.finish();
+    // }
 }
 
 pub fn benchmarks_main(c: &mut Criterion) {
