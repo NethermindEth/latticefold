@@ -24,7 +24,7 @@ struct LinearizationSetup<R: SuitableRing> {
     ccs: CCS<R>,
     z_ccs: Vec<R>,
     wit: Witness<R>,
-    g_mles: Vec<Arc<DenseMultilinearExtension<R>>>,
+    g_mles: Vec<DenseMultilinearExtension<R>>,
     g_degree: usize,
     mz_mles: Vec<DenseMultilinearExtension<R>>,
     point_r: Vec<R>,
@@ -190,22 +190,22 @@ fn linearization_operations<
         ),
         &setup,
         |bench, setup| {
-            bench.iter(|| {
-                let comb_fn = |vals: &[R]| -> R {
-                    linearization_sumcheck_polynomial_comb_fn(vals, &setup.ccs)
-                };
-
-                // Run sumcheck protocol.
-                let _ =
-                    LFLinearizationProver::<R, PoseidonTranscript<R, CS>>::generate_sumcheck_proof(
+            bench.iter_batched(
+                || setup.g_mles.clone(),
+                |g_mles| {
+                    let comb_fn = |vals: &[R]| -> R {
+                        linearization_sumcheck_polynomial_comb_fn(vals, &setup.ccs)
+                    };
+                    let _ = LFLinearizationProver::<R, PoseidonTranscript<R, CS>>::generate_sumcheck_proof(
                         &mut PoseidonTranscript::<R, CS>::default(),
-                        &setup.g_mles,
+                        g_mles,
                         setup.ccs.s,
                         setup.g_degree,
                         comb_fn,
-                    )
-                    .expect("Failed to generate sumcheck proof");
-            })
+                    ).expect("Failed to generate sumcheck proof");
+                },
+                criterion::BatchSize::LargeInput,
+            )
         },
     );
 

@@ -21,8 +21,8 @@ use latticefold::nifs::linearization::{
 use latticefold::transcript::poseidon::PoseidonTranscript;
 use latticefold::utils::sumcheck::MLSumcheck;
 use lattirust_poly::mle::DenseMultilinearExtension;
+use lattirust_ring::cyclotomic_ring::CRT;
 use std::fmt::Debug;
-use std::sync::Arc;
 use utils::{wit_and_ccs_gen, wit_and_ccs_gen_degree_three_non_scalar, wit_and_ccs_gen_non_scalar};
 
 mod macros;
@@ -40,12 +40,13 @@ struct FoldingSetup<const C: usize, R: SuitableRing> {
     f_hat_mles: Vec<Vec<DenseMultilinearExtension<R>>>,
     ris: Vec<Vec<R>>,
     prechallenged_m_s: (DenseMultilinearExtension<R>, DenseMultilinearExtension<R>),
-    g_mles: Vec<Arc<DenseMultilinearExtension<R>>>,
+    g_mles: Vec<DenseMultilinearExtension<R>>,
     g_degree: usize,
     r_0: Vec<R>,
     theta_s: Vec<Vec<R>>,
     eta_s: Vec<Vec<R>>,
     rho_s: Vec<R::CoefficientRepresentation>,
+    rho_s_ntt: Vec<R>,
     f_0: Vec<R>,
 }
 
@@ -140,7 +141,7 @@ where
         .expect("Failed to calculate second prechallenged_m_s");
     let (g_mles, g_degree) = create_sumcheck_polynomial::<_, DP>(
         ccs.s,
-        &f_hat_mles,
+        f_hat_mles.clone(),
         &alpha_s,
         &prechallenged_m_s_1,
         &prechallenged_m_s_2,
@@ -158,11 +159,12 @@ where
     let eta_s = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::get_etas(&mz_mles, &r_0)
         .expect("Failed to get etas");
 
-    let rho_s = (0..2 * DP::K)
+    let rho_s: Vec<R::CoefficientRepresentation> = (0..2 * DP::K)
         .map(|_| R::CoefficientRepresentation::rand(&mut test_rng()))
         .collect();
+    let rho_s_ntt = CRT::elementwise_crt(rho_s.clone());
 
-    let f_0 = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::compute_f_0(&rho_s, &wit_s);
+    let f_0 = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::compute_f_0(&rho_s_ntt, &wit_s);
 
     FoldingSetup {
         cm_i_s: lcccs,
@@ -182,6 +184,7 @@ where
         theta_s,
         eta_s,
         rho_s,
+        rho_s_ntt,
         f_0,
     }
 }
@@ -287,45 +290,45 @@ fn folding_operations<
         ),
         &setup,
         |bench, setup| {
-            bench.iter(|| {
-                let _ = create_sumcheck_polynomial::<_, DP>(
-                    setup.ccs.s,
-                    &setup.f_hat_mles,
-                    &setup.alpha_s,
-                    &setup.prechallenged_m_s.0,
-                    &setup.prechallenged_m_s.1,
-                    &setup.ris,
-                    &setup.beta_s,
-                    &setup.mu_s,
-                )
-                .unwrap();
-            })
+            bench.iter_batched(
+                || setup.f_hat_mles.clone(),
+                |f_hat_mles| {
+                    let _ = create_sumcheck_polynomial::<_, DP>(
+                        setup.ccs.s,
+                        f_hat_mles,
+                        &setup.alpha_s,
+                        &setup.prechallenged_m_s.0,
+                        &setup.prechallenged_m_s.1,
+                        &setup.ris,
+                        &setup.beta_s,
+                        &setup.mu_s,
+                    )
+                    .unwrap();
+                },
+                criterion::BatchSize::LargeInput,
+            )
         },
     );
 
     let comb_fn = |vals: &[R]| -> R { sumcheck_polynomial_comb_fn::<R, DP>(vals, &setup.mu_s) };
+    let mut transcript = PoseidonTranscript::<R, CS>::default();
+    
     group.bench_with_input(
         BenchmarkId::new(
             "Sumcheck",
             format!(
                 "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_small={}, K={}",
-                C,
-                WIT_LEN,
-                W,
-                DP::B,
-                DP::L,
-                DP::B_SMALL,
-                DP::K
+                C, WIT_LEN, W, DP::B, DP::L, DP::B_SMALL, DP::K
             ),
         ),
-        &(PoseidonTranscript::<R, CS>::default(), &setup, comb_fn),
-        |bench, (transcript, setup, comb_fn)| {
+        &(&setup, &comb_fn),
+        |bench, (setup, comb_fn)| {
             bench.iter_batched(
-                || transcript.clone(),
-                |mut t| {
+                || setup.g_mles.clone(),
+                |g_mles| {
                     let _ = MLSumcheck::prove_as_subprotocol(
-                        &mut t,
-                        &setup.g_mles,
+                        &mut transcript,
+                        g_mles,
                         setup.ccs.s,
                         setup.g_degree,
                         comb_fn,
@@ -387,7 +390,6 @@ fn folding_operations<
             })
         },
     );
-
     group.bench_with_input(
         BenchmarkId::new(
             "Compute v0, u0, x0, cm0",
@@ -404,15 +406,20 @@ fn folding_operations<
         ),
         &setup,
         |bench, setup| {
-            bench.iter(|| {
-                let _ = compute_v0_u0_x0_cm_0(
-                    &setup.rho_s,
-                    &setup.theta_s,
-                    &setup.cm_i_s,
-                    &setup.eta_s,
-                    &setup.ccs,
-                );
-            })
+            bench.iter_batched(
+                || (setup.rho_s.clone(), setup.rho_s_ntt.clone()),
+                |(rho_s, rho_s_ntt)| {
+                    let _ = compute_v0_u0_x0_cm_0(
+                        rho_s,
+                        rho_s_ntt,
+                        &setup.theta_s,
+                        &setup.cm_i_s,
+                        &setup.eta_s,
+                        &setup.ccs,
+                    );
+                },
+                criterion::BatchSize::LargeInput,
+            )
         },
     );
 
@@ -434,7 +441,7 @@ fn folding_operations<
         |bench, setup| {
             bench.iter(|| {
                 let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::compute_f_0(
-                    &setup.rho_s,
+                    &setup.rho_s_ntt,
                     &setup.wit_s,
                 );
             })
