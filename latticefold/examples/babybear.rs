@@ -4,7 +4,7 @@ use ark_serialize::{CanonicalSerialize, Compress};
 use ark_std::vec::Vec;
 use ark_std::UniformRand;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
+use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT, SuitableRing};
 use latticefold::arith::ccs::get_test_dummy_degree_three_ccs_non_scalar;
 use latticefold::arith::r1cs::get_test_dummy_z_split_ntt;
 use latticefold::arith::{Arith, Witness, CCCS, CCS, LCCCS};
@@ -98,35 +98,28 @@ fn setup_example_environment<
     (acc, wit_acc, cm_i, wit, ccs, scheme)
 }
 
-type RqNTT = GoldilocksRingNTT;
-type CS = GoldilocksChallengeSet;
+type RqNTT = BabyBearRingNTT;
+type CS = BabyBearChallengeSet;
 type T = PoseidonTranscript<RqNTT, CS>;
 
 fn main() {
     println!("Setting up example environment...");
 
     println!("Decomposition parameters:");
-    println!("\tB: {}", GoldilocksExampleDP::B);
-    println!("\tL: {}", GoldilocksExampleDP::L);
-    println!("\tB_SMALL: {}", GoldilocksExampleDP::B_SMALL);
-    println!("\tK: {}", GoldilocksExampleDP::K);
+    println!("\tB: {}", BabyBearExampleDP::B);
+    println!("\tL: {}", BabyBearExampleDP::L);
+    println!("\tB_SMALL: {}", BabyBearExampleDP::B_SMALL);
+    println!("\tK: {}", BabyBearExampleDP::K);
 
-    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<
-        X_LEN,
-        C,
-        RqNTT,
-        GoldilocksExampleDP,
-        W_GOLDILOCKS,
-        WIT_LEN,
-        CS,
-    >();
+    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) =
+        setup_example_environment::<X_LEN, C, RqNTT, BabyBearExampleDP, W_BABYBEAR, WIT_LEN, CS>();
 
     let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
     println!("Generating proof...");
     let start = Instant::now();
 
-    let (_, _, proof) = NIFSProver::<C, W_GOLDILOCKS, RqNTT, GoldilocksExampleDP, T>::prove(
+    let (_, _, proof) = NIFSProver::<C, W_BABYBEAR, RqNTT, BabyBearExampleDP, T>::prove(
         &acc,
         &wit_acc,
         &cm_i,
@@ -163,7 +156,7 @@ fn main() {
 
     println!("Verifying proof");
     let start = Instant::now();
-    NIFSVerifier::<C, RqNTT, GoldilocksExampleDP, T>::verify(
+    NIFSVerifier::<C, RqNTT, BabyBearExampleDP, T>::verify(
         &acc,
         &cm_i,
         &proof,

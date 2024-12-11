@@ -4,7 +4,7 @@ use ark_serialize::{CanonicalSerialize, Compress};
 use ark_std::vec::Vec;
 use ark_std::UniformRand;
 use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, SuitableRing};
+use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT, SuitableRing};
 use latticefold::arith::ccs::get_test_dummy_degree_three_ccs_non_scalar;
 use latticefold::arith::r1cs::get_test_dummy_z_split_ntt;
 use latticefold::arith::{Arith, Witness, CCCS, CCS, LCCCS};
@@ -75,14 +75,14 @@ fn setup_example_environment<
     CCCS<C, RqNTT>,
     Witness<RqNTT>,
     CCS<RqNTT>,
-    AjtaiCommitmentScheme<C, W, RqNTT>,
+    AjtaiCommitmentScheme<C, W_STARK, RqNTT>,
 ) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
 
     let (cm_i, wit, ccs, scheme) =
-        wit_and_ccs_gen_degree_three_non_scalar::<X_LEN, C, WIT_LEN, W, DP, RqNTT>(r1cs_rows);
+        wit_and_ccs_gen_degree_three_non_scalar::<X_LEN, C, WIT_LEN, W_STARK, DP, RqNTT>(r1cs_rows);
 
-    let rand_w_ccs: Vec<RqNTT> = (0..WIT_LEN).map(|i| RqNTT::from(i as u64)).collect();
+    let rand_w_ccs: Vec<RqNTT> = (0..WIT_LEN_STARK).map(|i| RqNTT::from(i as u64)).collect();
     let wit_acc = Witness::from_w_ccs::<DP>(rand_w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
@@ -98,26 +98,26 @@ fn setup_example_environment<
     (acc, wit_acc, cm_i, wit, ccs, scheme)
 }
 
-type RqNTT = GoldilocksRingNTT;
-type CS = GoldilocksChallengeSet;
+type RqNTT = StarkRingNTT;
+type CS = StarkChallengeSet;
 type T = PoseidonTranscript<RqNTT, CS>;
 
 fn main() {
     println!("Setting up example environment...");
 
     println!("Decomposition parameters:");
-    println!("\tB: {}", GoldilocksExampleDP::B);
-    println!("\tL: {}", GoldilocksExampleDP::L);
-    println!("\tB_SMALL: {}", GoldilocksExampleDP::B_SMALL);
-    println!("\tK: {}", GoldilocksExampleDP::K);
+    println!("\tB: {}", StarkPrimeExampleDP::B);
+    println!("\tL: {}", StarkPrimeExampleDP::L);
+    println!("\tB_SMALL: {}", StarkPrimeExampleDP::B_SMALL);
+    println!("\tK: {}", StarkPrimeExampleDP::K);
 
     let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<
-        X_LEN,
-        C,
+        X_LEN_STARK,
+        C_STARK,
         RqNTT,
-        GoldilocksExampleDP,
-        W_GOLDILOCKS,
-        WIT_LEN,
+        StarkPrimeExampleDP,
+        W_STARK,
+        WIT_LEN_STARK,
         CS,
     >();
 
@@ -126,7 +126,7 @@ fn main() {
     println!("Generating proof...");
     let start = Instant::now();
 
-    let (_, _, proof) = NIFSProver::<C, W_GOLDILOCKS, RqNTT, GoldilocksExampleDP, T>::prove(
+    let (_, _, proof) = NIFSProver::<C_STARK, W_STARK, RqNTT, StarkPrimeExampleDP, T>::prove(
         &acc,
         &wit_acc,
         &cm_i,
@@ -163,7 +163,7 @@ fn main() {
 
     println!("Verifying proof");
     let start = Instant::now();
-    NIFSVerifier::<C, RqNTT, GoldilocksExampleDP, T>::verify(
+    NIFSVerifier::<C_STARK, RqNTT, StarkPrimeExampleDP, T>::verify(
         &acc,
         &cm_i,
         &proof,
