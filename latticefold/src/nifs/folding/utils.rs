@@ -22,7 +22,29 @@ use crate::{
 use lattirust_poly::mle::DenseMultilinearExtension;
 use lattirust_ring::{OverField, PolyRing};
 
+/// A trait for squeezing challenges (`alpha`, `beta`, `zeta`, `mu`) from a cryptographic sponge.
+///
+///
+/// # Type Parameters
+/// - `NTT`: A type that implements the `SuitableRing` trait, representing a ring that can be used in the
+/// LatticeFold protocol.
+///
 pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
+    /// Extracts the cryptographic challenge vectors of provided length
+    ///
+    /// ### Arguments
+    /// - `log_m`: The length of the $\beta$ challenge vector.
+    ///
+    /// ### Type Parameters
+    /// - `P`: The decomposition parameters of the protocol.
+    ///
+    /// ### Returns
+    /// - `(Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>)`: A tuple containing four challenge vectors:
+    ///   - `alpha`: A challenge vector of length $2 \cdot k$, where $k$ is defined in the decomposition parameters.
+    ///   - `beta`: A challenge vector of length `log_m`.
+    ///   - `zeta`: A challenge vector of length $2 \cdot k$, where $k$ is defined in the decomposition parameters.
+    ///   - `mu`: A challenge vector of length $2 \cdot k$, where $k$ is defined in the decomposition parameters.
+    ///
     fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
         &mut self,
         log_m: usize,
@@ -495,6 +517,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
     (v_0, cm_0, u_0, x_0)
 }
 
+/// Get the MLEs needed for $k$ g1 and g3 components of the sumcheck polynomial
 fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     mles: &mut Vec<DenseMultilinearExtension<NTT>>,
     r_i_eq: DenseMultilinearExtension<NTT>,
@@ -518,7 +541,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     mles.push(r_i_eq);
     mles.push(combined_mle);
 }
-
+/// Get the MLEs needed for one g2 component of the sumcheck polynomial
 fn prepare_g2_i_mle_list<NTT: OverField>(
     mles: &mut Vec<DenseMultilinearExtension<NTT>>,
     beta_eq_x: DenseMultilinearExtension<NTT>,
