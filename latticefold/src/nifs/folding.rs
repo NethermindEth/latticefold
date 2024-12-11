@@ -6,7 +6,6 @@ use ark_std::iter::successors;
 
 use ark_std::iterable::Iterable;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::cyclotomic_ring::CRT;
 
 use super::error::FoldingError;
 use crate::ark_base::*;
@@ -114,16 +113,11 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
         Ok(eta_s)
     }
 
-    pub fn compute_f_0(
-        rho_s: &Vec<NTT::CoefficientRepresentation>,
-        w_s: &[Witness<NTT>],
-    ) -> Vec<NTT> {
+    pub fn compute_f_0(rho_s: &[NTT], w_s: &[Witness<NTT>]) -> Vec<NTT> {
         rho_s
             .iter()
             .zip(w_s)
             .fold(vec![NTT::ZERO; w_s[0].f.len()], |acc, (&rho_i, w_i)| {
-                let rho_i: NTT = rho_i.crt();
-
                 acc.into_iter()
                     .zip(w_i.f.iter())
                     .map(|(acc_j, w_ij)| acc_j + rho_i * w_ij)
@@ -165,7 +159,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             Self::calculate_challenged_mz_mle(&mz_mles[P::K..2 * P::K], &zeta_s[P::K..2 * P::K])?;
         let (g_mles, g_degree) = create_sumcheck_polynomial::<_, P>(
             log_m,
-            &f_hat_mles,
+            f_hat_mles.clone(),
             &alpha_s,
             &prechallenged_Ms_1,
             &prechallenged_Ms_2,
@@ -178,7 +172,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) =
-            MLSumcheck::prove_as_subprotocol(transcript, &g_mles, log_m, g_degree, comb_fn);
+            MLSumcheck::prove_as_subprotocol(transcript, g_mles, log_m, g_degree, comb_fn);
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
 
@@ -193,17 +187,18 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
 
         // Step 5 get rho challenges
-        let rho_s = get_rhos::<_, _, P>(transcript);
+        let (rho_s_coeff, rho_s) = get_rhos::<_, _, P>(transcript);
+
+        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, &w_s);
 
         // Step 6 compute v0, u0, y0, x_w0
-        let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(&rho_s, &theta_s, cm_i_s, &eta_s, ccs);
+        let (v_0, cm_0, u_0, x_0) =
+            compute_v0_u0_x0_cm_0(rho_s_coeff, rho_s, &theta_s, cm_i_s, &eta_s, ccs);
 
         // Step 7: Compute f0 and Witness_0
         let h = x_0.last().copied().ok_or(FoldingError::IncorrectLength)?;
 
         let lcccs = prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h);
-
-        let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, &w_s);
 
         let w_0 = Witness::from_f::<P>(f_0);
 
@@ -367,11 +362,17 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             .eta_s
             .iter()
             .for_each(|etas| transcript.absorb_slice(etas));
-        let rho_s = get_rhos::<_, _, P>(transcript);
+        let (rho_s_coeff, rho_s) = get_rhos::<_, _, P>(transcript);
 
         // Step 6
-        let (v_0, cm_0, u_0, x_0) =
-            compute_v0_u0_x0_cm_0(&rho_s, &proof.theta_s, cm_i_s, &proof.eta_s, ccs);
+        let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(
+            rho_s_coeff,
+            rho_s,
+            &proof.theta_s,
+            cm_i_s,
+            &proof.eta_s,
+            ccs,
+        );
 
         // Step 7: Compute f0 and Witness_0
 

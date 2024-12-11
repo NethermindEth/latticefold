@@ -2,10 +2,7 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
-use lattirust_poly::{
-    mle::MultilinearExtension,
-    polynomials::{DenseMultilinearExtension, RefCounter},
-};
+use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
 use lattirust_ring::{OverField, Ring};
 
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
@@ -37,18 +34,13 @@ pub struct ProverState<R: OverField> {
 impl<R: OverField, T> IPForMLSumcheck<R, T> {
     /// initialize the prover to argue for the sum of polynomial over {0,1}^`num_vars`
     pub fn prover_init(
-        mles: &[RefCounter<DenseMultilinearExtension<R>>],
+        mles: Vec<DenseMultilinearExtension<R>>,
         nvars: usize,
         degree: usize,
     ) -> ProverState<R> {
         if nvars == 0 {
             panic!("Attempt to prove a constant.")
         }
-
-        // create a deep copy of all unique MLExtensions
-        let mles = ark_std::cfg_iter!(mles)
-            .map(|x| x.as_ref().clone())
-            .collect();
 
         ProverState {
             randomness: Vec::with_capacity(nvars),
@@ -77,7 +69,7 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
             let i = prover_state.round;
             let r = prover_state.randomness[i - 1];
             cfg_iter_mut!(prover_state.mles).for_each(|multiplicand| {
-                *multiplicand = multiplicand.fix_variables(&[r.into()]);
+                multiplicand.fix_variables(&[r.into()]);
             });
         } else if prover_state.round > 0 {
             panic!("verifier message is empty");
@@ -95,63 +87,78 @@ impl<R: OverField, T> IPForMLSumcheck<R, T> {
 
         let polys = &prover_state.mles;
 
-        let iter = cfg_into_iter!(0..1 << (nv - i)).map(|b| {
+        struct Scratch<R> {
+            evals: Vec<R>,
+            steps: Vec<R>,
+            vals0: Vec<R>,
+            vals1: Vec<R>,
+            vals: Vec<R>,
+            levals: Vec<R>,
+        }
+        let scratch = || Scratch {
+            evals: vec![R::zero(); degree + 1],
+            steps: vec![R::zero(); polys.len()],
+            vals0: vec![R::zero(); polys.len()],
+            vals1: vec![R::zero(); polys.len()],
+            vals: vec![R::zero(); polys.len()],
+            levals: vec![R::zero(); degree + 1],
+        };
+
+        #[cfg(not(feature = "parallel"))]
+        let zeros = scratch();
+        #[cfg(feature = "parallel")]
+        let zeros = scratch;
+
+        let summer = cfg_into_iter!(0..1 << (nv - i)).fold(zeros, |mut s, b| {
             let index = b << 1;
-            let mut eval_points = vec![R::zero(); degree + 1];
 
-            let params_zero: Vec<R> = polys.iter().map(|poly| poly[index]).collect();
-            eval_points[0] += comb_fn(&params_zero);
+            s.vals0
+                .iter_mut()
+                .zip(polys.iter())
+                .for_each(|(v0, poly)| *v0 = poly[index]);
+            s.levals[0] = comb_fn(&s.vals0);
 
-            let params_one: Vec<R> = polys.iter().map(|poly| poly[index + 1]).collect();
-            eval_points[1] += comb_fn(&params_one);
+            s.vals1
+                .iter_mut()
+                .zip(polys.iter())
+                .for_each(|(v1, poly)| *v1 = poly[index + 1]);
+            s.levals[1] = comb_fn(&s.vals1);
 
-            let steps: Vec<R> = params_one
-                .iter()
-                .zip(params_zero)
-                .map(|(p1, p0)| *p1 - p0)
-                .collect();
-
-            let mut poly_evals = vec![R::zero(); polys.len()];
-            let mut current = params_one;
-            for eval_point in eval_points.iter_mut().take(degree + 1).skip(2) {
-                for poly_i in 0..polys.len() {
-                    poly_evals[poly_i] = current[poly_i] + steps[poly_i];
-                }
-
-                *eval_point += comb_fn(&poly_evals);
-                ark_std::mem::swap(&mut current, &mut poly_evals);
+            for (i, (v1, v0)) in s.vals1.iter().zip(s.vals0.iter()).enumerate() {
+                s.steps[i] = *v1 - v0;
+                s.vals[i] = *v1;
             }
 
-            eval_points
+            for eval_point in s.levals.iter_mut().take(degree + 1).skip(2) {
+                for poly_i in 0..polys.len() {
+                    s.vals[poly_i] += s.steps[poly_i];
+                }
+                *eval_point = comb_fn(&s.vals);
+            }
+
+            s.evals
+                .iter_mut()
+                .zip(s.levals.iter())
+                .for_each(|(e, l)| *e += l);
+            s
         });
 
-        // Rayon's reduce interface is different from standard's
+        // Rayon's fold outputs an iter which still needs to be summed over
         #[cfg(feature = "parallel")]
-        let products_sum = iter.reduce(
+        let evaluations = summer.map(|s| s.evals).reduce(
             || vec![R::zero(); degree + 1],
-            |mut products_sum, eval_points| {
-                products_sum
+            |mut evaluations, levals| {
+                evaluations
                     .iter_mut()
-                    .zip(eval_points)
-                    .for_each(|(s, e)| *s += e);
-                products_sum
+                    .zip(levals)
+                    .for_each(|(e, l)| *e += l);
+                evaluations
             },
         );
 
         #[cfg(not(feature = "parallel"))]
-        let products_sum = {
-            let mut products_sum = vec![R::zero(); degree + 1];
-            iter.for_each(|eval_points| {
-                products_sum
-                    .iter_mut()
-                    .zip(eval_points)
-                    .for_each(|(s, e)| *s += e);
-            });
-            products_sum
-        };
+        let evaluations = summer.evals;
 
-        ProverMsg {
-            evaluations: products_sum,
-        }
+        ProverMsg { evaluations }
     }
 }
