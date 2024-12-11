@@ -1,4 +1,4 @@
-//! The NIFS module defines the bahaviour of the [LatticeFold](https://eprint.iacr.org/2024/257.pdf) protocol
+//! The NIFS module defines the behaviour of the [LatticeFold](https://eprint.iacr.org/2024/257.pdf) protocol
 //!
 //! NIFS = Non Interactive Folding Scheme
 //! <>
