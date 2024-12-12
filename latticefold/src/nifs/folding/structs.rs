@@ -49,7 +49,7 @@ pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>
     ///
     /// On success, returns a tuple `(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>)` where:
     ///   * `LCCCS<C, NTT>` is a folded linearized version of the CCS witness commitment.
-    ///   * `Witness<NTT>` is a folded CCS and ajtai witness.
+    ///   * `Witness<NTT>` is a folded CCS and Ajtai witness.
     ///   * `LinearizationProof<NTT>` is a proof that the linearization subprotocol was executed correctly.
     ///
     /// # Errors
