@@ -52,7 +52,7 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
             .sponge
             .squeeze_field_elements(extension_degree as usize);
         self.sponge.absorb(&c);
-        <R::BaseRing as Field>::from_base_prime_field_elems(&c)
+        <R::BaseRing as Field>::from_base_prime_field_elems(c)
             .expect("something went wrong: c does not contain extension_degree elements")
     }
 }
