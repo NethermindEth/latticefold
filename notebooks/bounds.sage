@@ -48,7 +48,7 @@ params = {
 }
 
 # Range of num_cols values
-num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13]
+num_cols_values = [2^9, 2^10, 2^11, 2^12, 2^13, 2^14, 2^15]
 
 # Function to generate Rust macros and write to a file
 def generate_macros_file():
@@ -104,7 +104,7 @@ def generate_macros_file():
                         previous_powers_of_two = []
                         B = current_bound_inf
                         while B > 1:
-                            if B**L > p / 2:
+                            if B**L > p:
                                 previous_powers_of_two.append(B)
                             B //= 2  # Move to the previous power of two
                         # Display the results for each valid power of two
