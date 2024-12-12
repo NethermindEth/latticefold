@@ -147,6 +147,8 @@ impl<R: Ring> CCS<R> {
         ccs
     }
 
+    ///Constructs a [`R1CS`] instance from a [`CCS`] instance.
+    // TODO check that this is actually valid R1CS and make this return a result
     pub fn to_r1cs(self) -> R1CS<R> {
         R1CS::<R> {
             l: self.l,
@@ -200,11 +202,11 @@ pub struct LCCCS<const C: usize, R: Ring> {
     pub u: Vec<R>,
     /// The CCS statement
     pub x_w: Vec<R>,
-    // TODO fill this in
+    /// Constant term of the z-vector
     pub h: R,
 }
 
-/// A representation a CCS witness.
+/// A representation of a CCS witness.
 ///
 /// # Type Parameters
 /// - `NTT`: The ring in which the CCS is operating.
@@ -222,6 +224,10 @@ pub struct Witness<NTT: SuitableRing> {
 }
 
 impl<NTT: SuitableRing> Witness<NTT> {
+    /// Create a [`Witness`] from a ccs witness.
+    ///
+    /// The main operations that need to be done are decomposing the ccs witness.
+    /// We can then construct [`f_hat`](crate::arith::Witness::get_fhat).
     pub fn from_w_ccs<P: DecompositionParams>(w_ccs: Vec<NTT>) -> Self {
         // iNTT
         let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w_ccs.clone());
@@ -306,16 +312,18 @@ impl<NTT: SuitableRing> Witness<NTT> {
         }
     }
 
-    pub fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
+    #[allow(dead_code)]
+    fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
         Self::from_f::<P>(f.into())
     }
 
+    /// Reconstruct the original CCS witness from the Ajtai witness
+    ///
+    /// Assume that Ajtai witness has bound B.
+    /// We can multiply by the base B gadget matrix to reconstruct w_ccs.
     pub fn from_f_coeff<P: DecompositionParams>(
         f_coeff: Vec<NTT::CoefficientRepresentation>,
     ) -> Self {
-        // Reconstruct the original CCS witness from the Ajtai witness
-        // Ajtai witness has bound B
-        // WE multiply by the base B gadget matrix to reconstruct w_ccs
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
 
@@ -353,11 +361,15 @@ impl<NTT: SuitableRing> Witness<NTT> {
         ajtai.commit_ntt(&self.f)
     }
 
+    /// Takes the f_hat value.
+    ///
+    /// Leaves the value in the struct as `None`.
     pub fn take_f_hat(&mut self) -> Vec<DenseMultilinearExtension<NTT>> {
         mem::take(&mut self.f_hat)
     }
 
-    pub fn within_bound(&self, b: u128) -> bool {
+    #[allow(dead_code)]
+    fn within_bound(&self, b: u128) -> bool {
         // TODO consider using signed representatives instead
 
         let coeffs_repr: Vec<NTT::CoefficientRepresentation> =
