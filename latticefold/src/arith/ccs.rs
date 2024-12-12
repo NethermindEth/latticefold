@@ -10,6 +10,7 @@ use super::{
     CCS,
 };
 
+/// Given a witness, provides a satisfying degree three ccs of arbitrary size
 pub fn get_test_dummy_degree_three_ccs_non_scalar<
     R: Ring,
     const X_LEN: usize,
@@ -43,7 +44,7 @@ pub fn get_test_dummy_degree_three_ccs_non_scalar<
     ccs
 }
 
-pub fn get_test_degree_three_z<R: Ring>(input: usize) -> Vec<R> {
+pub(crate) fn get_test_degree_three_z<R: Ring>(input: usize) -> Vec<R> {
     // z = (x, 1, w)
     to_F_vec(vec![
         input, // x
@@ -54,7 +55,7 @@ pub fn get_test_degree_three_z<R: Ring>(input: usize) -> Vec<R> {
     ])
 }
 
-pub fn get_test_degree_three_z_non_scalar<R: SuitableRing>() -> Vec<R> {
+pub(crate) fn get_test_degree_three_z_non_scalar<R: SuitableRing>() -> Vec<R> {
     let mut res = Vec::new();
     for input in 0..R::dimension() {
         // z = (io, 1, w)
@@ -79,17 +80,20 @@ pub fn get_test_degree_three_z_non_scalar<R: SuitableRing>() -> Vec<R> {
     ret
 }
 
-pub fn get_test_degree_three_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
+#[allow(dead_code)]
+pub(crate) fn get_test_degree_three_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
     let z = get_test_degree_three_z(input);
     (z[1], vec![z[0]], z[2..].to_vec())
 }
 
-pub fn get_test_degree_three_z_non_scalar_split<R: SuitableRing>() -> (R, Vec<R>, Vec<R>) {
+#[allow(dead_code)]
+pub(crate) fn get_test_degree_three_z_non_scalar_split<R: SuitableRing>() -> (R, Vec<R>, Vec<R>) {
     let z = get_test_degree_three_z_non_scalar();
     (z[1], vec![z[0]], z[2..].to_vec())
 }
 
-pub fn get_test_degree_three_ccs<R: Ring>() -> CCS<R> {
+#[allow(dead_code)]
+pub(crate) fn get_test_degree_three_ccs<R: Ring>() -> CCS<R> {
     // Degree 3 CCS for: x^3 + x + 5 = y
     let A = to_F_matrix::<R>(vec![
         vec![1, 0, 0, 0, 0],
@@ -128,7 +132,8 @@ pub fn get_test_degree_three_ccs<R: Ring>() -> CCS<R> {
     }
 }
 
-pub fn get_test_degree_three_ccs_padded<R: Ring>(W: usize, L: usize) -> CCS<R> {
+#[cfg(test)]
+pub(crate) fn get_test_degree_three_ccs_padded<R: Ring>(W: usize, L: usize) -> CCS<R> {
     let mut ccs = get_test_degree_three_ccs();
 
     ccs.m = W;
@@ -139,7 +144,7 @@ pub fn get_test_degree_three_ccs_padded<R: Ring>(W: usize, L: usize) -> CCS<R> {
 }
 
 // Takes a vector and returns a matrix that will square the vector
-pub fn create_dummy_cubing_sparse_matrix<R: Ring>(
+pub(crate) fn create_dummy_cubing_sparse_matrix<R: Ring>(
     rows: usize,
     columns: usize,
     witness: &[R],

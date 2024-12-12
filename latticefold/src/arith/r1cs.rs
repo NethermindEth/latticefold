@@ -12,21 +12,23 @@ use super::{
 use crate::arith::hadamard;
 use crate::ark_base::*;
 
+/// a representation of a R1CS instance
 #[derive(Debug, Clone, PartialEq)]
 pub struct R1CS<R: Ring> {
+    /// Length of public input
     pub l: usize,
+    /// First constraint matrix
     pub A: SparseMatrix<R>,
+    /// Second constraint matrix
     pub B: SparseMatrix<R>,
+    /// Third constraint matrix
     pub C: SparseMatrix<R>,
 }
 
 impl<R: Ring> R1CS<R> {
-    // returns a tuple containing (w, x) (witness and public inputs respectively)
-    pub fn split_z(&self, z: &[R]) -> (Vec<R>, Vec<R>) {
-        (z[self.l + 1..].to_vec(), z[1..self.l + 1].to_vec())
-    }
-    // check that a R1CS structure is satisfied by a z vector. Only for testing.
-    pub fn check_relation(&self, z: &[R]) -> Result<(), Error> {
+    /// check that a R1CS structure is satisfied by a z vector. Only for testing.
+    #[cfg(test)]
+    pub(crate) fn check_relation(&self, z: &[R]) -> Result<(), Error> {
         let Az = mat_vec_mul(&self.A, z)?;
         let Bz = mat_vec_mul(&self.B, z)?;
 
@@ -39,8 +41,8 @@ impl<R: Ring> R1CS<R> {
             Ok(())
         }
     }
-    // converts the R1CS instance into a RelaxedR1CS as described in
-    // [Nova](https://eprint.iacr.org/2021/370.pdf) section 4.1.
+    /// Converts the R1CS instance into a RelaxedR1CS as described in
+    /// [Nova](https://eprint.iacr.org/2021/370.pdf#page=14)
     pub fn relax(self) -> RelaxedR1CS<R> {
         RelaxedR1CS::<R> {
             l: self.l,
@@ -52,13 +54,24 @@ impl<R: Ring> R1CS<R> {
         }
     }
 }
+
+/// A RelaxedR1CS instance as described in
+/// [Nova](https://eprint.iacr.org/2021/370.pdf#page=14).
+///
+/// A witness $z$ is satisfying if $(A \cdot z) \circ (B \cdot z) = u \cdot (C \cdot z) + E$.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RelaxedR1CS<R: Ring> {
-    pub l: usize, // io len
+    /// Public input length
+    pub l: usize,
+    /// First constraint matrix
     pub A: SparseMatrix<R>,
+    /// Second constraint matrix
     pub B: SparseMatrix<R>,
+    /// Third constraint matrix
     pub C: SparseMatrix<R>,
+    /// Scalar coefficient of $(C \cdot z)$
     pub u: R,
+    /// The error matrix
     pub E: Vec<R>,
 }
 
@@ -80,6 +93,7 @@ impl<R: Ring> RelaxedR1CS<R> {
     }
 }
 
+/// Returns a matrix of ring elements given a matrix of unsigned ints
 pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
     // dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
     let M_u64: Vec<Vec<u64>> = M
@@ -89,16 +103,20 @@ pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
     dense_matrix_u64_to_sparse(M_u64)
 }
 
+/// Returns a dense matrix of ring elements given a matrix of unsigned ints
 pub fn to_F_dense_matrix<R: Ring>(M: Vec<Vec<usize>>) -> Vec<Vec<R>> {
     M.iter()
         .map(|m| m.iter().map(|r| R::from(*r as u64)).collect())
         .collect()
 }
+
+/// Returns a vector of ring elements given a vector of unsigned ints
 pub fn to_F_vec<R: Ring>(z: Vec<usize>) -> Vec<R> {
     z.iter().map(|c| R::from(*c as u64)).collect()
 }
 
-pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
+#[cfg(test)]
+pub(crate) fn get_test_r1cs<R: Ring>() -> R1CS<R> {
     // R1CS for: x^3 + x + 5 = y (example from article
     // https://www.vitalik.ca/general/2016/12/10/qap.html )
     let A = to_F_matrix::<R>(vec![
@@ -123,6 +141,8 @@ pub fn get_test_r1cs<R: Ring>() -> R1CS<R> {
     R1CS::<R> { l: 1, A, B, C }
 }
 
+/// Return a R1CS instance of arbitrary size, useful for benching.
+/// Only works when z vector consists of multiplicative identities.
 pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     rows: usize,
 ) -> R1CS<R> {
@@ -138,6 +158,8 @@ pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     }
 }
 
+/// Return a R1CS instance of arbitrary size, useful for benching.
+/// Works for arbitrary z vector.
 pub fn get_test_dummy_r1cs_non_scalar<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
     rows: usize,
     witness: &[R],
@@ -154,15 +176,7 @@ pub fn get_test_dummy_r1cs_non_scalar<R: Ring, const X_LEN: usize, const WIT_LEN
     }
 }
 
-pub fn create_dummy_identity_matrix(rows: usize, columns: usize) -> Vec<Vec<usize>> {
-    let mut matrix = vec![vec![0; columns]; rows];
-    for (i, item) in matrix.iter_mut().enumerate().take(rows) {
-        item[i] = 1;
-    }
-    matrix
-}
-
-pub fn create_dummy_identity_sparse_matrix<R: Ring>(
+pub(crate) fn create_dummy_identity_sparse_matrix<R: Ring>(
     rows: usize,
     columns: usize,
 ) -> SparseMatrix<R> {
@@ -178,7 +192,7 @@ pub fn create_dummy_identity_sparse_matrix<R: Ring>(
 }
 
 // Takes a vector and returns a matrix that will square the vector
-pub fn create_dummy_squaring_sparse_matrix<R: Ring>(
+pub(crate) fn create_dummy_squaring_sparse_matrix<R: Ring>(
     rows: usize,
     columns: usize,
     witness: &[R],
@@ -199,7 +213,7 @@ pub fn create_dummy_squaring_sparse_matrix<R: Ring>(
     matrix
 }
 
-pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
+pub(crate) fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
     // z = (io, 1, w)
     to_F_vec(vec![
         input, // io
@@ -211,7 +225,7 @@ pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
     ])
 }
 
-pub fn get_test_z_ntt<R: SuitableRing>() -> Vec<R> {
+pub(crate) fn get_test_z_ntt<R: SuitableRing>() -> Vec<R> {
     let mut res = Vec::new();
     for input in 0..R::dimension() {
         // z = (io, 1, w)
@@ -237,16 +251,22 @@ pub fn get_test_z_ntt<R: SuitableRing>() -> Vec<R> {
     ret
 }
 
+/// Return scalar z vector for Vitalik's [R1CS example](https://medium.com/@VitalikButerin/quadratic-arithmetic-programs-from-zero-to-hero-f6d558cea649#81e4),
+/// split into statement, constant, and witness.
 pub fn get_test_z_split<R: Ring>(input: usize) -> (R, Vec<R>, Vec<R>) {
     let z = get_test_z(input);
     (z[1], vec![z[0]], z[2..].to_vec())
 }
 
+/// Return non-scalar z vector for Vitalik's [R1CS example](https://medium.com/@VitalikButerin/quadratic-arithmetic-programs-from-zero-to-hero-f6d558cea649#81e4),
+/// split into statement, constant, and witness.
 pub fn get_test_z_ntt_split<R: SuitableRing>() -> (R, Vec<R>, Vec<R>) {
     let z = get_test_z_ntt();
     (z[1], vec![z[0]], z[2..].to_vec())
 }
 
+/// Return z vector consisting only of multiplicative identities,
+/// split into statement, constant, and witness.
 pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
 ) -> (R, Vec<R>, Vec<R>) {
     (
@@ -256,6 +276,8 @@ pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>
     )
 }
 
+/// Return z vector consisting of non scalar ring elements,
+/// split into statement, constant, and witness.
 pub fn get_test_dummy_z_split_ntt<R: SuitableRing, const X_LEN: usize, const WIT_LEN: usize>(
 ) -> (R, Vec<R>, Vec<R>) {
     let statement_vec = (0..X_LEN).map(|_| R::one()).collect();
@@ -274,7 +296,7 @@ pub fn get_test_dummy_z_split_ntt<R: SuitableRing, const X_LEN: usize, const WIT
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use cyclotomic_rings::rings::FrogRingNTT;
 
     use super::*;

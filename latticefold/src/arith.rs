@@ -170,7 +170,7 @@ impl<R: Ring> CCS<R> {
     }
 }
 
-/// A representation a CCS witness commitment and statement.
+/// A representation of a CCS witness commitment and statement.
 ///
 /// # Type Parameters
 /// - `C`: The length of the commitment vector.
@@ -296,7 +296,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         fhat
     }
 
-    pub fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
+    pub(crate) fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
         let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(f.clone());
         let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
         // Reconstruct the original CCS witness from the Ajtai witness
@@ -420,13 +420,14 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
     }
 }
 
+///
 #[cfg(test)]
 pub mod tests {
     use ark_ff::{One, Zero};
 
     use super::*;
     use crate::{
-        arith::r1cs::{get_test_dummy_r1cs, get_test_r1cs, get_test_z as r1cs_get_test_z},
+        arith::r1cs::{get_test_r1cs, get_test_z as r1cs_get_test_z},
         decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP},
     };
     use cyclotomic_rings::rings::{
@@ -434,24 +435,16 @@ pub mod tests {
     };
     use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
-    pub fn get_test_ccs<R: Ring>(W: usize, L: usize) -> CCS<R> {
+    pub(crate) fn get_test_ccs<R: Ring>(W: usize, L: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();
         CCS::<R>::from_r1cs_padded(r1cs, W, L)
     }
 
-    pub fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
+    pub(crate) fn get_test_z<R: Ring>(input: usize) -> Vec<R> {
         r1cs_get_test_z(input)
     }
 
-    pub fn get_test_dummy_ccs<R: Ring, const X_LEN: usize, const WIT_LEN: usize, const W: usize>(
-        rows_size: usize,
-        L: usize,
-    ) -> CCS<R> {
-        let r1cs = get_test_dummy_r1cs::<R, X_LEN, WIT_LEN>(rows_size);
-        CCS::<R>::from_r1cs_padded(r1cs, W, L)
-    }
-
-    /// Test that a basic CCS relation can be satisfied
+    /// Test that a basic CCS relation is satisfied by a witness
     #[test]
     fn test_ccs_relation() {
         let ccs = get_test_ccs::<BabyBearRingNTT>(4, 1);
