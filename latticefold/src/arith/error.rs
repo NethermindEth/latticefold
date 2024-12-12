@@ -9,7 +9,7 @@ pub enum CSError {
     #[error("constraint system is not satisfied")]
     NotSatisfied,
 
-    /// The constraint system is not of length 2.
+    /// The constraint system is not of length $2^k$ for any $k \in \mathbb{N}$.
     ///
     /// More to the point, the witness length will not be a power of 2,
     /// so we cannot use it as a MLE.
