@@ -91,7 +91,7 @@ pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NT
 
 /// The LatticeFold folding prover
 ///
-/// The implementation of the `FoldingProver` trait is defined in the main folding file.
+/// Implements the [`FoldingProver`] trait.
 pub struct LFFoldingProver<NTT, T> {
     _ntt: PhantomData<NTT>,
     _t: PhantomData<T>,
@@ -99,7 +99,7 @@ pub struct LFFoldingProver<NTT, T> {
 
 /// The LatticeFold folding verifier
 ///
-/// The implementation of the `FoldingVerifier` trait is defined in the main folding file.
+/// Implements the [`FoldingVerifier`] trait.
 pub struct LFFoldingVerifier<NTT, T> {
     _ntt: PhantomData<NTT>,
     _t: PhantomData<T>,
