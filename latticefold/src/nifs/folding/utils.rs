@@ -142,7 +142,7 @@ pub(super) fn get_rhos<
 /// where, for all $i \in \[2k\]$,
 ///
 /// $$
-/// g_{1,i}(\vec{x}) := eq(\vec{r}_i, \vec{x}) \cdot \mathrm{mle} \[\hat{f}_i\](\vec{x}),
+/// g_{1,i}(\vec{x}) := \sum\_{j=0}^{\tau} \alpha_i^j \cdot \left( eq(\vec{r}_i, \vec{x}) \cdot \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) \right),
 /// $$
 ///
 /// $$
@@ -151,12 +151,13 @@ pub(super) fn get_rhos<
 /// $$
 ///
 /// $$
-/// g_{3,i}(\vec{x}) := eq(\vec{r}_i, \vec{x}) \cdot
+/// g_{3,i}(\vec{x}) := \sum\_{j=0}^t \zeta_i^j \cdot \left(eq(\vec{r}_i, \vec{x}) \cdot
 /// \left(
 /// \sum\_{
 /// \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
 /// }
-/// \text{mle}\[M_1\]\(\vec{x}, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+/// \text{mle}\[M_j\]\(\vec{x}, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+/// \right)
 /// \right).
 /// $$
 ///
