@@ -138,6 +138,14 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
 
+        // Free some unneeded vars/memory
+        w_s.iter_mut().for_each(|w_i| {
+            w_i.f_coeff.clear();
+            w_i.f_coeff.shrink_to_fit();
+            w_i.w_ccs.clear();
+            w_i.w_ccs.shrink_to_fit();
+        });
+
         if cm_i_s.len() != 2 * P::K {
             return Err(FoldingError::IncorrectLength);
         }
