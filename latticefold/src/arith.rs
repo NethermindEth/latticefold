@@ -213,14 +213,14 @@ pub struct LCCCS<const C: usize, R: Ring> {
 ///
 #[derive(Debug, Clone, PartialEq)]
 pub struct Witness<NTT: SuitableRing> {
-    /// `f` is B-decomposed CCS witness in NTT form
-    pub f: Vec<NTT>,
-    /// `f_coeff` is B-decomposed CCS witness in coefficient form   
-    pub f_coeff: Vec<NTT::CoefficientRepresentation>,
-    /// NTT(f_hat) = Coeff(coefficient representation of f)
-    pub f_hat: Vec<DenseMultilinearExtension<NTT>>,
     /// `w_ccs` is the original CCS witness.
     pub w_ccs: Vec<NTT>,
+    /// `f` is B-decomposed CCS witness in NTT form
+    pub f: Vec<NTT>,
+    /// `f_coeff` is a gadget-decomposed witness slice in the coefficient form.
+    pub f_coeff: Vec<NTT::CoefficientRepresentation>,
+    /// See full description of f_hat [here](crate::arith::Witness::get_fhat).
+    pub f_hat: Vec<DenseMultilinearExtension<NTT>>,
 }
 
 impl<NTT: SuitableRing> Witness<NTT> {
@@ -420,7 +420,6 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
     }
 }
 
-///
 #[cfg(test)]
 pub mod tests {
     use ark_ff::{One, Zero};
