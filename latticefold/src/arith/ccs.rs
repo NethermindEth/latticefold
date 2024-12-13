@@ -10,7 +10,7 @@ use super::{
     CCS,
 };
 
-/// Given a witness, provides a satisfying degree three ccs of arbitrary size
+/// Given a witness, provides a satisfying degree three CCS of arbitrary size
 pub fn get_test_dummy_degree_three_ccs_non_scalar<
     R: Ring,
     const X_LEN: usize,

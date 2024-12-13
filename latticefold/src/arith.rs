@@ -361,7 +361,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         ajtai.commit_ntt(&self.f)
     }
 
-    /// Takes the f_hat value.
+    /// Takes the `f_hat` value.
     ///
     /// Leaves the value in the struct as `None`.
     pub fn take_f_hat(&mut self) -> Vec<DenseMultilinearExtension<NTT>> {
