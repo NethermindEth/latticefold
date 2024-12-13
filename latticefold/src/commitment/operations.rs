@@ -1,3 +1,7 @@
+//! Provide macros to expand the implementation of commitment operations
+
+/// Given the additive operation for two references of a type,
+/// implement the additive operations for non-references.
 #[macro_export]
 macro_rules! impl_additive_ops_from_ref {
     ($type: ident, $params: ident, $constant: ident) => {
@@ -57,6 +61,9 @@ macro_rules! impl_additive_ops_from_ref {
         }
     };
 }
+
+/// Given the subtractive operation for two references of a type,
+/// implement the additive operations for non-references.
 #[macro_export]
 macro_rules! impl_subtractive_ops_from_ref {
     ($type: ident, $params: ident, $constant: ident) => {
@@ -101,6 +108,9 @@ macro_rules! impl_subtractive_ops_from_ref {
         }
     };
 }
+
+/// Given the multiplicative operation for two references of a type,
+/// implement the additive operations for non-references.
 #[macro_export]
 macro_rules! impl_multiplicative_ops_from_ref {
     ($type: ident, $params: ident, $constant: ident) => {

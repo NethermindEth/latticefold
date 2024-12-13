@@ -56,6 +56,7 @@ impl<const C: usize, const W: usize, NTT: OverField> TryFrom<Vec<Vec<NTT>>>
 }
 
 impl<const C: usize, const W: usize, NTT: OverField> AjtaiCommitmentScheme<C, W, NTT> {
+    /// Returns a random Ajtai commitment matrix
     pub fn rand<Rng: rand::Rng + ?Sized>(rng: &mut Rng) -> Self {
         Self {
             matrix: vec![vec![NTT::rand(rng); W]; C],
