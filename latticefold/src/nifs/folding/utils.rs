@@ -142,16 +142,16 @@ pub(super) fn get_rhos<
 /// where, for all $i \in \[2k\]$,
 ///
 /// $$
-/// g_{1,i}(\vec{x}) := \sum\_{j=0}^{\tau} \alpha_i^j \cdot \left( eq(\vec{r}_i, \vec{x}) \cdot \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) \right),
+/// g_{1,i}(\vec{x}) := \sum\_{j=0}^{\tau - 1} \alpha_i^j \cdot \left( eq(\vec{r}_i, \vec{x}) \cdot \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) \right),
 /// $$
 ///
 /// $$
-/// g_{2,i}(\vec{x}) := eq(\vec{\beta}, \vec{x}) \cdot
-/// \prod_{j=-(b-1)}^{b-1} \( \mathrm{mle} \[\hat{f}_i\](\vec{x}) - j \),
+/// g_{2,i,j}(\vec{x}) := \sum\_{j=0}^{\tau - 1} \mu_i^j \left( eq(\vec{\beta}, \vec{x}) \cdot
+/// \prod_{j=-(b-1)}^{b-1} \( \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) - j \)\right),
 /// $$
 ///
 /// $$
-/// g_{3,i}(\vec{x}) := \sum\_{j=0}^t \zeta_i^j \cdot \left(eq(\vec{r}_i, \vec{x}) \cdot
+/// g_{3,i}(\vec{x}) := \sum\_{j=0}^{t-1} \zeta_i^j \cdot \left(eq(\vec{r}_i, \vec{x}) \cdot
 /// \left(
 /// \sum\_{
 /// \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
