@@ -2,8 +2,8 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::{OverField, Ring};
+use stark_rings::{OverField, Ring};
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::{
     arith::{Witness, CCS, LCCCS},

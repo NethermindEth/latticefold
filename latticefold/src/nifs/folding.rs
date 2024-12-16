@@ -22,7 +22,7 @@ use crate::{
     decomposition_parameters::DecompositionParams,
 };
 
-use lattirust_poly::mle::DenseMultilinearExtension;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 use utils::*;
 
 use crate::commitment::Commitment;

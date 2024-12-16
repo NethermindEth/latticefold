@@ -1,7 +1,7 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{fmt::Display, marker::PhantomData};
-use lattirust_poly::polynomials::{ArithErrors, DenseMultilinearExtension};
-use lattirust_ring::{OverField, Ring};
+use stark_rings::{OverField, Ring};
+use stark_rings_poly::polynomials::{ArithErrors, DenseMultilinearExtension};
 use thiserror::Error;
 
 use crate::ark_base::*;
@@ -222,7 +222,7 @@ mod tests {
 
     mod stark {
         use cyclotomic_rings::rings::StarkChallengeSet;
-        use lattirust_ring::cyclotomic_ring::models::stark_prime::RqNTT;
+        use stark_rings::cyclotomic_ring::models::stark_prime::RqNTT;
 
         type CS = StarkChallengeSet;
 
@@ -244,7 +244,7 @@ mod tests {
 
     mod frog {
         use cyclotomic_rings::rings::FrogChallengeSet;
-        use lattirust_ring::cyclotomic_ring::models::frog_ring::RqNTT;
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqNTT;
 
         type CS = FrogChallengeSet;
 
@@ -266,7 +266,7 @@ mod tests {
 
     mod goldilocks {
         use cyclotomic_rings::rings::GoldilocksChallengeSet;
-        use lattirust_ring::cyclotomic_ring::models::goldilocks::RqNTT;
+        use stark_rings::cyclotomic_ring::models::goldilocks::RqNTT;
 
         type CS = GoldilocksChallengeSet;
 
@@ -288,7 +288,7 @@ mod tests {
 
     mod babybear {
         use cyclotomic_rings::rings::BabyBearChallengeSet;
-        use lattirust_ring::cyclotomic_ring::models::babybear::RqNTT;
+        use stark_rings::cyclotomic_ring::models::babybear::RqNTT;
 
         type CS = BabyBearChallengeSet;
 

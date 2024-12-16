@@ -3,7 +3,7 @@ use ark_std::{
     ops::{Add, Mul, Sub},
     Zero,
 };
-use lattirust_ring::Ring;
+use stark_rings::Ring;
 
 use crate::{
     ark_base::*, commitment::CommitmentError, impl_additive_ops_from_ref,

@@ -1,8 +1,8 @@
 use crate::{ark_base::Vec, utils::mle_helpers::evaluate_mles};
 use ark_ff::PrimeField;
 
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::OverField;
+use stark_rings::OverField;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::nifs::{error::LinearizationError, CCS};
 use crate::transcript::Transcript;

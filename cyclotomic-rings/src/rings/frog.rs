@@ -1,4 +1,4 @@
-use lattirust_ring::cyclotomic_ring::models::frog_ring::{Fq, RqNTT, RqPoly};
+use stark_rings::cyclotomic_ring::models::frog_ring::{Fq, RqNTT, RqPoly};
 
 use crate::ark_base::*;
 use crate::challenge_set::{error, LatticefoldChallengeSet};
@@ -57,7 +57,7 @@ impl LatticefoldChallengeSet<FrogRingNTT> for FrogChallengeSet {
 #[cfg(test)]
 mod tests {
     use ark_ff::BigInt;
-    use lattirust_ring::cyclotomic_ring::models::frog_ring::Fq;
+    use stark_rings::cyclotomic_ring::models::frog_ring::Fq;
 
     use super::*;
 

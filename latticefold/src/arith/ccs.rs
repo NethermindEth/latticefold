@@ -2,8 +2,8 @@
 
 use ark_std::{log2, vec::Vec};
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_linear_algebra::SparseMatrix;
-use lattirust_ring::Ring;
+use stark_rings::Ring;
+use stark_rings_linalg::SparseMatrix;
 
 use super::{
     r1cs::{create_dummy_identity_sparse_matrix, to_F_matrix, to_F_vec},

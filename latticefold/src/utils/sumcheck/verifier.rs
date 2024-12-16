@@ -1,7 +1,7 @@
 //! Verifier
 use ark_ff::{Field, One, Zero};
 use ark_std::vec::Vec;
-use lattirust_ring::OverField;
+use stark_rings::OverField;
 
 use super::{prover::ProverMsg, IPForMLSumcheck, SumCheckError};
 use crate::transcript::Transcript;

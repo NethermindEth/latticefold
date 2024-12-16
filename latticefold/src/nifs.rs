@@ -8,7 +8,7 @@ use ark_std::marker::PhantomData;
 use ark_std::vec::Vec;
 
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_ring::OverField;
+use stark_rings::OverField;
 
 use crate::{
     arith::{error::CSError, Witness, CCCS, CCS, LCCCS},

@@ -1,5 +1,5 @@
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
-use lattirust_ring::cyclotomic_ring::models::frog_ring::Fq;
+use stark_rings::cyclotomic_ring::models::frog_ring::Fq;
 
 use crate::ark_base::*;
 use crate::rings::{FrogPoseidonConfig, GetPoseidonParams};

@@ -7,13 +7,13 @@ use core::mem;
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_linear_algebra::SparseMatrix;
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::{
+use stark_rings::{
     balanced_decomposition::{gadget_decompose, gadget_recompose},
     cyclotomic_ring::{CRT, ICRT},
     PolyRing, Ring,
 };
+use stark_rings_linalg::SparseMatrix;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::{
     ark_base::*,
@@ -432,7 +432,7 @@ pub mod tests {
     use cyclotomic_rings::rings::{
         BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
     };
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
+    use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     pub(crate) fn get_test_ccs<R: Ring>(W: usize, L: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();

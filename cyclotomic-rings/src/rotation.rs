@@ -3,7 +3,7 @@
 //!
 
 use ark_ff::{Field, Zero};
-use lattirust_ring::{Cyclotomic, PolyRing};
+use stark_rings::{Cyclotomic, PolyRing};
 
 use crate::ark_base::*;
 use crate::rings::SuitableRing;
@@ -107,7 +107,7 @@ pub fn rot_lin_combination<R: SuitableRing>(
 #[cfg(test)]
 mod tests {
     use ark_ff::UniformRand;
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
+    use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     use super::*;
     use crate::rings::{GoldilocksRingNTT, GoldilocksRingPoly};

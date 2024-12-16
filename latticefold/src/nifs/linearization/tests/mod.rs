@@ -13,12 +13,12 @@ use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
 use cyclotomic_rings::rings::{
     BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet,
 };
-use lattirust_ring::cyclotomic_ring::models::{
+use num_traits::One;
+use rand::Rng;
+use stark_rings::cyclotomic_ring::models::{
     babybear::RqNTT as BabyBearRqNTT, frog_ring::RqNTT as FrogRqNTT,
     goldilocks::RqNTT as GoldilocksRqNTT, stark_prime::RqNTT as StarkRqNTT,
 };
-use num_traits::One;
-use rand::Rng;
 
 const C: usize = 4;
 const WIT_LEN: usize = 4;

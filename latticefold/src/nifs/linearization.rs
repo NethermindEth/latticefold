@@ -1,6 +1,6 @@
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::OverField;
+use stark_rings::OverField;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 use utils::{compute_u, prepare_lin_sumcheck_polynomial, sumcheck_polynomial_comb_fn};
 
 use super::error::LinearizationError;

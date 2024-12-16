@@ -1,5 +1,5 @@
 // PGold = 2^64 − 2^32 + 1
-use lattirust_ring::cyclotomic_ring::models::stark_prime::{Fq, RqNTT, RqPoly};
+use stark_rings::cyclotomic_ring::models::stark_prime::{Fq, RqNTT, RqPoly};
 
 use crate::ark_base::*;
 use crate::{challenge_set::error, challenge_set::LatticefoldChallengeSet};

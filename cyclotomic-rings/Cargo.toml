@@ -10,9 +10,9 @@ ark-std = { workspace = true }
 ark-crypto-primitives = { workspace = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }
-lattirust-linear-algebra = { workspace = true }
-lattirust-poly = { workspace = true }
-lattirust-ring = { workspace = true }
+stark-rings = { workspace = true }
+stark-rings-linalg = { workspace = true }
+stark-rings-poly = { workspace = true }
 thiserror = { workspace = true }
 
 [features]

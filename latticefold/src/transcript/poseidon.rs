@@ -4,7 +4,7 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_ff::Field;
 use ark_std::marker::PhantomData;
-use lattirust_ring::OverField;
+use stark_rings::OverField;
 
 use super::{Transcript, TranscriptWithShortChallenges};
 use crate::ark_base::*;
@@ -74,7 +74,7 @@ impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithShortChallen
 mod tests {
     use ark_ff::BigInt;
     use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, GoldilocksRingPoly};
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
+    use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     use super::*;
 

@@ -1,5 +1,5 @@
-use lattirust_poly::polynomials::ArithErrors;
-use lattirust_ring::Ring;
+use stark_rings::Ring;
+use stark_rings_poly::polynomials::ArithErrors;
 use thiserror::Error;
 
 use crate::{

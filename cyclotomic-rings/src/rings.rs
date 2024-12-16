@@ -6,7 +6,7 @@ use ark_crypto_primitives::sponge::{poseidon::PoseidonConfig, Absorb};
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use ark_std::ops::MulAssign;
-use lattirust_ring::{
+use stark_rings::{
     balanced_decomposition::Decompose,
     cyclotomic_ring::{CRT, ICRT},
     traits::MulUnchecked,

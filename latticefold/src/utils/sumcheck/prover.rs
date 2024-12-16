@@ -2,8 +2,8 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
-use lattirust_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
-use lattirust_ring::{OverField, Ring};
+use stark_rings::{OverField, Ring};
+use stark_rings_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
 
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
 

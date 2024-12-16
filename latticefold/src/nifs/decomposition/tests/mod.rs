@@ -21,9 +21,9 @@ use cyclotomic_rings::rings::{
     BabyBearChallengeSet, BabyBearRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT,
     StarkChallengeSet, StarkRingNTT, SuitableRing,
 };
-use lattirust_poly::mle::DenseMultilinearExtension;
 use num_traits::One;
 use rand::Rng;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 #[cfg(feature = "parallel")]
 use rayon::iter::{

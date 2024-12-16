@@ -439,11 +439,11 @@ dependencies = [
  "ark-crypto-primitives",
  "ark-ff",
  "ark-std",
- "lattirust-linear-algebra",
- "lattirust-poly",
- "lattirust-ring",
  "num-bigint",
  "rand",
+ "stark-rings",
+ "stark-rings-linalg",
+ "stark-rings-poly",
  "thiserror",
 ]
 
@@ -659,72 +659,15 @@ dependencies = [
  "dhat",
  "hashbrown 0.15.2",
  "humansize",
- "lattirust-linear-algebra",
- "lattirust-poly",
- "lattirust-ring",
  "num-bigint",
  "num-traits",
  "paste",
  "rand",
  "rayon",
+ "stark-rings",
+ "stark-rings-linalg",
+ "stark-rings-poly",
  "thiserror",
-]
-
-[[package]]
-name = "lattirust-linear-algebra"
-version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#bf7dd3aeb7648fdb779510730f0876d825393914"
-dependencies = [
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "delegate",
- "derive_more",
- "nalgebra",
- "num-integer",
- "rand",
- "rayon",
- "serde",
-]
-
-[[package]]
-name = "lattirust-poly"
-version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#bf7dd3aeb7648fdb779510730f0876d825393914"
-dependencies = [
- "ark-ff",
- "ark-serialize",
- "ark-std",
- "displaydoc",
- "hashbrown 0.15.2",
- "lattirust-linear-algebra",
- "lattirust-ring",
- "rand",
- "rayon",
- "thiserror",
-]
-
-[[package]]
-name = "lattirust-ring"
-version = "0.0.1-alpha"
-source = "git+ssh://git@github.com/NethermindEth/lattirust.git?branch=main#bf7dd3aeb7648fdb779510730f0876d825393914"
-dependencies = [
- "ark-crypto-primitives",
- "ark-ff",
- "ark-poly",
- "ark-serialize",
- "ark-std",
- "delegate",
- "derive_more",
- "lattirust-linear-algebra",
- "num-bigint",
- "num-integer",
- "num-traits",
- "rand",
- "rayon",
- "serde",
- "serde_with",
- "zeroize",
 ]
 
 [[package]]
@@ -1190,6 +1133,63 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+
+[[package]]
+name = "stark-rings"
+version = "0.0.1-alpha"
+source = "git+ssh://git@github.com/NethermindEth/stark-rings.git?branch=main#6db62a87790910f67630eab2772dc585fcf21ad9"
+dependencies = [
+ "ark-crypto-primitives",
+ "ark-ff",
+ "ark-poly",
+ "ark-serialize",
+ "ark-std",
+ "delegate",
+ "derive_more",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "rand",
+ "rayon",
+ "serde",
+ "serde_with",
+ "stark-rings-linalg",
+ "zeroize",
+]
+
+[[package]]
+name = "stark-rings-linalg"
+version = "0.0.1-alpha"
+source = "git+ssh://git@github.com/NethermindEth/stark-rings.git?branch=main#6db62a87790910f67630eab2772dc585fcf21ad9"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "delegate",
+ "derive_more",
+ "nalgebra",
+ "num-integer",
+ "rand",
+ "rayon",
+ "serde",
+]
+
+[[package]]
+name = "stark-rings-poly"
+version = "0.0.1-alpha"
+source = "git+ssh://git@github.com/NethermindEth/stark-rings.git?branch=main#6db62a87790910f67630eab2772dc585fcf21ad9"
+dependencies = [
+ "ark-ff",
+ "ark-serialize",
+ "ark-std",
+ "displaydoc",
+ "hashbrown 0.15.2",
+ "rand",
+ "rayon",
+ "stark-rings",
+ "stark-rings-linalg",
+ "thiserror",
+]
 
 [[package]]
 name = "subtle"

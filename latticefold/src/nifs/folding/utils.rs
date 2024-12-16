@@ -7,7 +7,7 @@ use ark_std::iterable::Iterable;
 
 // use ark_std::sync::Arc;
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
-use lattirust_ring::{cyclotomic_ring::CRT, Ring};
+use stark_rings::{cyclotomic_ring::CRT, Ring};
 
 use crate::ark_base::*;
 use crate::commitment::Commitment;
@@ -19,8 +19,8 @@ use crate::{
     decomposition_parameters::DecompositionParams,
     transcript::Transcript,
 };
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::{OverField, PolyRing};
+use stark_rings::{OverField, PolyRing};
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 /// A trait for squeezing challenges (`alpha`, `beta`, `zeta`, `mu`) from a cryptographic sponge.
 ///

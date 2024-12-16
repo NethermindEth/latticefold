@@ -1,4 +1,4 @@
-use lattirust_ring::{
+use stark_rings::{
     balanced_decomposition::decompose_balanced_vec,
     cyclotomic_ring::{CRT, ICRT},
     OverField,
@@ -125,7 +125,7 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
 #[cfg(test)]
 mod tests {
-    use lattirust_ring::OverField;
+    use stark_rings::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
     use crate::ark_base::*;

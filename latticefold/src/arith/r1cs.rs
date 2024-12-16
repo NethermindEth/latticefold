@@ -1,9 +1,9 @@
 //! Defines behaviour of R1CS, a degree two constraint system
 
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_linear_algebra::sparse_matrix::dense_matrix_u64_to_sparse;
-use lattirust_linear_algebra::SparseMatrix;
-use lattirust_ring::Ring;
+use stark_rings::Ring;
+use stark_rings_linalg::sparse_matrix::dense_matrix_u64_to_sparse;
+use stark_rings_linalg::SparseMatrix;
 
 use super::{
     error::CSError as Error,

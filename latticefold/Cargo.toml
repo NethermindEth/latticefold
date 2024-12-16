@@ -11,9 +11,9 @@ ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 cyclotomic-rings = { workspace = true }
 hashbrown = "0.15"
-lattirust-linear-algebra = { workspace = true }
-lattirust-poly = { workspace = true }
-lattirust-ring = { workspace = true }
+stark-rings = { workspace = true }
+stark-rings-linalg = { workspace = true }
+stark-rings-poly = { workspace = true }
 num-traits = { version = "0.2.19", default-features = false }
 paste = "1.0.15"
 rand = { workspace = true }
@@ -28,9 +28,9 @@ parallel = [
     "dep:rayon",
     "std",
     "ark-std/parallel",
-    "lattirust-linear-algebra/parallel",
-    "lattirust-poly/parallel",
-    "lattirust-ring/parallel",
+    "stark-rings/parallel",
+    "stark-rings-linalg/parallel",
+    "stark-rings-poly/parallel",
 ]
 getrandom = [ "ark-std/getrandom" ]
 

@@ -41,15 +41,15 @@ use cyclotomic_rings::rings::{
     BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
     StarkChallengeSet, SuitableRing,
 };
-use lattirust_poly::mle::DenseMultilinearExtension;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
-use lattirust_ring::cyclotomic_ring::models::{
+use num_traits::{One, Zero};
+use stark_rings::cyclotomic_ring::models::{
     frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
     stark_prime::RqNTT as StarkRqNTT,
 };
-use lattirust_ring::cyclotomic_ring::ICRT;
-use lattirust_ring::Ring;
-use num_traits::{One, Zero};
+use stark_rings::cyclotomic_ring::ICRT;
+use stark_rings::Ring;
 
 const C: usize = 4;
 const WIT_LEN: usize = 3;

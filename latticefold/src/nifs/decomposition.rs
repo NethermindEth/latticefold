@@ -10,10 +10,10 @@ use crate::{
     utils::mle_helpers::{evaluate_mles, to_mles_err},
 };
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_linear_algebra::SparseMatrix;
-use lattirust_poly::polynomials::DenseMultilinearExtension;
+use stark_rings_linalg::SparseMatrix;
+use stark_rings_poly::polynomials::DenseMultilinearExtension;
 
-use lattirust_ring::OverField;
+use stark_rings::OverField;
 use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 
 use ark_std::iterable::Iterable;

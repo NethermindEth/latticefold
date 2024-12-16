@@ -3,7 +3,7 @@
 //! Transcripts allow provers and verifiers to independently draw the same challenges.
 
 use ark_std::fmt::Debug;
-use lattirust_ring::OverField;
+use stark_rings::OverField;
 
 use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 

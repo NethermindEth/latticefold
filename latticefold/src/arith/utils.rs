@@ -4,8 +4,8 @@ use crate::ark_base::*;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 
-use lattirust_linear_algebra::SparseMatrix;
-use lattirust_ring::Ring;
+use stark_rings::Ring;
+use stark_rings_linalg::SparseMatrix;
 
 use super::error::CSError as Error;
 
@@ -69,9 +69,9 @@ pub(crate) fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R
 mod tests {
     use super::*;
     use ark_ff::Zero;
-    use lattirust_linear_algebra::sparse_matrix::dense_matrix_to_sparse;
+    use stark_rings_linalg::sparse_matrix::dense_matrix_to_sparse;
 
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
+    use stark_rings::cyclotomic_ring::models::goldilocks::Fq;
 
     #[test]
     fn test_hadamard_vec() {

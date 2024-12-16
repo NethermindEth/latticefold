@@ -1,9 +1,9 @@
 use cyclotomic_rings::rings::SuitableRing;
-use lattirust_linear_algebra::ops::Transpose;
-use lattirust_ring::{
+use stark_rings::{
     balanced_decomposition::{decompose_balanced_vec, gadget_decompose, recompose},
     cyclotomic_ring::{CRT, ICRT},
 };
+use stark_rings_linalg::ops::Transpose;
 
 use crate::ark_base::*;
 use crate::decomposition_parameters::DecompositionParams;
@@ -51,7 +51,8 @@ pub(super) fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionPar
 #[cfg(test)]
 mod tests {
     use cyclotomic_rings::rings::SuitableRing;
-    use lattirust_ring::{
+    use rand::Rng;
+    use stark_rings::{
         balanced_decomposition::{decompose_balanced_vec, recompose},
         cyclotomic_ring::{
             models::goldilocks::{RqNTT, RqPoly},
@@ -59,7 +60,6 @@ mod tests {
         },
         PolyRing,
     };
-    use rand::Rng;
 
     use crate::{
         ark_base::*,

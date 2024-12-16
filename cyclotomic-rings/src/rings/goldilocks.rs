@@ -1,4 +1,4 @@
-use lattirust_ring::cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly};
+use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly};
 
 use super::SuitableRing;
 use crate::ark_base::*;
@@ -69,7 +69,7 @@ impl LatticefoldChallengeSet<GoldilocksRingNTT> for GoldilocksChallengeSet {
 #[cfg(test)]
 mod tests {
     use ark_ff::BigInt;
-    use lattirust_ring::cyclotomic_ring::models::goldilocks::Fq;
+    use stark_rings::cyclotomic_ring::models::goldilocks::Fq;
 
     use super::*;
 

@@ -5,8 +5,8 @@
 use ark_std::{cfg_into_iter, cfg_iter, vec::Vec};
 use thiserror::Error;
 
-use lattirust_poly::mle::DenseMultilinearExtension;
-use lattirust_ring::Ring;
+use stark_rings::Ring;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::arith::{error::CSError, utils::mat_vec_mul, CCS};
 use cyclotomic_rings::rings::SuitableRing;
