@@ -26,7 +26,7 @@ cargo build --release
 Import the library:
 ```toml
 [dependencies]
-latticefold = { git = "https://github.com/NethermindEth/latticefold.git", package = "latticefold"}
+latticefold = { git = "https://github.com/NethermindEth/latticefold.git", package = "latticefold" }
 ```
 
 Available packages:
@@ -51,7 +51,7 @@ Unless you explicitly state otherwise, any contribution submitted for inclusion 
 
 ## Acknowledgments
 
-- This project is built on top of [our fork](https://github.com/NethermindEth/lattirust) of [lattirust library](https://github.com/cknabs/lattirust) originally developed by [Christian Knabenhans](https://github.com/cknabs) and [Giacomo Fenzi](https://github.com/WizardOfMenlo). 
-- We almost verbatim adapt [the sumcheck protocol from Nexus zkVM](https://github.com/nexus-xyz/nexus-zkvm/blob/f37401c477b680ce5334b2ca523ded8a7273d8c8/nova/src/folding/hypernova/ml_sumcheck/mod.rs) to the ring setting. 
+- This project is built on top of [our fork](https://github.com/NethermindEth/stark-rings) of [lattirust library](https://github.com/cknabs/lattirust) originally developed by [Christian Knabenhans](https://github.com/cknabs) and [Giacomo Fenzi](https://github.com/WizardOfMenlo). 
+- We adapted [the sumcheck protocol from Jolt](https://github.com/a16z/jolt/blob/fa45507aaddb1815bafd54332e4b14173a7f8699/jolt-core/src/subprotocols/sumcheck.rs#L35) to the ring setting. 
 - A lot of definitions are directly transferred from [sonobe](https://github.com/privacy-scaling-explorations/sonobe) library. 
 - The implementation is supported by Ethereum Foundation [ZK Grant](https://blog.ethereum.org/2024/06/25/zk-grants-round-announce).
