@@ -55,9 +55,9 @@ unused = 'deny'
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
-# TODO remove this git dependency after the lattirust status is clarified
+# TODO remove this git dependency after the stark-rings status is clarified
 allow-git = [
-    "ssh://git@github.com/NethermindEth/lattirust.git",
+    "ssh://git@github.com/NethermindEth/stark-rings.git",
 ]
 
 [sources.allow-org]
