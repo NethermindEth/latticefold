@@ -24,7 +24,7 @@ fn ajtai_benchmark<
     let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
 
     group.bench_with_input(
-        BenchmarkId::new("AjtaiCommitNTT", format!("KAPPA={}, W={}", C, W)),
+        BenchmarkId::new("AjtaiCommitNTT", format!("Kappa={}, W={}", C, W)),
         &(ajtai_data.clone(), witness),
         |b, (ajtai_data, witness)| {
             b.iter(|| {
