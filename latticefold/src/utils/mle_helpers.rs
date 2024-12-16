@@ -46,9 +46,8 @@ impl<R: Ring> Evaluate<R> for &[R] {
 
 impl<R: Ring> Evaluate<R> for &DenseMultilinearExtension<R> {
     fn evaluate(self, point: &[R]) -> Result<R, MleEvaluationError> {
-        DenseMultilinearExtension::<R>::evaluate(self, point).ok_or(
-            MleEvaluationError::IncorrectLength(point.len(), self.evaluations.len()),
-        )
+        DenseMultilinearExtension::<R>::evaluate(self, point)
+            .ok_or(MleEvaluationError::IncorrectLength(point.len(), self.elen))
     }
 }
 
@@ -107,7 +106,7 @@ where
             if 1 << n_vars < m.len() {
                 Err(MleEvaluationError::IncorrectLength(1 << n_vars, m.len()).into())
             } else {
-                Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
+                Ok(DenseMultilinearExtension::from_evaluations_vec(n_vars, m))
             }
         })
         .collect::<Result<_, E>>()

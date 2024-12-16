@@ -274,13 +274,11 @@ impl<NTT: SuitableRing> Witness<NTT> {
     fn get_fhat(f: &[NTT::CoefficientRepresentation]) -> Vec<DenseMultilinearExtension<NTT>> {
         let num_vars = log2(f.len().next_power_of_two()) as usize;
 
-        let mut fhat = vec![
-            DenseMultilinearExtension::from_evaluations_vec(
-                num_vars,
-                vec![NTT::zero(); f.len().next_power_of_two()]
-            );
-            NTT::CoefficientRepresentation::dimension() / NTT::dimension()
-        ];
+        let mut fhat =
+            vec![
+                DenseMultilinearExtension::from_evaluations_vec(num_vars, Vec::<NTT>::new());
+                NTT::CoefficientRepresentation::dimension() / NTT::dimension()
+            ];
 
         for (i, f_i) in f.iter().enumerate() {
             for (j, coeff_chunk_j) in f_i.coeffs().chunks(NTT::dimension()).enumerate() {
@@ -292,6 +290,9 @@ impl<NTT: SuitableRing> Witness<NTT> {
                 }
             }
         }
+
+        // Make any possible MLEs smaller
+        fhat.iter_mut().for_each(|mle| mle.truncate_lnze());
 
         fhat
     }

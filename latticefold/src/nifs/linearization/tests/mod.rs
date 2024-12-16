@@ -211,7 +211,9 @@ fn test_compute_u() {
     let expected_Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
         .M
         .iter()
-        .map(|M| DenseMultilinearExtension::from_slice(ccs.s, &mat_vec_mul(M, &z_ccs).unwrap()))
+        .map(|M| {
+            DenseMultilinearExtension::from_evaluations_vec(ccs.s, mat_vec_mul(M, &z_ccs).unwrap())
+        })
         .collect();
     let expected_u = compute_u(&expected_Mz_mles, &point_r).unwrap();
 

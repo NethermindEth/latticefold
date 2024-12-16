@@ -64,7 +64,9 @@ where
     let Mz_mles: Vec<DenseMultilinearExtension<RqNTT>> = ccs
         .M
         .iter()
-        .map(|M| DenseMultilinearExtension::from_slice(log_m, &mat_vec_mul(M, &z).unwrap()))
+        .map(|M| {
+            DenseMultilinearExtension::from_evaluations_vec(log_m, mat_vec_mul(M, &z).unwrap())
+        })
         .collect();
 
     let u = compute_u(&Mz_mles, &r).unwrap();
