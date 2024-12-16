@@ -1,5 +1,3 @@
-#![allow(incomplete_features)]
-
 use ark_std::{time::Duration, UniformRand};
 use criterion::{
     criterion_group, criterion_main, AxisScale, BatchSize::SmallInput, BenchmarkId, Criterion,

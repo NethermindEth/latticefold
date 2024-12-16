@@ -1,4 +1,3 @@
-#![allow(incomplete_features)]
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };

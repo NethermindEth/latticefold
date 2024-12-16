@@ -4,7 +4,6 @@
 //!
 
 #![cfg_attr(not(feature = "std"), no_std)]
-#![allow(incomplete_features)]
 #![forbid(unsafe_code)]
 
 #[macro_use]

@@ -1,4 +1,3 @@
-#![allow(incomplete_features)]
 use std::time::Duration;
 
 use criterion::{
