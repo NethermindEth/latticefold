@@ -2,6 +2,7 @@
 //!
 //! NIFS = Non Interactive Folding Scheme
 
+use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
 use ark_std::vec::Vec;
@@ -13,7 +14,7 @@ use crate::{
     arith::{error::CSError, Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
-    transcript::TranscriptWithShortChallenges,
+    transcript::{Transcript, TranscriptWithShortChallenges},
 };
 use decomposition::*;
 use error::LatticefoldError;
@@ -70,6 +71,8 @@ impl<
         scheme: &AjtaiCommitmentScheme<C, W, NTT>,
     ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
+
+        absorb_public_input::<NTT, C>(acc, cm_i, transcript);
 
         let (linearized_cm_i, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
@@ -142,6 +145,8 @@ impl<
     ) -> Result<LCCCS<C, NTT>, LatticefoldError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
 
+        absorb_public_input::<NTT, C>(acc, cm_i, transcript);
+
         let linearized_cm_i = LFLinearizationVerifier::<_, T>::verify(
             cm_i,
             &proof.linearization_proof,
@@ -187,4 +192,28 @@ fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
     }
 
     Ok(())
+}
+
+fn absorb_public_input<NTT: SuitableRing, const C: usize>(
+    acc: &LCCCS<C, NTT>,
+    cm_i: &CCCS<C, NTT>,
+    transcript: &mut impl Transcript<NTT>,
+) {
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"acc"),
+    ));
+
+    transcript.absorb_slice(&acc.r);
+    transcript.absorb_slice(&acc.v);
+    transcript.absorb_slice(acc.cm.as_ref());
+    transcript.absorb_slice(&acc.u);
+    transcript.absorb_slice(&acc.x_w);
+    transcript.absorb(&acc.h);
+
+    transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
+        <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"cm_i"),
+    ));
+
+    transcript.absorb_slice(cm_i.cm.as_ref());
+    transcript.absorb_slice(&cm_i.x_ccs);
 }
