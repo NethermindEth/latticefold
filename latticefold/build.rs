@@ -1,7 +1,13 @@
-use std::{fs, path::Path};
+use std::{env, fs, fs::File, io::Write, path::Path, process::Command};
+
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::{quote, ToTokens};
+use serde::Deserialize;
 
 fn main() -> Result<(), String> {
     generate_code_for_examples();
+
+    parse_benches();
 
     Ok(())
 }
@@ -112,4 +118,418 @@ fn generate_code_for_examples() {
     println!("cargo:rerun-if-env-changed=PARAM_B_SMALL_STARK");
     println!("cargo:rerun-if-env-changed=PARAM_WIT_LEN_STARK");
     println!("cargo:rerun-if-env-changed=PARAM_K_STARK");
+}
+
+fn string_to_u128<'de, D>(deserializer: D) -> Result<u128, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s: String = String::deserialize(deserializer)?;
+    s.parse::<u128>().map_err(serde::de::Error::custom)
+}
+
+#[warn(non_snake_case)]
+#[derive(Debug, Deserialize)]
+pub struct BenchmarkRecord {
+    pub x_len: usize,
+    pub c: usize,
+    pub w: usize,
+    #[serde(deserialize_with = "string_to_u128")] // Custom deserializer for `b`
+    pub b: u128,
+    pub l: usize,
+    pub b_small: usize,
+    pub k: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Benchmarks {
+    pub goldilocks: Vec<BenchmarkRecord>,
+    pub starkprime: Vec<BenchmarkRecord>,
+    pub frog: Vec<BenchmarkRecord>,
+    pub babybear: Vec<BenchmarkRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AjtaiRecord {
+    pub c: usize,
+    pub w: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Ajtai {
+    pub babybear: Vec<AjtaiRecord>,
+    pub goldilocks: Vec<AjtaiRecord>,
+    pub starkprime: Vec<AjtaiRecord>,
+    pub frog: Vec<AjtaiRecord>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct BenchmarkConfig {
+    pub benchmarks: Benchmarks,
+    pub ajtai: Ajtai,
+}
+
+#[derive(Clone, Copy)]
+pub enum R1CS {
+    Scalar,
+    NonScalar,
+    DegreeThreeNonScalar,
+}
+
+impl ToTokens for R1CS {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let token_stream = match self {
+            R1CS::Scalar => quote! { R1CS::Scalar },
+            R1CS::NonScalar => quote! { R1CS::NonScalar },
+            R1CS::DegreeThreeNonScalar => quote! { R1CS::DegreeThreeNonScalar },
+        };
+
+        tokens.extend(token_stream);
+    }
+}
+
+fn parse_benches() {
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR is not set");
+    let toml_content = fs::read_to_string("benches/config.toml").expect("Failed to read TOML file");
+    let config: BenchmarkConfig =
+        toml::from_str(&toml_content).expect("Failed to deserialize benches/config.toml");
+
+    let file_path = Path::new(&out_dir).join("generated_benchmarks.rs");
+    let mut file = File::create(&file_path).expect("Failed to create benchmark generated file");
+
+    writeln!(&mut file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(&mut file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+    write_group(
+        &mut file,
+        &config.benchmarks.goldilocks,
+        "goldilocks",
+        "GoldilocksRingNTT",
+        "GoldilocksChallengeSet",
+        R1CS::Scalar,
+        "Goldilocks Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.goldilocks,
+        "goldilocks_non_scalar",
+        "GoldilocksRingNTT",
+        "GoldilocksChallengeSet",
+        R1CS::NonScalar,
+        "Goldilocks Non Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.goldilocks,
+        "goldilocks_degree_three_non_scalar",
+        "GoldilocksRingNTT",
+        "GoldilocksChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "Goldilocks Degree Three Non Scalar",
+    );
+
+    write_group(
+        &mut file,
+        &config.benchmarks.starkprime,
+        "stark_prime",
+        "StarkRingNTT",
+        "StarkChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "Stark Non Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.starkprime,
+        "stark_prime_non_scalar",
+        "StarkRingNTT",
+        "StarkChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "Stark Non Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.starkprime,
+        "stark_prime_degree_three_non_scalar",
+        "StarkRingNTT",
+        "StarkChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "Stark Degree Three Non Scalar",
+    );
+
+    write_group(
+        &mut file,
+        &config.benchmarks.frog,
+        "frog",
+        "FrogRingNTT",
+        "FrogChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "Frog Non Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.frog,
+        "frog_non_scalar",
+        "FrogRingNTT",
+        "FrogChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "Frog Non Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.frog,
+        "frog_degree_three_non_scalar",
+        "FrogRingNTT",
+        "FrogChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "Frog Degree Three Non Scalar",
+    );
+
+    write_group(
+        &mut file,
+        &config.benchmarks.babybear,
+        "single_babybear",
+        "BabyBearRingNTT",
+        "BabyBearChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "BabyBear Non Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.babybear,
+        "single_babybear_non_scalar",
+        "BabyBearRingNTT",
+        "BabyBearChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "BabyBear Non Scalar",
+    );
+    write_group(
+        &mut file,
+        &config.benchmarks.babybear,
+        "single_babybear_degree_three_non_scalar",
+        "BabyBearRingNTT",
+        "BabyBearChallengeSet",
+        R1CS::DegreeThreeNonScalar,
+        "BabyBear Degree Three Non Scalar",
+    );
+
+    drop(file);
+
+    Command::new("rustfmt")
+        .arg(file_path)
+        .output()
+        .expect("rustfmt failed");
+
+    let file_path = Path::new(&out_dir).join("generated_ajtai_benchmarks.rs");
+    let mut file = File::create(&file_path).expect("Failed to create benchmark generated file");
+
+    write_ajtai_group(
+        &mut file,
+        &config.ajtai.goldilocks,
+        "goldilocks",
+        "GoldilocksRingNTT",
+    );
+    write_ajtai_group(
+        &mut file,
+        &config.ajtai.starkprime,
+        "starkprime",
+        "StarkRingNTT",
+    );
+    write_ajtai_group(&mut file, &config.ajtai.frog, "frog", "FrogRingNTT");
+    write_ajtai_group(
+        &mut file,
+        &config.ajtai.babybear,
+        "babybear",
+        "BabyBearRingNTT",
+    );
+
+    drop(file);
+
+    Command::new("rustfmt")
+        .arg(file_path)
+        .output()
+        .expect("rustfmt failed");
+}
+
+fn write_ajtai_group(file: &mut File, benchmarks: &[AjtaiRecord], name: &str, ring: &str) {
+    let generated_blocks: Vec<_> = benchmarks.iter().map(|b| {
+        let (c, w) = (b.c, b.w);
+        let ring = Ident::new(ring, Span::call_site());
+        quote! {
+            {
+                const C: usize = #c;
+                const W: usize = #w;
+                type R = #ring;
+
+                group.bench_function(
+                BenchmarkId::new("CommitNTT", format!("C={}, W={}", C, W)),
+                |b| {
+                    let mut rng = ark_std::test_rng();
+                    let witness: Vec<R> = (0..W).map(|_| R::rand(&mut rng)).collect();
+                    let ajtai_data: AjtaiCommitmentScheme<C, W, R> = AjtaiCommitmentScheme::rand(&mut rng);
+                    b.iter(|| {
+                        let _ = ajtai_data.commit_ntt(&witness);
+                    })
+                },
+                );
+
+                // NTT -> INTT (coefficients)
+                group.bench_function(
+                    BenchmarkId::new("NTT->INTT", format!("C={}, W={}", C, W)),
+                    |b| {
+                        let mut rng = ark_std::test_rng();
+                        let witness: Vec<R> = (0..W).map(|_| R::rand(&mut rng)).collect();
+                        b.iter_batched(
+                            || witness.clone(),
+                            |witness| {
+                                let _ = ICRT::elementwise_icrt(witness);
+                            },
+                            SmallInput,
+                        );
+                    },
+                );
+
+                // INTT -> NTT
+                group.bench_function(
+                    BenchmarkId::new("INTT->NTT", format!("C={}, W={}", C, W)),
+                    |b| {
+                        let mut rng = ark_std::test_rng();
+                        let witness: Vec<R> = (0..W).map(|_| R::rand(&mut rng)).collect();
+                        let witness_3 = witness.clone();
+                        let coeff = ICRT::elementwise_icrt(witness_3);
+                        b.iter_batched(
+                            || coeff.clone(),
+                            |coeff| {
+                                let _: Vec<R> = CRT::elementwise_crt(coeff);
+                            },
+                            SmallInput,
+                        );
+                    },
+                );
+            }
+        }
+    }).collect();
+
+    let function_name = format!("bench_ajtai_{name}");
+    let function_ident = Ident::new(&function_name, Span::call_site());
+    let benchmark_name = format!("Ajtai {name}");
+
+    write!(file, "{}", quote! {
+        fn #function_ident(c: &mut Criterion) {
+            let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+            let mut group = c.benchmark_group(#benchmark_name);
+            group.plot_config(plot_config.clone());
+            #(#generated_blocks)*
+        }
+    })
+    .unwrap();
+}
+
+fn write_group(
+    file: &mut File,
+    benchmarks: &[BenchmarkRecord],
+    group: &str,
+    ring: &str,
+    cs: &str,
+    scalar: R1CS,
+    group_name: &str,
+) {
+    write!(
+        file,
+        "{}",
+        write_function(
+            benchmarks,
+            group,
+            "linearization",
+            ring,
+            cs,
+            scalar,
+            group_name
+        )
+    )
+    .unwrap();
+    write!(
+        file,
+        "{}",
+        write_function(
+            benchmarks,
+            group,
+            "decomposition",
+            ring,
+            cs,
+            scalar,
+            group_name
+        )
+    )
+    .unwrap();
+    write!(
+        file,
+        "{}",
+        write_function(benchmarks, group, "folding", ring, cs, scalar, group_name)
+    )
+    .unwrap();
+    write!(
+        file,
+        "{}",
+        write_function(benchmarks, group, "e2e", ring, cs, scalar, group_name)
+    )
+    .unwrap();
+}
+
+fn write_function(
+    benchmarks: &[BenchmarkRecord],
+    group: &str,
+    subprotocol: &str,
+    ring: &str,
+    cs: &str,
+    scalar: R1CS,
+    group_name: &str,
+) -> TokenStream {
+    let cs = Ident::new(cs, Span::call_site());
+    let ring = Ident::new(ring, Span::call_site());
+    let prover_function = Ident::new(&format!("bench_{subprotocol}_prover"), Span::call_site());
+    let verifier_function = Ident::new(&format!("bench_{subprotocol}_verifier"), Span::call_site());
+
+    let generated_blocks: Vec<_> = benchmarks
+        .iter()
+        .map(|b| {
+            let (x_len, c, w, b, l, b_small, k) = (b.x_len, b.c, b.w, b.b, b.l, b.b_small, b.k);
+            quote! {
+                {
+                    const X_LEN: usize = #x_len;
+                    const C: usize = #c;
+                    const WIT_LEN: usize = #w;
+                    const W: usize = #w * #l;
+
+                    #[derive(Clone)]
+                    struct DP {}
+                    impl DecompositionParams for DP {
+                        const B: u128 = #b;
+                        const L: usize = #l;
+                        const B_SMALL: usize = #b_small;
+                        const K: usize = #k;
+                    }
+
+                    type CS = #cs;
+                    type R = #ring;
+
+                    type BlockBencher = Bencher<X_LEN, C, WIT_LEN, W, DP, R, CS>;
+
+                    BlockBencher::#prover_function(&mut group, #scalar);
+                    BlockBencher::#verifier_function(&mut group, #scalar);
+                }
+            }
+        })
+        .collect();
+
+    let function_name = format!("bench_{}_{}", group, subprotocol);
+    let function_ident = Ident::new(&function_name, Span::call_site());
+
+    quote! {
+        #[allow(dead_code)]
+        fn #function_ident(c: &mut Criterion) {
+            let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+            let mut group = c.benchmark_group(#group_name);
+            group.plot_config(plot_config.clone());
+            #(#generated_blocks)*
+        }
+    }
 }

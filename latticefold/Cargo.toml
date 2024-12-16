@@ -21,6 +21,13 @@ thiserror = { workspace = true }
 num-bigint = { workspace = true }
 rayon = { version = "1.10.0", optional = true }
 
+
+[build-dependencies]
+serde = { version = "1.0.216", features = ["derive"] }
+toml = "0.8.19"
+quote = "1.0.37"
+proc-macro2 = "1.0.92"
+
 [features]
 default = [ "std" ]
 std = [ "ark-std/std", "cyclotomic-rings/std", "rand/std" ]
@@ -69,9 +76,11 @@ harness = false
 name = "linearization"
 harness = false
 
+
 [[bench]]
 name = "decomposition"
 harness = false
+
 
 [[bench]]
 name = "folding"
