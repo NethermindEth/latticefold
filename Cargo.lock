@@ -669,6 +669,7 @@ dependencies = [
  "dhat",
  "hashbrown 0.15.2",
  "humansize",
+ "lazy_static",
  "num-bigint",
  "num-traits",
  "paste",

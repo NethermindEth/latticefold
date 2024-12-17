@@ -1,7 +1,10 @@
 use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, AxisScale, Criterion, PlotConfiguration};
+use env::ENV;
 use latticefold::decomposition_parameters::DecompositionParams;
+
+mod env;
 
 mod utils;
 
@@ -27,6 +30,6 @@ pub fn benchmarks_main(c: &mut Criterion) {
 
 criterion_group!(
     name=benches;
-    config = Criterion::default().sample_size(10).measurement_time(Duration::from_secs(50)).warm_up_time(Duration::from_secs(1));
+    config = Criterion::default().sample_size(10).measurement_time(Duration::from_secs_f32(ENV.duration)).warm_up_time(Duration::from_secs_f32(ENV.warmup));
     targets = benchmarks_main);
 criterion_main!(benches);

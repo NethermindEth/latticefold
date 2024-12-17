@@ -354,6 +354,7 @@ fn write_ajtai_group(file: &mut File, benchmarks: &[AjtaiRecord], name: &str, ri
         let (c, w) = (b.c, b.w);
         let ring = Ident::new(ring, Span::call_site());
         quote! {
+            if ENV.ajtai
             {
                 const C: usize = #c;
                 const W: usize = #w;
@@ -487,12 +488,14 @@ fn write_function(
     let ring = Ident::new(ring, Span::call_site());
     let prover_function = Ident::new(&format!("bench_{subprotocol}_prover"), Span::call_site());
     let verifier_function = Ident::new(&format!("bench_{subprotocol}_verifier"), Span::call_site());
+    let subprotocol_ident = Ident::new(subprotocol, Span::call_site());
 
     let generated_blocks: Vec<_> = benchmarks
         .iter()
         .map(|b| {
             let (x_len, c, w, b, l, b_small, k) = (b.x_len, b.c, b.w, b.b, b.l, b.b_small, b.k);
             quote! {
+                if ENV.#subprotocol_ident && ENV.#ring
                 {
                     const X_LEN: usize = #x_len;
                     const C: usize = #c;
@@ -513,8 +516,23 @@ fn write_function(
 
                     type BlockBencher = Bencher<X_LEN, C, WIT_LEN, W, DP, R, CS>;
 
-                    BlockBencher::#prover_function(&mut group, #scalar);
-                    BlockBencher::#verifier_function(&mut group, #scalar);
+                    if X_LEN == ENV.x_len.unwrap_or(X_LEN) &&
+                        C == ENV.kappa.unwrap_or(C) &&
+                        W == ENV.w.unwrap_or(W) &&
+                        WIT_LEN == ENV.wit_len.unwrap_or(WIT_LEN) &&
+                        DP::B == ENV.b.unwrap_or(DP::B) &&
+                        DP::L == ENV.l.unwrap_or(DP::L) &&
+                        DP::B_SMALL == ENV.b_small.unwrap_or(DP::B_SMALL) &&
+                        DP::K == ENV.k.unwrap_or(DP::K)
+                    {
+                        if ENV.prover {
+                            BlockBencher::#prover_function(&mut group, #scalar);
+                        }
+
+                        if ENV.verifier {
+                            BlockBencher::#verifier_function(&mut group, #scalar);
+                        }
+                    }
                 }
             }
         })

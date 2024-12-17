@@ -4,8 +4,11 @@ use criterion::{
     PlotConfiguration,
 };
 use cyclotomic_rings::rings::{BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT};
+use env::ENV;
 use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::cyclotomic_ring::{CRT, ICRT};
+
+mod env;
 
 include!(concat!(env!("OUT_DIR"), "/generated_ajtai_benchmarks.rs"));
 
@@ -22,10 +25,7 @@ pub fn benchmarks_main(c: &mut Criterion) {
 
 criterion_group!(
     name=benches;
-    config = Criterion::default()
-            .sample_size(10)
-            .measurement_time(Duration::from_secs(50))
-            .warm_up_time(Duration::from_secs(1));
+    config = Criterion::default().sample_size(10).measurement_time(Duration::from_secs_f32(ENV.duration)).warm_up_time(Duration::from_secs_f32(ENV.warmup));
     targets = benchmarks_main
 );
 criterion_main!(benches);
