@@ -14,17 +14,21 @@ use utils::{wit_and_ccs_gen_degree_three_non_scalar, wit_and_ccs_gen_non_scalar}
 mod macros;
 mod utils;
 
-use crate::utils::wit_and_ccs_gen;
-use latticefold::nifs::linearization::{
-    LFLinearizationProver, LFLinearizationVerifier, LinearizationProver, LinearizationVerifier,
-};
 use latticefold::{
     arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
-    nifs::{NIFSProver, NIFSVerifier},
+    nifs::{
+        linearization::{
+            LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
+            LinearizationVerifier,
+        },
+        NIFSProver, NIFSVerifier,
+    },
     transcript::poseidon::PoseidonTranscript,
 };
+
+use crate::utils::wit_and_ccs_gen;
 
 fn prover_e2e_benchmark<
     const C: usize,

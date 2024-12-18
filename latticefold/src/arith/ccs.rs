@@ -169,13 +169,12 @@ pub(crate) fn create_dummy_cubing_sparse_matrix<R: Ring>(
 mod tests {
     use cyclotomic_rings::rings::GoldilocksRingNTT;
 
+    use super::{get_test_degree_three_ccs, get_test_dummy_degree_three_ccs_non_scalar};
     use crate::arith::{
         ccs::{get_test_degree_three_z, get_test_degree_three_z_non_scalar},
         r1cs::get_test_dummy_z_split_ntt,
         Arith, CCS,
     };
-
-    use super::{get_test_degree_three_ccs, get_test_dummy_degree_three_ccs_non_scalar};
     type NTT = GoldilocksRingNTT;
 
     #[test]

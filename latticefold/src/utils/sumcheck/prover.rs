@@ -2,13 +2,12 @@
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{cfg_into_iter, cfg_iter_mut, vec::Vec};
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 use stark_rings::{OverField, Ring};
 use stark_rings_poly::{mle::MultilinearExtension, polynomials::DenseMultilinearExtension};
 
 use super::{verifier::VerifierMsg, IPForMLSumcheck};
-
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 
 /// Prover Message
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]

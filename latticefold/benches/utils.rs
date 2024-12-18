@@ -1,13 +1,18 @@
 #![allow(non_snake_case)]
 use ark_std::{fmt::Debug, UniformRand};
 use cyclotomic_rings::rings::SuitableRing;
-use latticefold::arith::ccs::get_test_dummy_degree_three_ccs_non_scalar;
-use latticefold::arith::r1cs::{
-    get_test_dummy_r1cs_non_scalar, get_test_dummy_z_split, get_test_dummy_z_split_ntt,
+use latticefold::{
+    arith::{
+        ccs::get_test_dummy_degree_three_ccs_non_scalar,
+        r1cs::{
+            get_test_dummy_r1cs, get_test_dummy_r1cs_non_scalar, get_test_dummy_z_split,
+            get_test_dummy_z_split_ntt,
+        },
+        Arith, Witness, CCCS, CCS,
+    },
+    commitment::AjtaiCommitmentScheme,
+    decomposition_parameters::DecompositionParams,
 };
-use latticefold::arith::{r1cs::get_test_dummy_r1cs, Arith, Witness, CCCS, CCS};
-use latticefold::commitment::AjtaiCommitmentScheme;
-use latticefold::decomposition_parameters::DecompositionParams;
 
 #[allow(dead_code)]
 pub fn wit_and_ccs_gen<

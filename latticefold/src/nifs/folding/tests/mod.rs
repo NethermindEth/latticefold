@@ -1,55 +1,59 @@
-use crate::arith::ccs::{
-    get_test_degree_three_ccs_padded, get_test_degree_three_z_non_scalar_split,
-};
-use crate::arith::{CCS, LCCCS};
-use crate::ark_base::Vec;
-use crate::decomposition_parameters::test_params::{
-    BabyBearDP, FrogDP, GoldilocksDP, StarkFoldingDP,
-};
-use crate::nifs::folding::utils::SqueezeAlphaBetaZetaMu;
-use crate::nifs::folding::{
-    prepare_public_output,
-    utils::{
-        compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_rhos, sumcheck_polynomial_comb_fn,
+use ark_ff::{Field, PrimeField};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
+use ark_std::{io::Cursor, test_rng};
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{
+        BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
+        StarkChallengeSet, SuitableRing,
     },
-    FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
 };
-use crate::nifs::FoldingProof;
-use crate::transcript::{Transcript, TranscriptWithShortChallenges};
-use crate::utils::sumcheck::MLSumcheck;
+use num_traits::{One, Zero};
+use stark_rings::{
+    cyclotomic_ring::{
+        models::{
+            frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
+            stark_prime::RqNTT as StarkRqNTT,
+        },
+        ICRT,
+    },
+    Ring,
+};
+use stark_rings_poly::mle::DenseMultilinearExtension;
+
 use crate::{
-    arith::{Witness, CCCS},
+    arith::{
+        ccs::{get_test_degree_three_ccs_padded, get_test_degree_three_z_non_scalar_split},
+        Witness, CCCS, CCS, LCCCS,
+    },
+    ark_base::Vec,
     commitment::AjtaiCommitmentScheme,
-    decomposition_parameters::DecompositionParams,
+    decomposition_parameters::{
+        test_params::{BabyBearDP, FrogDP, GoldilocksDP, StarkFoldingDP},
+        DecompositionParams,
+    },
     nifs::{
         decomposition::{
             DecompositionProver, DecompositionVerifier, LFDecompositionProver,
             LFDecompositionVerifier,
         },
+        folding::{
+            prepare_public_output,
+            utils::{
+                compute_v0_u0_x0_cm_0, create_sumcheck_polynomial, get_rhos,
+                sumcheck_polynomial_comb_fn, SqueezeAlphaBetaZetaMu,
+            },
+            FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
+        },
         linearization::{
             LFLinearizationProver, LFLinearizationVerifier, LinearizationProver,
             LinearizationVerifier,
         },
+        FoldingProof,
     },
-    transcript::poseidon::PoseidonTranscript,
+    transcript::{poseidon::PoseidonTranscript, Transcript, TranscriptWithShortChallenges},
+    utils::sumcheck::MLSumcheck,
 };
-use ark_ff::{Field, PrimeField};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
-use ark_std::{io::Cursor, test_rng};
-use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{
-    BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
-    StarkChallengeSet, SuitableRing,
-};
-use stark_rings_poly::mle::DenseMultilinearExtension;
-
-use num_traits::{One, Zero};
-use stark_rings::cyclotomic_ring::models::{
-    frog_ring::RqNTT as FrogRqNTT, goldilocks::RqNTT as GoldilocksRqNTT,
-    stark_prime::RqNTT as StarkRqNTT,
-};
-use stark_rings::cyclotomic_ring::ICRT;
-use stark_rings::Ring;
 
 const C: usize = 4;
 const WIT_LEN: usize = 3;

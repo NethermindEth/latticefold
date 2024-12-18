@@ -1,23 +1,25 @@
-use super::*;
-use crate::arith::utils::mat_vec_mul;
-use crate::decomposition_parameters::test_params::{BabyBearDP, FrogDP, GoldilocksDP, StarkDP};
-use crate::nifs::linearization::utils::{sumcheck_polynomial_comb_fn, SqueezeBeta};
-use crate::{
-    arith::{r1cs::get_test_z_split, tests::get_test_ccs},
-    commitment::AjtaiCommitmentScheme,
-    decomposition_parameters::DecompositionParams,
-    transcript::poseidon::PoseidonTranscript,
-};
 use ark_std::test_rng;
-use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{
-    BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet,
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet},
 };
 use num_traits::One;
 use rand::Rng;
 use stark_rings::cyclotomic_ring::models::{
     babybear::RqNTT as BabyBearRqNTT, frog_ring::RqNTT as FrogRqNTT,
     goldilocks::RqNTT as GoldilocksRqNTT, stark_prime::RqNTT as StarkRqNTT,
+};
+
+use super::*;
+use crate::{
+    arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul},
+    commitment::AjtaiCommitmentScheme,
+    decomposition_parameters::{
+        test_params::{BabyBearDP, FrogDP, GoldilocksDP, StarkDP},
+        DecompositionParams,
+    },
+    nifs::linearization::utils::{sumcheck_polynomial_comb_fn, SqueezeBeta},
+    transcript::poseidon::PoseidonTranscript,
 };
 
 const C: usize = 4;

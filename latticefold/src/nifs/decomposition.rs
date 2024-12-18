@@ -1,5 +1,16 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
+use ark_std::{cfg_into_iter, cfg_iter, iterable::Iterable};
+use cyclotomic_rings::rings::SuitableRing;
+use num_traits::Zero;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+use stark_rings::OverField;
+use stark_rings_linalg::SparseMatrix;
+use stark_rings_poly::polynomials::DenseMultilinearExtension;
+
+pub use self::structs::*;
+use self::utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
 use crate::{
     arith::{error::CSError, utils::mat_vec_mul, Witness, CCS, LCCCS},
     ark_base::*,
@@ -9,20 +20,6 @@ use crate::{
     transcript::Transcript,
     utils::mle_helpers::{evaluate_mles, to_mles_err},
 };
-use cyclotomic_rings::rings::SuitableRing;
-use stark_rings_linalg::SparseMatrix;
-use stark_rings_poly::polynomials::DenseMultilinearExtension;
-
-use stark_rings::OverField;
-use utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back};
-
-use ark_std::iterable::Iterable;
-use ark_std::{cfg_into_iter, cfg_iter};
-use num_traits::Zero;
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
-
-pub use structs::*;
 
 mod structs;
 

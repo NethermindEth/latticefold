@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use ark_std::{time::Duration, UniformRand};
 use criterion::{
     criterion_group, criterion_main, AxisScale, BatchSize::SmallInput, BenchmarkId, Criterion,
@@ -8,7 +10,6 @@ use cyclotomic_rings::rings::{
 };
 use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::cyclotomic_ring::{CRT, ICRT};
-use std::fmt::Debug;
 
 fn ajtai_benchmark<
     const C: usize, // rows

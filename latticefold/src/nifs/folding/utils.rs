@@ -1,26 +1,20 @@
 #![allow(non_snake_case)]
 
-use ark_ff::Zero;
-use ark_ff::{Field, PrimeField};
-use ark_std::iter::successors;
-use ark_std::iterable::Iterable;
-
-// use ark_std::sync::Arc;
+use ark_ff::{Field, PrimeField, Zero};
+use ark_std::{iter::successors, iterable::Iterable};
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
-use stark_rings::{cyclotomic_ring::CRT, Ring};
+use stark_rings::{cyclotomic_ring::CRT, OverField, PolyRing, Ring};
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
-use crate::ark_base::*;
-use crate::commitment::Commitment;
-use crate::nifs::error::FoldingError;
-use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::sumcheck::utils::build_eq_x_r;
 use crate::{
     arith::{CCS, LCCCS},
+    ark_base::*,
+    commitment::Commitment,
     decomposition_parameters::DecompositionParams,
-    transcript::Transcript,
+    nifs::error::FoldingError,
+    transcript::{Transcript, TranscriptWithShortChallenges},
+    utils::sumcheck::utils::build_eq_x_r,
 };
-use stark_rings::{OverField, PolyRing};
-use stark_rings_poly::mle::DenseMultilinearExtension;
 
 /// A trait for squeezing challenges (`alpha`, `beta`, `zeta`, `mu`) from a cryptographic sponge.
 ///

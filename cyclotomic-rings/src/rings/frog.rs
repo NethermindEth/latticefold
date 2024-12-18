@@ -1,9 +1,10 @@
 use stark_rings::cyclotomic_ring::models::frog_ring::{Fq, RqNTT, RqPoly};
 
-use crate::ark_base::*;
-use crate::challenge_set::{error, LatticefoldChallengeSet};
-
 use super::SuitableRing;
+use crate::{
+    ark_base::*,
+    challenge_set::{error, LatticefoldChallengeSet},
+};
 
 /// Frog ring in the NTT form.
 ///

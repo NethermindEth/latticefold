@@ -1,3 +1,5 @@
+use std::{fmt::Debug, time::Duration};
+
 use criterion::{
     criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
 };
@@ -8,19 +10,16 @@ use cyclotomic_rings::{
         GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT, SuitableRing,
     },
 };
-use latticefold::nifs::decomposition::{
-    DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
+use latticefold::nifs::{
+    decomposition::{
+        DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
+    },
+    folding::{FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier},
 };
-use latticefold::nifs::folding::{
-    FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier,
-};
-use std::{fmt::Debug, time::Duration};
 use utils::wit_and_ccs_gen_non_scalar;
 mod macros;
 mod utils;
 use ark_std::UniformRand;
-
-use crate::utils::wit_and_ccs_gen;
 use latticefold::{
     arith::{Witness, CCCS, CCS},
     commitment::AjtaiCommitmentScheme,
@@ -30,6 +29,8 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+
+use crate::utils::wit_and_ccs_gen;
 
 fn prover_folding_benchmark<
     const C: usize,

@@ -1,17 +1,17 @@
-use crate::arith::r1cs::get_test_z_split;
-use crate::arith::tests::get_test_ccs;
-use crate::arith::{Witness, CCCS, CCS, LCCCS};
-use crate::commitment::AjtaiCommitmentScheme;
-use crate::decomposition_parameters::DecompositionParams;
-use crate::nifs::linearization::{LFLinearizationProver, LinearizationProver};
-use crate::nifs::{NIFSProver, NIFSVerifier};
-use crate::transcript::poseidon::PoseidonTranscript;
-use crate::transcript::TranscriptWithShortChallenges;
-use ark_std::test_rng;
-use ark_std::vec::Vec;
-use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::SuitableRing;
+use ark_std::{test_rng, vec::Vec};
+use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use rand::Rng;
+
+use crate::{
+    arith::{r1cs::get_test_z_split, tests::get_test_ccs, Witness, CCCS, CCS, LCCCS},
+    commitment::AjtaiCommitmentScheme,
+    decomposition_parameters::DecompositionParams,
+    nifs::{
+        linearization::{LFLinearizationProver, LinearizationProver},
+        NIFSProver, NIFSVerifier,
+    },
+    transcript::{poseidon::PoseidonTranscript, TranscriptWithShortChallenges},
+};
 
 fn setup_test_environment<
     const C: usize,
@@ -121,11 +121,13 @@ fn test_nifs_verify<
 mod e2e_tests {
     use super::*;
     mod stark {
-        use crate::decomposition_parameters::test_params::StarkDP;
-        use crate::decomposition_parameters::DecompositionParams;
-        use crate::nifs::tests::{test_nifs_prove, test_nifs_verify};
-        use crate::transcript::poseidon::PoseidonTranscript;
         use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
+
+        use crate::{
+            decomposition_parameters::{test_params::StarkDP, DecompositionParams},
+            nifs::tests::{test_nifs_prove, test_nifs_verify},
+            transcript::poseidon::PoseidonTranscript,
+        };
 
         type RqNTT = StarkRingNTT;
         type CS = StarkChallengeSet;
@@ -150,9 +152,10 @@ mod e2e_tests {
     }
 
     mod goldilocks {
+        use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
+
         use super::*;
         use crate::decomposition_parameters::test_params::GoldilocksDP;
-        use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
 
         type RqNTT = GoldilocksRingNTT;
         type CS = GoldilocksChallengeSet;
@@ -175,9 +178,10 @@ mod e2e_tests {
     }
 
     mod babybear {
+        use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
+
         use super::*;
         use crate::decomposition_parameters::test_params::BabyBearDP;
-        use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
 
         type RqNTT = BabyBearRingNTT;
         type CS = BabyBearChallengeSet;

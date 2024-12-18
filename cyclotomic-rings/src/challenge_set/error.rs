@@ -1,5 +1,6 @@
-use crate::ark_base::*;
 use thiserror::Error;
+
+use crate::ark_base::*;
 
 /// Short challenge generation error.
 #[derive(Debug, Error)]

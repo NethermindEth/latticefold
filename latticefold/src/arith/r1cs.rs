@@ -2,15 +2,13 @@
 
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::Ring;
-use stark_rings_linalg::sparse_matrix::dense_matrix_u64_to_sparse;
-use stark_rings_linalg::SparseMatrix;
+use stark_rings_linalg::{sparse_matrix::dense_matrix_u64_to_sparse, SparseMatrix};
 
 use super::{
     error::CSError as Error,
     utils::{mat_vec_mul, vec_add, vec_scalar_mul},
 };
-use crate::arith::hadamard;
-use crate::ark_base::*;
+use crate::{arith::hadamard, ark_base::*};
 
 /// a representation of a R1CS instance
 #[derive(Debug, Clone, PartialEq)]

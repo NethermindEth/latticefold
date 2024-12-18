@@ -7,6 +7,7 @@ use core::mem;
 use ark_ff::Field;
 use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
+use r1cs::R1CS;
 use stark_rings::{
     balanced_decomposition::{gadget_decompose, gadget_recompose},
     cyclotomic_ring::{CRT, ICRT},
@@ -15,14 +16,15 @@ use stark_rings::{
 use stark_rings_linalg::SparseMatrix;
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
+use self::{
+    error::CSError as Error,
+    utils::{hadamard, mat_vec_mul, vec_add, vec_scalar_mul},
+};
 use crate::{
     ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
     decomposition_parameters::DecompositionParams,
 };
-use error::CSError as Error;
-use r1cs::R1CS;
-use utils::{hadamard, mat_vec_mul, vec_add, vec_scalar_mul};
 
 pub mod ccs;
 pub mod error;
@@ -423,16 +425,16 @@ impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
 #[cfg(test)]
 pub mod tests {
     use ark_ff::{One, Zero};
+    use cyclotomic_rings::rings::{
+        BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
+    };
+    use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     use super::*;
     use crate::{
         arith::r1cs::{get_test_r1cs, get_test_z as r1cs_get_test_z},
         decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP},
     };
-    use cyclotomic_rings::rings::{
-        BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
-    };
-    use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     pub(crate) fn get_test_ccs<R: Ring>(W: usize, L: usize) -> CCS<R> {
         let r1cs = get_test_r1cs::<R>();

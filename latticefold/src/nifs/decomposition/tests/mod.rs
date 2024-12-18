@@ -1,33 +1,37 @@
-use crate::arith::r1cs::get_test_z_split;
-use crate::arith::tests::get_test_ccs;
-use crate::arith::utils::mat_vec_mul;
-use crate::arith::{Witness, CCS, LCCCS};
-use crate::commitment::{AjtaiCommitmentScheme, Commitment};
-use crate::decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP};
-use crate::decomposition_parameters::DecompositionParams;
-use crate::nifs::decomposition::utils::{
-    decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back,
-};
-use crate::nifs::decomposition::{
-    DecompositionProver, DecompositionVerifier, LFDecompositionProver, LFDecompositionVerifier,
-};
-use crate::nifs::error::DecompositionError;
-use crate::nifs::linearization::utils::compute_u;
-use crate::transcript::poseidon::PoseidonTranscript;
-use crate::utils::mle_helpers::{evaluate_mles, to_mles_err};
 use ark_std::vec::Vec;
-use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{
-    BabyBearChallengeSet, BabyBearRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT,
-    StarkChallengeSet, StarkRingNTT, SuitableRing,
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{
+        BabyBearChallengeSet, BabyBearRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT,
+        StarkChallengeSet, StarkRingNTT, SuitableRing,
+    },
 };
 use num_traits::One;
 use rand::Rng;
-use stark_rings_poly::mle::DenseMultilinearExtension;
-
 #[cfg(feature = "parallel")]
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
+use stark_rings_poly::mle::DenseMultilinearExtension;
+
+use crate::{
+    arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
+    commitment::{AjtaiCommitmentScheme, Commitment},
+    decomposition_parameters::{
+        test_params::{BabyBearDP, GoldilocksDP, StarkDP},
+        DecompositionParams,
+    },
+    nifs::{
+        decomposition::{
+            utils::{decompose_B_vec_into_k_vec, decompose_big_vec_into_k_vec_and_compose_back},
+            DecompositionProver, DecompositionVerifier, LFDecompositionProver,
+            LFDecompositionVerifier,
+        },
+        error::DecompositionError,
+        linearization::utils::compute_u,
+    },
+    transcript::poseidon::PoseidonTranscript,
+    utils::mle_helpers::{evaluate_mles, to_mles_err},
 };
 
 fn generate_decomposition_args<RqNTT, CS, DP, const WIT_LEN: usize, const W: usize>() -> (

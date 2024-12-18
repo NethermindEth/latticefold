@@ -15,10 +15,12 @@ pub mod rotation;
 
 #[doc(hidden)]
 mod ark_base {
-    pub use ark_std::clone::Clone;
-    pub use ark_std::convert::From;
-    pub use ark_std::iter::Iterator;
-    pub use ark_std::prelude::rust_2021::{derive, Debug};
-    pub use ark_std::result::Result::{self, Err, Ok};
-    pub use ark_std::vec::*;
+    pub use ark_std::{
+        clone::Clone,
+        convert::From,
+        iter::Iterator,
+        prelude::rust_2021::{derive, Debug},
+        result::Result::{self, Err, Ok},
+        vec::*,
+    };
 }

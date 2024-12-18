@@ -3,8 +3,10 @@ use stark_rings_poly::polynomials::ArithErrors;
 use thiserror::Error;
 
 use crate::{
-    arith::error::CSError, ark_base::*, commitment::CommitmentError,
-    utils::mle_helpers::MleEvaluationError, utils::sumcheck::SumCheckError,
+    arith::error::CSError,
+    ark_base::*,
+    commitment::CommitmentError,
+    utils::{mle_helpers::MleEvaluationError, sumcheck::SumCheckError},
 };
 
 #[derive(Debug, Error)]

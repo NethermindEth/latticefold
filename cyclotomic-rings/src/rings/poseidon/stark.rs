@@ -2,8 +2,10 @@ use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use ark_ff::MontFp;
 use stark_rings::cyclotomic_ring::models::stark_prime::Fq;
 
-use crate::ark_base::*;
-use crate::rings::{GetPoseidonParams, StarkPoseidonConfig};
+use crate::{
+    ark_base::*,
+    rings::{GetPoseidonParams, StarkPoseidonConfig},
+};
 
 impl GetPoseidonParams<Fq> for StarkPoseidonConfig {
     fn get_poseidon_config() -> PoseidonConfig<Fq> {

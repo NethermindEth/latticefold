@@ -4,24 +4,16 @@
 
 use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::marker::PhantomData;
-use ark_std::vec::Vec;
-
+use ark_std::{marker::PhantomData, vec::Vec};
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::OverField;
 
+use self::{decomposition::*, error::LatticefoldError, folding::*, linearization::*};
 use crate::{
     arith::{error::CSError, Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
     transcript::{Transcript, TranscriptWithShortChallenges},
-};
-use decomposition::*;
-use error::LatticefoldError;
-use folding::{FoldingProof, FoldingProver, FoldingVerifier, LFFoldingProver, LFFoldingVerifier};
-use linearization::{
-    LFLinearizationProver, LFLinearizationVerifier, LinearizationProof, LinearizationProver,
-    LinearizationVerifier,
 };
 
 pub mod decomposition;

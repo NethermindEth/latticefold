@@ -3,16 +3,14 @@
 //!  
 
 use ark_std::{cfg_into_iter, cfg_iter, vec::Vec};
-use thiserror::Error;
-
-use stark_rings::Ring;
-use stark_rings_poly::mle::DenseMultilinearExtension;
-
-use crate::arith::{error::CSError, utils::mat_vec_mul, CCS};
 use cyclotomic_rings::rings::SuitableRing;
-
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use stark_rings::Ring;
+use stark_rings_poly::mle::DenseMultilinearExtension;
+use thiserror::Error;
+
+use crate::arith::{error::CSError, utils::mat_vec_mul, CCS};
 
 #[derive(Debug, Error)]
 pub enum MleEvaluationError {

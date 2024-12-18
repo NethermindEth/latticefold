@@ -1,21 +1,20 @@
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::OverField;
 use stark_rings_poly::mle::DenseMultilinearExtension;
-use utils::{compute_u, prepare_lin_sumcheck_polynomial, sumcheck_polynomial_comb_fn};
 
+pub use self::structs::*;
+use self::utils::{compute_u, prepare_lin_sumcheck_polynomial, sumcheck_polynomial_comb_fn};
 use super::error::LinearizationError;
-use crate::ark_base::*;
-use crate::utils::mle_helpers::{calculate_Mz_mles, evaluate_mles};
 use crate::{
-    arith::{Witness, CCCS, CCS, LCCCS},
+    arith::{Instance, Witness, CCCS, CCS, LCCCS},
+    ark_base::*,
+    nifs::linearization::utils::SqueezeBeta,
     transcript::Transcript,
-    utils::sumcheck::{utils::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed},
+    utils::{
+        mle_helpers::{calculate_Mz_mles, evaluate_mles},
+        sumcheck::{utils::eq_eval, MLSumcheck, Proof, SumCheckError::SumCheckFailed},
+    },
 };
-
-use crate::arith::Instance;
-use crate::nifs::linearization::utils::SqueezeBeta;
-use crate::utils::sumcheck::Proof;
-pub use structs::*;
 
 mod structs;
 

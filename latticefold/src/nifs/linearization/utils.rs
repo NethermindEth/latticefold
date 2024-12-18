@@ -1,14 +1,14 @@
-use crate::{ark_base::Vec, utils::mle_helpers::evaluate_mles};
-use ark_ff::PrimeField;
-
+use ark_ff::{Field, PrimeField};
+use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::OverField;
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
-use crate::nifs::{error::LinearizationError, CCS};
-use crate::transcript::Transcript;
-use crate::utils::sumcheck::utils::build_eq_x_r;
-use ark_ff::Field;
-use cyclotomic_rings::rings::SuitableRing;
+use crate::{
+    ark_base::Vec,
+    nifs::{error::LinearizationError, CCS},
+    transcript::Transcript,
+    utils::{mle_helpers::evaluate_mles, sumcheck::utils::build_eq_x_r},
+};
 
 /// Computes the evaluation of the MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$ at the sumcheck challenge point.
 ///

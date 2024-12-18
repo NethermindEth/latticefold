@@ -13,12 +13,13 @@ use ark_std::{
     string::ToString,
     vec::*,
 };
-use stark_rings_poly::mle::DenseMultilinearExtension;
-use stark_rings_poly::polynomials::{random_mle_list, ArithErrors, RefCounter};
-
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use stark_rings::Ring;
+use stark_rings_poly::{
+    mle::DenseMultilinearExtension,
+    polynomials::{random_mle_list, ArithErrors, RefCounter},
+};
 
 pub fn rand_poly<R: Ring>(
     nv: usize,

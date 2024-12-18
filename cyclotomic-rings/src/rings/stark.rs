@@ -1,10 +1,11 @@
 // PGold = 2^64 − 2^32 + 1
 use stark_rings::cyclotomic_ring::models::stark_prime::{Fq, RqNTT, RqPoly};
 
-use crate::ark_base::*;
-use crate::{challenge_set::error, challenge_set::LatticefoldChallengeSet};
-
 use super::SuitableRing;
+use crate::{
+    ark_base::*,
+    challenge_set::{error, LatticefoldChallengeSet},
+};
 
 /// Starknet prime ring in the NTT form.
 ///

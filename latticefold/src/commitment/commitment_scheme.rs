@@ -1,3 +1,6 @@
+use cyclotomic_rings::rings::SuitableRing;
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
 use stark_rings::{
     balanced_decomposition::decompose_balanced_vec,
     cyclotomic_ring::{CRT, ICRT},
@@ -8,10 +11,6 @@ use super::homomorphic_commitment::Commitment;
 use crate::{
     ark_base::*, commitment::CommitmentError, decomposition_parameters::DecompositionParams,
 };
-use cyclotomic_rings::rings::SuitableRing;
-
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 
 /// A concrete instantiation of the Ajtai commitment scheme.
 /// Contains a random Ajtai matrix for the corresponding Ajtai parameters
@@ -125,11 +124,11 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
 
 #[cfg(test)]
 mod tests {
+    use cyclotomic_rings::rings::GoldilocksRingNTT;
     use stark_rings::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};
     use crate::ark_base::*;
-    use cyclotomic_rings::rings::GoldilocksRingNTT;
 
     pub(crate) fn generate_ajtai<const C: usize, const W: usize, NTT: OverField>(
     ) -> Result<AjtaiCommitmentScheme<C, W, NTT>, CommitmentError> {

@@ -1,13 +1,12 @@
 //! Provides operations used for working with constraint systems
 
-use crate::ark_base::*;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
 use stark_rings::Ring;
 use stark_rings_linalg::SparseMatrix;
 
 use super::error::CSError as Error;
+use crate::ark_base::*;
 
 //  Computes the hadamard product of two ring
 #[allow(dead_code)]
@@ -67,11 +66,11 @@ pub(crate) fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use ark_ff::Zero;
+    use stark_rings::cyclotomic_ring::models::goldilocks::Fq;
     use stark_rings_linalg::sparse_matrix::dense_matrix_to_sparse;
 
-    use stark_rings::cyclotomic_ring::models::goldilocks::Fq;
+    use super::*;
 
     #[test]
     fn test_hadamard_vec() {

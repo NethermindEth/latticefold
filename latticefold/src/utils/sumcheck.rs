@@ -1,13 +1,12 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{fmt::Display, marker::PhantomData};
+use prover::{ProverMsg, ProverState};
 use stark_rings::{OverField, Ring};
 use stark_rings_poly::polynomials::{ArithErrors, DenseMultilinearExtension};
 use thiserror::Error;
 
-use crate::ark_base::*;
-use crate::transcript::Transcript;
-use prover::{ProverMsg, ProverState};
-use verifier::SubClaim;
+use self::verifier::SubClaim;
+use crate::{ark_base::*, transcript::Transcript};
 
 pub mod prover;
 pub mod utils;
@@ -107,15 +106,19 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ark_base::*;
-    use crate::transcript::poseidon::PoseidonTranscript;
-    use crate::utils::sumcheck::utils::{rand_poly, rand_poly_comb_fn};
-    use crate::utils::sumcheck::{MLSumcheck, Proof};
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-    use cyclotomic_rings::rings::SuitableRing;
+    use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
     use rand::Rng;
+
+    use crate::{
+        ark_base::*,
+        transcript::poseidon::PoseidonTranscript,
+        utils::sumcheck::{
+            utils::{rand_poly, rand_poly_comb_fn},
+            MLSumcheck, Proof,
+        },
+    };
 
     fn generate_sumcheck_proof<R, CS>(
         nvars: usize,

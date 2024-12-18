@@ -5,8 +5,7 @@ use stark_rings::{
 };
 use stark_rings_linalg::ops::Transpose;
 
-use crate::ark_base::*;
-use crate::decomposition_parameters::DecompositionParams;
+use crate::{ark_base::*, decomposition_parameters::DecompositionParams};
 
 /// Decompose a vector of arbitrary norm in its NTT form into DP::K vectors
 /// and applies the gadget-B matrix again.

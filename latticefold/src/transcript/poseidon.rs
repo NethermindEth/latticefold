@@ -4,14 +4,14 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_ff::Field;
 use ark_std::marker::PhantomData;
-use stark_rings::OverField;
-
-use super::{Transcript, TranscriptWithShortChallenges};
-use crate::ark_base::*;
 use cyclotomic_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{GetPoseidonParams, SuitableRing},
 };
+use stark_rings::OverField;
+
+use super::{Transcript, TranscriptWithShortChallenges};
+use crate::ark_base::*;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 #[derive(Clone)]

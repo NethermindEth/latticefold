@@ -5,8 +5,7 @@
 use ark_ff::{Field, Zero};
 use stark_rings::{Cyclotomic, PolyRing};
 
-use crate::ark_base::*;
-use crate::rings::SuitableRing;
+use crate::{ark_base::*, rings::SuitableRing};
 
 /// An implementation of the $\mathrm{RotSum}$ operation from lemma 2.1 of the Latticefold paper.
 ///

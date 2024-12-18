@@ -6,30 +6,27 @@
 #![allow(non_snake_case)]
 
 use ark_ff::Zero;
-use ark_std::cfg_iter;
-use ark_std::iter::successors;
-
-use ark_std::iterable::Iterable;
+use ark_std::{cfg_iter, iter::successors, iterable::Iterable};
 use cyclotomic_rings::rings::SuitableRing;
-
-use super::error::FoldingError;
-use crate::ark_base::*;
-use crate::transcript::TranscriptWithShortChallenges;
-use crate::utils::mle_helpers::evaluate_mles;
-use crate::utils::sumcheck::{utils::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed};
-use crate::{
-    arith::{error::CSError, Witness, CCS, LCCCS},
-    decomposition_parameters::DecompositionParams,
-};
-
-use stark_rings_poly::mle::DenseMultilinearExtension;
-use utils::*;
-
-use crate::commitment::Commitment;
-use crate::utils::sumcheck::prover::ProverState;
-
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
+use stark_rings_poly::mle::DenseMultilinearExtension;
+
+use self::utils::*;
+use super::error::FoldingError;
+use crate::{
+    arith::{error::CSError, Witness, CCS, LCCCS},
+    ark_base::*,
+    commitment::Commitment,
+    decomposition_parameters::DecompositionParams,
+    transcript::TranscriptWithShortChallenges,
+    utils::{
+        mle_helpers::evaluate_mles,
+        sumcheck::{
+            prover::ProverState, utils::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed,
+        },
+    },
+};
 
 #[cfg(test)]
 mod tests;

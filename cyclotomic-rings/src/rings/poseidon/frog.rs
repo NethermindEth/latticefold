@@ -1,8 +1,10 @@
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
 use stark_rings::cyclotomic_ring::models::frog_ring::Fq;
 
-use crate::ark_base::*;
-use crate::rings::{FrogPoseidonConfig, GetPoseidonParams};
+use crate::{
+    ark_base::*,
+    rings::{FrogPoseidonConfig, GetPoseidonParams},
+};
 
 impl GetPoseidonParams<Fq> for FrogPoseidonConfig {
     fn get_poseidon_config() -> ark_crypto_primitives::sponge::poseidon::PoseidonConfig<Fq> {

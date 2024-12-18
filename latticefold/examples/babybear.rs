@@ -1,19 +1,25 @@
 #![allow(dead_code)]
 
+use std::{fmt::Debug, time::Instant};
+
 use ark_serialize::{CanonicalSerialize, Compress};
-use ark_std::vec::Vec;
-use ark_std::UniformRand;
-use cyclotomic_rings::challenge_set::LatticefoldChallengeSet;
-use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT, SuitableRing};
-use latticefold::arith::ccs::get_test_dummy_degree_three_ccs_non_scalar;
-use latticefold::arith::r1cs::get_test_dummy_z_split_ntt;
-use latticefold::arith::{Arith, Witness, CCCS, CCS, LCCCS};
-use latticefold::commitment::AjtaiCommitmentScheme;
-use latticefold::nifs::linearization::{LFLinearizationProver, LinearizationProver};
-use latticefold::nifs::{NIFSProver, NIFSVerifier};
-use latticefold::transcript::poseidon::PoseidonTranscript;
-use std::fmt::Debug;
-use std::time::Instant;
+use ark_std::{vec::Vec, UniformRand};
+use cyclotomic_rings::{
+    challenge_set::LatticefoldChallengeSet,
+    rings::{BabyBearChallengeSet, BabyBearRingNTT, SuitableRing},
+};
+use latticefold::{
+    arith::{
+        ccs::get_test_dummy_degree_three_ccs_non_scalar, r1cs::get_test_dummy_z_split_ntt, Arith,
+        Witness, CCCS, CCS, LCCCS,
+    },
+    commitment::AjtaiCommitmentScheme,
+    nifs::{
+        linearization::{LFLinearizationProver, LinearizationProver},
+        NIFSProver, NIFSVerifier,
+    },
+    transcript::poseidon::PoseidonTranscript,
+};
 
 include!(concat!(env!("OUT_DIR"), "/examples_generated.rs"));
 
