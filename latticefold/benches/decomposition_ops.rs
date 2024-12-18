@@ -19,6 +19,7 @@ use latticefold::nifs::error::DecompositionError;
 use latticefold::nifs::linearization::utils::compute_u;
 use latticefold::utils::mle_helpers::{evaluate_mles, to_mles_err};
 use lattirust_poly::mle::DenseMultilinearExtension;
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::fmt::Debug;
 use utils::{wit_and_ccs_gen, wit_and_ccs_gen_degree_three_non_scalar, wit_and_ccs_gen_non_scalar};
 
@@ -162,8 +163,7 @@ where
     DP: DecompositionParams,
 {
     let r1cs_rows = 1 + WIT_LEN + 1;
-    let (cm_i, wit, ccs, scheme) =
-        wit_and_ccs_gen_non_scalar::<1, C, WIT_LEN, W, DP, R>(r1cs_rows);
+    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen_non_scalar::<1, C, WIT_LEN, W, DP, R>(r1cs_rows);
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R, 1, WIT_LEN>();
     let mut z = vec![one];
     z.extend(&x_ccs);

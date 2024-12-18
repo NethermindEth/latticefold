@@ -312,13 +312,19 @@ fn folding_operations<
 
     let comb_fn = |vals: &[R]| -> R { sumcheck_polynomial_comb_fn::<R, DP>(vals, &setup.mu_s) };
     let mut transcript = PoseidonTranscript::<R, CS>::default();
-    
+
     group.bench_with_input(
         BenchmarkId::new(
             "Sumcheck",
             format!(
                 "Kappa={}, W_CCS={}, W={}, B={}, L={}, B_SMALL={}, K={}",
-                C, WIT_LEN, W, DP::B, DP::L, DP::B_SMALL, DP::K
+                C,
+                WIT_LEN,
+                W,
+                DP::B,
+                DP::L,
+                DP::B_SMALL,
+                DP::K
             ),
         ),
         &(&setup, &comb_fn),

@@ -116,7 +116,9 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
         // );
 
         let mle = DenseMultilinearExtension::from_slice(nv, &vec_ntt_form);
-        let points = (0..nv).map(|i| R::rand(&mut thread_rng())).collect::<Vec<_>>();
+        let points = (0..nv)
+            .map(|i| R::rand(&mut thread_rng()))
+            .collect::<Vec<_>>();
         group.bench_with_input(
             BenchmarkId::new(
                 "MLE Evaluation",
