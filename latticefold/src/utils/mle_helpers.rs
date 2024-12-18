@@ -129,7 +129,7 @@ where
             if 1 << n_vars < m.len() {
                 Err(MleEvaluationError::IncorrectLength(1 << n_vars, m.len()).into())
             } else {
-                Ok(DenseMultilinearExtension::from_slice(n_vars, &m))
+                Ok(DenseMultilinearExtension::from_evaluations_vec(n_vars, m))
             }
         })
         .collect::<Result<_, E>>()
