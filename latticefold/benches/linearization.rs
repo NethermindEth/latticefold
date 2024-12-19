@@ -6,7 +6,10 @@ use latticefold::decomposition_parameters::DecompositionParams;
 mod env;
 mod utils;
 
-include!(concat!(env!("OUT_DIR"), "/generated_benchmarks.rs"));
+include!(concat!(
+    env!("OUT_DIR"),
+    "/generated_linearization_benchmarks.rs"
+));
 
 pub fn benchmarks_main(c: &mut Criterion) {
     bench_goldilocks_linearization(c);

@@ -104,6 +104,7 @@ fn generate_code_for_examples() {
     fs::write(&dest_path, generated_code).unwrap();
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=latticefold/benches/config.toml");
     println!("cargo:rerun-if-env-changed=PARAM_B");
     println!("cargo:rerun-if-env-changed=PARAM_L");
     println!("cargo:rerun-if-env-changed=PARAM_B_SMALL");
@@ -144,9 +145,17 @@ pub struct BenchmarkRecord {
 #[derive(Debug, Deserialize)]
 pub struct Benchmarks {
     pub goldilocks: Vec<BenchmarkRecord>,
+    pub goldilocks_non_scalar: Vec<BenchmarkRecord>,
+    pub goldilocks_degree_three_non_scalar: Vec<BenchmarkRecord>,
     pub starkprime: Vec<BenchmarkRecord>,
+    pub starkprime_non_scalar: Vec<BenchmarkRecord>,
+    pub starkprime_degree_three_non_scalar: Vec<BenchmarkRecord>,
     pub frog: Vec<BenchmarkRecord>,
+    pub frog_non_scalar: Vec<BenchmarkRecord>,
+    pub frog_degree_three_non_scalar: Vec<BenchmarkRecord>,
     pub babybear: Vec<BenchmarkRecord>,
+    pub babybear_non_scalar: Vec<BenchmarkRecord>,
+    pub babybear_degree_three_non_scalar: Vec<BenchmarkRecord>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,18 +198,49 @@ impl ToTokens for R1CS {
 }
 
 fn parse_benches() {
+    println!("cargo:rerun-if-changed=latticefold/benches/config.toml");
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR is not set");
     let toml_content = fs::read_to_string("benches/config.toml").expect("Failed to read TOML file");
     let config: BenchmarkConfig =
         toml::from_str(&toml_content).expect("Failed to deserialize benches/config.toml");
 
-    let file_path = Path::new(&out_dir).join("generated_benchmarks.rs");
-    let mut file = File::create(&file_path).expect("Failed to create benchmark generated file");
+    let linearization_file_path = Path::new(&out_dir).join("generated_linearization_benchmarks.rs");
+    let mut linearization_file =
+        File::create(&linearization_file_path).expect("Failed to create benchmark generated file");
 
-    writeln!(&mut file, "use utils::{{Bencher, R1CS}};").unwrap();
-    writeln!(&mut file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+    writeln!(&mut linearization_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(&mut linearization_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+
+    let decomposition_file_path = Path::new(&out_dir).join("generated_decomposition_benchmarks.rs");
+    let mut decomposition_file =
+        File::create(&decomposition_file_path).expect("Failed to create benchmark generated file");
+
+    writeln!(&mut decomposition_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(&mut decomposition_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+
+    let folding_file_path = Path::new(&out_dir).join("generated_folding_benchmarks.rs");
+    let mut folding_file =
+        File::create(&folding_file_path).expect("Failed to create benchmark generated file");
+
+    writeln!(&mut folding_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(&mut folding_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+
+    let e2e_file_path = Path::new(&out_dir).join("generated_e2e_benchmarks.rs");
+    let mut e2e_file =
+        File::create(&e2e_file_path).expect("Failed to create benchmark generated file");
+
+    writeln!(&mut e2e_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(&mut e2e_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+
+    let mut files = (
+        linearization_file,
+        decomposition_file,
+        folding_file,
+        e2e_file,
+    );
+
     write_group(
-        &mut file,
+        &mut files,
         &config.benchmarks.goldilocks,
         "goldilocks",
         "GoldilocksRingNTT",
@@ -209,8 +249,8 @@ fn parse_benches() {
         "Goldilocks Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.goldilocks,
+        &mut files,
+        &config.benchmarks.goldilocks_non_scalar,
         "goldilocks_non_scalar",
         "GoldilocksRingNTT",
         "GoldilocksChallengeSet",
@@ -218,8 +258,8 @@ fn parse_benches() {
         "Goldilocks Non Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.goldilocks,
+        &mut files,
+        &config.benchmarks.goldilocks_degree_three_non_scalar,
         "goldilocks_degree_three_non_scalar",
         "GoldilocksRingNTT",
         "GoldilocksChallengeSet",
@@ -228,17 +268,17 @@ fn parse_benches() {
     );
 
     write_group(
-        &mut file,
+        &mut files,
         &config.benchmarks.starkprime,
         "stark_prime",
         "StarkRingNTT",
         "StarkChallengeSet",
         R1CS::DegreeThreeNonScalar,
-        "Stark Non Scalar",
+        "Stark Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.starkprime,
+        &mut files,
+        &config.benchmarks.starkprime_non_scalar,
         "stark_prime_non_scalar",
         "StarkRingNTT",
         "StarkChallengeSet",
@@ -246,8 +286,8 @@ fn parse_benches() {
         "Stark Non Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.starkprime,
+        &mut files,
+        &config.benchmarks.starkprime_degree_three_non_scalar,
         "stark_prime_degree_three_non_scalar",
         "StarkRingNTT",
         "StarkChallengeSet",
@@ -256,17 +296,17 @@ fn parse_benches() {
     );
 
     write_group(
-        &mut file,
+        &mut files,
         &config.benchmarks.frog,
         "frog",
         "FrogRingNTT",
         "FrogChallengeSet",
         R1CS::DegreeThreeNonScalar,
-        "Frog Non Scalar",
+        "Frog Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.frog,
+        &mut files,
+        &config.benchmarks.frog_non_scalar,
         "frog_non_scalar",
         "FrogRingNTT",
         "FrogChallengeSet",
@@ -274,8 +314,8 @@ fn parse_benches() {
         "Frog Non Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.frog,
+        &mut files,
+        &config.benchmarks.frog_degree_three_non_scalar,
         "frog_degree_three_non_scalar",
         "FrogRingNTT",
         "FrogChallengeSet",
@@ -284,17 +324,17 @@ fn parse_benches() {
     );
 
     write_group(
-        &mut file,
+        &mut files,
         &config.benchmarks.babybear,
         "single_babybear",
         "BabyBearRingNTT",
         "BabyBearChallengeSet",
         R1CS::DegreeThreeNonScalar,
-        "BabyBear Non Scalar",
+        "BabyBear Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.babybear,
+        &mut files,
+        &config.benchmarks.babybear_non_scalar,
         "single_babybear_non_scalar",
         "BabyBearRingNTT",
         "BabyBearChallengeSet",
@@ -302,8 +342,8 @@ fn parse_benches() {
         "BabyBear Non Scalar",
     );
     write_group(
-        &mut file,
-        &config.benchmarks.babybear,
+        &mut files,
+        &config.benchmarks.babybear_degree_three_non_scalar,
         "single_babybear_degree_three_non_scalar",
         "BabyBearRingNTT",
         "BabyBearChallengeSet",
@@ -311,10 +351,28 @@ fn parse_benches() {
         "BabyBear Degree Three Non Scalar",
     );
 
-    drop(file);
+    drop(files.0);
+    drop(files.1);
+    drop(files.2);
+    drop(files.3);
 
     Command::new("rustfmt")
-        .arg(file_path)
+        .arg(linearization_file_path)
+        .output()
+        .expect("rustfmt failed");
+
+    Command::new("rustfmt")
+        .arg(decomposition_file_path)
+        .output()
+        .expect("rustfmt failed");
+
+    Command::new("rustfmt")
+        .arg(folding_file_path)
+        .output()
+        .expect("rustfmt failed");
+
+    Command::new("rustfmt")
+        .arg(e2e_file_path)
         .output()
         .expect("rustfmt failed");
 
@@ -425,7 +483,7 @@ fn write_ajtai_group(file: &mut File, benchmarks: &[AjtaiRecord], name: &str, ri
 }
 
 fn write_group(
-    file: &mut File,
+    files: &mut (File, File, File, File),
     benchmarks: &[BenchmarkRecord],
     group: &str,
     ring: &str,
@@ -434,7 +492,7 @@ fn write_group(
     group_name: &str,
 ) {
     write!(
-        file,
+        files.0,
         "{}",
         write_function(
             benchmarks,
@@ -448,7 +506,7 @@ fn write_group(
     )
     .unwrap();
     write!(
-        file,
+        files.1,
         "{}",
         write_function(
             benchmarks,
@@ -462,13 +520,13 @@ fn write_group(
     )
     .unwrap();
     write!(
-        file,
+        files.2,
         "{}",
         write_function(benchmarks, group, "folding", ring, cs, scalar, group_name)
     )
     .unwrap();
     write!(
-        file,
+        files.3,
         "{}",
         write_function(benchmarks, group, "e2e", ring, cs, scalar, group_name)
     )
