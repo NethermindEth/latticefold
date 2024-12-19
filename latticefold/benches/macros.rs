@@ -1315,14 +1315,14 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 26, 32768, 65536, 4, 2, 16);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 44, 32768, 4194304, 3, 2, 22);
         //run_single_goldilocks_non_scalar_benchmark!(
-            //&mut $group,
-            //1,
-            //99,
-            //32768,
-            //4294967296,
-            //2,
-            //2,
-            //32
+        //&mut $group,
+        //1,
+        //99,
+        //32768,
+        //4294967296,
+        //2,
+        //2,
+        //32
         //);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 11, 65536, 256, 8, 2, 8);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 12, 65536, 1024, 7, 2, 10);
@@ -1331,14 +1331,14 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 27, 65536, 65536, 4, 2, 16);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 46, 65536, 4194304, 3, 2, 22);
         //run_single_goldilocks_non_scalar_benchmark!(
-            //&mut $group,
-            //1,
-            //99,
-            //65536,
-            //4294967296,
-            //2,
-            //2,
-            //32
+        //&mut $group,
+        //1,
+        //99,
+        //65536,
+        //4294967296,
+        //2,
+        //2,
+        //32
         //);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 12, 131072, 256, 8, 2, 8);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 13, 131072, 1024, 7, 2, 10);
@@ -1347,14 +1347,14 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 28, 131072, 65536, 4, 2, 16);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 47, 131072, 4194304, 3, 2, 22);
         //run_single_goldilocks_non_scalar_benchmark!(
-            //&mut $group,
-            //1,
-            //99,
-            //131072,
-            //4294967296,
-            //2,
-            //2,
-            //32
+        //&mut $group,
+        //1,
+        //99,
+        //131072,
+        //4294967296,
+        //2,
+        //2,
+        //32
         //);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 12, 262144, 256, 8, 2, 8);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 13, 262144, 1024, 7, 2, 10);
@@ -1363,14 +1363,14 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 29, 262144, 65536, 4, 2, 16);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 48, 262144, 4194304, 3, 2, 22);
         //run_single_goldilocks_non_scalar_benchmark!(
-            //&mut $group,
-            //1,
-            //99,
-            //262144,
-            //4294967296,
-            //2,
-            //2,
-            //32
+        //&mut $group,
+        //1,
+        //99,
+        //262144,
+        //4294967296,
+        //2,
+        //2,
+        //32
         //);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 13, 524288, 256, 8, 2, 8);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 14, 524288, 1024, 7, 2, 10);
@@ -1379,14 +1379,14 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 30, 524288, 65536, 4, 2, 16);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 49, 524288, 4194304, 3, 2, 22);
         //run_single_goldilocks_non_scalar_benchmark!(
-            //&mut $group,
-            //1,
-            //99,
-            //524288,
-            //4294967296,
-            //2,
-            //2,
-            //32
+        //&mut $group,
+        //1,
+        //99,
+        //524288,
+        //4294967296,
+        //2,
+        //2,
+        //32
         //);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 14, 1048576, 256, 8, 2, 8);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 15, 1048576, 1024, 7, 2, 10);
@@ -1395,14 +1395,14 @@ macro_rules! run_goldilocks_non_scalar_benchmarks {
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 30, 1048576, 65536, 4, 2, 16);
         //run_single_goldilocks_non_scalar_benchmark!(&mut $group, 1, 50, 1048576, 4194304, 3, 2, 22);
         //run_single_goldilocks_non_scalar_benchmark!(
-            //&mut $group,
-            //1,
-            //99,
-            //1048576,
-            //4294967296,
-            //2,
-            //2,
-            //32
+        //&mut $group,
+        //1,
+        //99,
+        //1048576,
+        //4294967296,
+        //2,
+        //2,
+        //32
         //);
     };
 }

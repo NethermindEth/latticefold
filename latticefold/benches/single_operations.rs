@@ -1,7 +1,7 @@
 #![allow(incomplete_features)]
 use ark_std::{test_rng, time::Duration, UniformRand};
 use criterion::{
-    criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration,
+    black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion, PlotConfiguration
 };
 use cyclotomic_rings::rings::{GoldilocksRingNTT, SuitableRing};
 use lattirust_poly::mle::DenseMultilinearExtension;
@@ -21,50 +21,83 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
     let b = R::rand(&mut rng);
     let a_field = <R::CoefficientRepresentation as PolyRing>::BaseRing::rand(&mut rng);
     let b_field = <R::CoefficientRepresentation as PolyRing>::BaseRing::rand(&mut rng);
+    let a_field_ext = <R as PolyRing>::BaseRing::rand(&mut rng);
+    let b_field_ext = <R as PolyRing>::BaseRing::rand(&mut rng);
 
-    // group.bench_with_input("Addition Field", &(a_field, b_field), |bench, (a, b)| {
-    //     bench.iter(|| {
-    //         let _ = *a + *b;
-    //     })
-    // });
+    println!("a_field: {}", a_field);
+    println!("b_field: {}", b_field);
+    println!("a_field_ext: {}", a_field_ext);
+    println!("b_field_ext: {}", b_field_ext);
 
-    // group.bench_with_input(
-    //     "Substraction Field",
-    //     &(a_field, b_field),
-    //     |bench, (a, b)| {
-    //         bench.iter(|| {
-    //             let _ = *a * *b;
-    //         })
-    //     },
-    // );
+    group.bench_with_input("Addition Field", &(a_field, b_field), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = black_box(*a + *b);
+        })
+    });
 
-    // group.bench_with_input(
-    //     "Multiplication Field",
-    //     &(a_field, b_field),
-    //     |bench, (a, b)| {
-    //         bench.iter(|| {
-    //             let _ = *a * *b;
-    //         })
-    //     },
-    // );
+    group.bench_with_input(
+        "Substraction Field",
+        &(a_field, b_field),
+        |bench, (a, b)| {
+            bench.iter(|| {
+                let _ = black_box(*a - *b);
+            })
+        },
+    );
 
-    // group.bench_with_input("Addition NTT", &(a, b), |bench, (a, b)| {
-    //     bench.iter(|| {
-    //         let _ = *a + *b;
-    //     })
-    // });
+    group.bench_with_input(
+        "Multiplication Field",
+        &(a_field, b_field),
+        |bench, (a, b)| {
+            bench.iter(|| {
+                let _ = black_box(*a * *b);
+            })
+        },
+    );
 
-    // group.bench_with_input("Substraction NTT", &(a, b), |bench, (a, b)| {
-    //     bench.iter(|| {
-    //         let _ = *a - *b;
-    //     })
-    // });
+    group.bench_with_input("Addition Extension", &(a_field_ext, b_field_ext), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = black_box(*a + *b);
+        })
+    });
 
-    // group.bench_with_input("Multiplication NTT", &(a, b), |bench, (a, b)| {
-    //     bench.iter(|| {
-    //         let _ = *a * *b;
-    //     })
-    // });
+    group.bench_with_input(
+        "Substraction Extension",
+        &(a_field_ext, b_field_ext),
+        |bench, (a, b)| {
+            bench.iter(|| {
+                let _ = black_box(*a - *b);
+            })
+        },
+    );
+
+    group.bench_with_input(
+        "Multiplication Extension",
+        &(a_field_ext, b_field_ext),
+        |bench, (a, b)| {
+            bench.iter(|| {
+                let _ = black_box(*a * *b);
+            })
+        },
+    );
+
+    group.bench_with_input("Addition NTT", &(a, b), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = black_box(*a + *b);
+        })
+    });
+
+    group.bench_with_input("Substraction NTT", &(a, b), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = black_box(*a - *b);
+        })
+    });
+
+    group.bench_with_input("Multiplication NTT", &(a, b), |bench, (a, b)| {
+        bench.iter(|| {
+            let _ = black_box(*a * *b);
+        })
+    });
 
     // group.bench_with_input("CRT", &a.icrt(), |bench, a| {
     //     bench.iter(|| {
@@ -82,9 +115,74 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
         let vec_ntt_form = (0..(1 << nv))
             .map(|_| R::rand(&mut rng))
             .collect::<Vec<R>>();
+        let vec_ntt_form_2 = (0..(1 << nv))
+            .map(|_| R::rand(&mut rng))
+            .collect::<Vec<R>>();
         // let vec_coeff_form = (0..(1 << nv))
         //     .map(|_| R::CoefficientRepresentation::rand(&mut rng))
         //     .collect::<Vec<_>>();
+
+        group.bench_with_input(
+            BenchmarkId::new(
+                "Elementwise NTT addition",
+                format!("{} W = {}", "Goldilocks", 1 << nv),
+            ),
+            &(vec_ntt_form.clone(), vec_ntt_form_2.clone()),
+            |b, (a, c)| {
+                b.iter_batched(
+                    || (a.clone(), c.clone()),
+                    |(a, c)| {
+                        let _ = a
+                            .iter()
+                            .zip(c.iter())
+                            .map(|(a, c)| black_box(*a + *c))
+                            .collect::<Vec<_>>();
+                    },
+                    criterion::BatchSize::SmallInput,
+                )
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new(
+                "Elementwise NTT substraction",
+                format!("{} W = {}", "Goldilocks", 1 << nv),
+            ),
+            &(vec_ntt_form.clone(), vec_ntt_form_2.clone()),
+            |b, (a, c)| {
+                b.iter_batched(
+                    || (a.clone(), c.clone()),
+                    |(a, c)| {
+                        let _ = a
+                            .iter()
+                            .zip(c.iter())
+                            .map(|(a, c)| black_box(*a - *c))
+                            .collect::<Vec<_>>();
+                    },
+                    criterion::BatchSize::SmallInput,
+                )
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new(
+                "Elementwise NTT multiplication",
+                format!("{} W = {}", "Goldilocks", 1 << nv),
+            ),
+            &(vec_ntt_form, vec_ntt_form_2),
+            |b, (a, c)| {
+                b.iter_batched(
+                    || (a.clone(), c.clone()),
+                    |(a, c)| {
+                        let _ = a
+                            .iter()
+                            .zip(c.iter())
+                            .map(|(a, c)| black_box(*a * *c))
+                            .collect::<Vec<_>>();
+                    },
+                    criterion::BatchSize::SmallInput,
+                );
+            },
+        );
 
         // group.bench_with_input(
         //     BenchmarkId::new(
@@ -115,24 +213,24 @@ fn single_op_benchmark<R: Clone + UniformRand + Debug + SuitableRing>(
         //     },
         // );
 
-        let mle = DenseMultilinearExtension::from_slice(nv, &vec_ntt_form);
-        let points = (0..nv)
-            .map(|i| R::rand(&mut thread_rng()))
-            .collect::<Vec<_>>();
-        group.bench_with_input(
-            BenchmarkId::new(
-                "MLE Evaluation",
-                format!("{} W = {}", "Goldilocks", 1 << nv),
-            ),
-            &vec_ntt_form,
-            |b, input| {
-                b.iter_batched(
-                    || mle.clone(),
-                    |mle| mle.evaluate(&points),
-                    criterion::BatchSize::SmallInput,
-                )
-            },
-        );
+        // let mle = DenseMultilinearExtension::from_slice(nv, &vec_ntt_form);
+        // let points = (0..nv)
+        //     .map(|i| R::rand(&mut thread_rng()))
+        //     .collect::<Vec<_>>();
+        // group.bench_with_input(
+        //     BenchmarkId::new(
+        //         "MLE Evaluation",
+        //         format!("{} W = {}", "Goldilocks", 1 << nv),
+        //     ),
+        //     &vec_ntt_form,
+        //     |b, input| {
+        //         b.iter_batched(
+        //             || mle.clone(),
+        //             |mle| mle.evaluate(&points),
+        //             criterion::BatchSize::SmallInput,
+        //         )
+        //     },
+        // );
     }
 }
 fn single_operation_benchmarks(c: &mut Criterion) {
