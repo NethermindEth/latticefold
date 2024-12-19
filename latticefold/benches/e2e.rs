@@ -361,7 +361,7 @@ macro_rules! run_single_frog_degree_three_non_scalar_benchmark {
 }
 
 fn benchmarks_main(c: &mut Criterion) {
-    // Goldilocks
+    //Goldilocks
     {
         let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
         let mut group = c.benchmark_group("E2E Goldilocks");
