@@ -7,11 +7,11 @@ A proof-of-concept implementation of the LatticeFold folding scheme engineered b
 
 ## Building
 
-The [rust-toolchain](https://github.com/NethermindEth/latticefold/blob/main/rust-toolchain) file pins the version of the Rust toolchain, which the LatticeFold library builds with, to the specific version `nightly-2024-11-05`.
+The [rust-toolchain](https://github.com/NethermindEth/latticefold/blob/main/rust-toolchain) file pins the version of the Rust toolchain, which the LatticeFold library builds with, to the specific version `nightly-2025-03-06`.
 
-One can install the `nightly-2024-11-05` toolchain by invoking:
+One can install the `nightly-2025-03-06` toolchain by invoking:
 ```bash
-rustup install nightly-2024-11-05
+rustup install nightly-2025-03-06
 ```
 
 After that, use `cargo`, the standard Rust build tool, to build the library:
