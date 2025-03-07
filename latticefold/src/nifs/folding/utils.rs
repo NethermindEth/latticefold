@@ -21,7 +21,7 @@ use crate::{
 ///
 /// # Type Parameters
 /// - `NTT`: A type that implements the `SuitableRing` trait, representing a ring that can be used in the
-///     LatticeFold protocol.
+///   LatticeFold protocol.
 ///
 pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
     /// Extracts the cryptographic challenge vectors of provided length
@@ -170,10 +170,10 @@ pub(super) fn get_rhos<
 ///   A reference to the M matrices multiplied by the first $k$ decomposed vectors, and then taken a linear combination of.
 ///
 /// - `challenged_Ms_2: &DenseMultilinearExtension<NTT>`  
-///    A reference to the M matrices multiplied by the second $k$ decomposed vectors, and then taken a linear combination of.
+///   A reference to the M matrices multiplied by the second $k$ decomposed vectors, and then taken a linear combination of.
 ///
 /// - `r_s: &[Vec<NTT>]`  
-///    The linearization challenge vectors
+///   The linearization challenge vectors
 ///
 /// - `beta_s: &[NTT]`  
 ///   The $\beta$ challenges
@@ -260,13 +260,13 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
 /// # Arguments
 ///
 /// - `vals: &[NTT]`:
-///     The evaluations of the multilinear extensions produced by the `create_sumcheck_polynomial` function
+///   The evaluations of the multilinear extensions produced by the `create_sumcheck_polynomial` function
 /// - `mu_s: &[NTT]`
-///     The $\mu$ challenges
+///   The $\mu$ challenges
 ///
 ///  # Returns
 ///  - NTT:
-///     The value of the same evaluation point evaluated by the folding sumcheck polynomial
+///    The value of the same evaluation point evaluated by the folding sumcheck polynomial
 pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionParams>(
     vals: &[NTT],
     mu_s: &[NTT],
@@ -326,42 +326,42 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
 /// # Arguments
 ///
 /// - `alpha_s: &[NTT]`  
-///     A slice containing the $\alpha$ challenges.
+///   A slice containing the $\alpha$ challenges.
 ///
 /// - `mu_s: &[NTT]`  
-///     A slice containing the $\mu$ challenges.
+///   A slice containing the $\mu$ challenges.
 ///
 /// - `theta_s: &[Vec<NTT>]`  
-///     $$
-///     \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
-///     $$
+///   $$
+///   \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
+///   $$
 ///
 /// - `e_asterisk: NTT`  
-///     $$
-///     \mathbf{e}^* := eq(\boldsymbol{\beta}, \mathbf{r}_o)
-///     $$
+///   $$
+///   \mathbf{e}^* := eq(\boldsymbol{\beta}, \mathbf{r}_o)
+///   $$
 ///
 /// - `e_s: &[NTT]`  
-///     $$
-///     \left[ e_i := eq(\vec{r}\_i, \vec{r}\_o) \right]\_{i=1}^{2k}
-///     $$
+///   $$
+///   \left[ e_i := eq(\vec{r}\_i, \vec{r}\_o) \right]\_{i=1}^{2k}
+///   $$
 /// - `zeta_s: &[NTT]`  
 ///
 ///     A slice containing the $\zeta$ challenges.
 ///
 /// - `eta_s: &[Vec<NTT>]`  
-///     $$
-///     \eta[i] :=
-///     \sum\_{
-///     \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
-///     }
-///     \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
-///     $$
+///   $$
+///   \eta[i] :=
+///   \sum\_{
+///   \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
+///   }
+///   \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+///   $$
 ///
 /// # Returns
 ///
 /// - `NTT`  
-///     Returns the expected value of the sumcheck claim.
+///   Returns the expected value of the sumcheck claim.
 ///
 pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
     alpha_s: &[NTT],
@@ -422,9 +422,9 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 ///     $\rho$ challenges
 ///
 /// - `theta_s: &[Vec<NTT>]`
-///     $$
-///     \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
-///     $$
+///   $$
+///   \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
+///   $$
 /// - `cm_i_s: &[LCCCS<C, NTT>]`
 ///
 ///     Decomposed linearized commitments
@@ -432,12 +432,12 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 /// - `eta_s: &[Vec<NTT>]`  
 ///
 ///     $$
-///     \eta[i] :=
-///     \sum\_{
-///     \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
-///     }
-///     \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
-///     $$
+///   \eta[i] :=
+///   \sum\_{
+///   \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
+///   }
+///   \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+///   $$
 ///
 /// - `ccs: &CCS<NTT>`  
 ///
@@ -450,7 +450,7 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 ///   - `v0: Vec<NTT>`  
 ///     Evaluation of linearized folded witness at $\vec{r}\_o$
 ///   - `u_0: Commitment<C, NTT>`
-///      A linear combination of $\left[ eta_s[i] \right]\_{i=1}^{2k}$
+///     A linear combination of $\left[ eta_s[i] \right]\_{i=1}^{2k}$
 ///   - `x0: Vec<NTT>`
 ///     Folded CCS statement
 ///   - `cm_0: Vec<NTT>`

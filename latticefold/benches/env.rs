@@ -4,11 +4,7 @@ use lazy_static::lazy_static;
 
 fn get_env_var<T: FromStr>(key: &str) -> Option<T> {
     if let Ok(var) = env::var(key) {
-        if let Ok(v) = var.parse::<T>() {
-            Some(v)
-        } else {
-            None
-        }
+        var.parse::<T>().ok()
     } else {
         None
     }
