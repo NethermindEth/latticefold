@@ -382,10 +382,13 @@ fn test_recompose_u() {
 
     let b_s = Verifier::calculate_b_s::<DP>();
 
-    let should_equal_u0 =
-        Verifier::recompose_u(&proof.u_s, &b_s).expect("Recomposing proof failed");
+    for (row, &cm_i_value) in lcccs.u.iter().enumerate() {
+        let should_equal_u0 = Verifier::recompose_u(&proof.u_s, &b_s, row);
 
-    assert_eq!(should_equal_u0, lcccs.u);
+        if should_equal_u0 != cm_i_value {
+            assert_eq!(should_equal_u0, cm_i_value);
+        }
+    }
 }
 
 #[test]
