@@ -483,7 +483,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
                 .map(|etas_i_j| rho_i * etas_i_j)
                 .collect::<Vec<NTT>>()
         })
-        .fold(vec![NTT::zero(); ccs.l], |mut acc, rho_i_times_etas_i| {
+        .fold(vec![NTT::zero(); ccs.t], |mut acc, rho_i_times_etas_i| {
             acc.iter_mut()
                 .zip(rho_i_times_etas_i)
                 .for_each(|(acc_j, rho_i_times_etas_i_j)| {
