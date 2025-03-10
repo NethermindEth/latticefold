@@ -134,10 +134,12 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             return Err(DecompositionError::RecomposedError);
         }
 
-        let should_equal_u0: Vec<NTT> = Self::recompose_u(&proof.u_s, &b_s)?;
+        for (row, &cm_i_value) in cm_i.u.iter().enumerate() {
+            let should_equal_u0: NTT = Self::recompose_u(&proof.u_s, &b_s, row);
 
-        if should_equal_u0 != cm_i.u {
-            return Err(DecompositionError::RecomposedError);
+            if should_equal_u0 != cm_i_value {
+                return Err(DecompositionError::RecomposedError);
+            }
         }
 
         for (row, &cm_i_value) in cm_i.v.iter().enumerate() {
@@ -275,17 +277,11 @@ impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
     }
 
     /// Computes the linear combination `coeffs[0] * u_s[0] + coeffs[1] * u_s[1] + ... + coeffs[y_s.len() - 1] * u_s[y_s.len() - 1]`.
-    pub fn recompose_u(u_s: &[Vec<NTT>], coeffs: &[NTT]) -> Result<Vec<NTT>, DecompositionError> {
+    pub fn recompose_u(u_s: &[Vec<NTT>], coeffs: &[NTT], row: usize) -> NTT {
         u_s.iter()
             .zip(coeffs)
-            .map(|(u_i, b_i)| u_i.iter().map(|&u| u * b_i).collect())
-            .reduce(|acc, u_i_times_b_i: Vec<NTT>| {
-                acc.into_iter()
-                    .zip(&u_i_times_b_i)
-                    .map(|(u0, ui)| u0 + ui)
-                    .collect()
-            })
-            .ok_or(DecompositionError::RecomposedError)
+            .map(|(v_i, b_i)| v_i[row] * b_i)
+            .sum()
     }
 
     /// Computes the linear combination `coeffs[0] * v_s[0][row] + coeffs[1] * v_s[1][row] + ... + coeffs[v_s.len() - 1] * v_s[v_s.len() - 1][row]`.
