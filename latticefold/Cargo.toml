@@ -15,7 +15,6 @@ stark-rings = { workspace = true }
 stark-rings-linalg = { workspace = true }
 stark-rings-poly = { workspace = true }
 num-traits = { version = "0.2.19", default-features = false }
-paste = "1.0.15"
 rand = { workspace = true }
 thiserror = { workspace = true }
 num-bigint = { workspace = true }
