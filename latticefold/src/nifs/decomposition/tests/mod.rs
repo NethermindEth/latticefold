@@ -382,13 +382,9 @@ fn test_recompose_u() {
 
     let b_s = Verifier::calculate_b_s::<DP>();
 
-    for (row, &cm_i_value) in lcccs.u.iter().enumerate() {
-        let should_equal_u0 = Verifier::recompose_u(&proof.u_s, &b_s, row);
+    let u = Verifier::recompose(&proof.u_s, &b_s).expect("Recomposing proof u failed");
 
-        if should_equal_u0 != cm_i_value {
-            assert_eq!(should_equal_u0, cm_i_value);
-        }
-    }
+    assert_eq!(u, lcccs.u);
 }
 
 #[test]
@@ -416,11 +412,9 @@ fn test_recompose_v() {
 
     let b_s = Verifier::calculate_b_s::<DP>();
 
-    for (row, &cm_i_value) in lcccs.v.iter().enumerate() {
-        let should_equal_v0 = Verifier::recompose_v(&proof.v_s, &b_s, row);
+    let v = Verifier::recompose(&proof.v_s, &b_s).expect("Recomposing proof u failed");
 
-        assert_eq!(should_equal_v0, cm_i_value);
-    }
+    assert_eq!(v, lcccs.v);
 }
 
 #[test]
@@ -448,11 +442,11 @@ fn test_recompose_xw_and_h() {
 
     let b_s = Verifier::calculate_b_s::<DP>();
 
-    let (should_equal_xw, should_equal_h) =
-        Verifier::recompose_xw_and_h(&proof.x_s, &b_s).expect("Recomposing proof failed");
+    let mut x_w = Verifier::recompose(&proof.x_s, &b_s).expect("Recomposing proof x_w failed");
+    let h = x_w.pop().expect("x_w does not contain h");
 
-    assert_eq!(should_equal_h, lcccs.h);
-    assert_eq!(should_equal_xw, lcccs.x_w);
+    assert_eq!(x_w, lcccs.x_w);
+    assert_eq!(h, lcccs.h);
 }
 
 #[test]
