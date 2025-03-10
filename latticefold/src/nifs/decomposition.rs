@@ -1,6 +1,6 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
-use ark_std::{cfg_into_iter, cfg_iter, iterable::Iterable};
+use ark_std::{cfg_into_iter, cfg_iter};
 use cyclotomic_rings::rings::SuitableRing;
 use num_traits::Zero;
 #[cfg(feature = "parallel")]
