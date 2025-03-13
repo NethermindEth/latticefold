@@ -39,6 +39,7 @@ impl<R: Ring> R1CS<R> {
             Ok(())
         }
     }
+
     /// Converts the R1CS instance into a RelaxedR1CS as described in
     /// [Nova](https://eprint.iacr.org/2021/370.pdf#page=14)
     pub fn relax(self) -> RelaxedR1CS<R> {
@@ -50,6 +51,11 @@ impl<R: Ring> R1CS<R> {
             C: self.C,
             u: R::one(),
         }
+    }
+
+    /// Create an R1CS from a constraint system
+    pub fn from_constraint_system(cs: ConstraintSystem<R>) -> Self {
+        cs.to_r1cs()
     }
 }
 
@@ -293,18 +299,352 @@ pub fn get_test_dummy_z_split_ntt<R: SuitableRing, const X_LEN: usize, const WIT
     (R::one(), statement_vec, witness_vec)
 }
 
+/// A linear combination of variables
+#[derive(Debug, Clone, PartialEq)]
+pub struct LinearCombination<R: Ring> {
+    /// The terms in the linear combination
+    /// For each element, `.0` is the coefficient, `.1` is the variable index
+    pub terms: Vec<(R, usize)>,
+}
+
+impl<R: Ring> LinearCombination<R> {
+    /// Create a new empty linear combination
+    pub fn new() -> Self {
+        Self { terms: Vec::new() }
+    }
+
+    /// Add a term to the linear combination
+    pub fn term(mut self, coeff: impl Into<R>, index: usize) -> Self {
+        self.terms.push((coeff.into(), index));
+        self
+    }
+
+    /// Evaluate the linear combination given a variable assignment
+    pub fn evaluate(&self, assignment: &[R]) -> R {
+        self.terms
+            .iter()
+            .fold(R::zero(), |acc, term| acc + term.0 * assignment[term.1])
+    }
+
+    /// Check if the linear combination is valid given the number of variables
+    pub fn is_valid(&self, nvars: usize) -> bool {
+        self.terms.iter().all(|term| term.1 < nvars)
+    }
+}
+
+/// A single R1CS constraint of the form A * B = C
+#[derive(Debug, Clone, PartialEq)]
+pub struct Constraint<R: Ring> {
+    /// The A linear combination
+    pub a: LinearCombination<R>,
+    /// The B linear combination
+    pub b: LinearCombination<R>,
+    /// The C linear combination
+    pub c: LinearCombination<R>,
+}
+
+impl<R: Ring> Constraint<R> {
+    /// Create a new constraint from three linear combinations
+    pub fn new(a: LinearCombination<R>, b: LinearCombination<R>, c: LinearCombination<R>) -> Self {
+        Self { a, b, c }
+    }
+}
+
+/// A system of R1CS constraints
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstraintSystem<R: Ring> {
+    /// The number of public inputs
+    pub ninputs: usize,
+    /// The number of private inputs (auxiliary variables)
+    pub nauxs: usize,
+    /// The constraints in the system
+    pub constraints: Vec<Constraint<R>>,
+}
+
+impl<R: Ring> ConstraintSystem<R> {
+    /// Create a new empty constraint system
+    pub fn new() -> Self {
+        Self {
+            ninputs: 0,
+            nauxs: 0,
+            constraints: Vec::new(),
+        }
+    }
+
+    /// Get the total number of variables
+    pub fn nvars(&self) -> usize {
+        self.ninputs + self.nauxs
+    }
+
+    /// Get the number of constraints
+    pub fn nconstraints(&self) -> usize {
+        self.constraints.len()
+    }
+
+    /// Add a constraint to the system
+    pub fn constraint(&mut self, constraint: Constraint<R>) {
+        self.constraints.push(constraint);
+    }
+
+    /// Check if the constraint system is valid
+    pub fn is_valid(&self) -> bool {
+        if self.ninputs > self.nvars() {
+            return false;
+        }
+
+        for constraint in &self.constraints {
+            if !(constraint.a.is_valid(self.nvars())
+                && constraint.b.is_valid(self.nvars())
+                && constraint.c.is_valid(self.nvars()))
+            {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Check if the constraint system is satisfied by the given inputs
+    pub fn is_satisfied(&self, primary_input: &[R], auxiliary_input: &[R]) -> Result<(), Error> {
+        if primary_input.len() != self.ninputs {
+            return Err(Error::LengthsNotEqual(
+                "primary_input".to_string(),
+                "num_inputs".to_string(),
+                primary_input.len(),
+                self.ninputs,
+            ));
+        }
+
+        if primary_input.len() + auxiliary_input.len() != self.nvars() {
+            return Err(Error::LengthsNotEqual(
+                "primary_input + auxiliary_input".to_string(),
+                "num_variables".to_string(),
+                primary_input.len() + auxiliary_input.len(),
+                self.nvars(),
+            ));
+        }
+
+        // Combine primary and auxiliary inputs into a full assignment
+        let mut full_assignment = primary_input.to_vec();
+        full_assignment.extend_from_slice(auxiliary_input);
+
+        // Check each constraint
+        self.constraints.iter().try_for_each(|constraint| {
+            let a_res = constraint.a.evaluate(&full_assignment);
+            let b_res = constraint.b.evaluate(&full_assignment);
+            let c_res = constraint.c.evaluate(&full_assignment);
+
+            if a_res * b_res != c_res {
+                return Err(Error::NotSatisfied);
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Swap A and B matrices if it would be beneficial for performance
+    pub fn swap_AB_if_beneficial(&mut self) {
+        // Count non-zero entries in A and B
+        let mut touched_by_A = vec![false; self.nvars() + 1];
+        let mut touched_by_B = vec![false; self.nvars() + 1];
+
+        for constraint in &self.constraints {
+            for term in &constraint.a.terms {
+                touched_by_A[term.1] = true;
+            }
+            for term in &constraint.b.terms {
+                touched_by_B[term.1] = true;
+            }
+        }
+
+        let non_zero_A_count = touched_by_A.iter().filter(|&&x| x).count();
+        let non_zero_B_count = touched_by_B.iter().filter(|&&x| x).count();
+
+        // If B has more non-zero entries than A, swap them
+        if non_zero_B_count > non_zero_A_count {
+            for constraint in &mut self.constraints {
+                ark_std::mem::swap(&mut constraint.a, &mut constraint.b);
+            }
+        }
+    }
+
+    /// Convert to a sparse matrix representation (R1CS)
+    pub fn to_r1cs(&self) -> R1CS<R> {
+        let nconstraints = self.nconstraints();
+        let nvars = self.nvars();
+
+        // Create empty sparse matrices
+        let mut A = SparseMatrix {
+            n_rows: nconstraints,
+            n_cols: nvars,
+            coeffs: vec![vec![]; nconstraints],
+        };
+
+        let mut B = SparseMatrix {
+            n_rows: nconstraints,
+            n_cols: nvars,
+            coeffs: vec![vec![]; nconstraints],
+        };
+
+        let mut C = SparseMatrix {
+            n_rows: nconstraints,
+            n_cols: nvars,
+            coeffs: vec![vec![]; nconstraints],
+        };
+
+        // Fill the matrices
+        for (i, constraint) in self.constraints.iter().enumerate() {
+            for &term in &constraint.a.terms {
+                A.coeffs[i].push(term);
+            }
+            for &term in &constraint.b.terms {
+                B.coeffs[i].push(term);
+            }
+            for &term in &constraint.c.terms {
+                C.coeffs[i].push(term);
+            }
+        }
+
+        R1CS {
+            l: self.ninputs,
+            A,
+            B,
+            C,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use cyclotomic_rings::rings::FrogRingNTT;
+    use cyclotomic_rings::rings::GoldilocksRingNTT;
 
     use super::*;
 
+    type RqNTT = GoldilocksRingNTT;
+
     #[test]
-    fn test_check_relation() {
-        let r1cs = get_test_r1cs::<FrogRingNTT>();
+    fn test_r1cs_check_relation() {
+        let r1cs = get_test_r1cs::<RqNTT>();
         let z = get_test_z(5);
 
         r1cs.check_relation(&z).unwrap();
         r1cs.relax().check_relation(&z).unwrap();
+    }
+
+    #[test]
+    fn test_r1cs_linear_combination() {
+        let lc = LinearCombination::<RqNTT>::new()
+            .term(2u64, 0)
+            .term(3u64, 1);
+        let assignment = vec![RqNTT::from(5u64), RqNTT::from(7u64)];
+        let result = lc.evaluate(&assignment);
+        assert_eq!(result, RqNTT::from(31u64)); // 2*5 + 3*7 = 31
+    }
+
+    #[test]
+    fn test_r1cs_constraint_system() {
+        // Create a constraint system for x * y = z
+        let mut cs = ConstraintSystem::<RqNTT>::new();
+        cs.ninputs = 2; // x and y are public inputs
+        cs.nauxs = 1; // z is an auxiliary variable
+
+        // Create the constraint x * y = z
+        let a = LinearCombination::new().term(1u64, 0); // x
+        let b = LinearCombination::new().term(1u64, 1); // y
+        let c = LinearCombination::new().term(1u64, 2); // z
+
+        let constraint = Constraint::new(a, b, c);
+        cs.constraint(constraint);
+
+        let primary_input = vec![RqNTT::from(3u64), RqNTT::from(4u64)]; // x=3, y=4
+        let aux_input = vec![RqNTT::from(12u64)]; // z=12
+        cs.is_satisfied(&primary_input, &aux_input).unwrap();
+    }
+
+    #[test]
+    fn test_r1cs_from_constraint_system() {
+        // Create a constraint system for x * y = z
+        let mut cs = ConstraintSystem::<RqNTT>::new();
+        cs.ninputs = 2; // x and y are public inputs
+        cs.nauxs = 1; // z is an auxiliary variable
+
+        // Create the constraint x * y = z
+        let a = LinearCombination::new().term(1u64, 0); // x
+        let b = LinearCombination::new().term(1u64, 1); // y
+        let c = LinearCombination::new().term(1u64, 2); // z
+
+        let constraint = Constraint::new(a, b, c);
+        cs.constraint(constraint);
+
+        // Convert to R1CS
+        let r1cs = R1CS::from_constraint_system(cs);
+
+        // Check that the R1CS is correct
+        assert_eq!(r1cs.l, 2);
+        assert_eq!(r1cs.A.n_rows, 1);
+        assert_eq!(r1cs.A.n_cols, 3);
+        assert_eq!(r1cs.B.n_rows, 1);
+        assert_eq!(r1cs.B.n_cols, 3);
+        assert_eq!(r1cs.C.n_rows, 1);
+        assert_eq!(r1cs.C.n_cols, 3);
+
+        // Test with a valid assignment
+        let z = vec![RqNTT::from(3u64), RqNTT::from(4u64), RqNTT::from(12u64)]; // x=3, y=4, z=12
+        r1cs.check_relation(&z).unwrap();
+    }
+
+    #[test]
+    fn test_r1cs_example_from_constraint_system() {
+        // x^3 + x + 5 = y
+        let mut cs = ConstraintSystem::<RqNTT>::new();
+
+        // 1 public input (x) and 5 auxiliary variables
+        cs.ninputs = 1;
+        cs.nauxs = 5;
+
+        // Variables:
+        // 0: x (public input)
+        // 1: 1 (constant)
+        // 2: y (output)
+        // 3: x^2
+        // 4: x^3
+        // 5: x^3 + x
+
+        // Constraint 1: x * x = x^2
+        let a1 = LinearCombination::new().term(1u64, 0); // x
+        let b1 = LinearCombination::new().term(1u64, 0); // x
+        let c1 = LinearCombination::new().term(1u64, 3); // x^2
+        cs.constraint(Constraint::new(a1, b1, c1));
+
+        // Constraint 2: x^2 * x = x^3
+        let a2 = LinearCombination::new().term(1u64, 3); // x^2
+        let b2 = LinearCombination::new().term(1u64, 0); // x
+        let c2 = LinearCombination::new().term(1u64, 4); // x^3
+        cs.constraint(Constraint::new(a2, b2, c2));
+
+        // Constraint 3: (x + x^3) * 1 = x^3 + x
+        let a3 = LinearCombination::new().term(1u64, 0).term(1u64, 4); // x + x^3
+        let b3 = LinearCombination::new().term(1u64, 1); // 1
+        let c3 = LinearCombination::new().term(1u64, 5); // x^3 + x
+        cs.constraint(Constraint::new(a3, b3, c3));
+
+        // Constraint 4: (5*1 + x^3 + x) * 1 = y
+        let a4 = LinearCombination::new().term(5u64, 1).term(1u64, 5);
+        let b4 = LinearCombination::new().term(1u64, 1); // 1
+        let c4 = LinearCombination::new().term(1u64, 2); // y
+        cs.constraint(Constraint::new(a4, b4, c4));
+
+        let r1cs_from_cs = R1CS::from_constraint_system(cs);
+        let r1cs_original = get_test_r1cs::<RqNTT>();
+
+        // Test with x = 5
+        let x = 5;
+        let z = get_test_z(x);
+
+        r1cs_original.check_relation(&z).unwrap();
+        r1cs_from_cs.check_relation(&z).unwrap();
+
+        let y = x * x * x + x + 5;
+        assert_eq!(z[2], RqNTT::from(y as u64));
     }
 }
