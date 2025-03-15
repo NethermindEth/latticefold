@@ -25,8 +25,7 @@ pub struct R1CS<R: Ring> {
 
 impl<R: Ring> R1CS<R> {
     /// check that a R1CS structure is satisfied by a z vector. Only for testing.
-    #[cfg(test)]
-    pub(crate) fn check_relation(&self, z: &[R]) -> Result<(), Error> {
+    pub fn check_relation(&self, z: &[R]) -> Result<(), Error> {
         let Az = mat_vec_mul(&self.A, z)?;
         let Bz = mat_vec_mul(&self.B, z)?;
 
