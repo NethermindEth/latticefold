@@ -312,9 +312,22 @@ impl<R: Ring> LinearCombination<R> {
         Self { terms: Vec::new() }
     }
 
+    /// Initializes a new linear combination with a single term
+    pub fn single_term(coeff: impl Into<R>, index: usize) -> Self {
+        Self {
+            terms: vec![(coeff.into(), index)],
+        }
+    }
+
     /// Add a term to the linear combination
-    pub fn term(mut self, coeff: impl Into<R>, index: usize) -> Self {
+    pub fn add_term(mut self, coeff: impl Into<R>, index: usize) -> Self {
         self.terms.push((coeff.into(), index));
+        self
+    }
+
+    /// Add a term to the linear combination
+    pub fn add_terms(mut self, terms: &[(R, usize)]) -> Self {
+        terms.iter().for_each(|&term| self.terms.push(term));
         self
     }
 
@@ -381,8 +394,9 @@ impl<R: Ring> ConstraintSystem<R> {
     }
 
     /// Add a constraint to the system
-    pub fn constraint(&mut self, constraint: Constraint<R>) {
+    pub fn add_constraint(&mut self, constraint: Constraint<R>) -> &mut Self {
         self.constraints.push(constraint);
+        self
     }
 
     /// Check if the constraint system is valid
@@ -533,8 +547,8 @@ mod tests {
     #[test]
     fn test_r1cs_linear_combination() {
         let lc = LinearCombination::<RqNTT>::new()
-            .term(2u64, 0)
-            .term(3u64, 1);
+            .add_term(2u64, 0)
+            .add_term(3u64, 1);
         let assignment = vec![RqNTT::from(5u64), RqNTT::from(7u64)];
         let result = lc.evaluate(&assignment);
         assert_eq!(result, RqNTT::from(31u64)); // 2*5 + 3*7 = 31
@@ -548,12 +562,12 @@ mod tests {
         cs.nauxs = 1; // z is an auxiliary variable
 
         // Create the constraint x * y = z
-        let a = LinearCombination::new().term(1u64, 0); // x
-        let b = LinearCombination::new().term(1u64, 1); // y
-        let c = LinearCombination::new().term(1u64, 2); // z
+        let a = LinearCombination::new().add_term(1u64, 0); // x
+        let b = LinearCombination::new().add_term(1u64, 1); // y
+        let c = LinearCombination::new().add_term(1u64, 2); // z
 
         let constraint = Constraint::new(a, b, c);
-        cs.constraint(constraint);
+        cs.add_constraint(constraint);
 
         let primary_input = vec![RqNTT::from(3u64), RqNTT::from(4u64)]; // x=3, y=4
         let aux_input = vec![RqNTT::from(12u64)]; // z=12
@@ -568,12 +582,12 @@ mod tests {
         cs.nauxs = 1; // z is an auxiliary variable
 
         // Create the constraint x * y = z
-        let a = LinearCombination::new().term(1u64, 0); // x
-        let b = LinearCombination::new().term(1u64, 1); // y
-        let c = LinearCombination::new().term(1u64, 2); // z
+        let a = LinearCombination::new().add_term(1u64, 0); // x
+        let b = LinearCombination::new().add_term(1u64, 1); // y
+        let c = LinearCombination::new().add_term(1u64, 2); // z
 
         let constraint = Constraint::new(a, b, c);
-        cs.constraint(constraint);
+        cs.add_constraint(constraint);
 
         // Convert to R1CS
         let r1cs = R1CS::from_constraint_system(cs);
@@ -610,28 +624,28 @@ mod tests {
         // 5: x^3 + x
 
         // Constraint 1: x * x = x^2
-        let a1 = LinearCombination::new().term(1u64, 0); // x
-        let b1 = LinearCombination::new().term(1u64, 0); // x
-        let c1 = LinearCombination::new().term(1u64, 3); // x^2
-        cs.constraint(Constraint::new(a1, b1, c1));
+        let a1 = LinearCombination::new().add_term(1u64, 0); // x
+        let b1 = LinearCombination::new().add_term(1u64, 0); // x
+        let c1 = LinearCombination::new().add_term(1u64, 3); // x^2
+        cs.add_constraint(Constraint::new(a1, b1, c1));
 
         // Constraint 2: x^2 * x = x^3
-        let a2 = LinearCombination::new().term(1u64, 3); // x^2
-        let b2 = LinearCombination::new().term(1u64, 0); // x
-        let c2 = LinearCombination::new().term(1u64, 4); // x^3
-        cs.constraint(Constraint::new(a2, b2, c2));
+        let a2 = LinearCombination::new().add_term(1u64, 3); // x^2
+        let b2 = LinearCombination::new().add_term(1u64, 0); // x
+        let c2 = LinearCombination::new().add_term(1u64, 4); // x^3
+        cs.add_constraint(Constraint::new(a2, b2, c2));
 
         // Constraint 3: (x + x^3) * 1 = x^3 + x
-        let a3 = LinearCombination::new().term(1u64, 0).term(1u64, 4); // x + x^3
-        let b3 = LinearCombination::new().term(1u64, 1); // 1
-        let c3 = LinearCombination::new().term(1u64, 5); // x^3 + x
-        cs.constraint(Constraint::new(a3, b3, c3));
+        let a3 = LinearCombination::new().add_term(1u64, 0).add_term(1u64, 4); // x + x^3
+        let b3 = LinearCombination::new().add_term(1u64, 1); // 1
+        let c3 = LinearCombination::new().add_term(1u64, 5); // x^3 + x
+        cs.add_constraint(Constraint::new(a3, b3, c3));
 
         // Constraint 4: (5*1 + x^3 + x) * 1 = y
-        let a4 = LinearCombination::new().term(5u64, 1).term(1u64, 5);
-        let b4 = LinearCombination::new().term(1u64, 1); // 1
-        let c4 = LinearCombination::new().term(1u64, 2); // y
-        cs.constraint(Constraint::new(a4, b4, c4));
+        let a4 = LinearCombination::new().add_term(5u64, 1).add_term(1u64, 5);
+        let b4 = LinearCombination::new().add_term(1u64, 1); // 1
+        let c4 = LinearCombination::new().add_term(1u64, 2); // y
+        cs.add_constraint(Constraint::new(a4, b4, c4));
 
         let r1cs_from_cs = R1CS::from_constraint_system(cs);
         let r1cs_original = get_test_r1cs::<RqNTT>();
