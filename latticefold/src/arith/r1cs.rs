@@ -535,6 +535,7 @@ impl<R: Ring> ConstraintSystem<R> {
 pub struct VariableMap {
     map: HashMap<String, (usize, usize)>,
     one: usize,
+    total_len: usize,
 }
 
 impl VariableMap {
@@ -542,18 +543,20 @@ impl VariableMap {
         Self {
             map: HashMap::new(),
             one: 0,
+            total_len: 1,
         }
     }
 
     pub fn add(&mut self, name: impl Into<String>, index: usize, len: usize) {
         self.map.insert(name.into(), (index, len));
+        self.total_len += len;
     }
 
     pub fn get(&self, name: &str) -> Option<(usize, usize)> {
         self.map.get(name).copied()
     }
 
-    pub fn add_one(&mut self, index: usize) -> usize {
+    pub fn set_one(&mut self, index: usize) -> usize {
         self.one = index;
         index
     }
@@ -564,6 +567,10 @@ impl VariableMap {
 
     pub fn vars(&self) -> hash_map::Iter<String, (usize, usize)> {
         self.map.iter()
+    }
+
+    pub fn total_len(&self) -> usize {
+        self.total_len
     }
 }
 
