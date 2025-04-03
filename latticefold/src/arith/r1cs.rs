@@ -1,5 +1,6 @@
 //! Defines behaviour of R1CS, a degree two constraint system
 
+use ark_std::collections::{HashMap, HashSet};
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::Ring;
 use stark_rings_linalg::{sparse_matrix::dense_matrix_u64_to_sparse, SparseMatrix};
@@ -371,6 +372,8 @@ pub struct ConstraintSystem<R: Ring> {
     pub nauxs: usize,
     /// The constraints in the system
     pub constraints: Vec<Constraint<R>>,
+    /// The variable map
+    pub vars: VariableMap,
 }
 
 impl<R: Ring> ConstraintSystem<R> {
@@ -380,6 +383,7 @@ impl<R: Ring> ConstraintSystem<R> {
             ninputs: 0,
             nauxs: 0,
             constraints: Vec::new(),
+            vars: VariableMap::new(),
         }
     }
 
@@ -524,6 +528,38 @@ impl<R: Ring> ConstraintSystem<R> {
             B,
             C,
         }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariableMap {
+    map: HashMap<String, (usize, usize)>,
+    one: usize,
+}
+
+impl VariableMap {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            one: 0,
+        }
+    }
+
+    pub fn add(&mut self, name: impl Into<String>, index: usize, len: usize) {
+        self.map.insert(name.into(), (index, len));
+    }
+
+    pub fn get(&self, name: &str) -> Option<(usize, usize)> {
+        self.map.get(name).copied()
+    }
+
+    pub fn add_one(&mut self, index: usize) -> usize {
+        self.one = index;
+        index
+    }
+
+    pub fn get_one(&self) -> usize {
+        self.one
     }
 }
 
