@@ -1,6 +1,6 @@
 //! Defines behaviour of R1CS, a degree two constraint system
 
-use ark_std::collections::{HashMap, HashSet};
+use ark_std::collections::{hash_map, HashMap};
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::Ring;
 use stark_rings_linalg::{sparse_matrix::dense_matrix_u64_to_sparse, SparseMatrix};
@@ -560,6 +560,10 @@ impl VariableMap {
 
     pub fn get_one(&self) -> usize {
         self.one
+    }
+
+    pub fn vars(&self) -> hash_map::Iter<String, (usize, usize)> {
+        self.map.iter()
     }
 }
 
