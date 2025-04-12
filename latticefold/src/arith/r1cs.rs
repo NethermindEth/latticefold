@@ -1,6 +1,6 @@
 //! Defines behaviour of R1CS, a degree two constraint system
 
-use ark_std::collections::{hash_map, HashMap};
+use ark_std::collections::{btree_map, BTreeMap};
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::Ring;
 use stark_rings_linalg::{sparse_matrix::dense_matrix_u64_to_sparse, SparseMatrix};
@@ -533,7 +533,7 @@ impl<R: Ring> ConstraintSystem<R> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariableMap {
-    map: HashMap<String, (usize, usize)>,
+    map: BTreeMap<String, (usize, usize)>,
     one: usize,
     total_len: usize,
 }
@@ -541,7 +541,7 @@ pub struct VariableMap {
 impl VariableMap {
     pub fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            map: BTreeMap::new(),
             one: 0,
             total_len: 1,
         }
@@ -565,7 +565,7 @@ impl VariableMap {
         self.one
     }
 
-    pub fn vars(&self) -> hash_map::Iter<String, (usize, usize)> {
+    pub fn vars(&self) -> btree_map::Iter<String, (usize, usize)> {
         self.map.iter()
     }
 
