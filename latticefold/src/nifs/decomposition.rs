@@ -226,7 +226,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
             .collect::<Result<Vec<Vec<NTT>>, DecompositionError>>()
     }
     fn compute_mz_mles(
-        wit_s: &Vec<Witness<NTT>>,
+        wit_s: &[Witness<NTT>],
         M: &[SparseMatrix<NTT>],
         decomposed_statements: &[Vec<NTT>],
         num_mle_vars: usize,

@@ -307,6 +307,12 @@ pub struct LinearCombination<R: Ring> {
     pub terms: Vec<(R, usize)>,
 }
 
+impl<R: Ring> Default for LinearCombination<R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<R: Ring> LinearCombination<R> {
     /// Create a new empty linear combination
     pub fn new() -> Self {
@@ -374,6 +380,12 @@ pub struct ConstraintSystem<R: Ring> {
     pub constraints: Vec<Constraint<R>>,
     /// The variable map
     pub vars: VariableMap,
+}
+
+impl<R: Ring> Default for ConstraintSystem<R> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<R: Ring> ConstraintSystem<R> {
@@ -536,6 +548,12 @@ pub struct VariableMap {
     map: BTreeMap<String, (usize, usize)>,
     one: usize,
     total_len: usize,
+}
+
+impl Default for VariableMap {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VariableMap {
