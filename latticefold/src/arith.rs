@@ -100,9 +100,8 @@ impl<R: Ring> Arith<R> for CCS<R> {
         // make sure the final vector is all zeroes
         result
             .iter()
-            .all(|item| item.is_zero())
-            .then_some(())
-            .ok_or(Error::NotSatisfied)
+            .position(|item| !item.is_zero())
+            .map_or(Ok(()), |i| Err(Error::NotSatisfied(i)))
     }
 
     fn params_to_le_bytes(&self) -> Vec<u8> {
