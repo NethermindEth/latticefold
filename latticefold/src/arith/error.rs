@@ -7,8 +7,8 @@ use crate::ark_base::*;
 #[derive(Debug, Error)]
 pub enum CSError {
     /// The constraint system is not satisfied by the provided witness
-    #[error("constraint system is not satisfied")]
-    NotSatisfied,
+    #[error("constraint system is not satisfied for constraint {0}")]
+    NotSatisfied(usize),
 
     /// The constraint system is not of length $2^k$ for any $k \in \mathbb{N}$.
     ///

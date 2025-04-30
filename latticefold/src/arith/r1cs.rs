@@ -25,7 +25,7 @@ pub struct R1CS<R: Ring> {
 }
 
 impl<R: Ring> R1CS<R> {
-    /// check that a R1CS structure is satisfied by a z vector. Only for testing.
+    /// check that a R1CS structure is satisfied by a z vector.
     pub fn check_relation(&self, z: &[R]) -> Result<(), Error> {
         let Az = mat_vec_mul(&self.A, z)?;
         let Bz = mat_vec_mul(&self.B, z)?;
@@ -33,11 +33,10 @@ impl<R: Ring> R1CS<R> {
         let Cz = mat_vec_mul(&self.C, z)?;
         let AzBz = hadamard(&Az, &Bz)?;
 
-        if AzBz != Cz {
-            Err(Error::NotSatisfied)
-        } else {
-            Ok(())
-        }
+        AzBz.iter()
+            .zip(Cz.iter())
+            .position(|(ab, c)| ab != c)
+            .map_or(Ok(()), |i| Err(Error::NotSatisfied(i)))
     }
 
     /// Converts the R1CS instance into a RelaxedR1CS as described in
@@ -56,6 +55,11 @@ impl<R: Ring> R1CS<R> {
     /// Create an R1CS from a constraint system
     pub fn from_constraint_system(cs: ConstraintSystem<R>) -> Self {
         cs.to_r1cs()
+    }
+
+    /// Fetch the i'th constraint, returning the respective (A, B, C) i'th row
+    pub fn constraint(&self, i: usize) -> (&[(R, usize)], &[(R, usize)], &[(R, usize)]) {
+        (&self.A.coeffs[i], &self.B.coeffs[i], &self.C.coeffs[i])
     }
 }
 
@@ -89,11 +93,11 @@ impl<R: Ring> RelaxedR1CS<R> {
         let uCz = vec_scalar_mul(&Cz, &self.u);
         let uCzE = vec_add(&uCz, &self.E)?;
         let AzBz = hadamard(&Az, &Bz)?;
-        if AzBz != uCzE {
-            Err(Error::NotSatisfied)
-        } else {
-            Ok(())
-        }
+
+        AzBz.iter()
+            .zip(uCzE.iter())
+            .position(|(ab, uce)| ab != uce)
+            .map_or(Ok(()), |i| Err(Error::NotSatisfied(i)))
     }
 }
 
@@ -458,17 +462,20 @@ impl<R: Ring> ConstraintSystem<R> {
         full_assignment.extend_from_slice(auxiliary_input);
 
         // Check each constraint
-        self.constraints.iter().try_for_each(|constraint| {
-            let a_res = constraint.a.evaluate(&full_assignment);
-            let b_res = constraint.b.evaluate(&full_assignment);
-            let c_res = constraint.c.evaluate(&full_assignment);
+        self.constraints
+            .iter()
+            .enumerate()
+            .try_for_each(|(i, constraint)| {
+                let a_res = constraint.a.evaluate(&full_assignment);
+                let b_res = constraint.b.evaluate(&full_assignment);
+                let c_res = constraint.c.evaluate(&full_assignment);
 
-            if a_res * b_res != c_res {
-                return Err(Error::NotSatisfied);
-            }
+                if a_res * b_res != c_res {
+                    return Err(Error::NotSatisfied(i));
+                }
 
-            Ok(())
-        })
+                Ok(())
+            })
     }
 
     /// Swap A and B matrices if it would be beneficial for performance
@@ -724,5 +731,41 @@ mod tests {
 
         let y = x * x * x + x + 5;
         assert_eq!(z[2], RqNTT::from(y as u64));
+    }
+
+    #[test]
+    fn test_r1cs_bad_constraint() {
+        // Constraint system:
+        // - x0 * y0 = z0
+        // - x1 * y1 = z1
+        // - x2 * y2 = z2
+        let mut cs = ConstraintSystem::<RqNTT>::new();
+        cs.ninputs = 6;
+        cs.nauxs = 3;
+
+        for i in 0..3 {
+            let a = LinearCombination::new().add_term(1u64, i * 3); // xi
+            let b = LinearCombination::new().add_term(1u64, i * 3 + 1); // yi
+            let c = LinearCombination::new().add_term(1u64, i * 3 + 2); // zi
+            let constraint = Constraint::new(a, b, c);
+            cs.add_constraint(constraint);
+        }
+
+        let r1cs = R1CS::from_constraint_system(cs);
+
+        #[rustfmt::skip]
+        let z = vec![
+            RqNTT::from(3u64),  RqNTT::from(4u64), RqNTT::from(12u64),
+            RqNTT::from(2u64),  RqNTT::from(4u64), RqNTT::from(9u64), // bad
+            RqNTT::from(10u64), RqNTT::from(5u64), RqNTT::from(50u64),
+        ];
+
+        let i = match r1cs.check_relation(&z) {
+            Ok(()) => panic!("check_relation OK but should fail"),
+            Err(Error::NotSatisfied(i)) => i,
+            Err(_) => panic!("expected NotSatisfied error"),
+        };
+
+        assert_eq!(i, 1);
     }
 }
