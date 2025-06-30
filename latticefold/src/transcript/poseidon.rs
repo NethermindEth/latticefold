@@ -26,6 +26,43 @@ impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> Default for PoseidonTransc
     }
 }
 
+#[derive(Clone)]
+pub struct PoseidonTS<R: OverField> {
+    sponge: PoseidonSponge<<R::BaseRing as Field>::BasePrimeField>,
+}
+impl<R: OverField> PoseidonTS<R> {
+    pub fn default<P: GetPoseidonParams<<<R>::BaseRing as Field>::BasePrimeField>>() -> Self {
+        Self::new(&P::get_poseidon_config())
+    }
+}
+impl<R: OverField> Transcript<R> for PoseidonTS<R> {
+    type TranscriptConfig = PoseidonConfig<<R::BaseRing as Field>::BasePrimeField>;
+
+    fn new(config: &Self::TranscriptConfig) -> Self {
+        let sponge = PoseidonSponge::<<R::BaseRing as Field>::BasePrimeField>::new(config);
+        Self { sponge }
+    }
+
+    fn absorb(&mut self, v: &R) {
+        self.sponge.absorb(
+            &v.coeffs()
+                .iter()
+                .flat_map(|x| x.to_base_prime_field_elements())
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    fn get_challenge(&mut self) -> R::BaseRing {
+        let extension_degree = R::BaseRing::extension_degree();
+        let c = self
+            .sponge
+            .squeeze_field_elements(extension_degree as usize);
+        self.sponge.absorb(&c);
+        <R::BaseRing as Field>::from_base_prime_field_elems(&c)
+            .expect("something went wrong: c does not contain extension_degree elements")
+    }
+}
+
 impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
     type TranscriptConfig = PoseidonConfig<<R::BaseRing as Field>::BasePrimeField>;
 

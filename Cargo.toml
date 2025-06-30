@@ -1,5 +1,5 @@
 [workspace] 
-members = [ "latticefold", "cyclotomic-rings" ]
+members = [ "latticefold-plus", "latticefold", "cyclotomic-rings" ]
 resolver = "2"
 
 [workspace.package]
@@ -13,13 +13,17 @@ ark-crypto-primitives = { version = "0.4.0", default-features = false, features 
 ark-ff = { version = "0.4.2", default-features = false }
 ark-serialize = { version = "0.4.2", features = ["derive"] }
 ark-std = { version = "0.4.0", default-features = false }
-stark-rings = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
-stark-rings-linalg = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
-stark-rings-poly = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+#stark-rings = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+#stark-rings-linalg = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+#stark-rings-poly = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+stark-rings = { path = "../stark-rings/ring/" }
+stark-rings-linalg = { path = "../stark-rings/linear_algebra" }
+stark-rings-poly = { path = "../stark-rings/poly" }
 num-bigint = { version = "0.4.5", default-features = false }
 rand = { version = "0.8.5", default-features = false }
 thiserror = { version = "2.0.3", default-features = false }
 cyclotomic-rings = { path = "cyclotomic-rings", default-features = false }
+latticefold = { path = "latticefold", default-features = false }
 [workspace.metadata.docs.rs]
 # To build locally, use 
 # RUSTDOCFLAGS="--html-in-header docs-header.html" cargo doc --no-deps --document-private-items --open

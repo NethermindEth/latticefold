@@ -1,0 +1,76 @@
+[package]
+name = "latticefold-plus"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ark-crypto-primitives = { workspace = true }
+ark-ff = { workspace = true }
+ark-serialize = { workspace = true }
+ark-std = { workspace = true }
+cyclotomic-rings = { workspace = true }
+hashbrown = "0.15"
+latticefold = { workspace = true }
+stark-rings = { workspace = true }
+stark-rings-linalg = { workspace = true }
+stark-rings-poly = { workspace = true }
+num-traits = { version = "0.2.19", default-features = false }
+rand = { workspace = true }
+thiserror = { workspace = true }
+num-bigint = { workspace = true }
+rayon = { version = "1.10.0", optional = true }
+
+
+[build-dependencies]
+serde = { version = "1.0.216", features = ["derive"] }
+toml = "0.8.19"
+quote = "1.0.37"
+proc-macro2 = "1.0.92"
+
+[features]
+default = [ "std" ]
+std = [ "ark-std/std", "cyclotomic-rings/std", "rand/std" ]
+parallel = [ 
+    "dep:rayon",
+    "std",
+    "ark-std/parallel",
+    "stark-rings/parallel",
+    "stark-rings-linalg/parallel",
+    "stark-rings-poly/parallel",
+]
+getrandom = [ "ark-std/getrandom" ]
+
+# dev-only
+dhat-heap = []
+
+[profile.release]
+debug = 1
+
+[profile.bench]
+lto = false
+codegen-units = 16
+opt-level = 3
+rpath = true
+
+[lints.clippy]
+single_match = "warn"
+single_match_else = "warn"
+needless_match = "warn"
+needless_late_init = "warn"
+redundant_pattern_matching = "warn"
+redundant_pattern = "warn"
+redundant_guards = "warn"
+collapsible_match = "warn"
+match_single_binding = "warn"
+match_same_arms = "warn"
+match_ref_pats = "warn"
+match_bool = "warn"
+needless_bool = "warn"
+implicit_clone = "warn"
+
+[dev-dependencies]
+criterion = "0.5.1"
+dhat = "0.3.2"
+humansize = "2.1.3"
+lazy_static = "1.5.0"

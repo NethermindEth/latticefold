@@ -9,7 +9,7 @@ use ark_std::log2;
 use cyclotomic_rings::rings::SuitableRing;
 use r1cs::R1CS;
 use stark_rings::{
-    balanced_decomposition::{gadget_decompose, gadget_recompose},
+    balanced_decomposition::{GadgetDecompose, GadgetRecompose},
     cyclotomic_ring::{CRT, ICRT},
     PolyRing, Ring,
 };
@@ -234,7 +234,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w_ccs.clone());
 
         // decompose radix-B
-        let f_coeff: Vec<NTT::CoefficientRepresentation> = gadget_decompose(&w_coeff, P::B, P::L);
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = w_coeff.gadget_decompose(P::B, P::L);
 
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
@@ -304,7 +304,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         // Reconstruct the original CCS witness from the Ajtai witness
         // Ajtai witness has bound B
         // WE multiply by the base B gadget matrix to reconstruct w_ccs
-        let w_ccs = gadget_recompose(&f, P::B, P::L);
+        let w_ccs = f.gadget_recompose(P::B, P::L);
 
         Self {
             f,
@@ -329,7 +329,7 @@ impl<NTT: SuitableRing> Witness<NTT> {
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
 
-        let w_ccs = gadget_recompose(&f, P::B, P::L);
+        let w_ccs = f.gadget_recompose(P::B, P::L);
 
         Self {
             f,
@@ -507,7 +507,7 @@ pub mod tests {
         fn check_data<P: DecompositionParams>(&self) -> bool {
             let w_coeff = ICRT::elementwise_icrt(self.w_ccs.clone());
 
-            (self.f_coeff == gadget_decompose(&w_coeff, P::B, P::L))
+            (self.f_coeff == w_coeff.gadget_decompose(P::B, P::L))
                 && (CRT::elementwise_crt(self.f_coeff.clone()) == self.f)
                 && (self.f_hat == Self::get_fhat(&self.f_coeff))
         }
