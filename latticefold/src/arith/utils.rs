@@ -50,11 +50,11 @@ pub(crate) fn hadamard<R: Ring>(a: &[R], b: &[R]) -> Result<Vec<R>, Error> {
 }
 
 pub(crate) fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R>, Error> {
-    if M.n_cols != z.len() {
+    if M.ncols != z.len() {
         return Err(Error::LengthsNotEqual(
             "M".to_string(),
             "z".to_string(),
-            M.n_cols,
+            M.ncols,
             z.len(),
         ));
     }
@@ -68,7 +68,6 @@ pub(crate) fn mat_vec_mul<R: Ring>(M: &SparseMatrix<R>, z: &[R]) -> Result<Vec<R
 mod tests {
     use ark_ff::Zero;
     use stark_rings::cyclotomic_ring::models::goldilocks::Fq;
-    use stark_rings_linalg::sparse_matrix::dense_matrix_to_sparse;
 
     use super::*;
 
@@ -138,9 +137,10 @@ mod tests {
             vec![Fq::from(1u64), Fq::zero(), Fq::zero()], // Row 0
             vec![Fq::zero(), Fq::from(2u64), Fq::from(1u64)], // Row 1
             vec![Fq::zero(), Fq::zero(), Fq::from(3u64)], // Row 2
-        ];
+        ]
+        .into();
 
-        let M = dense_matrix_to_sparse(dense_matrix);
+        let M = SparseMatrix::from_dense(&dense_matrix);
 
         let z = [Fq::from(1u64), Fq::from(1u64), Fq::from(1u64)];
         let result = mat_vec_mul(&M, &z);

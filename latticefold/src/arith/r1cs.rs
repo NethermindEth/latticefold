@@ -2,7 +2,7 @@
 
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::Ring;
-use stark_rings_linalg::{sparse_matrix::dense_matrix_u64_to_sparse, SparseMatrix};
+use stark_rings_linalg::{Matrix, SparseMatrix};
 
 use super::{
     error::CSError as Error,
@@ -25,8 +25,7 @@ pub struct R1CS<R: Ring> {
 
 impl<R: Ring> R1CS<R> {
     /// check that a R1CS structure is satisfied by a z vector. Only for testing.
-    #[cfg(test)]
-    pub(crate) fn check_relation(&self, z: &[R]) -> Result<(), Error> {
+    pub fn check_relation(&self, z: &[R]) -> Result<(), Error> {
         let Az = mat_vec_mul(&self.A, z)?;
         let Bz = mat_vec_mul(&self.B, z)?;
 
@@ -94,11 +93,12 @@ impl<R: Ring> RelaxedR1CS<R> {
 /// Returns a matrix of ring elements given a matrix of unsigned ints
 pub fn to_F_matrix<R: Ring>(M: Vec<Vec<usize>>) -> SparseMatrix<R> {
     // dense_matrix_to_sparse(to_F_dense_matrix::<R>(M))
-    let M_u64: Vec<Vec<u64>> = M
+    let M_u64: Matrix<u64> = M
         .iter()
         .map(|m| m.iter().map(|r| *r as u64).collect())
-        .collect();
-    dense_matrix_u64_to_sparse(M_u64)
+        .collect::<Vec<Vec<_>>>()
+        .into();
+    SparseMatrix::from_dense(&M_u64)
 }
 
 /// Returns a dense matrix of ring elements given a matrix of unsigned ints
@@ -179,8 +179,8 @@ pub(crate) fn create_dummy_identity_sparse_matrix<R: Ring>(
     columns: usize,
 ) -> SparseMatrix<R> {
     let mut matrix = SparseMatrix {
-        n_rows: rows,
-        n_cols: columns,
+        nrows: rows,
+        ncols: columns,
         coeffs: vec![vec![]; rows],
     };
     for (i, row) in matrix.coeffs.iter_mut().enumerate() {
@@ -201,8 +201,8 @@ pub(crate) fn create_dummy_squaring_sparse_matrix<R: Ring>(
         "Length of witness vector must be equal to ccs width"
     );
     let mut matrix = SparseMatrix {
-        n_rows: rows,
-        n_cols: columns,
+        nrows: rows,
+        ncols: columns,
         coeffs: vec![vec![]; rows],
     };
     for (i, row) in matrix.coeffs.iter_mut().enumerate() {
