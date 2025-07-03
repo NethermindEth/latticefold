@@ -15,42 +15,24 @@ use thiserror::Error;
 // M: witness matrix of monomials
 
 #[derive(Debug)]
-pub enum Arity<T> {
-    Single(T),
-    Batch(Vec<T>),
-}
-
-impl<T> Arity<T> {
-    pub fn as_slice(&self) -> &[T] {
-        match self {
-            Self::Single(a) => ark_std::slice::from_ref(a),
-            Self::Batch(a) => a.as_slice(),
-        }
-    }
-}
-
-impl<T> From<Vec<T>> for Arity<T> {
-    fn from(v: Vec<T>) -> Self {
-        if v.len() == 1 {
-            Self::Single(v.into_iter().next().unwrap())
-        } else {
-            Self::Batch(v)
-        }
-    }
+pub enum MonomialSet<R> {
+    Matrix(SparseMatrix<R>),
+    Vector(Vec<R>),
 }
 
 #[derive(Debug)]
 pub struct In<R> {
     pub nvars: usize,
-    pub M: Arity<SparseMatrix<R>>, // n x m
+    pub sets: Vec<MonomialSet<R>>, // Ms and ms: n x m, or n
 }
 
 #[derive(Debug)]
-pub struct Out<R: Ring> {
+pub struct Out<R: PolyRing> {
     pub nvars: usize,
-    pub r: Vec<R>, // log n
+    pub r: Vec<R::BaseRing>, // log n
     pub sumcheck_proof: Proof<R>,
-    pub e: Arity<Vec<R>>, // m
+    pub e: Vec<Vec<R>>, // m, matrices outputs
+    pub b: Vec<R>,      // vectors outputs
 }
 
 #[derive(Debug, Error)]
@@ -71,17 +53,36 @@ fn ev<R: PolyRing>(r: &R, x: R::BaseRing) -> R::BaseRing {
 
 impl<R: OverField> In<R> {
     /// Monomial set check
+    ///
+    /// Proves sets rings are all monomials.
+    /// Currently requires k >= 1 monomial matrices sets. TODO support other scenarios.
+    /// If k > 1, sumcheck batching is employed.
     pub fn set_check(&self, transcript: &mut impl Transcript<R>) -> Out<R> {
-        let Ms = self.M.as_slice();
+        let Ms: Vec<&SparseMatrix<R>> = self
+            .sets
+            .iter()
+            .filter_map(|set| match set {
+                MonomialSet::Matrix(m) => Some(m),
+                _ => None,
+            })
+            .collect();
+        let ms: Vec<&Vec<R>> = self
+            .sets
+            .iter()
+            .filter_map(|set| match set {
+                MonomialSet::Vector(v) => Some(v),
+                _ => None,
+            })
+            .collect();
+
         let ncols = Ms[0].ncols;
         let MTs = Ms.iter().map(|M| M.transpose()).collect::<Vec<_>>();
         let tnvars = log2(Ms[0].nrows.next_power_of_two()) as usize;
 
-        let mut mles = Vec::with_capacity(Ms.len() * (ncols * 2 + 1));
+        let mut mles = Vec::with_capacity((Ms.len() + ms.len()) * (ncols * 2 + 1));
         let mut alphas = Vec::with_capacity(Ms.len());
 
-        // loop for batch support
-        for M in Ms {
+        for M in Ms.iter() {
             // Step 1
             let c: Vec<R> = transcript
                 .get_challenges(self.nvars)
@@ -115,9 +116,34 @@ impl<R: OverField> In<R> {
             alphas.push(alpha);
         }
 
+        for m in ms.iter() {
+            // Step 1
+            let c: Vec<R> = transcript
+                .get_challenges(self.nvars)
+                .into_iter()
+                .map(|x| x.into())
+                .collect();
+            let beta = transcript.get_challenge();
+
+            let m_j = m.iter().map(|r| R::from(ev(r, beta))).collect::<Vec<_>>();
+            // ev(x^2) = ev(x)^2, iif monomial
+            let m_prime_j = m_j.iter().map(|z| *z * z).collect::<Vec<_>>();
+
+            let mle_m_j = DenseMultilinearExtension::from_evaluations_vec(tnvars, m_j);
+            let mle_m_prime_j = DenseMultilinearExtension::from_evaluations_vec(tnvars, m_prime_j);
+
+            mles.push(mle_m_j);
+            mles.push(mle_m_prime_j);
+
+            let eq = build_eq_x_r(&c).unwrap();
+            mles.push(eq);
+
+            let _alpha: R = transcript.get_challenge().into();
+            alphas.push(R::one());
+        }
+
         // random linear combinator, for batching
-        let rc: Option<R::BaseRing> =
-            matches!(self.M, Arity::Batch(_)).then(|| transcript.get_challenge().into());
+        let rc: Option<R::BaseRing> = (Ms.len() > 1).then(|| transcript.get_challenge().into());
 
         let comb_fn = |vals: &[R]| -> R {
             let mut lc = R::zero();
@@ -142,13 +168,14 @@ impl<R: OverField> In<R> {
         let (sumcheck_proof, prover_state) =
             MLSumcheck::prove_as_subprotocol(transcript, mles, self.nvars, 3, comb_fn);
 
-        let r = prover_state
+        let r = prover_state.randomness.clone();
+        let r_poly = prover_state
             .randomness
             .into_iter()
             .map(|x| x.into())
             .collect::<Vec<R>>();
 
-        let e: Arity<Vec<R>> = MTs
+        let e: Vec<Vec<R>> = MTs
             .iter()
             .map(|MT| {
                 MT.coeffs
@@ -156,16 +183,24 @@ impl<R: OverField> In<R> {
                     .map(|row| {
                         let evals: Vec<(usize, R)> = row.iter().map(|&(r, i)| (i, r)).collect();
                         let mle = SparseMultilinearExtension::from_evaluations(tnvars, &evals);
-                        mle.evaluate(&r)
+                        mle.evaluate(&r_poly)
                     })
                     .collect::<Vec<_>>()
             })
-            .collect::<Vec<Vec<_>>>() // batch
-            .into();
+            .collect::<Vec<Vec<_>>>();
+
+        let b: Vec<R> = ms
+            .iter()
+            .map(|m| {
+                let mle = DenseMultilinearExtension::from_evaluations_slice(tnvars, *m);
+                mle.evaluate(&r_poly).unwrap()
+            })
+            .collect::<Vec<_>>();
 
         Out {
             nvars: self.nvars,
             e,
+            b,
             r,
             sumcheck_proof,
         }
@@ -174,9 +209,9 @@ impl<R: OverField> In<R> {
 
 impl<R: OverField> Out<R> {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), SetCheckError<R>> {
-        let es = self.e.as_slice();
+        let nclaims = self.e.len() + self.b.len();
 
-        let cba: Vec<(Vec<R>, R::BaseRing, R)> = (0..es.len())
+        let cba: Vec<(Vec<R>, R::BaseRing, R)> = (0..nclaims)
             .map(|_| {
                 let c: Vec<R> = transcript
                     .get_challenges(self.nvars)
@@ -189,8 +224,7 @@ impl<R: OverField> Out<R> {
             })
             .collect();
 
-        let rc: Option<R::BaseRing> =
-            matches!(self.e, Arity::Batch(_)).then(|| transcript.get_challenge().into());
+        let rc: Option<R::BaseRing> = (self.e.len() > 1).then(|| transcript.get_challenge().into());
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,
@@ -206,7 +240,7 @@ impl<R: OverField> Out<R> {
 
         use ark_std::One;
         let mut ver = R::zero();
-        for (i, e) in es.iter().enumerate() {
+        for (i, e) in self.e.iter().enumerate() {
             let c = &cba[i].0;
             let beta = &cba[i].1;
             let alpha = &cba[i].2;
@@ -221,6 +255,19 @@ impl<R: OverField> Out<R> {
                 })
                 .sum::<R>();
             ver += eq * e_sum * rc.as_ref().unwrap_or(&R::BaseRing::one()).pow([i as u64]);
+        }
+        for (i, b) in self.b.iter().enumerate() {
+            let offset = self.e.len();
+            let c = &cba[i + offset].0;
+            let beta = &cba[i + offset].1;
+            let alpha = &cba[i + offset].2;
+            let eq = eq_eval(&c, &r).unwrap();
+            let b_claim = {
+                let ev1 = R::from(ev(b, *beta));
+                let ev2 = R::from(ev(b, *beta * beta));
+                ev1 * ev1 - ev2
+            };
+            ver += eq * b_claim * rc.as_ref().unwrap_or(&R::BaseRing::one()).pow([i as u64]);
         }
 
         (ver == v).then(|| ()).ok_or(SetCheckError::ExpectedClaim)?;
@@ -245,7 +292,7 @@ mod tests {
         let M = SparseMatrix::<R>::identity(n);
 
         let scin = In {
-            M: Arity::Single(M),
+            sets: vec![MonomialSet::Matrix(M)],
             nvars: log2(n) as usize,
         };
 
@@ -266,7 +313,7 @@ mod tests {
         M.coeffs[0][0].0 = onepx;
 
         let scin = In {
-            M: Arity::Single(M),
+            sets: vec![MonomialSet::Matrix(M)],
             nvars: log2(n) as usize,
         };
 
@@ -284,7 +331,7 @@ mod tests {
         let M1 = SparseMatrix::<R>::identity(n);
 
         let scin = In {
-            M: Arity::Batch(vec![M0, M1]),
+            sets: vec![MonomialSet::Matrix(M0), MonomialSet::Matrix(M1)],
             nvars: log2(n) as usize,
         };
 
@@ -306,7 +353,56 @@ mod tests {
         M1.coeffs[0][0].0 = onepx;
 
         let scin = In {
-            M: Arity::Batch(vec![M0, M1]),
+            sets: vec![MonomialSet::Matrix(M0), MonomialSet::Matrix(M1)],
+            nvars: log2(n) as usize,
+        };
+
+        let mut ts = PoseidonTS::default::<PC>();
+        let out = scin.set_check(&mut ts);
+
+        let mut ts = PoseidonTS::default::<PC>();
+        assert!(out.verify(&mut ts).is_err());
+    }
+
+    #[test]
+    fn test_set_check_mix() {
+        let n = 4;
+        let M0 = SparseMatrix::<R>::identity(n);
+        let M1 = SparseMatrix::<R>::identity(n);
+        let m0 = vec![R::one(); n];
+
+        let scin = In {
+            sets: vec![
+                MonomialSet::Matrix(M0),
+                MonomialSet::Matrix(M1),
+                MonomialSet::Vector(m0),
+            ],
+            nvars: log2(n) as usize,
+        };
+
+        let mut ts = PoseidonTS::default::<PC>();
+        let out = scin.set_check(&mut ts);
+
+        let mut ts = PoseidonTS::default::<PC>();
+        out.verify(&mut ts).unwrap();
+    }
+
+    #[test]
+    fn test_set_check_mix_bad() {
+        let n = 4;
+        let M0 = SparseMatrix::<R>::identity(n);
+        let M1 = SparseMatrix::<R>::identity(n);
+        let mut m0 = vec![R::one(); n];
+        let mut onepx = R::one();
+        onepx.coeffs_mut()[1] = 1u128.into();
+        m0[0] = onepx;
+
+        let scin = In {
+            sets: vec![
+                MonomialSet::Matrix(M0),
+                MonomialSet::Matrix(M1),
+                MonomialSet::Vector(m0),
+            ],
             nvars: log2(n) as usize,
         };
 
