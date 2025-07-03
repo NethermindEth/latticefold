@@ -82,6 +82,7 @@ impl<R: OverField> In<R> {
         let mut mles = Vec::with_capacity((Ms.len() + ms.len()) * (ncols * 2 + 1));
         let mut alphas = Vec::with_capacity(Ms.len());
 
+        // matrix sets
         for M in Ms.iter() {
             // Step 1
             let c: Vec<R> = transcript
@@ -116,6 +117,7 @@ impl<R: OverField> In<R> {
             alphas.push(alpha);
         }
 
+        // vector sets
         for m in ms.iter() {
             // Step 1
             let c: Vec<R> = transcript
