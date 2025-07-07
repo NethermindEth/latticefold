@@ -17,7 +17,7 @@ The examples in this repository support customization via environment variables.
     - Default: `32768` (`1 << 15`)
 - **`PARAM_L`**: Sets the value of `L` in `DecompositionParams`.
     - Default: `5`
-- **`PARAM_B_SMALL`**: Sets the value of `B_SMALL` in `DecompositionParams`.
+- **`PARAM_B_SMALL`**: Sets the value of `B_SMALL` in `DecompositionParams`. Must be even.
     - Default: `2`
 - **`PARAM_K`**: Sets the value of `K` in `DecompositionParams`.
     - Default: `15`
@@ -54,7 +54,7 @@ These parameters influence the behavior and output of the examples.
    ```bash
    export PARAM_B=65536
    export PARAM_L=6
-   export PARAM_B_SMALL=3
+   export PARAM_B_SMALL=2
    export PARAM_K=16
    export PARAM_C=5
    export PARAM_WIT_LEN=5
@@ -73,7 +73,7 @@ These parameters influence the behavior and output of the examples.
    ```powershell
    $env:PARAM_B=65536
    $env:PARAM_L=6
-   $env:PARAM_B_SMALL=3
+   $env:PARAM_B_SMALL=2
    $env:PARAM_K=16
    $env:PARAM_C=5
    $env:PARAM_WIT_LEN=5
