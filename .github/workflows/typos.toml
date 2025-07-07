@@ -2,3 +2,5 @@
 extend-ignore-re = [
     "0x.*_i128",
 ]
+[default.extend-words]
+MSIS = "MSIS"
