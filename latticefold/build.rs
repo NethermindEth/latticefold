@@ -463,7 +463,7 @@ fn write_ajtai_group(file: &mut File, benchmarks: &[AjtaiRecord], name: &str, ri
                         );
                     },
                 );
-            }
+            };
         }
     }).collect();
 
@@ -585,13 +585,13 @@ fn write_function(
                     {
                         if ENV.prover {
                             BlockBencher::#prover_function(&mut group, #scalar);
-                        }
+                        };
 
                         if ENV.verifier {
                             BlockBencher::#verifier_function(&mut group, #scalar);
-                        }
+                        };
                     }
-                }
+                };
             }
         })
         .collect();
