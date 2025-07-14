@@ -1,4 +1,4 @@
-use ark_std::{log2, Zero};
+use ark_std::{iter::once, log2, One, Zero};
 use latticefold::{
     transcript::Transcript,
     utils::sumcheck::{
@@ -16,80 +16,54 @@ use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
 use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
 use thiserror::Error;
 
-use crate::setchk::{In, MonomialSet, Out};
+use crate::{
+    setchk::{In, MonomialSet, Out},
+    utils::split,
+};
 
 // D_f: decomposed cf(f), Z n x dk
 // M_f: EXP(D_f)
 
 #[derive(Debug)]
-pub struct Rg<R: CoeffRing>
-where
-    R::BaseRing: Zq,
-{
+pub struct Rg<R: PolyRing> {
     pub nvars: usize,
     pub M_f: Vec<Matrix<R>>,   // n x d, k matrices, monomials
-    pub f: Vec<R>,             // n
     pub tau: Vec<R::BaseRing>, // n
     pub m_tau: Vec<R>,         // n, monomials
+    pub f: Vec<R>,             // n
+    pub comM_f: Vec<Matrix<R>>,
 
     // decomposition
     pub b: u128,
     pub k: usize,
+    pub l: usize,
 }
 
 #[derive(Debug)]
-pub struct Dcom<R: CoeffRing>
-where
-    R::BaseRing: Zq,
-{
-    pub v: Vec<R::BaseRing>,
-    pub a: R::BaseRing,
-    pub b: R,
-    pub u: Vec<Vec<R>>,
-}
-
-pub fn split<R: PolyRing>(com: Matrix<R>, n: usize, b: u128, k: usize) -> Vec<R::BaseRing>
-where
-    R: Decompose,
-{
-    let M_prime = com.gadget_decompose(b, k);
-    let M_dprime = M_prime.vals.into_iter().fold(vec![], |mut acc, row| {
-        // TODO pre-alloc
-        acc.extend(row);
-        acc
-    });
-    let mut tau = M_dprime
-        .iter()
-        .map(|r| r.coeffs().to_vec())
-        .into_iter()
-        .fold(vec![], |mut acc, row| {
-            // TODO pre-alloc
-            acc.extend(row);
-            acc
-        });
-    if tau.len() < n {
-        // TODO handle when opposite
-        tau.resize(n, R::BaseRing::zero());
-    }
-    tau
+pub struct Dcom<R: PolyRing> {
+    pub v: Vec<R::BaseRing>, // eval over M_f
+    pub a: R::BaseRing,      // eval over tau
+    pub b: R,                // eval over m_tau
+    pub c: R,                // eval over f
+    pub out: Out<R>,         // set checks
+    pub k: usize,
 }
 
 impl<R: CoeffRing> Rg<R>
 where
     R::BaseRing: Zq,
 {
+    /// Range checks
     pub fn range_check(&self, transcript: &mut impl Transcript<R>) -> Dcom<R> {
-        let in_rel = In {
-            sets: self
-                .M_f
-                .iter()
-                .map(|m| MonomialSet::Matrix(SparseMatrix::<R>::from_dense(m)))
-                .chain(
-                    ark_std::iter::once(&self.m_tau)
-                        .map(|m_tau| MonomialSet::Vector(m_tau.clone())),
-                )
-                .collect::<Vec<_>>(),
+        let sets = self
+            .M_f
+            .iter()
+            .map(|m| MonomialSet::Matrix(SparseMatrix::<R>::from_dense(m)))
+            .chain(once(MonomialSet::Vector(self.m_tau.clone())))
+            .collect::<Vec<_>>();
 
+        let in_rel = In {
+            sets,
             nvars: self.nvars,
         };
         let out_rel = in_rel.set_check(transcript);
@@ -114,11 +88,18 @@ where
 
         let b = out_rel.b[0];
 
+        // Let `c` be the evaluation of `f` over r
+        let c = DenseMultilinearExtension::from_evaluations_vec(self.nvars, self.f.clone())
+            .evaluate(&out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>())
+            .unwrap();
+
         Dcom {
             v,
             a,
             b,
-            u: out_rel.e,
+            c,
+            out: out_rel,
+            k: self.k,
         }
     }
 }
@@ -128,26 +109,28 @@ where
     R::BaseRing: Zq,
 {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), ()> {
-        // TODO Run set checks
+        self.out.verify(transcript).unwrap(); //.map_err(|_| ())?;
 
+        // ct(psi b) =? a
         ((psi::<R>() * self.b).ct() == self.a)
             .then(|| ())
-            .ok_or(())?;
+            .ok_or(())
+            .unwrap();
 
         let d = R::dimension();
         let d_prime = d / 2;
-        let u_comb = self
-            .u
-            .iter()
-            .enumerate()
-            .fold(vec![R::zero(); d], |mut acc, (i, u_i)| {
+        let u_comb = self.out.e.iter().take(self.k).enumerate().fold(
+            vec![R::zero(); d],
+            |mut acc, (i, u_i)| {
                 let d_ppow = R::BaseRing::from(d_prime as u128).pow([i as u64]);
                 u_i.iter()
                     .zip(acc.iter_mut())
                     .for_each(|(u_ij, a_j)| *a_j += *u_ij * d_ppow);
                 acc
-            });
+            },
+        );
 
+        // ct(psi (sum d^i u_i)) =? v
         let v_rec = u_comb
             .iter()
             .map(|uc| (psi::<R>() * uc).ct())
@@ -163,10 +146,10 @@ where
 mod tests {
     use ark_ff::PrimeField;
     use ark_std::{One, Zero};
-    use cyclotomic_rings::rings::GoldilocksPoseidonConfig as PC;
+    use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use latticefold::transcript::poseidon::PoseidonTS;
     use stark_rings::{
-        balanced_decomposition::DecomposeToVec, cyclotomic_ring::models::goldilocks::RqPoly as R,
+        balanced_decomposition::DecomposeToVec, cyclotomic_ring::models::frog_ring::RqPoly as R,
     };
     use stark_rings_linalg::SparseMatrix;
 
@@ -232,13 +215,13 @@ mod tests {
 
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
 
-        let coms = M_f
+        let comM_f = M_f
             .iter()
             .map(|M| A.try_mul_mat(M).unwrap())
             .collect::<Vec<_>>();
-        let com = Matrix::hconcat(&coms).unwrap();
+        let com = Matrix::hconcat(&comM_f).unwrap();
 
-        let tau = split(com, n, (R::dimension() / 2) as u128, l);
+        let tau = split(&com, n, (R::dimension() / 2) as u128, l);
 
         let m_tau = tau
             .iter()
@@ -251,8 +234,10 @@ mod tests {
             f,
             tau,
             m_tau,
+            comM_f,
             b,
             k,
+            l,
         };
 
         let mut ts = PoseidonTS::default::<PC>();

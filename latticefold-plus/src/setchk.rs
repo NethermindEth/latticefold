@@ -54,7 +54,7 @@ fn ev<R: PolyRing>(r: &R, x: R::BaseRing) -> R::BaseRing {
 impl<R: OverField> In<R> {
     /// Monomial set check
     ///
-    /// Proves sets rings are all monomials.
+    /// Proves sets rings are all unit monomials.
     /// Currently requires k >= 1 monomial matrices sets. TODO support other scenarios.
     /// If k > 1, sumcheck batching is employed.
     pub fn set_check(&self, transcript: &mut impl Transcript<R>) -> Out<R> {
@@ -164,6 +164,18 @@ impl<R: OverField> In<R> {
                     return res;
                 };
             }
+            for i in 0..ms.len() {
+                let s = Ms.len() * (2 * ncols + 1);
+                let mut res = R::zero();
+                res +=
+                    alphas[Ms.len() + i].pow([Ms.len() as u64]) * (vals[s] * vals[s] - vals[s + 1]);
+                res *= vals[s + 2]; // eq
+                lc += if let Some(rc) = &rc {
+                    res * rc.pow([(Ms.len() + i) as u64])
+                } else {
+                    return res;
+                };
+            }
             lc
         };
 
@@ -269,7 +281,11 @@ impl<R: OverField> Out<R> {
                 let ev2 = R::from(ev(b, *beta * beta));
                 ev1 * ev1 - ev2
             };
-            ver += eq * b_claim * rc.as_ref().unwrap_or(&R::BaseRing::one()).pow([i as u64]);
+            ver += eq
+                * b_claim
+                * rc.as_ref()
+                    .unwrap_or(&R::BaseRing::one())
+                    .pow([(i + offset) as u64]);
         }
 
         (ver == v).then(|| ()).ok_or(SetCheckError::ExpectedClaim)?;
@@ -281,9 +297,9 @@ impl<R: OverField> Out<R> {
 #[cfg(test)]
 mod tests {
     use ark_std::One;
-    use cyclotomic_rings::rings::GoldilocksPoseidonConfig as PC;
+    use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use latticefold::transcript::poseidon::PoseidonTS;
-    use stark_rings::cyclotomic_ring::models::goldilocks::RqPoly as R;
+    use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, unit_monomial};
     use stark_rings_linalg::SparseMatrix;
 
     use super::*;
@@ -372,12 +388,14 @@ mod tests {
         let M0 = SparseMatrix::<R>::identity(n);
         let M1 = SparseMatrix::<R>::identity(n);
         let m0 = vec![R::one(); n];
+        let m1 = vec![unit_monomial(2); n];
 
         let scin = In {
             sets: vec![
                 MonomialSet::Matrix(M0),
                 MonomialSet::Matrix(M1),
                 MonomialSet::Vector(m0),
+                MonomialSet::Vector(m1),
             ],
             nvars: log2(n) as usize,
         };
