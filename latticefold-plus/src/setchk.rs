@@ -24,6 +24,7 @@ pub enum MonomialSet<R> {
 pub struct In<R> {
     pub nvars: usize,
     pub sets: Vec<MonomialSet<R>>, // Ms and ms: n x m, or n
+    pub M: Vec<SparseMatrix<R>>,   // n_lin matrices, n x n
 }
 
 #[derive(Debug)]
@@ -31,8 +32,8 @@ pub struct Out<R: PolyRing> {
     pub nvars: usize,
     pub r: Vec<R::BaseRing>, // log n
     pub sumcheck_proof: Proof<R>,
-    pub e: Vec<Vec<R>>, // m, matrices outputs
-    pub b: Vec<R>,      // vectors outputs
+    pub e: Vec<Vec<Vec<R>>>, // m, matrices outputs
+    pub b: Vec<R>,           // vectors outputs
 }
 
 #[derive(Debug, Error)]
@@ -189,19 +190,48 @@ impl<R: OverField> In<R> {
             .map(|x| x.into())
             .collect::<Vec<R>>();
 
-        let e: Vec<Vec<R>> = MTs
-            .iter()
-            .map(|MT| {
-                MT.coeffs
+        let e: Vec<Vec<Vec<R>>> = {
+            let mut e = Vec::with_capacity(1 + self.M.len());
+
+            let e0 = MTs
+                .iter()
+                .map(|MT| {
+                    MT.coeffs
+                        .iter()
+                        .map(|row| {
+                            let evals: Vec<(usize, R)> = row.iter().map(|&(r, i)| (i, r)).collect();
+                            let mle = SparseMultilinearExtension::from_evaluations(tnvars, &evals);
+                            mle.evaluate(&r_poly)
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<Vec<R>>>();
+            e.push(e0);
+
+            for M in &self.M {
+                let ei = MTs
                     .iter()
-                    .map(|row| {
-                        let evals: Vec<(usize, R)> = row.iter().map(|&(r, i)| (i, r)).collect();
-                        let mle = SparseMultilinearExtension::from_evaluations(tnvars, &evals);
-                        mle.evaluate(&r_poly)
+                    .map(|MT| {
+                        MT.coeffs
+                            .iter()
+                            .map(|row| {
+                                let mut drow = vec![R::zero(); MT.ncols];
+                                row.iter().for_each(|&(r, i)| {
+                                    drow[i] = r;
+                                });
+                                let evals = M.try_mul_vec(&drow).unwrap();
+                                //let evals: Vec<(usize, R)> = row.iter().map(|&(r, i)| (i, r)).collect();
+                                let mle =
+                                    DenseMultilinearExtension::from_evaluations_vec(tnvars, evals);
+                                mle.evaluate(&r_poly).unwrap()
+                            })
+                            .collect::<Vec<_>>()
                     })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<Vec<_>>>();
+                    .collect::<Vec<Vec<R>>>();
+                e.push(ei);
+            }
+            e
+        };
 
         let b: Vec<R> = ms
             .iter()
@@ -223,7 +253,7 @@ impl<R: OverField> In<R> {
 
 impl<R: OverField> Out<R> {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), SetCheckError<R>> {
-        let nclaims = self.e.len() + self.b.len();
+        let nclaims = self.e[0].len() + self.b.len();
 
         let cba: Vec<(Vec<R>, R::BaseRing, R)> = (0..nclaims)
             .map(|_| {
@@ -238,7 +268,8 @@ impl<R: OverField> Out<R> {
             })
             .collect();
 
-        let rc: Option<R::BaseRing> = (self.e.len() > 1).then(|| transcript.get_challenge().into());
+        let rc: Option<R::BaseRing> =
+            (self.e[0].len() > 1).then(|| transcript.get_challenge().into());
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,
@@ -254,7 +285,7 @@ impl<R: OverField> Out<R> {
 
         use ark_std::One;
         let mut ver = R::zero();
-        for (i, e) in self.e.iter().enumerate() {
+        for (i, e) in self.e[0].iter().enumerate() {
             let c = &cba[i].0;
             let beta = &cba[i].1;
             let alpha = &cba[i].2;
@@ -271,7 +302,7 @@ impl<R: OverField> Out<R> {
             ver += eq * e_sum * rc.as_ref().unwrap_or(&R::BaseRing::one()).pow([i as u64]);
         }
         for (i, b) in self.b.iter().enumerate() {
-            let offset = self.e.len();
+            let offset = self.e[0].len();
             let c = &cba[i + offset].0;
             let beta = &cba[i + offset].1;
             let alpha = &cba[i + offset].2;
@@ -312,6 +343,7 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M)],
             nvars: log2(n) as usize,
+            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
@@ -333,6 +365,7 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M)],
             nvars: log2(n) as usize,
+            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
@@ -351,6 +384,7 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M0), MonomialSet::Matrix(M1)],
             nvars: log2(n) as usize,
+            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
@@ -373,6 +407,7 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M0), MonomialSet::Matrix(M1)],
             nvars: log2(n) as usize,
+            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
@@ -398,6 +433,7 @@ mod tests {
                 MonomialSet::Vector(m1),
             ],
             nvars: log2(n) as usize,
+            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
@@ -424,6 +460,7 @@ mod tests {
                 MonomialSet::Vector(m0),
             ],
             nvars: log2(n) as usize,
+            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
