@@ -32,6 +32,7 @@ pub struct Rg<R: PolyRing> {
     pub m_tau: Vec<R>,         // n, monomials
     pub f: Vec<R>,             // n
     pub comM_f: Vec<Matrix<R>>,
+    pub M: Vec<SparseMatrix<R>>, // n_lin matrices, n x n
 
     // decomposition
     pub b: u128,
@@ -42,9 +43,9 @@ pub struct Rg<R: PolyRing> {
 #[derive(Debug)]
 pub struct Dcom<R: PolyRing> {
     pub v: Vec<R::BaseRing>, // eval over M_f
-    pub a: R::BaseRing,      // eval over tau
-    pub b: R,                // eval over m_tau
-    pub c: R,                // eval over f
+    pub a: Vec<R::BaseRing>, // eval over tau
+    pub b: Vec<R>,           // eval over m_tau
+    pub c: Vec<R>,           // eval over f
     pub out: Out<R>,         // set checks
     pub k: usize,
 }
@@ -65,6 +66,7 @@ where
         let in_rel = In {
             sets,
             nvars: self.nvars,
+            M: self.M.clone(),
         };
         let out_rel = in_rel.set_check(transcript);
 
@@ -82,16 +84,54 @@ where
             })
             .collect::<Vec<_>>();
 
-        let a = DenseMultilinearExtension::from_evaluations_vec(self.nvars, self.tau.clone())
-            .evaluate(&out_rel.r)
-            .unwrap();
+        let r = out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>();
 
-        let b = out_rel.b[0];
-
+        let mut a = Vec::with_capacity(1 + self.M.len());
+        let mut b = Vec::with_capacity(1 + self.M.len());
         // Let `c` be the evaluation of `f` over r
-        let c = DenseMultilinearExtension::from_evaluations_vec(self.nvars, self.f.clone())
-            .evaluate(&out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>())
-            .unwrap();
+        let mut c = Vec::with_capacity(1 + self.M.len());
+
+        a.push(
+            DenseMultilinearExtension::from_evaluations_vec(self.nvars, self.tau.clone())
+                .evaluate(&out_rel.r)
+                .unwrap(),
+        );
+
+        b.push(out_rel.b[0]);
+
+        c.push(
+            DenseMultilinearExtension::from_evaluations_vec(self.nvars, self.f.clone())
+                .evaluate(&out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>())
+                .unwrap(),
+        );
+
+        self.M.iter().for_each(|m| {
+            let Mtau = m
+                .try_mul_vec(&self.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
+                .unwrap();
+            a.push(
+                DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mtau)
+                    .evaluate(&r)
+                    .unwrap()
+                    .ct(),
+            );
+
+            let Mm_tau = m
+                .try_mul_vec(&self.m_tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
+                .unwrap();
+            b.push(
+                DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mm_tau)
+                    .evaluate(&r)
+                    .unwrap(),
+            );
+
+            let Mf = m.try_mul_vec(&self.f).unwrap();
+            c.push(
+                DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mf)
+                    .evaluate(&r)
+                    .unwrap(),
+            );
+        });
 
         Dcom {
             v,
@@ -112,14 +152,16 @@ where
         self.out.verify(transcript).unwrap(); //.map_err(|_| ())?;
 
         // ct(psi b) =? a
-        ((psi::<R>() * self.b).ct() == self.a)
-            .then(|| ())
-            .ok_or(())
-            .unwrap();
+        for (&a_i, b_i) in self.a.iter().zip(self.b.iter()) {
+            ((psi::<R>() * b_i).ct() == a_i)
+                .then(|| ())
+                .ok_or(())
+                .unwrap();
+        }
 
         let d = R::dimension();
         let d_prime = d / 2;
-        let u_comb = self.out.e.iter().take(self.k).enumerate().fold(
+        let u_comb = self.out.e[0].iter().take(self.k).enumerate().fold(
             vec![R::zero(); d],
             |mut acc, (i, u_i)| {
                 let d_ppow = R::BaseRing::from(d_prime as u128).pow([i as u64]);
@@ -145,13 +187,12 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ff::PrimeField;
-    use ark_std::{One, Zero};
+    use ark_std::Zero;
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use latticefold::transcript::poseidon::PoseidonTS;
     use stark_rings::{
         balanced_decomposition::DecomposeToVec, cyclotomic_ring::models::frog_ring::RqPoly as R,
     };
-    use stark_rings_linalg::SparseMatrix;
 
     use super::*;
 
@@ -235,6 +276,7 @@ mod tests {
             tau,
             m_tau,
             comM_f,
+            M: vec![],
             b,
             k,
             l,

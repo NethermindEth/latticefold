@@ -10,6 +10,8 @@ use latticefold::{
 use stark_rings::{OverField, Ring};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
+use crate::lin::{Linearize, Verify};
+
 /// Assume $n=m*\hat{l}$.
 #[derive(Debug)]
 pub struct CommittedR1CS<R: Ring> {
@@ -20,18 +22,19 @@ pub struct CommittedR1CS<R: Ring> {
 }
 
 #[derive(Debug)]
-pub struct Lin<R: Ring> {
-    sumcheck_proof: Proof<R>,
-    nvars: usize,
-    degree: usize,
-    v: R,
-    va: R,
-    vb: R,
-    vc: R,
+pub struct CommittedR1CSProof<R: Ring> {
+    pub sumcheck_proof: Proof<R>,
+    pub nvars: usize,
+    pub degree: usize,
+    pub v: R,
+    pub va: R,
+    pub vb: R,
+    pub vc: R,
 }
 
-impl<R: OverField> CommittedR1CS<R> {
-    pub fn linearize(&self, transcript: &mut impl Transcript<R>) -> Lin<R> {
+impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
+    type Proof = CommittedR1CSProof<R>;
+    fn linearize(&self, transcript: &mut impl Transcript<R>) -> Self::Proof {
         let nvars = log2(self.f.len().next_power_of_two()) as usize;
         let ga = self.r1cs.A.try_mul_vec(&self.f).unwrap();
         let gb = self.r1cs.B.try_mul_vec(&self.f).unwrap();
@@ -63,7 +66,7 @@ impl<R: OverField> CommittedR1CS<R> {
         let va = mle_ga.evaluate(&ro).unwrap();
         let vb = mle_gb.evaluate(&ro).unwrap();
         let vc = mle_gc.evaluate(&ro).unwrap();
-        Lin {
+        Self::Proof {
             sumcheck_proof,
             nvars,
             degree: 3,
@@ -75,8 +78,8 @@ impl<R: OverField> CommittedR1CS<R> {
     }
 }
 
-impl<R: OverField> Lin<R> {
-    pub fn verify(&self, transcript: &mut impl Transcript<R>) {
+impl<R: OverField> Verify<R> for CommittedR1CSProof<R> {
+    fn verify(&self, transcript: &mut impl Transcript<R>) -> bool {
         let r: Vec<R> = transcript
             .get_challenges(self.nvars)
             .into_iter()
@@ -95,7 +98,9 @@ impl<R: OverField> Lin<R> {
         let s = subclaim.expected_evaluation;
         let e = eq_eval(&r, &ro).unwrap();
 
-        assert_eq!(e * (self.va * self.vb - self.vc), s)
+        assert_eq!(e * (self.va * self.vb - self.vc), s);
+
+        true
     }
 }
 
