@@ -15,18 +15,17 @@ use crate::lin::{Linearize, Verify};
 /// Assume $n=m*\hat{l}$.
 #[derive(Debug)]
 pub struct CommittedR1CS<R: Ring> {
-    r1cs: R1CS<R>,
-    cm: Vec<R>, // kappa
-    x: Vec<R>,  // l_in
-    f: Vec<R>,  // n
+    pub r1cs: R1CS<R>,
+    pub cm: Vec<R>, // kappa
+    pub x: Vec<R>,  // l_in
+    pub f: Vec<R>,  // n
 }
 
 #[derive(Debug)]
 pub struct CommittedR1CSProof<R: Ring> {
     pub sumcheck_proof: Proof<R>,
     pub nvars: usize,
-    pub degree: usize,
-    pub v: R,
+    pub r: Vec<R>,
     pub va: R,
     pub vb: R,
     pub vc: R,
@@ -61,16 +60,13 @@ impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
             .map(|x| x.into())
             .collect::<Vec<R>>();
 
-        let mle_f = DenseMultilinearExtension::from_evaluations_slice(nvars, &self.f);
-        let v = mle_f.evaluate(&ro).unwrap();
         let va = mle_ga.evaluate(&ro).unwrap();
         let vb = mle_gb.evaluate(&ro).unwrap();
         let vc = mle_gc.evaluate(&ro).unwrap();
         Self::Proof {
             sumcheck_proof,
             nvars,
-            degree: 3,
-            v,
+            r: ro,
             va,
             vb,
             vc,
@@ -88,7 +84,7 @@ impl<R: OverField> Verify<R> for CommittedR1CSProof<R> {
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,
             self.nvars,
-            self.degree,
+            3,
             R::zero(),
             &self.sumcheck_proof,
         )

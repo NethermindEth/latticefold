@@ -3,6 +3,7 @@
 #![allow(non_snake_case)]
 
 mod cm;
+mod decomp;
 mod dopen;
 mod fold;
 mod lin;
