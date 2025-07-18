@@ -24,6 +24,13 @@ use crate::{
 // D_f: decomposed cf(f), Z n x dk
 // M_f: EXP(D_f)
 
+#[derive(Clone, Debug)]
+pub struct DecompParameters {
+    pub b: u128,
+    pub k: usize,
+    pub l: usize,
+}
+
 #[derive(Debug)]
 pub struct Rg<R: PolyRing> {
     pub nvars: usize,
@@ -33,11 +40,7 @@ pub struct Rg<R: PolyRing> {
     pub f: Vec<R>,             // n
     pub comM_f: Vec<Matrix<R>>,
     pub M: Vec<SparseMatrix<R>>, // n_lin matrices, n x n
-
-    // decomposition
-    pub b: u128,
-    pub k: usize,
-    pub l: usize,
+    pub dparams: DecompParameters,
 }
 
 #[derive(Debug)]
@@ -47,7 +50,7 @@ pub struct Dcom<R: PolyRing> {
     pub b: Vec<R>,           // eval over m_tau
     pub c: Vec<R>,           // eval over f
     pub out: Out<R>,         // set checks
-    pub k: usize,
+    pub dparams: DecompParameters,
 }
 
 impl<R: CoeffRing> Rg<R>
@@ -139,7 +142,7 @@ where
             b,
             c,
             out: out_rel,
-            k: self.k,
+            dparams: self.dparams.clone(),
         }
     }
 }
@@ -161,7 +164,7 @@ where
 
         let d = R::dimension();
         let d_prime = d / 2;
-        let u_comb = self.out.e[0].iter().take(self.k).enumerate().fold(
+        let u_comb = self.out.e[0].iter().take(self.dparams.k).enumerate().fold(
             vec![R::zero(); d],
             |mut acc, (i, u_i)| {
                 let d_ppow = R::BaseRing::from(d_prime as u128).pow([i as u64]);
@@ -277,9 +280,7 @@ mod tests {
             m_tau,
             comM_f,
             M: vec![],
-            b,
-            k,
-            l,
+            dparams: DecompParameters { b, k, l },
         };
 
         let mut ts = PoseidonTS::default::<PC>();

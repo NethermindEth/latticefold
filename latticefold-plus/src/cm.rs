@@ -22,7 +22,7 @@ use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtensio
 use thiserror::Error;
 
 use crate::{
-    rgchk::{Dcom, Rg},
+    rgchk::{Dcom, DecompParameters, Rg},
     setchk::{In, MonomialSet, Out},
     utils::{tensor, tensor_product},
 };
@@ -58,7 +58,7 @@ where
         let k = self.rg.comM_f.len();
         let d = R::dimension();
         let dp = R::dimension() / 2;
-        let l = self.rg.l;
+        let l = self.rg.dparams.l;
         let n = self.rg.tau.len();
 
         let dcom = self.rg.range_check(transcript);
@@ -271,16 +271,19 @@ where
 
         (sumcheck_proof, evals)
     }
+}
 
-    pub fn verify(
-        &self,
-        proof: &CmProof<R>,
-        transcript: &mut impl Transcript<R>,
-    ) -> Result<(), SumCheckError<R>> {
-        let k = self.rg.comM_f.len();
+impl<R: CoeffRing> CmProof<R>
+where
+    R::BaseRing: Zq,
+{
+    pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), SumCheckError<R>> {
+        let k = self.dcom.dparams.k;
         let d = R::dimension();
+        let nvars = self.dcom.out.nvars;
+        let M = &self.dcom.out.M;
 
-        proof.dcom.verify(transcript).unwrap();
+        self.dcom.verify(transcript).unwrap();
 
         let s: Vec<R> = transcript
             .get_challenges(3)
@@ -299,7 +302,7 @@ where
             .collect::<Vec<_>>();
         let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
 
-        let kappa = proof.comh.len();
+        let kappa = self.comh.len();
         let log_kappa = log2(kappa) as usize;
 
         let c = (0..2)
@@ -312,7 +315,7 @@ where
             })
             .collect::<Vec<_>>();
 
-        let u: Vec<R> = proof
+        let u: Vec<R> = self
             .dcom
             .out
             .e
@@ -328,17 +331,17 @@ where
 
         let tcch0 = tensor(&c[0])
             .iter()
-            .zip(&proof.comh)
+            .zip(&self.comh)
             .map(|(&t_i, ch_i)| t_i * ch_i)
             .sum::<R>();
         let tcch1 = tensor(&c[1])
             .iter()
-            .zip(&proof.comh)
+            .zip(&self.comh)
             .map(|(&t_i, ch_i)| t_i * ch_i)
             .sum::<R>();
 
         let dp = R::dimension() / 2;
-        let l = self.rg.l;
+        let l = self.dcom.dparams.l;
         let dpp = (0..l)
             .map(|i| R::from(R::BaseRing::from(dp as u128).pow([i as u64])))
             .collect::<Vec<_>>();
@@ -347,39 +350,39 @@ where
         let mut verify_sumcheck = |sumcheck_proof: &Proof<R>, evals: &[[R; 4]]| {
             let rc: R = transcript.get_challenge().into();
 
-            let claimed_sum = R::from(proof.dcom.a[0])
-                + proof.dcom.b[0] * rc
-                + proof.dcom.c[0] * rc.pow([2])
+            let claimed_sum = R::from(self.dcom.a[0])
+                + self.dcom.b[0] * rc
+                + self.dcom.c[0] * rc.pow([2])
                 + u[0] * rc.pow([3])
                 + tcch0 * rc.pow([4])
                 + tcch1 * rc.pow([5])
-                + (0..self.rg.M.len())
+                + (0..M.len())
                     .map(|i| {
-                        R::from(proof.dcom.a[i + 1]) * rc.pow([6 + (i * 4) as u64])
-                            + proof.dcom.b[i + 1] * rc.pow([6 + (i * 4 + 1) as u64])
-                            + proof.dcom.c[i + 1] * rc.pow([6 + (i * 4 + 2) as u64])
+                        R::from(self.dcom.a[i + 1]) * rc.pow([6 + (i * 4) as u64])
+                            + self.dcom.b[i + 1] * rc.pow([6 + (i * 4 + 1) as u64])
+                            + self.dcom.c[i + 1] * rc.pow([6 + (i * 4 + 2) as u64])
                             + u[i + 1] * rc.pow([6 + (i * 4 + 3) as u64])
                     })
                     .sum::<R>();
 
             let subclaim = MLSumcheck::verify_as_subprotocol(
                 transcript,
-                self.rg.nvars,
+                nvars,
                 2,
                 claimed_sum,
                 &sumcheck_proof,
             )
             .unwrap();
 
-            let r: Vec<R> = proof.dcom.out.r.iter().map(|x| R::from(*x)).collect();
+            let r: Vec<R> = self.dcom.out.r.iter().map(|x| R::from(*x)).collect();
             let ro: Vec<R> = subclaim.point.into_iter().map(|x| x.into()).collect();
             let t0 = DenseMultilinearExtension::from_evaluations_vec(
-                self.rg.nvars,
+                nvars,
                 calculate_t_z(&c[0], &s_prime_flat, &dpp, &xp),
             );
             let t0_ro = t0.evaluate(&ro).unwrap();
             let t1 = DenseMultilinearExtension::from_evaluations_vec(
-                self.rg.nvars,
+                nvars,
                 calculate_t_z(&c[1], &s_prime_flat, &dpp, &xp),
             );
             let t1_ro = t1.evaluate(&ro).unwrap();
@@ -390,7 +393,7 @@ where
             assert_eq!(
                 expected_eval,
                 e * (evals[0][0] + rc * evals[0][1] + rc.pow([2]) * evals[0][2] + rc.pow([3]) * evals[0][3] // base
-                    + (0..self.rg.M.len()).map(|i| { // M_i
+                    + (0..M.len()).map(|i| { // M_i
                         let M_evals = evals[i + 1];
                         M_evals[0] * rc.pow([6 + (i * 4) as u64])
                         + M_evals[1] * rc.pow([6 + (i * 4 + 1) as u64])
@@ -402,23 +405,23 @@ where
             );
         };
 
-        verify_sumcheck(&proof.sumcheck_proofs.0, &proof.evals.0);
-        verify_sumcheck(&proof.sumcheck_proofs.1, &proof.evals.1);
+        verify_sumcheck(&self.sumcheck_proofs.0, &self.evals.0);
+        verify_sumcheck(&self.sumcheck_proofs.1, &self.evals.1);
 
         // Step 6
-        let cm_g = proof
+        let cm_g = self
             .C_Mf
             .iter()
-            .zip(&proof.cm_mtau)
-            .zip(&proof.cm_f)
-            .zip(&proof.comh)
+            .zip(&self.cm_mtau)
+            .zip(&self.cm_f)
+            .zip(&self.comh)
             .map(|(((r_Mf, r_mtau), r_f), r_comh)| {
                 s[0] * r_Mf + s[1] * r_mtau + s[2] * r_f + r_comh
             })
             .collect::<Vec<R>>();
 
-        let v0 = once(&proof.evals.0)
-            .chain(once(&proof.evals.1))
+        let v0 = once(&self.evals.0)
+            .chain(once(&self.evals.1))
             .map(|evals| {
                 let evals = evals[0];
                 (s[0] * evals[0]) + (s[1] * evals[1]) + (s[2] * evals[2]) + evals[3]
@@ -548,9 +551,7 @@ mod tests {
             m_tau,
             comM_f,
             M,
-            b,
-            k,
-            l,
+            dparams: DecompParameters { b, k, l },
         };
 
         let cm = Cm {
@@ -564,6 +565,6 @@ mod tests {
         let proof = cm.prove(&mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
-        cm.verify(&proof, &mut ts).unwrap();
+        proof.verify(&mut ts).unwrap();
     }
 }

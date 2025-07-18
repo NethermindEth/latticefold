@@ -32,8 +32,9 @@ pub struct Out<R: PolyRing> {
     pub nvars: usize,
     pub r: Vec<R::BaseRing>, // log n
     pub sumcheck_proof: Proof<R>,
-    pub e: Vec<Vec<Vec<R>>>, // m, matrices outputs
-    pub b: Vec<R>,           // vectors outputs
+    pub e: Vec<Vec<Vec<R>>>,     // m, matrices outputs
+    pub b: Vec<R>,               // vectors outputs
+    pub M: Vec<SparseMatrix<R>>, // n_lin matrices, n x n
 }
 
 #[derive(Debug, Error)]
@@ -247,6 +248,7 @@ impl<R: OverField> In<R> {
             b,
             r,
             sumcheck_proof,
+            M: self.M.clone(),
         }
     }
 }
