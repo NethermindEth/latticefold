@@ -27,24 +27,35 @@ use crate::{
     utils::{tensor, tensor_product},
 };
 
+#[derive(Clone, Debug)]
 pub struct Cm<R: PolyRing> {
     pub rg: Rg<R>,
+    pub coms: Vec<CmComs<R>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CmComs<R> {
     pub cm_f: Vec<R>,
     pub C_Mf: Vec<R>,
     pub cm_mtau: Vec<R>,
 }
 
+// eval over r_o of [tau (a), m_tau (b), f (c), h (u)] over 1 + n_lin
+#[derive(Clone, Debug)]
+pub struct InstanceEvals<R>(Vec<[R; 4]>);
+
+#[derive(Clone, Debug)]
 pub struct CmProof<R: PolyRing> {
     pub dcom: Dcom<R>,
-    pub comh: Vec<R>,
+    pub comh: Vec<Vec<R>>,
     pub sumcheck_proofs: (Proof<R>, Proof<R>),
-    pub evals: (Vec<[R; 4]>, Vec<[R; 4]>), // eval over r0 of [tau (a), m_tau (b), f (c), h (u)],
-    // over 1 + n_lin, for two sumchecks
-    pub cm_f: Vec<R>,
-    pub C_Mf: Vec<R>,
-    pub cm_mtau: Vec<R>,
+    pub evals: (Vec<InstanceEvals<R>>, Vec<InstanceEvals<R>>),
+
+    pub cm_g: Vec<R>,
+    pub cm_coms: Vec<CmComs<R>>,
 }
 
+#[derive(Clone, Debug)]
 pub struct Com<R: PolyRing> {
     pub ro: Vec<R>,
     pub g: Vec<R>,
@@ -55,11 +66,11 @@ where
     R::BaseRing: Zq,
 {
     pub fn prove(&self, transcript: &mut impl Transcript<R>) -> CmProof<R> {
-        let k = self.rg.comM_f.len();
+        let k = self.rg.dparams.k;
         let d = R::dimension();
         let dp = R::dimension() / 2;
         let l = self.rg.dparams.l;
-        let n = self.rg.tau.len();
+        let n = self.rg.instances[0].tau.len();
 
         let dcom = self.rg.range_check(transcript);
 
@@ -80,42 +91,50 @@ where
             .collect::<Vec<_>>();
         let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
 
-        let h: Vec<R> = {
-            let n = 1 << self.rg.nvars;
-            let h_vectors: Vec<Vec<R>> = self
-                .rg
-                .M_f
-                .iter()
-                .zip(s_prime.iter())
-                .map(|(M, s_i)| M.try_mul_vec(s_i).unwrap())
-                .collect();
+        let h: Vec<Vec<R>> = self
+            .rg
+            .instances
+            .iter()
+            .map(|inst| {
+                let n = 1 << self.rg.nvars;
+                let h_vectors: Vec<Vec<R>> = inst
+                    .M_f
+                    .iter()
+                    .zip(s_prime.iter())
+                    .map(|(M, s_i)| M.try_mul_vec(s_i).unwrap())
+                    .collect();
 
-            let mut h = vec![R::zero(); n];
-            for v in h_vectors {
-                for (i, val) in v.iter().enumerate() {
-                    h[i] += *val;
+                let mut h = vec![R::zero(); n];
+                for v in h_vectors {
+                    for (i, val) in v.iter().enumerate() {
+                        h[i] += *val;
+                    }
                 }
-            }
-            h
-        };
+                h
+            })
+            .collect();
 
-        let comh: Vec<R> = {
-            let comh_vectors = self
-                .rg
-                .comM_f
-                .iter()
-                .zip(s_prime.iter())
-                .map(|(comM_f_i, s_i)| comM_f_i.try_mul_vec(s_i).unwrap())
-                .collect::<Vec<_>>();
+        let comh: Vec<Vec<R>> = self
+            .rg
+            .instances
+            .iter()
+            .map(|inst| {
+                let comh_vectors = inst
+                    .comM_f
+                    .iter()
+                    .zip(s_prime.iter())
+                    .map(|(comM_f_i, s_i)| comM_f_i.try_mul_vec(s_i).unwrap())
+                    .collect::<Vec<_>>();
 
-            let mut comh = vec![R::zero(); self.rg.comM_f[0].nrows];
-            for v in comh_vectors {
-                for (i, val) in v.iter().enumerate() {
-                    comh[i] += *val;
+                let mut comh = vec![R::zero(); inst.comM_f[0].nrows];
+                for v in comh_vectors {
+                    for (i, val) in v.iter().enumerate() {
+                        comh[i] += *val;
+                    }
                 }
-            }
-            comh
-        };
+                comh
+            })
+            .collect();
 
         let kappa = comh.len();
         let log_kappa = log2(kappa) as usize;
@@ -149,22 +168,28 @@ where
             panic!("t1 too large!");
         };
 
-        let (proof_a, evals_a) =
-            self.sumchecker(&dcom, &h, &s_prime, (t0.clone(), t1.clone()), transcript);
-        let (proof_b, evals_b) = self.sumchecker(&dcom, &h, &s_prime, (t0, t1), transcript);
+        let (proof_a, evals_a) = self.sumchecker(&dcom, &h, (t0.clone(), t1.clone()), transcript);
+        let (proof_b, evals_b) = self.sumchecker(&dcom, &h, (t0, t1), transcript);
 
         // Step 7
         let cm_g = self
             .rg
-            .tau
+            .instances
             .iter()
-            .zip(&self.rg.m_tau)
-            .zip(&self.rg.f)
-            .zip(&h)
-            .map(|(((r_tau, r_mtau), r_f), r_h)| {
-                (s[0] * R::from(*r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+            .enumerate()
+            .map(|(i, inst)| {
+                inst.tau
+                    .iter()
+                    .zip(&inst.m_tau)
+                    .zip(&inst.f)
+                    .zip(&h[i])
+                    .map(|(((r_tau, r_mtau), r_f), r_h)| {
+                        (s[0] * R::from(*r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                    })
+                    .collect::<Vec<R>>()
             })
-            .collect::<Vec<R>>();
+            .collect::<Vec<_>>();
+        let cm_g = cm_g[0].clone();
 
         CmProof {
             dcom,
@@ -172,77 +197,94 @@ where
             sumcheck_proofs: (proof_a, proof_b),
             evals: (evals_a, evals_b),
 
-            cm_f: self.cm_f.clone(),
-            C_Mf: self.C_Mf.clone(),
-            cm_mtau: self.cm_mtau.clone(),
+            cm_g,
+            cm_coms: self.coms.clone(),
         }
     }
 
     fn sumchecker(
         &self,
         dcom: &Dcom<R>,
-        h: &Vec<R>,
-        s_prime: &Vec<Vec<R>>,
+        h: &[Vec<R>],
         t: (Vec<R>, Vec<R>),
         transcript: &mut impl Transcript<R>,
-    ) -> (Proof<R>, Vec<[R; 4]>) {
+    ) -> (Proof<R>, Vec<InstanceEvals<R>>) {
         let nvars = self.rg.nvars;
         let r: Vec<R> = dcom.out.r.iter().map(|x| R::from(*x)).collect();
 
-        let eq = build_eq_x_r(&r).unwrap();
         let rc: R = transcript.get_challenge().into();
 
-        let rtau = self.rg.tau.iter().map(|z| R::from(*z)).collect::<Vec<_>>();
-        let tau_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, rtau.clone());
-        let m_tau_mle =
-            DenseMultilinearExtension::from_evaluations_vec(nvars, self.rg.m_tau.clone());
-        let f_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, self.rg.f.clone());
-        let h_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, h.clone());
+        let L = self.rg.instances.len();
+
+        let mut mles = Vec::with_capacity(
+            1 // eq
+            + L * (
+                4  // [tau, m_tau, f, h]
+                + 4 * self.rg.M.len() // M * [tau, ...]
+            )
+            + 2, // t(z)
+        );
+        let eq = build_eq_x_r(&r).unwrap();
+        mles.push(eq);
+
+        for (i, inst) in self.rg.instances.iter().enumerate() {
+            let rtau = inst.tau.iter().map(|z| R::from(*z)).collect::<Vec<_>>();
+            let tau_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, rtau.clone());
+            let m_tau_mle =
+                DenseMultilinearExtension::from_evaluations_vec(nvars, inst.m_tau.clone());
+            let f_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, inst.f.clone());
+            let h_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, h[i].clone());
+
+            mles.push(tau_mle);
+            mles.push(m_tau_mle);
+            mles.push(f_mle);
+            mles.push(h_mle);
+
+            for m in &self.rg.M {
+                let Mtau = m.try_mul_vec(&rtau).unwrap();
+                mles.push(DenseMultilinearExtension::from_evaluations_vec(nvars, Mtau));
+
+                let Mm_tau = m.try_mul_vec(&inst.m_tau).unwrap();
+                mles.push(DenseMultilinearExtension::from_evaluations_vec(
+                    nvars, Mm_tau,
+                ));
+
+                let Mf = m.try_mul_vec(&inst.f).unwrap();
+                mles.push(DenseMultilinearExtension::from_evaluations_vec(nvars, Mf));
+
+                let Mh = m.try_mul_vec(&h[i]).unwrap();
+                mles.push(DenseMultilinearExtension::from_evaluations_vec(nvars, Mh));
+            }
+        }
+
         let t0_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, t.0.clone());
         let t1_mle = DenseMultilinearExtension::from_evaluations_vec(nvars, t.1.clone());
-
-        let mut mles = Vec::with_capacity(7 + 4 * self.rg.M.len());
-        mles.push(eq);
-        mles.push(tau_mle);
-        mles.push(m_tau_mle);
-        mles.push(f_mle);
-        mles.push(h_mle);
         mles.push(t0_mle);
         mles.push(t1_mle);
 
-        for m in &self.rg.M {
-            let Mtau = m.try_mul_vec(&rtau).unwrap();
-            mles.push(DenseMultilinearExtension::from_evaluations_vec(nvars, Mtau));
-
-            let Mm_tau = m.try_mul_vec(&self.rg.m_tau).unwrap();
-            mles.push(DenseMultilinearExtension::from_evaluations_vec(
-                nvars, Mm_tau,
-            ));
-
-            let Mf = m.try_mul_vec(&self.rg.f).unwrap();
-            mles.push(DenseMultilinearExtension::from_evaluations_vec(nvars, Mf));
-
-            let Mh = m.try_mul_vec(&h).unwrap();
-            mles.push(DenseMultilinearExtension::from_evaluations_vec(nvars, Mh));
-        }
-
+        let Mlen = self.rg.M.len();
         let comb_fn = |vals: &[R]| -> R {
-            vals[0] // eq
-                * (
-                    vals[1]  // tau
-                    + vals[2] * rc // m_tau
-                    + vals[3] * rc.pow([2]) // f
-                    + vals[4] * rc.pow([3]) // h
-                    + (0..self.rg.M.len()).map(|i| {
-                        let idx = 7 + i * 4;
-                        vals[idx] * rc.pow([6 + (i * 4) as u64]) // M_i * tau
-                        + vals[idx + 1] * rc.pow([6 + (i * 4 + 1) as u64]) // M_i * m_tau
-                        + vals[idx + 2] * rc.pow([6 + (i * 4 + 2) as u64]) // M_i * f
-                        + vals[idx + 3] * rc.pow([6 + (i * 4 + 3) as u64]) // M_i * h
+            (0..L)
+                .map(|l| {
+                    let l_idx = 1 + l * (4 + 4 * Mlen);
+                    vals[0] * ( // eq
+                    vals[l_idx] * rc.pow([l_idx as u64 - 1])  // tau
+                    + vals[l_idx + 1] * rc.pow([l_idx as u64]) // m_tau
+                    + vals[l_idx + 2] * rc.pow([l_idx as u64 + 1]) // f
+                    + vals[l_idx + 3] * rc.pow([l_idx as u64 + 2]) // h
+                    + (0..Mlen).map(|i| {
+                        let idx = l_idx + 4 + i * 4;
+                        vals[idx] * rc.pow([idx as u64 - 1]) // M_i * tau
+                        + vals[idx + 1] * rc.pow([idx as u64]) // M_i * m_tau
+                        + vals[idx + 2] * rc.pow([idx as u64 + 1]) // M_i * f
+                        + vals[idx + 3] * rc.pow([idx as u64 + 2]) // M_i * h
                      }).sum::<R>()
                 )
-             + (vals[1] * vals[5]) * rc.pow([4]) // t(0)
-             + (vals[1] * vals[6]) * rc.pow([5]) // t(1)
+            + (vals[l_idx] * vals[vals.len()-2]) * rc.pow([vals.len() as u64 - 3]) // t(0)
+            + (vals[l_idx] * vals[vals.len()-1]) * rc.pow([vals.len() as u64 - 2])
+                    // t(1)
+                })
+                .sum::<R>()
         };
 
         let (sumcheck_proof, prover_state) =
@@ -253,21 +295,28 @@ where
             .map(|x| x.into())
             .collect::<Vec<R>>();
 
-        let mut evals = Vec::with_capacity(1 + self.rg.M.len());
-        evals.push([
-            mles[1].evaluate(&ro).unwrap(),
-            mles[2].evaluate(&ro).unwrap(),
-            mles[3].evaluate(&ro).unwrap(),
-            mles[4].evaluate(&ro).unwrap(),
-        ]);
-        for i in 0..self.rg.M.len() {
-            evals.push([
-                mles[7 + i * 4].evaluate(&ro).unwrap(),
-                mles[7 + 1 + i * 4].evaluate(&ro).unwrap(),
-                mles[7 + 2 + i * 4].evaluate(&ro).unwrap(),
-                mles[7 + 3 + i * 4].evaluate(&ro).unwrap(),
-            ]);
-        }
+        let evals = (0..L)
+            .map(|l| {
+                let mut e = Vec::with_capacity(1 + Mlen);
+                let l_idx = 1 + l * (4 + 4 * Mlen);
+                e.push([
+                    mles[l_idx].evaluate(&ro).unwrap(),
+                    mles[l_idx + 1].evaluate(&ro).unwrap(),
+                    mles[l_idx + 2].evaluate(&ro).unwrap(),
+                    mles[l_idx + 3].evaluate(&ro).unwrap(),
+                ]);
+                for i in 0..Mlen {
+                    let idx = l_idx + 4 + i * 4;
+                    e.push([
+                        mles[idx].evaluate(&ro).unwrap(),
+                        mles[idx + 1].evaluate(&ro).unwrap(),
+                        mles[idx + 2].evaluate(&ro).unwrap(),
+                        mles[idx + 3].evaluate(&ro).unwrap(),
+                    ]);
+                }
+                InstanceEvals(e)
+            })
+            .collect::<Vec<_>>();
 
         (sumcheck_proof, evals)
     }
@@ -282,6 +331,7 @@ where
         let d = R::dimension();
         let nvars = self.dcom.out.nvars;
         let M = &self.dcom.out.M;
+        let L = self.evals.0.len();
 
         self.dcom.verify(transcript).unwrap();
 
@@ -315,30 +365,49 @@ where
             })
             .collect::<Vec<_>>();
 
-        let u: Vec<R> = self
-            .dcom
-            .out
-            .e
-            .iter()
-            .map(|e_i| {
-                e_i.iter()
-                    .flatten()
-                    .zip(s_prime.iter().flatten())
-                    .map(|(u_ij, s_ij)| *u_ij * *s_ij)
-                    .sum()
+        let u: Vec<Vec<R>> = (0..L)
+            .map(|l| {
+                self.dcom
+                    .out
+                    .e
+                    .iter()
+                    .map(|e_i| {
+                        e_i.iter()
+                            .skip(l * k)
+                            .take(k)
+                            .flatten()
+                            .zip(s_prime_flat.iter())
+                            .map(|(u_ij, s_ij)| *u_ij * *s_ij)
+                            .sum()
+                    })
+                    .collect::<Vec<R>>()
             })
             .collect();
 
-        let tcch0 = tensor(&c[0])
+        let tensor_c0 = tensor(&c[0]);
+        let tensor_c1 = tensor(&c[1]);
+        let tcch0 = self
+            .comh
             .iter()
-            .zip(&self.comh)
-            .map(|(&t_i, ch_i)| t_i * ch_i)
-            .sum::<R>();
-        let tcch1 = tensor(&c[1])
+            .map(|com| {
+                tensor_c0
+                    .iter()
+                    .zip(com)
+                    .map(|(&t_i, ch_i)| t_i * ch_i)
+                    .sum::<R>()
+            })
+            .collect::<Vec<R>>();
+        let tcch1 = self
+            .comh
             .iter()
-            .zip(&self.comh)
-            .map(|(&t_i, ch_i)| t_i * ch_i)
-            .sum::<R>();
+            .map(|com| {
+                tensor_c1
+                    .iter()
+                    .zip(com)
+                    .map(|(&t_i, ch_i)| t_i * ch_i)
+                    .sum::<R>()
+            })
+            .collect::<Vec<R>>();
 
         let dp = R::dimension() / 2;
         let l = self.dcom.dparams.l;
@@ -347,23 +416,36 @@ where
             .collect::<Vec<_>>();
         let xp = (0..d).map(|i| unit_monomial::<R>(i)).collect::<Vec<_>>();
 
-        let mut verify_sumcheck = |sumcheck_proof: &Proof<R>, evals: &[[R; 4]]| {
+        let mut verify_sumcheck = |sumcheck_proof: &Proof<R>, evals: &[InstanceEvals<R>]| {
             let rc: R = transcript.get_challenge().into();
 
-            let claimed_sum = R::from(self.dcom.a[0])
-                + self.dcom.b[0] * rc
-                + self.dcom.c[0] * rc.pow([2])
-                + u[0] * rc.pow([3])
-                + tcch0 * rc.pow([4])
-                + tcch1 * rc.pow([5])
-                + (0..M.len())
-                    .map(|i| {
-                        R::from(self.dcom.a[i + 1]) * rc.pow([6 + (i * 4) as u64])
-                            + self.dcom.b[i + 1] * rc.pow([6 + (i * 4 + 1) as u64])
-                            + self.dcom.c[i + 1] * rc.pow([6 + (i * 4 + 2) as u64])
-                            + u[i + 1] * rc.pow([6 + (i * 4 + 3) as u64])
-                    })
-                    .sum::<R>();
+            let z_idx = L * (4 + 4 * M.len());
+
+            let claimed_sum = self
+                .dcom
+                .evals
+                .iter()
+                .enumerate()
+                .map(|(l, eval)| {
+                    let l_idx = l * (4 + 4 * M.len());
+
+                    R::from(eval.a[0]) * rc.pow([l_idx as u64])
+                        + eval.b[0] * rc.pow([l_idx as u64 + 1])
+                        + eval.c[0] * rc.pow([l_idx as u64 + 2])
+                        + u[l][0] * rc.pow([l_idx as u64 + 3])
+                        + (0..M.len())
+                            .map(|i| {
+                                let idx = l_idx + 4 + i * 4;
+                                R::from(eval.a[1 + i]) * rc.pow([idx as u64])
+                                    + eval.b[1 + i] * rc.pow([idx as u64 + 1])
+                                    + eval.c[1 + i] * rc.pow([idx as u64 + 2])
+                                    + u[l][1 + i] * rc.pow([idx as u64 + 3])
+                            })
+                            .sum::<R>()
+                        + tcch0[l] * rc.pow([z_idx as u64])
+                        + tcch1[l] * rc.pow([z_idx as u64 + 1])
+                })
+                .sum::<R>();
 
             let subclaim = MLSumcheck::verify_as_subprotocol(
                 transcript,
@@ -388,45 +470,59 @@ where
             let t1_ro = t1.evaluate(&ro).unwrap();
 
             let expected_eval = subclaim.expected_evaluation;
-            let e = eq_eval(&r, &ro).unwrap();
+            let eq = eq_eval(&r, &ro).unwrap();
 
-            assert_eq!(
-                expected_eval,
-                e * (evals[0][0] + rc * evals[0][1] + rc.pow([2]) * evals[0][2] + rc.pow([3]) * evals[0][3] // base
-                    + (0..M.len()).map(|i| { // M_i
-                        let M_evals = evals[i + 1];
-                        M_evals[0] * rc.pow([6 + (i * 4) as u64])
-                        + M_evals[1] * rc.pow([6 + (i * 4 + 1) as u64])
-                        + M_evals[2] * rc.pow([6 + (i * 4 + 2) as u64])
-                        + M_evals[3] * rc.pow([6 + (i * 4 + 3) as u64])
-                    }).sum::<R>())
-                    + rc.pow([4]) * (t0_ro * evals[0][0])
-                    + rc.pow([5]) * (t1_ro * evals[0][0])
-            );
+            let eval = evals
+                .iter()
+                .enumerate()
+                .map(|(l, el)| {
+                    let el = &el.0;
+                    let l_idx = l * (4 + 4 * M.len());
+                    eq * (el[0][0] * rc.pow([l_idx as u64])
+                        + el[0][1] * rc.pow([l_idx as u64 + 1])
+                        + el[0][2] * rc.pow([l_idx as u64 + 2])
+                        + el[0][3] * rc.pow([l_idx as u64 + 3])
+                        + (0..M.len())
+                            .map(|i| {
+                                // M_i
+                                let M_evals = el[i + 1];
+                                let idx = l_idx + 4 + i * 4;
+                                M_evals[0] * rc.pow([idx as u64])
+                                    + M_evals[1] * rc.pow([idx as u64 + 1])
+                                    + M_evals[2] * rc.pow([idx as u64 + 2])
+                                    + M_evals[3] * rc.pow([idx as u64 + 3])
+                            })
+                            .sum::<R>())
+                        + (t0_ro * el[0][0]) * rc.pow([z_idx as u64])
+                        + (t1_ro * el[0][0]) * rc.pow([z_idx as u64 + 1])
+                })
+                .sum::<R>();
+
+            assert_eq!(expected_eval, eval);
         };
 
         verify_sumcheck(&self.sumcheck_proofs.0, &self.evals.0);
         verify_sumcheck(&self.sumcheck_proofs.1, &self.evals.1);
 
         // Step 6
-        let cm_g = self
-            .C_Mf
-            .iter()
-            .zip(&self.cm_mtau)
-            .zip(&self.cm_f)
-            .zip(&self.comh)
-            .map(|(((r_Mf, r_mtau), r_f), r_comh)| {
-                s[0] * r_Mf + s[1] * r_mtau + s[2] * r_f + r_comh
-            })
-            .collect::<Vec<R>>();
+        //let cm_g = self
+        //    .C_Mf
+        //    .iter()
+        //    .zip(&self.cm_mtau)
+        //    .zip(&self.cm_f)
+        //    .zip(&self.comh)
+        //    .map(|(((r_Mf, r_mtau), r_f), r_comh)| {
+        //        s[0] * r_Mf + s[1] * r_mtau + s[2] * r_f + r_comh
+        //    })
+        //    .collect::<Vec<R>>();
 
-        let v0 = once(&self.evals.0)
-            .chain(once(&self.evals.1))
-            .map(|evals| {
-                let evals = evals[0];
-                (s[0] * evals[0]) + (s[1] * evals[1]) + (s[2] * evals[2]) + evals[3]
-            })
-            .collect::<Vec<R>>();
+        //let v0 = once(&self.evals.0)
+        //    .chain(once(&self.evals.1))
+        //    .map(|evals| {
+        //        let evals = evals[0];
+        //        (s[0] * evals[0]) + (s[1] * evals[1]) + (s[2] * evals[2]) + evals[3]
+        //    })
+        //    .collect::<Vec<R>>();
 
         Ok(())
     }
@@ -458,7 +554,7 @@ mod tests {
     use stark_rings_linalg::SparseMatrix;
 
     use super::*;
-    use crate::utils::split;
+    use crate::{rgchk::RgInstance, utils::split};
 
     #[test]
     fn test_com() {
@@ -545,20 +641,24 @@ mod tests {
 
         let rg = Rg {
             nvars: log2(n) as usize,
-            M_f,
-            f,
-            tau,
-            m_tau,
-            comM_f,
+            instances: vec![RgInstance {
+                M_f,
+                f,
+                tau,
+                m_tau,
+                comM_f,
+            }],
             M,
             dparams: DecompParameters { b, k, l },
         };
 
         let cm = Cm {
             rg,
-            cm_f,
-            C_Mf,
-            cm_mtau,
+            coms: vec![CmComs {
+                cm_f,
+                C_Mf,
+                cm_mtau,
+            }],
         };
 
         let mut ts = PoseidonTS::default::<PC>();

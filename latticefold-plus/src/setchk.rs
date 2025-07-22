@@ -14,20 +14,20 @@ use thiserror::Error;
 // cM: double commitment, commitment to M
 // M: witness matrix of monomials
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum MonomialSet<R> {
     Matrix(SparseMatrix<R>),
     Vector(Vec<R>),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct In<R> {
     pub nvars: usize,
     pub sets: Vec<MonomialSet<R>>, // Ms and ms: n x m, or n
     pub M: Vec<SparseMatrix<R>>,   // n_lin matrices, n x n
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Out<R: PolyRing> {
     pub nvars: usize,
     pub r: Vec<R::BaseRing>, // log n
@@ -142,8 +142,8 @@ impl<R: OverField> In<R> {
             let eq = build_eq_x_r(&c).unwrap();
             mles.push(eq);
 
-            let _alpha: R = transcript.get_challenge().into();
-            alphas.push(R::one());
+            let alpha: R = transcript.get_challenge().into();
+            alphas.push(alpha);
         }
 
         // random linear combinator, for batching
@@ -167,13 +167,14 @@ impl<R: OverField> In<R> {
                 };
             }
             for i in 0..ms.len() {
-                let s = Ms.len() * (2 * ncols + 1);
+                let s_base = Ms.len() * (2 * ncols + 1);
+                let s = s_base + i * 3;
                 let mut res = R::zero();
-                res +=
-                    alphas[Ms.len() + i].pow([Ms.len() as u64]) * (vals[s] * vals[s] - vals[s + 1]);
+                let alpha_idx = Ms.len() + i;
+                res += alphas[alpha_idx] * (vals[s] * vals[s] - vals[s + 1]);
                 res *= vals[s + 2]; // eq
                 lc += if let Some(rc) = &rc {
-                    res * rc.pow([(Ms.len() + i) as u64])
+                    res * rc.pow([alpha_idx as u64])
                 } else {
                     return res;
                 };
@@ -221,7 +222,6 @@ impl<R: OverField> In<R> {
                                     drow[i] = r;
                                 });
                                 let evals = M.try_mul_vec(&drow).unwrap();
-                                //let evals: Vec<(usize, R)> = row.iter().map(|&(r, i)| (i, r)).collect();
                                 let mle =
                                     DenseMultilinearExtension::from_evaluations_vec(tnvars, evals);
                                 mle.evaluate(&r_poly).unwrap()
@@ -311,10 +311,11 @@ impl<R: OverField> Out<R> {
             let eq = eq_eval(&c, &r).unwrap();
             let b_claim = {
                 let ev1 = R::from(ev(b, *beta));
-                let ev2 = R::from(ev(b, *beta * beta));
+                let ev2 = R::from(ev(b, *beta * *beta));
                 ev1 * ev1 - ev2
             };
             ver += eq
+                * *alpha
                 * b_claim
                 * rc.as_ref()
                     .unwrap_or(&R::BaseRing::one())

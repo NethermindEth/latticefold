@@ -31,26 +31,36 @@ pub struct DecompParameters {
     pub l: usize,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Rg<R: PolyRing> {
     pub nvars: usize,
+    pub instances: Vec<RgInstance<R>>, // L instances
+    pub M: Vec<SparseMatrix<R>>,       // n_lin matrices, n x n
+    pub dparams: DecompParameters,
+}
+
+#[derive(Clone, Debug)]
+pub struct RgInstance<R: PolyRing> {
     pub M_f: Vec<Matrix<R>>,   // n x d, k matrices, monomials
     pub tau: Vec<R::BaseRing>, // n
     pub m_tau: Vec<R>,         // n, monomials
     pub f: Vec<R>,             // n
     pub comM_f: Vec<Matrix<R>>,
-    pub M: Vec<SparseMatrix<R>>, // n_lin matrices, n x n
+}
+
+#[derive(Clone, Debug)]
+pub struct Dcom<R: PolyRing> {
+    pub evals: Vec<DcomEvals<R>>, // L evals
+    pub out: Out<R>,              // set checks
     pub dparams: DecompParameters,
 }
 
-#[derive(Debug)]
-pub struct Dcom<R: PolyRing> {
+#[derive(Clone, Debug)]
+pub struct DcomEvals<R: PolyRing> {
     pub v: Vec<R::BaseRing>, // eval over M_f
     pub a: Vec<R::BaseRing>, // eval over tau
     pub b: Vec<R>,           // eval over m_tau
     pub c: Vec<R>,           // eval over f
-    pub out: Out<R>,         // set checks
-    pub dparams: DecompParameters,
 }
 
 impl<R: CoeffRing> Rg<R>
@@ -58,13 +68,18 @@ where
     R::BaseRing: Zq,
 {
     /// Range checks
+    ///
+    /// Support for `L` [`RgInstance`]s mapped to the corresponding [`DcomEvals`].
     pub fn range_check(&self, transcript: &mut impl Transcript<R>) -> Dcom<R> {
-        let sets = self
-            .M_f
-            .iter()
-            .map(|m| MonomialSet::Matrix(SparseMatrix::<R>::from_dense(m)))
-            .chain(once(MonomialSet::Vector(self.m_tau.clone())))
-            .collect::<Vec<_>>();
+        let mut sets = Vec::with_capacity(self.instances.len() * (self.instances[0].M_f.len() + 1));
+        for inst in &self.instances {
+            inst.M_f.iter().for_each(|m| {
+                sets.push(MonomialSet::Matrix(SparseMatrix::<R>::from_dense(m)));
+            });
+        }
+        for inst in &self.instances {
+            sets.push(MonomialSet::Vector(inst.m_tau.clone()));
+        }
 
         let in_rel = In {
             sets,
@@ -73,74 +88,82 @@ where
         };
         let out_rel = in_rel.set_check(transcript);
 
-        let cfs = self
-            .f
+        let evals = self
+            .instances
             .iter()
-            .map(|r| r.coeffs().to_vec())
-            .collect::<Vec<_>>()
-            .transpose();
-        let v = cfs
-            .into_iter()
-            .map(|evals| {
-                let mle = DenseMultilinearExtension::from_evaluations_vec(self.nvars, evals);
-                mle.evaluate(&out_rel.r).unwrap()
+            .enumerate()
+            .map(|(l, inst)| {
+                let cfs = inst
+                    .f
+                    .iter()
+                    .map(|r| r.coeffs().to_vec())
+                    .collect::<Vec<_>>()
+                    .transpose();
+                let v = cfs
+                    .into_iter()
+                    .map(|evals| {
+                        let mle =
+                            DenseMultilinearExtension::from_evaluations_vec(self.nvars, evals);
+                        mle.evaluate(&out_rel.r).unwrap()
+                    })
+                    .collect::<Vec<_>>();
+
+                // TODO v is equal to c[0]
+
+                let r = out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>();
+
+                let mut a = Vec::with_capacity(1 + self.M.len());
+                let mut b = Vec::with_capacity(1 + self.M.len());
+                // Let `c` be the evaluation of `f` over r
+                let mut c = Vec::with_capacity(1 + self.M.len());
+
+                a.push(
+                    DenseMultilinearExtension::from_evaluations_vec(self.nvars, inst.tau.clone())
+                        .evaluate(&out_rel.r)
+                        .unwrap(),
+                );
+
+                b.push(out_rel.b[l]);
+
+                c.push(
+                    DenseMultilinearExtension::from_evaluations_vec(self.nvars, inst.f.clone())
+                        .evaluate(&out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>())
+                        .unwrap(),
+                );
+
+                self.M.iter().for_each(|m| {
+                    let Mtau = m
+                        .try_mul_vec(&inst.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
+                        .unwrap();
+                    a.push(
+                        DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mtau)
+                            .evaluate(&r)
+                            .unwrap()
+                            .ct(),
+                    );
+
+                    let Mm_tau = m
+                        .try_mul_vec(&inst.m_tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
+                        .unwrap();
+                    b.push(
+                        DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mm_tau)
+                            .evaluate(&r)
+                            .unwrap(),
+                    );
+
+                    let Mf = m.try_mul_vec(&inst.f).unwrap();
+                    c.push(
+                        DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mf)
+                            .evaluate(&r)
+                            .unwrap(),
+                    );
+                });
+                DcomEvals { v, a, b, c }
             })
             .collect::<Vec<_>>();
 
-        let r = out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>();
-
-        let mut a = Vec::with_capacity(1 + self.M.len());
-        let mut b = Vec::with_capacity(1 + self.M.len());
-        // Let `c` be the evaluation of `f` over r
-        let mut c = Vec::with_capacity(1 + self.M.len());
-
-        a.push(
-            DenseMultilinearExtension::from_evaluations_vec(self.nvars, self.tau.clone())
-                .evaluate(&out_rel.r)
-                .unwrap(),
-        );
-
-        b.push(out_rel.b[0]);
-
-        c.push(
-            DenseMultilinearExtension::from_evaluations_vec(self.nvars, self.f.clone())
-                .evaluate(&out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>())
-                .unwrap(),
-        );
-
-        self.M.iter().for_each(|m| {
-            let Mtau = m
-                .try_mul_vec(&self.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-                .unwrap();
-            a.push(
-                DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mtau)
-                    .evaluate(&r)
-                    .unwrap()
-                    .ct(),
-            );
-
-            let Mm_tau = m
-                .try_mul_vec(&self.m_tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-                .unwrap();
-            b.push(
-                DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mm_tau)
-                    .evaluate(&r)
-                    .unwrap(),
-            );
-
-            let Mf = m.try_mul_vec(&self.f).unwrap();
-            c.push(
-                DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mf)
-                    .evaluate(&r)
-                    .unwrap(),
-            );
-        });
-
         Dcom {
-            v,
-            a,
-            b,
-            c,
+            evals,
             out: out_rel,
             dparams: self.dparams.clone(),
         }
@@ -154,36 +177,134 @@ where
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), ()> {
         self.out.verify(transcript).unwrap(); //.map_err(|_| ())?;
 
-        // ct(psi b) =? a
-        for (&a_i, b_i) in self.a.iter().zip(self.b.iter()) {
-            ((psi::<R>() * b_i).ct() == a_i)
-                .then(|| ())
-                .ok_or(())
-                .unwrap();
+        for (l, eval) in self.evals.iter().enumerate() {
+            // ct(psi b) =? a
+            for (&a_i, b_i) in eval.a.iter().zip(eval.b.iter()) {
+                ((psi::<R>() * b_i).ct() == a_i)
+                    .then(|| ())
+                    .ok_or(())
+                    .unwrap();
+            }
+
+            let d = R::dimension();
+            let d_prime = d / 2;
+            for (ni, _) in self.out.e.iter().enumerate() {
+                let u_comb = self.out.e[ni]
+                    .iter()
+                    .skip(self.dparams.k * l)
+                    .take(self.dparams.k)
+                    .enumerate()
+                    .fold(vec![R::zero(); d], |mut acc, (i, u_i)| {
+                        let d_ppow = R::BaseRing::from(d_prime as u128).pow([i as u64]);
+                        u_i.iter()
+                            .zip(acc.iter_mut())
+                            .for_each(|(u_ij, a_j)| *a_j += *u_ij * d_ppow);
+                        acc
+                    });
+
+                // ct(psi (sum d^i u_i)) =? v
+                let v_rec = u_comb
+                    .iter()
+                    .map(|uc| (psi::<R>() * R::from(*uc)).ct())
+                    .collect::<Vec<_>>();
+
+                if ni == 0 {
+                    (eval.v == v_rec).then(|| ()).ok_or(()).unwrap();
+                } else {
+                    (eval.c[ni].coeffs() == v_rec)
+                        .then(|| ())
+                        .ok_or(())
+                        .unwrap();
+                }
+            }
         }
 
-        let d = R::dimension();
-        let d_prime = d / 2;
-        let u_comb = self.out.e[0].iter().take(self.dparams.k).enumerate().fold(
-            vec![R::zero(); d],
-            |mut acc, (i, u_i)| {
-                let d_ppow = R::BaseRing::from(d_prime as u128).pow([i as u64]);
-                u_i.iter()
-                    .zip(acc.iter_mut())
-                    .for_each(|(u_ij, a_j)| *a_j += *u_ij * d_ppow);
-                acc
-            },
-        );
+        Ok(())
+    }
+}
 
-        // ct(psi (sum d^i u_i)) =? v
-        let v_rec = u_comb
+impl<R: PolyRing> RgInstance<R> {
+    /// Construct monomial sets from `M_f` and `m_tau`
+    pub fn sets(&self) -> Vec<MonomialSet<R>> {
+        self.M_f
             .iter()
-            .map(|uc| (psi::<R>() * uc).ct())
+            .map(|m| MonomialSet::Matrix(SparseMatrix::<R>::from_dense(m)))
+            .chain(once(MonomialSet::Vector(self.m_tau.clone())))
+            .collect()
+    }
+}
+
+impl<R: CoeffRing> RgInstance<R>
+where
+    R::BaseRing: Decompose + Zq,
+    R: Decompose,
+{
+    pub fn from_f(f: Vec<R>, A: &Matrix<R>, decomp: &DecompParameters) -> Self {
+        let n = f.len();
+
+        let cfs: Matrix<_> = f
+            .iter()
+            .map(|r| r.coeffs().to_vec())
+            .collect::<Vec<Vec<_>>>()
+            .into();
+        let dec = cfs
+            .vals
+            .iter()
+            .map(|row| row.decompose_to_vec(decomp.b, decomp.k))
             .collect::<Vec<_>>();
 
-        (self.v == v_rec).then(|| ()).ok_or(())?;
+        let mut D_f = vec![Matrix::zero(n, R::dimension()); decomp.k];
 
-        Ok(())
+        // map dec: (Z n x d x k) to D_f: (Z n x d, k matrices)
+        dec.iter().enumerate().for_each(|(n_i, drow)| {
+            drow.iter().enumerate().for_each(|(d_i, coeffs)| {
+                coeffs.iter().enumerate().for_each(|(k_i, coeff)| {
+                    D_f[k_i].vals[n_i][d_i] = *coeff;
+                });
+            });
+        });
+
+        let M_f: Vec<Matrix<R>> = D_f
+            .iter()
+            .map(|m| {
+                m.vals
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .map(|c| exp::<R>(*c).unwrap())
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+                    .into()
+            })
+            .collect::<Vec<_>>();
+
+        let comM_f = M_f
+            .iter()
+            .map(|M| A.try_mul_mat(M).unwrap())
+            .collect::<Vec<_>>();
+        let com = Matrix::hconcat(&comM_f).unwrap();
+
+        let tau = split(&com, n, (R::dimension() / 2) as u128, decomp.l);
+
+        let m_tau = tau
+            .iter()
+            .map(|c| exp::<R>(*c).unwrap())
+            .collect::<Vec<_>>();
+
+        let cm_f = A.try_mul_vec(&f).unwrap();
+        let C_Mf = A
+            .try_mul_vec(&tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
+            .unwrap();
+        let cm_mtau = A.try_mul_vec(&m_tau).unwrap();
+
+        Self {
+            M_f,
+            tau,
+            m_tau,
+            f,
+            comM_f,
+        }
     }
 }
 
@@ -220,67 +341,60 @@ mod tests {
             / ((R::dimension() / 2) as f64).ln())
         .ceil() as usize;
 
-        let cfs: Matrix<_> = f
-            .iter()
-            .map(|r| r.coeffs().to_vec())
-            .collect::<Vec<Vec<_>>>()
-            .into();
-        let dec = cfs
-            .vals
-            .iter()
-            .map(|row| row.decompose_to_vec(b, k as usize))
-            .collect::<Vec<_>>();
-
-        let mut D_f = vec![Matrix::zero(n, R::dimension()); k as usize];
-
-        // map dec: (Z n x d x k) to D_f: (Z n x d, k matrices)
-        dec.iter().enumerate().for_each(|(n_i, drow)| {
-            drow.iter().enumerate().for_each(|(d_i, coeffs)| {
-                coeffs.iter().enumerate().for_each(|(k_i, coeff)| {
-                    D_f[k_i].vals[n_i][d_i] = *coeff;
-                });
-            });
-        });
-
-        let M_f: Vec<Matrix<R>> = D_f
-            .iter()
-            .map(|m| {
-                m.vals
-                    .iter()
-                    .map(|row| {
-                        row.iter()
-                            .map(|c| exp::<R>(*c).unwrap())
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>()
-                    .into()
-            })
-            .collect::<Vec<_>>();
-
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
 
-        let comM_f = M_f
-            .iter()
-            .map(|M| A.try_mul_mat(M).unwrap())
-            .collect::<Vec<_>>();
-        let com = Matrix::hconcat(&comM_f).unwrap();
-
-        let tau = split(&com, n, (R::dimension() / 2) as u128, l);
-
-        let m_tau = tau
-            .iter()
-            .map(|c| exp::<R>(*c).unwrap())
-            .collect::<Vec<_>>();
+        let dparams = DecompParameters { b, k, l };
+        let instance = RgInstance::from_f(f.clone(), &A, &dparams);
 
         let rg = Rg {
             nvars: log2(n) as usize,
-            M_f,
-            f,
-            tau,
-            m_tau,
-            comM_f,
+            instances: vec![instance],
             M: vec![],
-            dparams: DecompParameters { b, k, l },
+            dparams,
+        };
+
+        let mut ts = PoseidonTS::default::<PC>();
+        let dcom = rg.range_check(&mut ts);
+
+        let mut ts = PoseidonTS::default::<PC>();
+        dcom.verify(&mut ts).unwrap();
+    }
+
+    #[test]
+    fn test_range_check_mm() {
+        // f: [
+        // 2 + 5X
+        // 4 + X^2
+        // ]
+        let n = 1 << 15;
+        let mut f = vec![R::zero(); n];
+        f[0].coeffs_mut()[0] = 2u128.into();
+        f[0].coeffs_mut()[1] = 5u128.into();
+        f[1].coeffs_mut()[0] = 4u128.into();
+        f[1].coeffs_mut()[2] = 1u128.into();
+
+        let mut m = SparseMatrix::identity(n);
+        m.coeffs[0][0].0 = 2u128.into();
+        let M = vec![m];
+
+        let kappa = 1;
+        let b = (R::dimension() / 2) as u128;
+        let k = 2;
+        // log_d' (q)
+        let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
+            / ((R::dimension() / 2) as f64).ln())
+        .ceil() as usize;
+
+        let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
+
+        let dparams = DecompParameters { b, k, l };
+        let instance = RgInstance::from_f(f.clone(), &A, &dparams);
+
+        let rg = Rg {
+            nvars: log2(n) as usize,
+            instances: vec![instance],
+            M,
+            dparams,
         };
 
         let mut ts = PoseidonTS::default::<PC>();
