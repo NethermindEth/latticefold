@@ -82,7 +82,8 @@ where
             }],
         };
 
-        cm.prove(transcript)
+        let (_com, proof) = cm.prove(transcript);
+        proof
     }
 }
 

@@ -28,10 +28,24 @@ use crate::{
     utils::{tensor, tensor_product},
 };
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Mlin<R> {
     pub lins: Vec<Lin<R>>,
+    pub A: Matrix<R>,
     pub params: Parameters,
+}
+
+#[derive(Clone, Debug)]
+pub struct LinB2X<R> {
+    pub cm_g: Vec<R>,
+    pub ro: Vec<(R, R)>,
+    pub vo: Vec<(R, R)>,
+}
+
+#[derive(Clone, Debug)]
+pub struct LinB2<R> {
+    pub g: Vec<R>,
+    pub x: LinB2X<R>,
 }
 
 impl<R: CoeffRing> Mlin<R>
@@ -40,25 +54,24 @@ where
     R: Decompose,
 {
     /// Πmlin protocol
-    pub fn mlin(&self, transcript: &mut impl Transcript<R>) -> CmProof<R> {
+    pub fn mlin(&self, transcript: &mut impl Transcript<R>) -> (LinB2<R>, CmProof<R>) {
         let n = self.lins[0].f.len();
-
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), self.params.kappa, n);
 
         let instances = self
             .lins
             .iter()
-            .map(|lin| RgInstance::from_f(lin.f.clone(), &A, &self.params.decomp))
+            .map(|lin| RgInstance::from_f(lin.f.clone(), &self.A, &self.params.decomp))
             .collect::<Vec<_>>();
 
         let coms = instances
             .iter()
             .map(|inst| {
-                let cm_f = A.try_mul_vec(&inst.f).unwrap();
-                let C_Mf = A
+                let cm_f = self.A.try_mul_vec(&inst.f).unwrap();
+                let C_Mf = self
+                    .A
                     .try_mul_vec(&inst.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
                     .unwrap();
-                let cm_mtau = A.try_mul_vec(&inst.m_tau).unwrap();
+                let cm_mtau = self.A.try_mul_vec(&inst.m_tau).unwrap();
 
                 CmComs {
                     cm_f,
@@ -77,7 +90,47 @@ where
 
         let cm = Cm { rg, coms };
 
-        cm.prove(transcript)
+        let (com, proof) = cm.prove(transcript);
+
+        let cm_g = com
+            .x
+            .cm_g
+            .iter()
+            .fold(vec![R::zero(); self.params.kappa], |mut acc, cm| {
+                acc.iter_mut().zip(cm.iter()).for_each(|(acc_r, cm_r)| {
+                    *acc_r += cm_r;
+                });
+                acc
+            });
+
+        let nlin = com.x.vo[0].len();
+        let vo = com
+            .x
+            .vo
+            .iter()
+            .fold(vec![(R::zero(), R::zero()); nlin], |mut acc, v| {
+                v.iter().enumerate().for_each(|(i, v)| {
+                    acc[i].0 += v.0;
+                    acc[i].1 += v.1;
+                });
+                acc
+            });
+
+        let x = LinB2X {
+            cm_g,
+            ro: com.x.ro,
+            vo,
+        };
+
+        let g = com.g.iter().fold(vec![R::zero(); n], |mut acc, gi| {
+            acc.iter_mut().zip(gi.iter()).for_each(|(acc_r, gi_r)| {
+                *acc_r += gi_r;
+            });
+            acc
+        });
+        let linb2 = LinB2 { g, x };
+
+        (linb2, proof)
     }
 }
 
@@ -103,25 +156,30 @@ mod tests {
     #[test]
     fn test_mlin() {
         let n = 1 << 15;
-        let z = vec![R::one(); n];
+        let k = 2;
+        let z0 = vec![R::one(); n / k];
+        let mut z1 = vec![R::one(); n / k];
+        z1[0] = R::from(0u128);
 
         let mut r1cs = R1CS::<R> {
             l: 1,
-            A: SparseMatrix::identity(n),
-            B: SparseMatrix::identity(n),
-            C: SparseMatrix::identity(n),
+            A: SparseMatrix::identity(n / k),
+            B: SparseMatrix::identity(n / k),
+            C: SparseMatrix::identity(n / k),
         };
 
         r1cs.A.coeffs[0][0].0 = 2u128.into();
         r1cs.C.coeffs[0][0].0 = 2u128.into();
 
-        r1cs.A = r1cs.A.gadget_decompose(2, 4);
-        r1cs.B = r1cs.B.gadget_decompose(2, 4);
-        r1cs.C = r1cs.C.gadget_decompose(2, 4);
+        r1cs.A = r1cs.A.gadget_decompose(2, k);
+        r1cs.B = r1cs.B.gadget_decompose(2, k);
+        r1cs.C = r1cs.C.gadget_decompose(2, k);
+        r1cs.A.pad_rows(n);
+        r1cs.B.pad_rows(n);
+        r1cs.C.pad_rows(n);
 
-        let f0 = z.gadget_decompose(2, 4);
-        let mut f1 = z.gadget_decompose(2, 4);
-        f1[0] = R::from(0u128);
+        let f0 = z0.gadget_decompose(2, k);
+        let f1 = z1.gadget_decompose(2, k);
         r1cs.check_relation(&f0).unwrap();
         r1cs.check_relation(&f1).unwrap();
 
@@ -140,7 +198,6 @@ mod tests {
 
         let kappa = 2;
         let b = (R::dimension() / 2) as u128;
-        let k = 2;
         // log_d' (q)
         let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
             / ((R::dimension() / 2) as f64).ln())
@@ -173,12 +230,15 @@ mod tests {
             params: params.clone(),
         };
 
+        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+
         let mlin = Mlin {
             lins: vec![lin0, lin1],
             params,
+            A,
         };
 
-        let cmproof = mlin.mlin(&mut ts);
+        let (_linb2, cmproof) = mlin.mlin(&mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         lproof0.verify(&mut ts);
