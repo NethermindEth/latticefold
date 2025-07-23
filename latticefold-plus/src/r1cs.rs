@@ -26,6 +26,7 @@ pub struct CommittedR1CSProof<R: Ring> {
     pub sumcheck_proof: Proof<R>,
     pub nvars: usize,
     pub r: Vec<R>,
+    pub v: R,
     pub va: R,
     pub vb: R,
     pub vc: R,
@@ -44,6 +45,7 @@ impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
             .map(|x| x.into())
             .collect();
         let eq = build_eq_x_r(&r).unwrap();
+        let mle_f = DenseMultilinearExtension::from_evaluations_vec(nvars, self.f.clone());
         let mle_ga = DenseMultilinearExtension::from_evaluations_vec(nvars, ga);
         let mle_gb = DenseMultilinearExtension::from_evaluations_vec(nvars, gb);
         let mle_gc = DenseMultilinearExtension::from_evaluations_vec(nvars, gc);
@@ -60,6 +62,7 @@ impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
             .map(|x| x.into())
             .collect::<Vec<R>>();
 
+        let v = mle_f.evaluate(&ro).unwrap();
         let va = mle_ga.evaluate(&ro).unwrap();
         let vb = mle_gb.evaluate(&ro).unwrap();
         let vc = mle_gc.evaluate(&ro).unwrap();
@@ -67,6 +70,7 @@ impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
             sumcheck_proof,
             nvars,
             r: ro,
+            v,
             va,
             vb,
             vc,

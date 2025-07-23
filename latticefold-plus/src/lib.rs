@@ -5,8 +5,9 @@
 mod cm;
 mod decomp;
 mod dopen;
-mod fold;
 mod lin;
+mod mlin;
+mod plus;
 mod r1cs;
 mod rgchk;
 mod setchk;
