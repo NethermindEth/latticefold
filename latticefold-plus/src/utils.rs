@@ -11,9 +11,6 @@ use latticefold::{
         MLSumcheck, Proof, SumCheckError,
     },
 };
-// Import the concrete ring type for testing
-#[cfg(test)]
-use stark_rings::cyclotomic_ring::models::goldilocks::RqPoly as TestRing;
 use stark_rings::{
     balanced_decomposition::{
         convertible_ring::ConvertibleRing, Decompose, DecomposeToVec, GadgetDecompose,
@@ -95,6 +92,33 @@ where
         result = tensor_product(&result, &term);
     }
     result
+}
+
+pub fn short_challenge<R: OverField>(lambda: usize, transcript: &mut impl Transcript<R>) -> R {
+    let u = 2usize.pow(lambda as u32 / R::dimension() as u32);
+    let bytes = transcript.squeeze_bytes(R::dimension());
+
+    let coeffs = bytes
+        .iter()
+        .map(|b| {
+            // rough centering
+            R::BaseRing::from((*b as usize % u) as u128) - R::BaseRing::from((u / 2) as u128)
+        })
+        .collect::<Vec<R::BaseRing>>();
+
+    coeffs.into()
+}
+
+pub fn estimate_bound(sop: usize, L: usize, d: usize, k: usize) -> u128 {
+    let a = sop * L;
+    let c = d / 2 + d * k + 1;
+
+    let discriminant = (a * a + 4 * a * c) as f64;
+    let sqrt_discriminant = discriminant.sqrt();
+
+    let b = (a as f64 + sqrt_discriminant) / 2.0;
+
+    (b.ceil()) as u128
 }
 
 #[cfg(test)]

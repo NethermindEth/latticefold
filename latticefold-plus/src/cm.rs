@@ -24,7 +24,7 @@ use thiserror::Error;
 use crate::{
     rgchk::{Dcom, DecompParameters, Rg},
     setchk::{In, MonomialSet, Out},
-    utils::{tensor, tensor_product},
+    utils::{short_challenge, tensor, tensor_product},
 };
 
 #[derive(Clone, Debug)]
@@ -80,18 +80,14 @@ where
 
         let dcom = self.rg.range_check(transcript);
 
-        let s: Vec<R> = transcript
-            .get_challenges(3)
-            .into_iter()
-            .map(|x| x.into())
-            .collect();
+        let s = (0..3)
+            .map(|_| short_challenge(128, transcript))
+            .collect::<Vec<R>>();
 
         let s_prime = (0..k)
             .map(|_| {
-                transcript
-                    .get_challenges(d)
-                    .into_iter()
-                    .map(|x| x.into())
+                (0..d)
+                    .map(|_| short_challenge(128, transcript))
                     .collect::<Vec<R>>()
             })
             .collect::<Vec<_>>();
@@ -352,18 +348,14 @@ where
 
         self.dcom.verify(transcript).unwrap();
 
-        let s: Vec<R> = transcript
-            .get_challenges(3)
-            .into_iter()
-            .map(|x| x.into())
-            .collect();
+        let s = (0..3)
+            .map(|_| short_challenge(128, transcript))
+            .collect::<Vec<R>>();
 
-        let s_prime: Vec<Vec<R>> = (0..k)
+        let s_prime = (0..k)
             .map(|_| {
-                transcript
-                    .get_challenges(d)
-                    .into_iter()
-                    .map(|x| x.into())
+                (0..d)
+                    .map(|_| short_challenge(128, transcript))
                     .collect::<Vec<R>>()
             })
             .collect::<Vec<_>>();
