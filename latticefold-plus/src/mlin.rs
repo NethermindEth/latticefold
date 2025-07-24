@@ -23,16 +23,16 @@ use thiserror::Error;
 
 use crate::{
     cm::{Cm, CmComs, CmProof},
-    lin::{Lin, Parameters},
+    lin::{LinB, LinParameters},
     rgchk::{Dcom, Rg, RgInstance},
     utils::{tensor, tensor_product},
 };
 
 #[derive(Clone, Debug)]
 pub struct Mlin<R> {
-    pub lins: Vec<Lin<R>>,
+    pub lins: Vec<LinB<R>>,
     pub A: Matrix<R>,
-    pub params: Parameters,
+    pub params: LinParameters,
 }
 
 #[derive(Clone, Debug)]
@@ -54,7 +54,11 @@ where
     R: Decompose,
 {
     /// Πmlin protocol
-    pub fn mlin(&self, transcript: &mut impl Transcript<R>) -> (LinB2<R>, CmProof<R>) {
+    pub fn mlin(
+        &self,
+        M: &[SparseMatrix<R>],
+        transcript: &mut impl Transcript<R>,
+    ) -> (LinB2<R>, CmProof<R>) {
         let n = self.lins[0].f.len();
 
         let instances = self
@@ -84,7 +88,7 @@ where
         let rg = Rg {
             nvars: log2(n) as usize,
             instances,
-            M: self.lins[0].M.clone(),
+            M: M.to_vec(),
             dparams: self.params.decomp.clone(),
         };
 
@@ -150,7 +154,6 @@ mod tests {
         lin::{Linearize, Verify},
         r1cs::CommittedR1CS,
         rgchk::DecompParameters,
-        utils::split,
     };
 
     #[test]
@@ -204,41 +207,29 @@ mod tests {
         .ceil() as usize;
 
         let mut ts = PoseidonTS::default::<PC>();
-        let lproof0 = cr1cs0.linearize(&mut ts);
-        let lproof1 = cr1cs1.linearize(&mut ts);
+        let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
+        let (linb1, lproof1) = cr1cs1.linearize(&mut ts);
 
-        let params = Parameters {
+        let params = LinParameters {
             kappa,
             decomp: DecompParameters { b, k, l },
         };
 
-        let lin0 = Lin {
-            M: vec![
-                cr1cs0.r1cs.A.clone(),
-                cr1cs0.r1cs.B.clone(),
-                cr1cs0.r1cs.C.clone(),
-            ],
-            v: vec![lproof0.va, lproof0.vb, lproof0.vc],
-            f: cr1cs0.f.clone(),
-            params: params.clone(),
-        };
-
-        let lin1 = Lin {
-            M: vec![cr1cs1.r1cs.A, cr1cs1.r1cs.B, cr1cs1.r1cs.C],
-            v: vec![lproof1.va, lproof1.vb, lproof1.vc],
-            f: cr1cs1.f,
-            params: params.clone(),
-        };
+        let M = vec![
+            cr1cs0.r1cs.A.clone(),
+            cr1cs0.r1cs.B.clone(),
+            cr1cs0.r1cs.C.clone(),
+        ];
 
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
 
         let mlin = Mlin {
-            lins: vec![lin0, lin1],
+            lins: vec![linb0, linb1],
             params,
             A,
         };
 
-        let (_linb2, cmproof) = mlin.mlin(&mut ts);
+        let (_linb2, cmproof) = mlin.mlin(&M, &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         lproof0.verify(&mut ts);

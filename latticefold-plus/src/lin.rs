@@ -18,13 +18,14 @@ use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::{
     cm::{Cm, CmComs, CmProof},
+    mlin::{LinB2, Mlin},
     rgchk::{DecompParameters, Rg, RgInstance},
     utils::split,
 };
 
 pub trait Linearize<R: OverField> {
     type Proof: Verify<R>;
-    fn linearize(&self, transcript: &mut impl Transcript<R>) -> Self::Proof;
+    fn linearize(&self, transcript: &mut impl Transcript<R>) -> (LinB<R>, Self::Proof);
 }
 
 pub trait Verify<R: OverField> {
@@ -32,58 +33,46 @@ pub trait Verify<R: OverField> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Parameters {
+pub struct LinParameters {
     pub kappa: usize,
     pub decomp: DecompParameters,
 }
 
 #[derive(Clone, Debug)]
-pub struct Lin<R> {
-    pub M: Vec<SparseMatrix<R>>,
-    pub v: Vec<R>,
-    pub f: Vec<R>,
-
-    pub params: Parameters,
+pub struct LinBX<R> {
+    pub cm_f: Vec<R>,
+    pub r: Vec<(R, R)>,
+    pub v: Vec<(R, R)>,
 }
 
-impl<R: CoeffRing> Lin<R>
+#[derive(Clone, Debug)]
+pub struct LinB<R> {
+    pub f: Vec<R>,
+    pub x: LinBX<R>,
+}
+
+impl<R: CoeffRing> LinB<R>
 where
     R::BaseRing: ConvertibleRing + Decompose + Zq,
     R: Decompose,
 {
     /// Πlin protocol
     ///
-    /// Runs the Π'cm protocol
-    pub fn lin(&self, transcript: &mut impl Transcript<R>) -> CmProof<R> {
-        let n = self.f.len();
-
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), self.params.kappa, n);
-
-        let instance = RgInstance::from_f(self.f.clone(), &A, &self.params.decomp);
-        let cm_f = A.try_mul_vec(&self.f).unwrap();
-        let C_Mf = A
-            .try_mul_vec(&instance.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-            .unwrap();
-        let cm_mtau = A.try_mul_vec(&instance.m_tau).unwrap();
-
-        let rg = Rg {
-            nvars: log2(n) as usize,
-            instances: vec![instance],
-            M: self.M.clone(),
-            dparams: self.params.decomp.clone(),
+    /// Runs the Πmlin protocol with only L=1 instance
+    pub fn lin(
+        &self,
+        M: &[SparseMatrix<R>],
+        A: &Matrix<R>,
+        params: &LinParameters,
+        transcript: &mut impl Transcript<R>,
+    ) -> (LinB2<R>, CmProof<R>) {
+        let mlin = Mlin {
+            lins: vec![self.clone()],
+            A: A.clone(),
+            params: params.clone(),
         };
 
-        let cm = Cm {
-            rg,
-            coms: vec![CmComs {
-                cm_f,
-                C_Mf,
-                cm_mtau,
-            }],
-        };
-
-        let (_com, proof) = cm.prove(transcript);
-        proof
+        mlin.mlin(M, transcript)
     }
 }
 
@@ -104,23 +93,25 @@ mod tests {
     #[test]
     fn test_lin() {
         let n = 1 << 15;
-        let z = vec![R::one(); n];
+        let k = 2;
+        let m = n / k;
+        let z = vec![R::one(); m];
 
         let mut r1cs = R1CS::<R> {
             l: 1,
-            A: SparseMatrix::identity(n),
-            B: SparseMatrix::identity(n),
-            C: SparseMatrix::identity(n),
+            A: SparseMatrix::identity(m),
+            B: SparseMatrix::identity(m),
+            C: SparseMatrix::identity(m),
         };
 
         r1cs.A.coeffs[0][0].0 = 2u128.into();
         r1cs.C.coeffs[0][0].0 = 2u128.into();
 
-        r1cs.A = r1cs.A.gadget_decompose(2, 4);
-        r1cs.B = r1cs.B.gadget_decompose(2, 4);
-        r1cs.C = r1cs.C.gadget_decompose(2, 4);
+        r1cs.A = r1cs.A.gadget_decompose(2, k);
+        r1cs.B = r1cs.B.gadget_decompose(2, k);
+        r1cs.C = r1cs.C.gadget_decompose(2, k);
 
-        let f = z.gadget_decompose(2, 4);
+        let f = z.gadget_decompose(2, k);
         r1cs.check_relation(&f).unwrap();
 
         let cr1cs = CommittedR1CS {
@@ -132,26 +123,24 @@ mod tests {
 
         let kappa = 2;
         let b = (R::dimension() / 2) as u128;
-        let k = 2;
         // log_d' (q)
         let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
             / ((R::dimension() / 2) as f64).ln())
         .ceil() as usize;
+        let params = LinParameters {
+            kappa,
+            decomp: DecompParameters { b, k, l },
+        };
+        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+        let M = vec![
+            cr1cs.r1cs.A.clone(),
+            cr1cs.r1cs.B.clone(),
+            cr1cs.r1cs.C.clone(),
+        ];
 
         let mut ts = PoseidonTS::default::<PC>();
-        let lproof = cr1cs.linearize(&mut ts);
-
-        let lin = Lin {
-            M: vec![cr1cs.r1cs.A, cr1cs.r1cs.B, cr1cs.r1cs.C],
-            v: vec![lproof.va, lproof.vb, lproof.vc],
-            f: cr1cs.f,
-            params: Parameters {
-                kappa,
-                decomp: DecompParameters { b, k, l },
-            },
-        };
-
-        let cmproof = lin.lin(&mut ts);
+        let (linb, lproof) = cr1cs.linearize(&mut ts);
+        let (_linb2, cmproof) = linb.lin(&M, &A, &params, &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         lproof.verify(&mut ts);

@@ -34,6 +34,8 @@ pub trait Transcript<R: OverField> {
         challenges.extend((0..n).map(|_| self.get_challenge()));
         challenges
     }
+
+    fn squeeze_bytes(&mut self, n: usize) -> Vec<u8>;
 }
 
 pub trait TranscriptWithShortChallenges<R: SuitableRing>: Transcript<R> {

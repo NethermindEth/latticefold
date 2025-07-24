@@ -61,6 +61,10 @@ impl<R: OverField> Transcript<R> for PoseidonTS<R> {
         <R::BaseRing as Field>::from_base_prime_field_elems(&c)
             .expect("something went wrong: c does not contain extension_degree elements")
     }
+
+    fn squeeze_bytes(&mut self, n: usize) -> Vec<u8> {
+        self.sponge.squeeze_bytes(n)
+    }
 }
 
 impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
@@ -91,6 +95,10 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
         self.sponge.absorb(&c);
         <R::BaseRing as Field>::from_base_prime_field_elems(&c)
             .expect("something went wrong: c does not contain extension_degree elements")
+    }
+
+    fn squeeze_bytes(&mut self, n: usize) -> Vec<u8> {
+        self.sponge.squeeze_bytes(n)
     }
 }
 

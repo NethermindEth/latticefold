@@ -10,7 +10,7 @@ use latticefold::{
 use stark_rings::{OverField, Ring};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
-use crate::lin::{Linearize, Verify};
+use crate::lin::{LinB, LinBX, Linearize, Verify};
 
 /// Assume $n=m*\hat{l}$.
 #[derive(Debug)]
@@ -34,7 +34,7 @@ pub struct CommittedR1CSProof<R: Ring> {
 
 impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
     type Proof = CommittedR1CSProof<R>;
-    fn linearize(&self, transcript: &mut impl Transcript<R>) -> Self::Proof {
+    fn linearize(&self, transcript: &mut impl Transcript<R>) -> (LinB<R>, Self::Proof) {
         let nvars = log2(self.f.len().next_power_of_two()) as usize;
         let ga = self.r1cs.A.try_mul_vec(&self.f).unwrap();
         let gb = self.r1cs.B.try_mul_vec(&self.f).unwrap();
@@ -66,15 +66,31 @@ impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
         let va = mle_ga.evaluate(&ro).unwrap();
         let vb = mle_gb.evaluate(&ro).unwrap();
         let vc = mle_gc.evaluate(&ro).unwrap();
-        Self::Proof {
+
+        let proof = Self::Proof {
             sumcheck_proof,
             nvars,
-            r: ro,
+            r: ro.clone(),
             v,
             va,
             vb,
             vc,
-        }
+        };
+
+        let r = ro.iter().map(|&r| (r, r)).collect::<Vec<_>>();
+        let v = vec![(v, v), (va, va), (vb, vb), (vc, vc)];
+
+        let x = LinBX {
+            cm_f: self.cm.clone(),
+            r,
+            v,
+        };
+        let linb = LinB {
+            f: self.f.clone(),
+            x,
+        };
+
+        (linb, proof)
     }
 }
 
@@ -149,9 +165,9 @@ mod tests {
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let lin = cr1cs.linearize(&mut ts);
+        let (_linb, lproof) = cr1cs.linearize(&mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
-        lin.verify(&mut ts);
+        lproof.verify(&mut ts);
     }
 }

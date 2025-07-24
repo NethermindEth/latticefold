@@ -22,6 +22,7 @@ use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtensio
 use thiserror::Error;
 
 use crate::{
+    lin::{LinB, LinBX},
     rgchk::{Dcom, DecompParameters, Rg},
     setchk::{In, MonomialSet, Out},
     utils::{tensor, tensor_product},
@@ -30,9 +31,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Decomp<R> {
     pub f: Vec<R>,
-    pub B: u128,
     pub r: Vec<(R, R)>,
-    pub A: Matrix<R>,
     pub M: Vec<SparseMatrix<R>>,
 }
 
@@ -40,24 +39,19 @@ pub struct Decomp<R> {
 pub struct DecompProof<R> {
     /// C = com(F)
     pub C: (Vec<R>, Vec<R>), // kappa x 2
-    pub B: u128,
     pub v: (Vec<(R, R)>, Vec<(R, R)>), // (v(0), v(1))
 }
-
-//#[derive(Clone, Debug)]
-//pub struct LinBX<R> {
-//    pub C: Vec<R>,
-//    pub r: Vec<R>,
-//    pub v:
-//}
 
 impl<R: PolyRing> Decomp<R>
 where
     R: Decompose,
+    R::BaseRing: Zq,
 {
-    pub fn decompose(&self) -> DecompProof<R> {
-        let nvars = log2(self.A.ncols) as usize;
-        let F = self.f.decompose_to_vec(self.B, 2).transpose();
+    pub fn decompose(&self, A: &Matrix<R>, B: u128) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
+        let nvars = log2(A.ncols) as usize;
+        let mut F = self.f.decompose_to_vec(B, 2).transpose().into_iter();
+        let F0 = F.next().unwrap();
+        let F1 = F.next().unwrap();
 
         let vi_calc = |Fi: &[R]| -> Vec<(R, R)> {
             let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
@@ -91,30 +85,46 @@ where
             vi
         };
 
-        let v0 = vi_calc(&F[0]);
-        let v1 = vi_calc(&F[1]);
+        let v0 = vi_calc(&F0);
+        let v1 = vi_calc(&F1);
 
-        let C = (
-            self.A.try_mul_vec(&F[0]).unwrap(),
-            self.A.try_mul_vec(&F[1]).unwrap(),
-        );
+        let C0 = A.try_mul_vec(&F0).unwrap();
+        let C1 = A.try_mul_vec(&F1).unwrap();
 
-        DecompProof {
-            C,
-            B: self.B,
+        let linb0 = LinB {
+            x: LinBX {
+                cm_f: C0.clone(),
+                r: self.r.clone(),
+                v: v0.clone(),
+            },
+            f: F0,
+        };
+        let linb1 = LinB {
+            x: LinBX {
+                cm_f: C1.clone(),
+                r: self.r.clone(),
+                v: v1.clone(),
+            },
+            f: F1,
+        };
+        let proof = DecompProof {
+            C: (C0, C1),
             v: (v0, v1),
-        }
+        };
+
+        ((linb0, linb1), proof)
     }
 }
 
 impl<R: PolyRing> DecompProof<R> {
-    pub fn verify(&self, cm_f: &[R], v: &[(R, R)]) {
+    pub fn verify(&self, cm_f: &[R], v: &[(R, R)], B: u128) {
+        let Br = R::from(B);
         let rec_cm = self
             .C
             .0
             .iter()
             .zip(self.C.1.iter())
-            .map(|(&r0, &r1)| recompose(&[r0, r1], R::from(self.B)))
+            .map(|(&r0, &r1)| recompose(&[r0, r1], Br))
             .collect::<Vec<R>>();
 
         let rec_v = self
@@ -122,12 +132,7 @@ impl<R: PolyRing> DecompProof<R> {
             .0
             .iter()
             .zip(self.v.1.iter())
-            .map(|(v0, v1)| {
-                (
-                    recompose(&[v0.0, v1.0], R::from(self.B)),
-                    recompose(&[v0.1, v1.1], R::from(self.B)),
-                )
-            })
+            .map(|(v0, v1)| (recompose(&[v0.0, v1.0], Br), recompose(&[v0.1, v1.1], Br)))
             .collect::<Vec<(R, R)>>();
 
         assert_eq!(rec_cm, cm_f);
@@ -148,7 +153,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        lin::{Lin, Linearize, Parameters, Verify},
+        lin::{LinParameters, Linearize, Verify},
         mlin::Mlin,
         r1cs::CommittedR1CS,
     };
@@ -197,12 +202,12 @@ mod tests {
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let lin = cr1cs.linearize(&mut ts);
+        let (linb, lproof) = cr1cs.linearize(&mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
-        lin.verify(&mut ts);
+        lproof.verify(&mut ts);
 
-        let r = lin
+        let r = lproof
             .r
             .iter()
             .map(|r| (r.clone(), r.clone()))
@@ -210,21 +215,13 @@ mod tests {
 
         let decomp = Decomp {
             f: cr1cs.f,
-            B,
             r,
-            A,
             M: vec![cr1cs.r1cs.A, cr1cs.r1cs.B, cr1cs.r1cs.C],
         };
 
-        let proof = decomp.decompose();
+        let ((_linb0, _linb1), proof) = decomp.decompose(&A, B);
 
-        let v = vec![
-            (lin.v.clone(), lin.v),
-            (lin.va.clone(), lin.va),
-            (lin.vb.clone(), lin.vb),
-            (lin.vc.clone(), lin.vc),
-        ];
-        proof.verify(&cm_f, &v);
+        proof.verify(&cm_f, &linb.x.v, B);
     }
 
     #[test]
@@ -282,10 +279,10 @@ mod tests {
         .ceil() as usize;
 
         let mut ts = PoseidonTS::default::<PC>();
-        let lproof0 = cr1cs0.linearize(&mut ts);
-        let lproof1 = cr1cs1.linearize(&mut ts);
+        let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
+        let (linb1, lproof1) = cr1cs1.linearize(&mut ts);
 
-        let params = Parameters {
+        let params = LinParameters {
             kappa,
             decomp: DecompParameters { b, k, l },
         };
@@ -296,29 +293,15 @@ mod tests {
             cr1cs0.r1cs.C.clone(),
         ];
 
-        let lin0 = Lin {
-            M: M.clone(),
-            v: vec![lproof0.va, lproof0.vb, lproof0.vc],
-            f: cr1cs0.f.clone(),
-            params: params.clone(),
-        };
-
-        let lin1 = Lin {
-            M: M.clone(),
-            v: vec![lproof1.va, lproof1.vb, lproof1.vc],
-            f: cr1cs1.f,
-            params: params.clone(),
-        };
-
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
 
         let mlin = Mlin {
-            lins: vec![lin0, lin1],
+            lins: vec![linb0, linb1],
             params,
             A: A.clone(),
         };
 
-        let (linb2, cmproof) = mlin.mlin(&mut ts);
+        let (linb2, cmproof) = mlin.mlin(&M, &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         lproof0.verify(&mut ts);
@@ -327,14 +310,12 @@ mod tests {
 
         let decomp = Decomp {
             f: linb2.g,
-            B,
             r: linb2.x.ro,
-            A,
             M,
         };
 
-        let proof = decomp.decompose();
+        let (_linb, proof) = decomp.decompose(&A, B);
 
-        proof.verify(&linb2.x.cm_g, &linb2.x.vo);
+        proof.verify(&linb2.x.cm_g, &linb2.x.vo, B);
     }
 }
