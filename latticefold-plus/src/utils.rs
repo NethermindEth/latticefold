@@ -1,29 +1,20 @@
 use ark_std::{
-    iter::once,
-    log2,
     ops::{Mul, Sub},
     One, Zero,
 };
-use latticefold::{
-    transcript::Transcript,
-    utils::sumcheck::{
-        utils::{build_eq_x_r, eq_eval},
-        MLSumcheck, Proof, SumCheckError,
-    },
-};
+use latticefold::transcript::Transcript;
 use stark_rings::{
-    balanced_decomposition::{
-        convertible_ring::ConvertibleRing, Decompose, DecomposeToVec, GadgetDecompose,
-    },
-    exp, psi, psi_range_check, CoeffRing, OverField, PolyRing, Ring, Zq,
+    balanced_decomposition::{Decompose, GadgetDecompose},
+    OverField, PolyRing,
 };
-use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
-use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
+use stark_rings_linalg::Matrix;
 
-pub fn split<R: PolyRing>(com: &Matrix<R>, n: usize, b: u128, k: usize) -> Vec<R::BaseRing>
-where
-    R: Decompose,
-{
+pub fn split<R: Decompose + PolyRing>(
+    com: &Matrix<R>,
+    n: usize,
+    b: u128,
+    k: usize,
+) -> Vec<R::BaseRing> {
     let M_prime = com.gadget_decompose(b, k);
     let M_dprime = M_prime.vals.into_iter().fold(vec![], |mut acc, row| {
         // TODO pre-alloc
@@ -33,7 +24,6 @@ where
     let mut tau = M_dprime
         .iter()
         .map(|r| r.coeffs().to_vec())
-        .into_iter()
         .fold(vec![], |mut acc, row| {
             // TODO pre-alloc
             acc.extend(row);

@@ -1,32 +1,12 @@
-use ark_std::{
-    iter::once,
-    log2,
-    ops::{Mul, Sub},
-    One, Zero,
-};
-use latticefold::{
-    transcript::Transcript,
-    utils::sumcheck::{
-        utils::{build_eq_x_r, eq_eval},
-        MLSumcheck, Proof, SumCheckError,
-    },
-};
+use ark_std::log2;
 use stark_rings::{
-    balanced_decomposition::{
-        convertible_ring::ConvertibleRing, recompose, Decompose, DecomposeToVec, GadgetDecompose,
-    },
-    exp, psi, psi_range_check, unit_monomial, CoeffRing, OverField, PolyRing, Ring, Zq,
+    balanced_decomposition::{recompose, Decompose, DecomposeToVec},
+    PolyRing, Zq,
 };
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
-use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
-use thiserror::Error;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
-use crate::{
-    lin::{LinB, LinBX},
-    rgchk::{Dcom, DecompParameters, Rg},
-    setchk::{In, MonomialSet, Out},
-    utils::{tensor, tensor_product},
-};
+use crate::lin::{LinB, LinBX};
 
 #[derive(Clone, Debug)]
 pub struct Decomp<R> {
@@ -69,13 +49,13 @@ where
                 let vj = (
                     DenseMultilinearExtension::from_evaluations_vec(
                         nvars,
-                        M_i.try_mul_vec(&Fi).unwrap(),
+                        M_i.try_mul_vec(Fi).unwrap(),
                     )
                     .evaluate(&r_a)
                     .unwrap(),
                     DenseMultilinearExtension::from_evaluations_vec(
                         nvars,
-                        M_i.try_mul_vec(&Fi).unwrap(),
+                        M_i.try_mul_vec(Fi).unwrap(),
                     )
                     .evaluate(&r_b)
                     .unwrap(),
@@ -156,6 +136,7 @@ mod tests {
         lin::{LinParameters, Linearize, Verify},
         mlin::Mlin,
         r1cs::CommittedR1CS,
+        rgchk::DecompParameters,
     };
 
     fn identity_cs(n: usize) -> (R1CS<R>, Vec<R>) {

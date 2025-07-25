@@ -2,13 +2,12 @@
 
 #![allow(non_snake_case)]
 
-mod cm;
-mod decomp;
-mod dopen;
-mod lin;
-mod mlin;
-mod plus;
-mod r1cs;
-mod rgchk;
-mod setchk;
-mod utils;
+pub mod cm;
+pub mod decomp;
+pub mod lin;
+pub mod mlin;
+pub mod plus;
+pub mod r1cs;
+pub mod rgchk;
+pub mod setchk;
+pub mod utils;

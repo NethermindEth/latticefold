@@ -1,8 +1,7 @@
 use ark_std::{
-    iter::once,
     log2,
     ops::{Mul, Sub},
-    One, Zero,
+    One,
 };
 use latticefold::{
     transcript::Transcript,
@@ -11,19 +10,11 @@ use latticefold::{
         MLSumcheck, Proof, SumCheckError,
     },
 };
-use stark_rings::{
-    balanced_decomposition::{
-        convertible_ring::ConvertibleRing, Decompose, DecomposeToVec, GadgetDecompose,
-    },
-    exp, psi, psi_range_check, unit_monomial, CoeffRing, OverField, PolyRing, Ring, Zq,
-};
-use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
-use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
-use thiserror::Error;
+use stark_rings::{unit_monomial, CoeffRing, PolyRing, Ring, Zq};
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::{
-    rgchk::{Dcom, DecompParameters, Rg},
-    setchk::{In, MonomialSet, Out},
+    rgchk::{Dcom, Rg},
     utils::{short_challenge, tensor, tensor_product},
 };
 
@@ -138,7 +129,7 @@ where
             })
             .collect();
 
-        let kappa = comh.len();
+        let kappa = comh[0].len();
         let log_kappa = log2(kappa) as usize;
 
         let c = (0..2)
@@ -202,11 +193,7 @@ where
             cm_coms: self.coms.clone(),
         };
 
-        let ro = ro_a
-            .into_iter()
-            .zip(ro_b.into_iter())
-            .map(|rr| rr)
-            .collect::<Vec<_>>();
+        let ro = ro_a.into_iter().zip(ro_b).collect::<Vec<_>>();
 
         let x = proof.x(&s, ro);
 
@@ -361,7 +348,7 @@ where
             .collect::<Vec<_>>();
         let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
 
-        let kappa = self.comh.len();
+        let kappa = self.comh[0].len();
         let log_kappa = log2(kappa) as usize;
 
         let c = (0..2)
@@ -462,7 +449,7 @@ where
                     nvars,
                     2,
                     claimed_sum,
-                    &sumcheck_proof,
+                    sumcheck_proof,
                 )
                 .unwrap();
 
@@ -516,11 +503,7 @@ where
         let ro0 = verify_sumcheck(&self.sumcheck_proofs.0, &self.evals.0).unwrap();
         let ro1 = verify_sumcheck(&self.sumcheck_proofs.1, &self.evals.1).unwrap();
 
-        let ro = ro0
-            .into_iter()
-            .zip(ro1.into_iter())
-            .map(|rr| rr)
-            .collect::<Vec<_>>();
+        let ro = ro0.into_iter().zip(ro1).collect::<Vec<_>>();
 
         // Step 6
         Ok(self.x(&s, ro))
@@ -573,27 +556,22 @@ where
     T: Clone + One + Sub<Output = T> + Mul<Output = T>,
 {
     let tensor_c_z = tensor(c_z);
-
     let part1 = tensor_product(&tensor_c_z, s_prime);
     let part2 = tensor_product(&part1, d_prime_powers);
-    let t_z = tensor_product(&part2, x_powers);
-
-    t_z
+    tensor_product(&part2, x_powers)
 }
 
 #[cfg(test)]
 mod tests {
     use ark_ff::PrimeField;
-    use ark_std::{One, Zero};
+    use ark_std::Zero;
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use latticefold::transcript::poseidon::PoseidonTS;
-    use stark_rings::{
-        balanced_decomposition::DecomposeToVec, cyclotomic_ring::models::frog_ring::RqPoly as R,
-    };
-    use stark_rings_linalg::SparseMatrix;
+    use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
+    use stark_rings_linalg::{Matrix, SparseMatrix};
 
     use super::*;
-    use crate::{rgchk::RgInstance, utils::split};
+    use crate::rgchk::{DecompParameters, RgInstance};
 
     #[test]
     fn test_com() {

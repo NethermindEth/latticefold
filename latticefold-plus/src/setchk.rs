@@ -147,16 +147,16 @@ impl<R: OverField> In<R> {
         }
 
         // random linear combinator, for batching
-        let rc: Option<R::BaseRing> = (Ms.len() > 1).then(|| transcript.get_challenge().into());
+        let rc: Option<R::BaseRing> = (Ms.len() > 1).then(|| transcript.get_challenge());
 
         let comb_fn = |vals: &[R]| -> R {
             let mut lc = R::zero();
-            for i in 0..Ms.len() {
+            for (i, alpha) in alphas.iter().enumerate().take(Ms.len()) {
                 // 2 * ncols for (m_j, m_prime_j), +1 for eq
                 let s = i * (2 * ncols + 1);
                 let mut res = R::zero();
                 for j in 0..ncols {
-                    res += alphas[i].pow([j as u64])
+                    res += alpha.pow([j as u64])
                         * (vals[s + j * 2] * vals[s + j * 2] - vals[s + j * 2 + 1])
                 }
                 res *= vals[s + 2 * ncols]; // eq
@@ -237,7 +237,7 @@ impl<R: OverField> In<R> {
         let b: Vec<R> = ms
             .iter()
             .map(|m| {
-                let mle = DenseMultilinearExtension::from_evaluations_slice(tnvars, *m);
+                let mle = DenseMultilinearExtension::from_evaluations_slice(tnvars, m);
                 mle.evaluate(&r_poly).unwrap()
             })
             .collect::<Vec<_>>();
@@ -270,8 +270,7 @@ impl<R: OverField> Out<R> {
             })
             .collect();
 
-        let rc: Option<R::BaseRing> =
-            (self.e[0].len() > 1).then(|| transcript.get_challenge().into());
+        let rc: Option<R::BaseRing> = (self.e[0].len() > 1).then(|| transcript.get_challenge());
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
             transcript,
@@ -291,7 +290,7 @@ impl<R: OverField> Out<R> {
             let c = &cba[i].0;
             let beta = &cba[i].1;
             let alpha = &cba[i].2;
-            let eq = eq_eval(&c, &r).unwrap();
+            let eq = eq_eval(c, &r).unwrap();
             let e_sum = e
                 .iter()
                 .enumerate()
@@ -308,7 +307,7 @@ impl<R: OverField> Out<R> {
             let c = &cba[i + offset].0;
             let beta = &cba[i + offset].1;
             let alpha = &cba[i + offset].2;
-            let eq = eq_eval(&c, &r).unwrap();
+            let eq = eq_eval(c, &r).unwrap();
             let b_claim = {
                 let ev1 = R::from(ev(b, *beta));
                 let ev2 = R::from(ev(b, *beta * *beta));
@@ -322,7 +321,9 @@ impl<R: OverField> Out<R> {
                     .pow([(i + offset) as u64]);
         }
 
-        (ver == v).then(|| ()).ok_or(SetCheckError::ExpectedClaim)?;
+        (ver == v)
+            .then_some(())
+            .ok_or(SetCheckError::ExpectedClaim)?;
 
         Ok(())
     }

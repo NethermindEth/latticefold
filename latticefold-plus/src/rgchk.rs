@@ -1,20 +1,11 @@
-use ark_std::{iter::once, log2, One, Zero};
-use latticefold::{
-    transcript::Transcript,
-    utils::sumcheck::{
-        utils::{build_eq_x_r, eq_eval},
-        MLSumcheck, Proof, SumCheckError,
-    },
-};
+use ark_std::iter::once;
+use latticefold::transcript::Transcript;
 use stark_rings::{
-    balanced_decomposition::{
-        convertible_ring::ConvertibleRing, Decompose, DecomposeToVec, GadgetDecompose,
-    },
-    exp, psi, psi_range_check, CoeffRing, OverField, PolyRing, Ring, Zq,
+    balanced_decomposition::{Decompose, DecomposeToVec},
+    exp, psi, CoeffRing, PolyRing, Ring, Zq,
 };
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
-use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
-use thiserror::Error;
+use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::{
     setchk::{In, MonomialSet, Out},
@@ -142,9 +133,7 @@ where
                             .ct(),
                     );
 
-                    let Mm_tau = m
-                        .try_mul_vec(&inst.m_tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-                        .unwrap();
+                    let Mm_tau = m.try_mul_vec(&inst.m_tau).unwrap();
                     b.push(
                         DenseMultilinearExtension::from_evaluations_vec(self.nvars, Mm_tau)
                             .evaluate(&r)
@@ -181,7 +170,7 @@ where
             // ct(psi b) =? a
             for (&a_i, b_i) in eval.a.iter().zip(eval.b.iter()) {
                 ((psi::<R>() * b_i).ct() == a_i)
-                    .then(|| ())
+                    .then_some(())
                     .ok_or(())
                     .unwrap();
             }
@@ -205,14 +194,14 @@ where
                 // ct(psi (sum d^i u_i)) =? v
                 let v_rec = u_comb
                     .iter()
-                    .map(|uc| (psi::<R>() * R::from(*uc)).ct())
+                    .map(|&uc| (psi::<R>() * uc).ct())
                     .collect::<Vec<_>>();
 
                 if ni == 0 {
-                    (eval.v == v_rec).then(|| ()).ok_or(()).unwrap();
+                    (eval.v == v_rec).then_some(()).ok_or(()).unwrap();
                 } else {
                     (eval.c[ni].coeffs() == v_rec)
-                        .then(|| ())
+                        .then_some(())
                         .ok_or(())
                         .unwrap();
                 }
@@ -292,12 +281,6 @@ where
             .map(|c| exp::<R>(*c).unwrap())
             .collect::<Vec<_>>();
 
-        let cm_f = A.try_mul_vec(&f).unwrap();
-        let C_Mf = A
-            .try_mul_vec(&tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-            .unwrap();
-        let cm_mtau = A.try_mul_vec(&m_tau).unwrap();
-
         Self {
             M_f,
             tau,
@@ -311,12 +294,10 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ff::PrimeField;
-    use ark_std::Zero;
+    use ark_std::{log2, Zero};
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use latticefold::transcript::poseidon::PoseidonTS;
-    use stark_rings::{
-        balanced_decomposition::DecomposeToVec, cyclotomic_ring::models::frog_ring::RqPoly as R,
-    };
+    use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 
     use super::*;
 
