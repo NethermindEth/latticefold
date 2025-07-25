@@ -1,26 +1,14 @@
-use ark_std::log2;
-use latticefold::{
-    arith::r1cs::R1CS,
-    transcript::Transcript,
-    utils::sumcheck::{
-        utils::{build_eq_x_r, eq_eval},
-        MLSumcheck,
-    },
-};
+use latticefold::transcript::Transcript;
 use stark_rings::{
-    balanced_decomposition::{
-        convertible_ring::ConvertibleRing, Decompose, DecomposeToVec, GadgetDecompose,
-    },
-    exp, psi, psi_range_check, unit_monomial, CoeffRing, OverField, PolyRing, Ring, Zq,
+    balanced_decomposition::{convertible_ring::ConvertibleRing, Decompose},
+    CoeffRing, OverField, Zq,
 };
-use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
-use stark_rings_poly::mle::DenseMultilinearExtension;
+use stark_rings_linalg::{Matrix, SparseMatrix};
 
 use crate::{
-    cm::{Cm, CmComs, CmProof},
+    cm::CmProof,
     mlin::{LinB2, Mlin},
-    rgchk::{DecompParameters, Rg, RgInstance},
-    utils::split,
+    rgchk::DecompParameters,
 };
 
 pub trait Linearize<R: OverField> {
@@ -79,16 +67,17 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ff::PrimeField;
-    use ark_std::{One, Zero};
+    use ark_std::One;
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-    use latticefold::transcript::poseidon::PoseidonTS;
+    use latticefold::{arith::r1cs::R1CS, transcript::poseidon::PoseidonTS};
     use stark_rings::{
-        balanced_decomposition::DecomposeToVec, cyclotomic_ring::models::frog_ring::RqPoly as R,
+        balanced_decomposition::GadgetDecompose, cyclotomic_ring::models::frog_ring::RqPoly as R,
+        PolyRing,
     };
     use stark_rings_linalg::SparseMatrix;
 
     use super::*;
-    use crate::{r1cs::CommittedR1CS, utils::split};
+    use crate::r1cs::CommittedR1CS;
 
     #[test]
     fn test_lin() {

@@ -1,33 +1,15 @@
-use ark_std::{
-    iter::once,
-    log2,
-    ops::{Mul, Sub},
-    One, Zero,
-};
-use latticefold::{
-    transcript::Transcript,
-    utils::sumcheck::{
-        utils::{build_eq_x_r, eq_eval},
-        MLSumcheck, Proof, SumCheckError,
-    },
-};
+use latticefold::transcript::Transcript;
 use stark_rings::{
-    balanced_decomposition::{
-        convertible_ring::ConvertibleRing, Decompose, DecomposeToVec, GadgetDecompose,
-    },
-    exp, psi, psi_range_check, unit_monomial, CoeffRing, OverField, PolyRing, Ring, Zq,
+    balanced_decomposition::{convertible_ring::ConvertibleRing, Decompose},
+    CoeffRing, PolyRing, Zq,
 };
-use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
-use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
-use thiserror::Error;
+use stark_rings_linalg::{Matrix, SparseMatrix};
 
 use crate::{
-    cm::{Cm, CmComs, CmProof},
+    cm::CmProof,
     decomp::{Decomp, DecompProof},
     lin::{LinB, LinParameters},
     mlin::{LinB2X, Mlin},
-    rgchk::{Dcom, Rg, RgInstance},
-    utils::{tensor, tensor_product},
 };
 
 #[derive(Clone, Debug)]
@@ -63,8 +45,8 @@ where
     R::BaseRing: ConvertibleRing + Decompose + Zq,
     R: Decompose,
 {
-    /// Fold
-    pub fn fold(
+    /// Prove
+    pub fn prove(
         &self,
         M: &[SparseMatrix<R>],
         transcript: &mut impl Transcript<R>,
@@ -103,12 +85,12 @@ where
 #[cfg(test)]
 mod tests {
     use ark_ff::PrimeField;
-    use ark_std::{One, Zero};
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use latticefold::{arith::r1cs::R1CS, transcript::poseidon::PoseidonTS};
     use rand::prelude::*;
     use stark_rings::{
-        balanced_decomposition::DecomposeToVec, cyclotomic_ring::models::frog_ring::RqPoly as R,
+        balanced_decomposition::GadgetDecompose, cyclotomic_ring::models::frog_ring::RqPoly as R,
+        Ring,
     };
     use stark_rings_linalg::SparseMatrix;
 
@@ -121,7 +103,7 @@ mod tests {
     };
 
     #[test]
-    fn test_fold() {
+    fn test_prove() {
         let n = 1 << 15;
         let sop = R::dimension() * 128; // S inf-norm = 128
         let L = 3;
@@ -205,7 +187,7 @@ mod tests {
             },
         };
 
-        let (acc, proof) = prover.fold(&M, &mut ts);
+        let (_acc, proof) = prover.prove(&M, &mut ts);
 
         let verifier = PlusVerifier {
             A,
@@ -218,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fold_multi() {
+    fn test_prove_multi() {
         let n = 1 << 17;
         let sop = R::dimension() * 128; // S inf-norm = 128
         let L = 3;
@@ -305,8 +287,8 @@ mod tests {
 
         let mut ts_v = PoseidonTS::default::<PC>();
 
-        for i in 0..3 {
-            let (acc, proof) = prover.fold(&M, &mut ts);
+        for _ in 0..3 {
+            let (acc, proof) = prover.prove(&M, &mut ts);
             lproof.verify(&mut ts_v);
             verifier.verify(&proof, &mut ts_v);
 
