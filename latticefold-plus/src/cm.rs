@@ -11,6 +11,7 @@ use latticefold::{
     },
 };
 use stark_rings::{unit_monomial, CoeffRing, PolyRing, Ring, Zq};
+use stark_rings_linalg::SparseMatrix;
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::{
@@ -62,14 +63,18 @@ impl<R: CoeffRing> Cm<R>
 where
     R::BaseRing: Zq,
 {
-    pub fn prove(&self, transcript: &mut impl Transcript<R>) -> (Com<R>, CmProof<R>) {
+    pub fn prove(
+        &self,
+        M: &[SparseMatrix<R>],
+        transcript: &mut impl Transcript<R>,
+    ) -> (Com<R>, CmProof<R>) {
         let k = self.rg.dparams.k;
         let d = R::dimension();
         let dp = R::dimension() / 2;
         let l = self.rg.dparams.l;
         let n = self.rg.instances[0].tau.len();
 
-        let dcom = self.rg.range_check(transcript);
+        let dcom = self.rg.range_check(M, transcript);
 
         let s = (0..3)
             .map(|_| short_challenge(128, transcript))
@@ -162,8 +167,8 @@ where
         };
 
         let (proof_a, evals_a, ro_a) =
-            self.sumchecker(&dcom, &h, (t0.clone(), t1.clone()), transcript);
-        let (proof_b, evals_b, ro_b) = self.sumchecker(&dcom, &h, (t0, t1), transcript);
+            self.sumchecker(&dcom, &h, (t0.clone(), t1.clone()), M, transcript);
+        let (proof_b, evals_b, ro_b) = self.sumchecker(&dcom, &h, (t0, t1), M, transcript);
 
         // Step 7
         // TODO needs more folding challenges `s` for the L instances
@@ -207,6 +212,7 @@ where
         dcom: &Dcom<R>,
         h: &[Vec<R>],
         t: (Vec<R>, Vec<R>),
+        M: &[SparseMatrix<R>],
         transcript: &mut impl Transcript<R>,
     ) -> (Proof<R>, Vec<InstanceEvals<R>>, Vec<R>) {
         let nvars = self.rg.nvars;
@@ -220,7 +226,7 @@ where
             1 // eq
             + L * (
                 4  // [tau, m_tau, f, h]
-                + 4 * self.rg.M.len() // M * [tau, ...]
+                + 4 * M.len() // M * [tau, ...]
             )
             + 2, // t(z)
         );
@@ -240,7 +246,7 @@ where
             mles.push(f_mle);
             mles.push(h_mle);
 
-            for m in &self.rg.M {
+            for m in M {
                 let Mtau = m.try_mul_vec(&rtau).unwrap();
                 mles.push(DenseMultilinearExtension::from_evaluations_vec(nvars, Mtau));
 
@@ -262,7 +268,7 @@ where
         mles.push(t0_mle);
         mles.push(t1_mle);
 
-        let Mlen = self.rg.M.len();
+        let Mlen = M.len();
         let comb_fn = |vals: &[R]| -> R {
             (0..L)
                 .map(|l| {
@@ -326,11 +332,14 @@ impl<R: CoeffRing> CmProof<R>
 where
     R::BaseRing: Zq,
 {
-    pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<ComX<R>, SumCheckError<R>> {
+    pub fn verify(
+        &self,
+        M: &[SparseMatrix<R>],
+        transcript: &mut impl Transcript<R>,
+    ) -> Result<ComX<R>, SumCheckError<R>> {
         let k = self.dcom.dparams.k;
         let d = R::dimension();
         let nvars = self.dcom.out.nvars;
-        let M = &self.dcom.out.M;
         let L = self.evals.0.len();
 
         self.dcom.verify(transcript).unwrap();
@@ -612,7 +621,6 @@ mod tests {
         let rg = Rg {
             nvars: log2(n) as usize,
             instances: vec![instance],
-            M,
             dparams: DecompParameters { b, k, l },
         };
 
@@ -626,9 +634,9 @@ mod tests {
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let (_com, proof) = cm.prove(&mut ts);
+        let (_com, proof) = cm.prove(&M, &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
-        proof.verify(&mut ts).unwrap();
+        proof.verify(&M, &mut ts).unwrap();
     }
 }

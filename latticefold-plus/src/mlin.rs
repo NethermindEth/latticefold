@@ -15,7 +15,6 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Mlin<R> {
     pub lins: Vec<LinB<R>>,
-    pub A: Matrix<R>,
     pub params: LinParameters,
 }
 
@@ -42,6 +41,7 @@ where
     /// Folds L `LinB` instances.
     pub fn mlin(
         &self,
+        A: &Matrix<R>,
         M: &[SparseMatrix<R>],
         transcript: &mut impl Transcript<R>,
     ) -> (LinB2<R>, CmProof<R>) {
@@ -50,18 +50,17 @@ where
         let instances = self
             .lins
             .iter()
-            .map(|lin| RgInstance::from_f(lin.f.clone(), &self.A, &self.params.decomp))
+            .map(|lin| RgInstance::from_f(lin.f.clone(), &A, &self.params.decomp))
             .collect::<Vec<_>>();
 
         let coms = instances
             .iter()
             .map(|inst| {
-                let cm_f = self.A.try_mul_vec(&inst.f).unwrap();
-                let C_Mf = self
-                    .A
+                let cm_f = A.try_mul_vec(&inst.f).unwrap();
+                let C_Mf = A
                     .try_mul_vec(&inst.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
                     .unwrap();
-                let cm_mtau = self.A.try_mul_vec(&inst.m_tau).unwrap();
+                let cm_mtau = A.try_mul_vec(&inst.m_tau).unwrap();
 
                 CmComs {
                     cm_f,
@@ -74,13 +73,12 @@ where
         let rg = Rg {
             nvars: log2(n) as usize,
             instances,
-            M: M.to_vec(),
             dparams: self.params.decomp.clone(),
         };
 
         let cm = Cm { rg, coms };
 
-        let (com, proof) = cm.prove(transcript);
+        let (com, proof) = cm.prove(M, transcript);
 
         let cm_g = com
             .x
@@ -139,7 +137,7 @@ mod tests {
     use super::*;
     use crate::{
         lin::{Linearize, Verify},
-        r1cs::CommittedR1CS,
+        r1cs::ComR1CS,
         rgchk::DecompParameters,
     };
 
@@ -147,6 +145,17 @@ mod tests {
     fn test_mlin() {
         let n = 1 << 15;
         let k = 2;
+        let B = 2;
+        let b = (R::dimension() / 2) as u128;
+        let kappa = 2;
+        let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
+            / ((R::dimension() / 2) as f64).ln())
+        .ceil() as usize;
+        let params = LinParameters {
+            kappa,
+            decomp: DecompParameters { b, k, l },
+        };
+
         let z0 = vec![R::one(); n / k];
         let mut z1 = vec![R::one(); n / k];
         z1[0] = R::from(0u128);
@@ -161,66 +170,36 @@ mod tests {
         r1cs.A.coeffs[0][0].0 = 2u128.into();
         r1cs.C.coeffs[0][0].0 = 2u128.into();
 
-        r1cs.A = r1cs.A.gadget_decompose(2, k);
-        r1cs.B = r1cs.B.gadget_decompose(2, k);
-        r1cs.C = r1cs.C.gadget_decompose(2, k);
+        r1cs.A = r1cs.A.gadget_decompose(B, k);
+        r1cs.B = r1cs.B.gadget_decompose(B, k);
+        r1cs.C = r1cs.C.gadget_decompose(B, k);
         r1cs.A.pad_rows(n);
         r1cs.B.pad_rows(n);
         r1cs.C.pad_rows(n);
 
-        let f0 = z0.gadget_decompose(2, k);
-        let f1 = z1.gadget_decompose(2, k);
-        r1cs.check_relation(&f0).unwrap();
-        r1cs.check_relation(&f1).unwrap();
+        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
 
-        let cr1cs0 = CommittedR1CS {
-            r1cs: r1cs.clone(),
-            f: f0,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
-        let cr1cs1 = CommittedR1CS {
-            r1cs,
-            f: f1,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
-
-        let kappa = 2;
-        let b = (R::dimension() / 2) as u128;
-        // log_d' (q)
-        let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
-            / ((R::dimension() / 2) as f64).ln())
-        .ceil() as usize;
+        let cr1cs0 = ComR1CS::new(r1cs.clone(), z0, 1, B, k, &A);
+        let cr1cs1 = ComR1CS::new(r1cs, z1, 1, B, k, &A);
 
         let mut ts = PoseidonTS::default::<PC>();
         let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
         let (linb1, lproof1) = cr1cs1.linearize(&mut ts);
 
-        let params = LinParameters {
-            kappa,
-            decomp: DecompParameters { b, k, l },
-        };
-
-        let M = vec![
-            cr1cs0.r1cs.A.clone(),
-            cr1cs0.r1cs.B.clone(),
-            cr1cs0.r1cs.C.clone(),
-        ];
+        let M = cr1cs0.x.matrices();
 
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
 
         let mlin = Mlin {
             lins: vec![linb0, linb1],
             params,
-            A,
         };
 
-        let (_linb2, cmproof) = mlin.mlin(&M, &mut ts);
+        let (_linb2, cmproof) = mlin.mlin(&A, &M, &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         lproof0.verify(&mut ts);
         lproof1.verify(&mut ts);
-        cmproof.verify(&mut ts).unwrap();
+        cmproof.verify(&M, &mut ts).unwrap();
     }
 }

@@ -135,7 +135,7 @@ mod tests {
     use crate::{
         lin::{LinParameters, Linearize, Verify},
         mlin::Mlin,
-        r1cs::CommittedR1CS,
+        r1cs::ComR1CS,
         rgchk::DecompParameters,
     };
 
@@ -175,12 +175,7 @@ mod tests {
 
         r1cs.check_relation(&f).unwrap();
 
-        let cr1cs = CommittedR1CS {
-            r1cs,
-            f,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
+        let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
 
         let mut ts = PoseidonTS::default::<PC>();
         let (linb, lproof) = cr1cs.linearize(&mut ts);
@@ -197,12 +192,12 @@ mod tests {
         let decomp = Decomp {
             f: cr1cs.f,
             r,
-            M: vec![cr1cs.r1cs.A, cr1cs.r1cs.B, cr1cs.r1cs.C],
+            M: cr1cs.x.matrices(),
         };
 
         let ((_linb0, _linb1), proof) = decomp.decompose(&A, B);
 
-        proof.verify(&cm_f, &linb.x.v, B);
+        proof.verify(&cr1cs.x.cm_f, &linb.x.v, B);
     }
 
     #[test]
@@ -213,6 +208,18 @@ mod tests {
             + 1;
         let n = 1 << 15;
         let k = 2;
+        let kappa = 2;
+        let b = (R::dimension() / 2) as u128;
+        // log_d' (q)
+        let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
+            / ((R::dimension() / 2) as f64).ln())
+        .ceil() as usize;
+
+        let params = LinParameters {
+            kappa,
+            decomp: DecompParameters { b, k, l },
+        };
+
         let z0 = vec![R::one(); n / k];
         let mut z1 = vec![R::one(); n / k];
         z1[0] = R::from(0u128);
@@ -239,55 +246,28 @@ mod tests {
         r1cs.check_relation(&f0).unwrap();
         r1cs.check_relation(&f1).unwrap();
 
-        let cr1cs0 = CommittedR1CS {
-            r1cs: r1cs.clone(),
-            f: f0,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
-        let cr1cs1 = CommittedR1CS {
-            r1cs,
-            f: f1,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
+        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
 
-        let kappa = 2;
-        let b = (R::dimension() / 2) as u128;
-        // log_d' (q)
-        let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
-            / ((R::dimension() / 2) as f64).ln())
-        .ceil() as usize;
+        let cr1cs0 = ComR1CS::new(r1cs.clone(), z0, 1, B, k, &A);
+        let cr1cs1 = ComR1CS::new(r1cs, z1, 1, B, k, &A);
 
         let mut ts = PoseidonTS::default::<PC>();
         let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
         let (linb1, lproof1) = cr1cs1.linearize(&mut ts);
 
-        let params = LinParameters {
-            kappa,
-            decomp: DecompParameters { b, k, l },
-        };
-
-        let M = vec![
-            cr1cs0.r1cs.A.clone(),
-            cr1cs0.r1cs.B.clone(),
-            cr1cs0.r1cs.C.clone(),
-        ];
-
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+        let M = cr1cs0.x.matrices();
 
         let mlin = Mlin {
             lins: vec![linb0, linb1],
             params,
-            A: A.clone(),
         };
 
-        let (linb2, cmproof) = mlin.mlin(&M, &mut ts);
+        let (linb2, cmproof) = mlin.mlin(&A, &M, &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         lproof0.verify(&mut ts);
         lproof1.verify(&mut ts);
-        cmproof.verify(&mut ts).unwrap();
+        cmproof.verify(&M, &mut ts).unwrap();
 
         let decomp = Decomp {
             f: linb2.g,

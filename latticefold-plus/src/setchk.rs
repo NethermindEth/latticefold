@@ -24,7 +24,6 @@ pub enum MonomialSet<R> {
 pub struct In<R> {
     pub nvars: usize,
     pub sets: Vec<MonomialSet<R>>, // Ms and ms: n x m, or n
-    pub M: Vec<SparseMatrix<R>>,   // n_lin matrices, n x n
 }
 
 #[derive(Clone, Debug)]
@@ -32,9 +31,8 @@ pub struct Out<R: PolyRing> {
     pub nvars: usize,
     pub r: Vec<R::BaseRing>, // log n
     pub sumcheck_proof: Proof<R>,
-    pub e: Vec<Vec<Vec<R>>>,     // m, matrices outputs
-    pub b: Vec<R>,               // vectors outputs
-    pub M: Vec<SparseMatrix<R>>, // n_lin matrices, n x n
+    pub e: Vec<Vec<Vec<R>>>, // m, matrices outputs
+    pub b: Vec<R>,           // vectors outputs
 }
 
 #[derive(Debug, Error)]
@@ -59,7 +57,7 @@ impl<R: OverField> In<R> {
     /// Proves sets rings are all unit monomials.
     /// Currently requires k >= 1 monomial matrices sets. TODO support other scenarios.
     /// If k > 1, sumcheck batching is employed.
-    pub fn set_check(&self, transcript: &mut impl Transcript<R>) -> Out<R> {
+    pub fn set_check(&self, M: &[SparseMatrix<R>], transcript: &mut impl Transcript<R>) -> Out<R> {
         let Ms: Vec<&SparseMatrix<R>> = self
             .sets
             .iter()
@@ -193,7 +191,7 @@ impl<R: OverField> In<R> {
             .collect::<Vec<R>>();
 
         let e: Vec<Vec<Vec<R>>> = {
-            let mut e = Vec::with_capacity(1 + self.M.len());
+            let mut e = Vec::with_capacity(1 + M.len());
 
             let e0 = MTs
                 .iter()
@@ -210,7 +208,8 @@ impl<R: OverField> In<R> {
                 .collect::<Vec<Vec<R>>>();
             e.push(e0);
 
-            for M in &self.M {
+            // Mf
+            for Mi in M {
                 let ei = MTs
                     .iter()
                     .map(|MT| {
@@ -221,7 +220,7 @@ impl<R: OverField> In<R> {
                                 row.iter().for_each(|&(r, i)| {
                                     drow[i] = r;
                                 });
-                                let evals = M.try_mul_vec(&drow).unwrap();
+                                let evals = Mi.try_mul_vec(&drow).unwrap();
                                 let mle =
                                     DenseMultilinearExtension::from_evaluations_vec(tnvars, evals);
                                 mle.evaluate(&r_poly).unwrap()
@@ -248,7 +247,6 @@ impl<R: OverField> In<R> {
             b,
             r,
             sumcheck_proof,
-            M: self.M.clone(),
         }
     }
 }
@@ -347,11 +345,10 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M)],
             nvars: log2(n) as usize,
-            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let out = scin.set_check(&mut ts);
+        let out = scin.set_check(&[], &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         out.verify(&mut ts).unwrap();
@@ -369,11 +366,10 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M)],
             nvars: log2(n) as usize,
-            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let out = scin.set_check(&mut ts);
+        let out = scin.set_check(&[], &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         assert!(out.verify(&mut ts).is_err());
@@ -388,11 +384,10 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M0), MonomialSet::Matrix(M1)],
             nvars: log2(n) as usize,
-            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let out = scin.set_check(&mut ts);
+        let out = scin.set_check(&[], &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         out.verify(&mut ts).unwrap();
@@ -411,11 +406,10 @@ mod tests {
         let scin = In {
             sets: vec![MonomialSet::Matrix(M0), MonomialSet::Matrix(M1)],
             nvars: log2(n) as usize,
-            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let out = scin.set_check(&mut ts);
+        let out = scin.set_check(&[], &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         assert!(out.verify(&mut ts).is_err());
@@ -437,11 +431,10 @@ mod tests {
                 MonomialSet::Vector(m1),
             ],
             nvars: log2(n) as usize,
-            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let out = scin.set_check(&mut ts);
+        let out = scin.set_check(&[], &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         out.verify(&mut ts).unwrap();
@@ -464,11 +457,10 @@ mod tests {
                 MonomialSet::Vector(m0),
             ],
             nvars: log2(n) as usize,
-            M: vec![],
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let out = scin.set_check(&mut ts);
+        let out = scin.set_check(&[], &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         assert!(out.verify(&mut ts).is_err());
