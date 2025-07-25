@@ -7,22 +7,35 @@ use latticefold::{
         MLSumcheck, Proof,
     },
 };
-use stark_rings::{OverField, Ring};
+use stark_rings::{
+    balanced_decomposition::{Decompose, GadgetDecompose},
+    OverField, Ring,
+};
+use stark_rings_linalg::{Matrix, SparseMatrix};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::lin::{LinB, LinBX, Linearize, Verify};
 
+/// Committed R1CS
+///
 /// Assume $n=m*\hat{l}$.
 #[derive(Debug)]
-pub struct CommittedR1CS<R: Ring> {
-    pub r1cs: R1CS<R>,
-    pub cm: Vec<R>, // kappa
-    pub x: Vec<R>,  // l_in
-    pub f: Vec<R>,  // n
+pub struct ComR1CS<R: Ring> {
+    pub x: ComR1CSX<R>,
+    pub f: Vec<R>, // n
 }
 
 #[derive(Debug)]
-pub struct CommittedR1CSProof<R: Ring> {
+pub struct ComR1CSX<R: Ring> {
+    pub r1cs: R1CS<R>,
+    pub z: Vec<R>,    // m
+    pub cm_f: Vec<R>, // kappa
+    /// Public input length
+    pub l_in: usize,
+}
+
+#[derive(Debug)]
+pub struct ComR1CSProof<R: Ring> {
     pub sumcheck_proof: Proof<R>,
     pub nvars: usize,
     pub r: Vec<R>,
@@ -32,13 +45,37 @@ pub struct CommittedR1CSProof<R: Ring> {
     pub vc: R,
 }
 
-impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
-    type Proof = CommittedR1CSProof<R>;
+impl<R: Decompose + Ring> ComR1CS<R> {
+    pub fn new(r1cs: R1CS<R>, z: Vec<R>, l_in: usize, b: u128, k: usize, A: &Matrix<R>) -> Self {
+        let f = z.gadget_decompose(b, k);
+        let cm_f = A.try_mul_vec(&f).unwrap();
+        let x = ComR1CSX {
+            r1cs,
+            z,
+            cm_f,
+            l_in,
+        };
+        Self { x, f }
+    }
+}
+
+impl<R: Ring> ComR1CSX<R> {
+    pub fn matrices(&self) -> Vec<SparseMatrix<R>> {
+        vec![
+            self.r1cs.A.clone(),
+            self.r1cs.B.clone(),
+            self.r1cs.C.clone(),
+        ]
+    }
+}
+
+impl<R: OverField> Linearize<R> for ComR1CS<R> {
+    type Proof = ComR1CSProof<R>;
     fn linearize(&self, transcript: &mut impl Transcript<R>) -> (LinB<R>, Self::Proof) {
         let nvars = log2(self.f.len().next_power_of_two()) as usize;
-        let ga = self.r1cs.A.try_mul_vec(&self.f).unwrap();
-        let gb = self.r1cs.B.try_mul_vec(&self.f).unwrap();
-        let gc = self.r1cs.C.try_mul_vec(&self.f).unwrap();
+        let ga = self.x.r1cs.A.try_mul_vec(&self.f).unwrap();
+        let gb = self.x.r1cs.B.try_mul_vec(&self.f).unwrap();
+        let gc = self.x.r1cs.C.try_mul_vec(&self.f).unwrap();
         let r: Vec<R> = transcript
             .get_challenges(nvars)
             .into_iter()
@@ -81,7 +118,7 @@ impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
         let v = vec![(v, v), (va, va), (vb, vb), (vc, vc)];
 
         let x = LinBX {
-            cm_f: self.cm.clone(),
+            cm_f: self.x.cm_f.clone(),
             r,
             v,
         };
@@ -94,7 +131,7 @@ impl<R: OverField> Linearize<R> for CommittedR1CS<R> {
     }
 }
 
-impl<R: OverField> Verify<R> for CommittedR1CSProof<R> {
+impl<R: OverField> Verify<R> for ComR1CSProof<R> {
     fn verify(&self, transcript: &mut impl Transcript<R>) -> bool {
         let r: Vec<R> = transcript
             .get_challenges(self.nvars)
@@ -118,6 +155,24 @@ impl<R: OverField> Verify<R> for CommittedR1CSProof<R> {
 
         true
     }
+}
+
+/// Decomposes and squares a R1CS
+///
+/// n x m -> n x n, where m * k = n
+pub fn r1cs_decomposed_square<R: Decompose + Ring>(
+    mut r1cs: R1CS<R>,
+    n: usize,
+    b: u128,
+    k: usize,
+) -> R1CS<R> {
+    r1cs.A = r1cs.A.gadget_decompose(b, k);
+    r1cs.B = r1cs.B.gadget_decompose(b, k);
+    r1cs.C = r1cs.C.gadget_decompose(b, k);
+    r1cs.A.pad_rows(n);
+    r1cs.B.pad_rows(n);
+    r1cs.C.pad_rows(n);
+    r1cs
 }
 
 #[cfg(test)]
@@ -145,24 +200,20 @@ mod tests {
 
     #[test]
     fn test_linearization() {
-        let (mut r1cs, z) = identity_cs(1 << 5);
+        let n = 1 << 7;
+        let k = 4;
+        let m = n / k;
+        let b = 2;
+        let kappa = 2;
+        let (mut r1cs, z) = identity_cs(m);
 
-        r1cs.A.coeffs[0][0].0 = 9u128.into();
-        r1cs.C.coeffs[0][0].0 = 9u128.into();
+        r1cs.A = r1cs.A.gadget_decompose(b, k);
+        r1cs.B = r1cs.B.gadget_decompose(b, k);
+        r1cs.C = r1cs.C.gadget_decompose(b, k);
 
-        r1cs.A = r1cs.A.gadget_decompose(2, 4);
-        r1cs.B = r1cs.B.gadget_decompose(2, 4);
-        r1cs.C = r1cs.C.gadget_decompose(2, 4);
-
-        let f = z.gadget_decompose(2, 4);
-        r1cs.check_relation(&f).unwrap();
-
-        let cr1cs = CommittedR1CS {
-            r1cs,
-            f,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
+        let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
+        let cr1cs = ComR1CS::new(r1cs, z, 1, b, k, &A);
+        cr1cs.x.r1cs.check_relation(&cr1cs.f).unwrap();
 
         let mut ts = PoseidonTS::default::<PC>();
         let (_linb, lproof) = cr1cs.linearize(&mut ts);

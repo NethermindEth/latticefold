@@ -51,7 +51,7 @@ where
         M: &[SparseMatrix<R>],
         transcript: &mut impl Transcript<R>,
     ) -> ((LinB<R>, LinB<R>), PlusProof<R>) {
-        let (linb2, cmproof) = self.instances.mlin(M, transcript);
+        let (linb2, cmproof) = self.instances.mlin(&self.A, M, transcript);
         let decomp = Decomp {
             f: linb2.g,
             r: linb2.x.ro.clone(),
@@ -74,8 +74,13 @@ where
     R::BaseRing: Zq,
 {
     /// Verify
-    pub fn verify(&self, proof: &PlusProof<R>, transcript: &mut impl Transcript<R>) {
-        proof.cmproof.verify(transcript).unwrap();
+    pub fn verify(
+        &self,
+        proof: &PlusProof<R>,
+        M: &[SparseMatrix<R>],
+        transcript: &mut impl Transcript<R>,
+    ) {
+        proof.cmproof.verify(M, transcript).unwrap();
         proof
             .dproof
             .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, self.params.B);
@@ -97,7 +102,7 @@ mod tests {
     use super::*;
     use crate::{
         lin::{Linearize, Verify},
-        r1cs::CommittedR1CS,
+        r1cs::{r1cs_decomposed_square, ComR1CS},
         rgchk::DecompParameters,
         utils::estimate_bound,
     };
@@ -117,6 +122,10 @@ mod tests {
         let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
             / ((R::dimension() / 2) as f64).ln())
         .ceil() as usize;
+        let params = LinParameters {
+            kappa,
+            decomp: DecompParameters { b, k, l },
+        };
 
         let mut rng = rand::thread_rng();
         let pop = [R::ZERO, R::ONE];
@@ -130,43 +139,24 @@ mod tests {
             C: SparseMatrix::identity(m),
         };
 
-        r1cs.A = r1cs.A.gadget_decompose(B, k);
-        r1cs.B = r1cs.B.gadget_decompose(B, k);
-        r1cs.C = r1cs.C.gadget_decompose(B, k);
-        r1cs.A.pad_rows(n);
-        r1cs.B.pad_rows(n);
-        r1cs.C.pad_rows(n);
-
-        let f0 = z0.gadget_decompose(B, k);
-        let f1 = z1.gadget_decompose(B, k);
-        r1cs.check_relation(&f0).unwrap();
-        r1cs.check_relation(&f1).unwrap();
-
-        let cr1cs0 = CommittedR1CS {
-            r1cs: r1cs.clone(),
-            f: f0,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
-        let cr1cs1 = CommittedR1CS {
-            r1cs,
-            f: f1,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
-
-        let params = LinParameters {
-            kappa,
-            decomp: DecompParameters { b, k, l },
-        };
-
-        let M = vec![
-            cr1cs0.r1cs.A.clone(),
-            cr1cs0.r1cs.B.clone(),
-            cr1cs0.r1cs.C.clone(),
-        ];
+        let r1cs = r1cs_decomposed_square(
+            R1CS::<R> {
+                l: 1,
+                A: SparseMatrix::identity(m),
+                B: SparseMatrix::identity(m),
+                C: SparseMatrix::identity(m),
+            },
+            n,
+            B,
+            k,
+        );
 
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+
+        let cr1cs0 = ComR1CS::new(r1cs.clone(), z0, 1, B, k, &A);
+        let cr1cs1 = ComR1CS::new(r1cs, z1, 1, B, k, &A);
+
+        let M = cr1cs0.x.matrices();
 
         let mut ts = PoseidonTS::default::<PC>();
         let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
@@ -175,7 +165,6 @@ mod tests {
         let mlin = Mlin {
             lins: vec![linb0, linb1],
             params: params.clone(),
-            A: A.clone(),
         };
 
         let prover = PlusProver {
@@ -196,7 +185,7 @@ mod tests {
         let mut ts = PoseidonTS::default::<PC>();
         lproof0.verify(&mut ts);
         lproof1.verify(&mut ts);
-        verifier.verify(&proof, &mut ts);
+        verifier.verify(&proof, &M, &mut ts);
     }
 
     #[test]
@@ -214,50 +203,32 @@ mod tests {
         let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
             / ((R::dimension() / 2) as f64).ln())
         .ceil() as usize;
-
-        let mut rng = rand::thread_rng();
-        let pop = [R::ZERO, R::ONE];
-        let z0: Vec<R> = (0..m).map(|_| *pop.choose(&mut rng).unwrap()).collect();
-        let z1: Vec<R> = (0..m).map(|_| *pop.choose(&mut rng).unwrap()).collect();
-
-        let mut r1cs = R1CS::<R> {
-            l: 1,
-            A: SparseMatrix::identity(m),
-            B: SparseMatrix::identity(m),
-            C: SparseMatrix::identity(m),
-        };
-
-        r1cs.A = r1cs.A.gadget_decompose(B, k);
-        r1cs.B = r1cs.B.gadget_decompose(B, k);
-        r1cs.C = r1cs.C.gadget_decompose(B, k);
-        r1cs.A.pad_rows(n);
-        r1cs.B.pad_rows(n);
-        r1cs.C.pad_rows(n);
-
-        let f0 = z0.gadget_decompose(B, k);
-        let f1 = z1.gadget_decompose(B, k);
-        r1cs.check_relation(&f0).unwrap();
-        r1cs.check_relation(&f1).unwrap();
-
-        let cr1cs = CommittedR1CS {
-            r1cs: r1cs.clone(),
-            f: f0,
-            x: vec![1u128.into()],
-            cm: vec![],
-        };
-
         let params = LinParameters {
             kappa,
             decomp: DecompParameters { b, k, l },
         };
 
-        let M = vec![
-            cr1cs.r1cs.A.clone(),
-            cr1cs.r1cs.B.clone(),
-            cr1cs.r1cs.C.clone(),
-        ];
+        let mut rng = rand::thread_rng();
+        let pop = [R::ZERO, R::ONE];
+        let z: Vec<R> = (0..m).map(|_| *pop.choose(&mut rng).unwrap()).collect();
+
+        let r1cs = r1cs_decomposed_square(
+            R1CS::<R> {
+                l: 1,
+                A: SparseMatrix::identity(m),
+                B: SparseMatrix::identity(m),
+                C: SparseMatrix::identity(m),
+            },
+            n,
+            B,
+            k,
+        );
 
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+
+        let cr1cs = ComR1CS::new(r1cs, z, 1, B, k, &A);
+
+        let M = cr1cs.x.matrices();
 
         let mut ts = PoseidonTS::default::<PC>();
         let (mut linb, mut lproof) = cr1cs.linearize(&mut ts);
@@ -265,7 +236,6 @@ mod tests {
         let mlin = Mlin {
             lins: vec![linb],
             params: params.clone(),
-            A: A.clone(),
         };
 
         let mut prover = PlusProver {
@@ -290,22 +260,14 @@ mod tests {
         for _ in 0..3 {
             let (acc, proof) = prover.prove(&M, &mut ts);
             lproof.verify(&mut ts_v);
-            verifier.verify(&proof, &mut ts_v);
+            verifier.verify(&proof, &M, &mut ts_v);
 
             (linb, lproof) = cr1cs.linearize(&mut ts);
             let mlin = Mlin {
                 lins: vec![acc.0, acc.1, linb],
                 params: params.clone(),
-                A: A.clone(),
             };
-            prover = PlusProver {
-                instances: mlin,
-                A: A.clone(),
-                params: PlusParameters {
-                    lin: params.clone(),
-                    B,
-                },
-            };
+            prover.instances = mlin;
         }
     }
 }

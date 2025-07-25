@@ -26,7 +26,6 @@ pub struct DecompParameters {
 pub struct Rg<R: PolyRing> {
     pub nvars: usize,
     pub instances: Vec<RgInstance<R>>, // L instances
-    pub M: Vec<SparseMatrix<R>>,       // n_lin matrices, n x n
     pub dparams: DecompParameters,
 }
 
@@ -61,7 +60,11 @@ where
     /// Range checks
     ///
     /// Support for `L` [`RgInstance`]s mapped to the corresponding [`DcomEvals`].
-    pub fn range_check(&self, transcript: &mut impl Transcript<R>) -> Dcom<R> {
+    pub fn range_check(
+        &self,
+        M: &[SparseMatrix<R>],
+        transcript: &mut impl Transcript<R>,
+    ) -> Dcom<R> {
         let mut sets = Vec::with_capacity(self.instances.len() * (self.instances[0].M_f.len() + 1));
         for inst in &self.instances {
             inst.M_f.iter().for_each(|m| {
@@ -75,9 +78,8 @@ where
         let in_rel = In {
             sets,
             nvars: self.nvars,
-            M: self.M.clone(),
         };
-        let out_rel = in_rel.set_check(transcript);
+        let out_rel = in_rel.set_check(M, transcript);
 
         let evals = self
             .instances
@@ -103,10 +105,10 @@ where
 
                 let r = out_rel.r.iter().map(|z| R::from(*z)).collect::<Vec<_>>();
 
-                let mut a = Vec::with_capacity(1 + self.M.len());
-                let mut b = Vec::with_capacity(1 + self.M.len());
+                let mut a = Vec::with_capacity(1 + M.len());
+                let mut b = Vec::with_capacity(1 + M.len());
                 // Let `c` be the evaluation of `f` over r
-                let mut c = Vec::with_capacity(1 + self.M.len());
+                let mut c = Vec::with_capacity(1 + M.len());
 
                 a.push(
                     DenseMultilinearExtension::from_evaluations_vec(self.nvars, inst.tau.clone())
@@ -122,7 +124,7 @@ where
                         .unwrap(),
                 );
 
-                self.M.iter().for_each(|m| {
+                M.iter().for_each(|m| {
                     let Mtau = m
                         .try_mul_vec(&inst.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
                         .unwrap();
@@ -330,12 +332,11 @@ mod tests {
         let rg = Rg {
             nvars: log2(n) as usize,
             instances: vec![instance],
-            M: vec![],
             dparams,
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let dcom = rg.range_check(&mut ts);
+        let dcom = rg.range_check(&[], &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         dcom.verify(&mut ts).unwrap();
@@ -374,12 +375,11 @@ mod tests {
         let rg = Rg {
             nvars: log2(n) as usize,
             instances: vec![instance],
-            M,
             dparams,
         };
 
         let mut ts = PoseidonTS::default::<PC>();
-        let dcom = rg.range_check(&mut ts);
+        let dcom = rg.range_check(&M, &mut ts);
 
         let mut ts = PoseidonTS::default::<PC>();
         dcom.verify(&mut ts).unwrap();
