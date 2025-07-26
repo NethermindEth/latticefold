@@ -155,8 +155,8 @@ pub(crate) fn create_dummy_cubing_sparse_matrix<R: Ring>(
         "Length of witness vector must be equal to ccs width"
     );
     let mut matrix = SparseMatrix {
-        n_rows: rows,
-        n_cols: columns,
+        nrows: rows,
+        ncols: columns,
         coeffs: vec![vec![]; rows],
     };
     for (i, row) in matrix.coeffs.iter_mut().enumerate() {
