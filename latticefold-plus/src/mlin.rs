@@ -173,7 +173,7 @@ mod tests {
         r1cs.A.coeffs[0][0].0 = 2u128.into();
         r1cs.C.coeffs[0][0].0 = 2u128.into();
 
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), params.kappa, n);
 
         let cr1cs0 = ComR1CS::new(r1cs.clone(), z0, 1, B, k, &A);
         let cr1cs1 = ComR1CS::new(r1cs, z1, 1, B, k, &A);
@@ -184,7 +184,7 @@ mod tests {
 
         let M = cr1cs0.x.matrices();
 
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), params.kappa, n);
 
         let mlin = Mlin {
             lins: vec![linb0, linb1],

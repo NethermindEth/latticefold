@@ -344,7 +344,7 @@ mod tests {
             / ((R::dimension() / 2) as f64).ln())
         .ceil() as usize;
 
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), kappa, n);
 
         let dparams = DecompParameters { b, k, l };
         let instance = RgInstance::from_f(f.clone(), &A, &dparams);
@@ -387,7 +387,7 @@ mod tests {
             / ((R::dimension() / 2) as f64).ln())
         .ceil() as usize;
 
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), kappa, n);
 
         let dparams = DecompParameters { b, k, l };
         let instance = RgInstance::from_f(f.clone(), &A, &dparams);

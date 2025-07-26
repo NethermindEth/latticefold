@@ -220,7 +220,7 @@ mod tests {
         r1cs.B = r1cs.B.gadget_decompose(b, k);
         r1cs.C = r1cs.C.gadget_decompose(b, k);
 
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), kappa, n);
         let cr1cs = ComR1CS::new(r1cs, z, 1, b, k, &A);
         cr1cs.x.r1cs.check_relation(&cr1cs.f).unwrap();
 

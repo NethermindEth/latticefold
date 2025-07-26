@@ -93,7 +93,7 @@ mod tests {
             kappa,
             decomp: DecompParameters { b, k, l },
         };
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), params.kappa, n);
         let z = vec![R::one(); m];
 
         let mut r1cs = R1CS::<R> {
