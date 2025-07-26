@@ -99,7 +99,7 @@ impl<R: OverField> In<R> {
             for row in MT.coeffs.iter() {
                 let mut m_j = vec![R::zero(); M.nrows];
                 row.iter().for_each(|(r, i)| m_j[*i] = R::from(ev(r, beta)));
-                // ev(x^2) = ev(x)^2, iif monomial
+                // ev(x^2) = ev(x)^2, if and only if monomial
                 let m_prime_j = m_j.iter().map(|z| *z * z).collect::<Vec<_>>();
 
                 let mle_m_j = DenseMultilinearExtension::from_evaluations_vec(tnvars, m_j);
@@ -128,7 +128,7 @@ impl<R: OverField> In<R> {
             let beta = transcript.get_challenge();
 
             let m_j = m.iter().map(|r| R::from(ev(r, beta))).collect::<Vec<_>>();
-            // ev(x^2) = ev(x)^2, iif monomial
+            // ev(x^2) = ev(x)^2, if and only if monomial
             let m_prime_j = m_j.iter().map(|z| *z * z).collect::<Vec<_>>();
 
             let mle_m_j = DenseMultilinearExtension::from_evaluations_vec(tnvars, m_j);
