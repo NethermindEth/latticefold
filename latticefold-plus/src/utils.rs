@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_tensor() {
         let r = vec![10, 2];
-        let expected = vec![-9 * -1, -9 * 2, 10 * -1, 10 * 2];
+        let expected = vec![-9 * -1, -9 * 2, -10, 10 * 2];
         assert_eq!(tensor(&r), expected);
     }
 }
