@@ -8,6 +8,8 @@ use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::lin::{LinB, LinBX};
 
+pub type RxR<R> = (R, R);
+
 #[derive(Clone, Debug)]
 pub struct Decomp<R> {
     pub f: Vec<R>,
@@ -19,7 +21,7 @@ pub struct Decomp<R> {
 pub struct DecompProof<R> {
     /// C = com(F)
     pub C: (Vec<R>, Vec<R>), // kappa x 2
-    pub v: (Vec<(R, R)>, Vec<(R, R)>), // (v(0), v(1))
+    pub v: (Vec<RxR<R>>, Vec<RxR<R>>), // (v(0), v(1))
 }
 
 impl<R: PolyRing> Decomp<R>

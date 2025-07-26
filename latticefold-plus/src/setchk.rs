@@ -39,8 +39,8 @@ pub struct Out<R: PolyRing> {
 pub enum SetCheckError<R: Ring> {
     #[error("Sumcheck failed: {0}")]
     Sumcheck(#[from] SumCheckError<R>),
-    #[error("Recomputed claim `v` mismatch")]
-    ExpectedClaim,
+    #[error("Recomputed claim `v` mismatch: expected = {0}, received = {1}")]
+    ExpectedEvaluation(R, R),
 }
 
 fn ev<R: PolyRing>(r: &R, x: R::BaseRing) -> R::BaseRing {
@@ -328,7 +328,7 @@ impl<R: OverField> Out<R> {
 
         (ver == v)
             .then_some(())
-            .ok_or(SetCheckError::ExpectedClaim)?;
+            .ok_or(SetCheckError::ExpectedEvaluation(ver, v))?;
 
         Ok(())
     }
