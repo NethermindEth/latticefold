@@ -165,7 +165,7 @@ mod tests {
         r1cs.C.coeffs[0][0].0 = 2u128.into();
         let r1cs = r1cs_decomposed_square(r1cs, n, 2, k);
 
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), kappa, n);
 
         let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
 
@@ -234,7 +234,7 @@ mod tests {
         r1cs.check_relation(&f0).unwrap();
         r1cs.check_relation(&f1).unwrap();
 
-        let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+        let A = Matrix::<R>::rand(&mut ark_std::test_rng(), params.kappa, n);
 
         let cr1cs0 = ComR1CS::new(r1cs.clone(), z0, 1, B, k, &A);
         let cr1cs1 = ComR1CS::new(r1cs, z1, 1, B, k, &A);

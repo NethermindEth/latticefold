@@ -40,7 +40,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         decomp: DecompParameters { b, k, l },
     };
 
-    let mut rng = rand::thread_rng();
+    let mut rng = ark_std::test_rng();
     let pop = [R::ZERO, R::ONE];
     let z: Vec<R> = (0..m).map(|_| *pop.choose(&mut rng).unwrap()).collect();
 
@@ -56,7 +56,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         k,
     );
 
-    let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
+    let A = Matrix::<R>::rand(&mut ark_std::test_rng(), params.kappa, n);
 
     let cr1cs = ComR1CS::new(r1cs, z, 1, B, k, &A);
 
