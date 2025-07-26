@@ -175,11 +175,7 @@ mod tests {
         let mut ts = PoseidonTranscript::empty::<PC>();
         lproof.verify(&mut ts);
 
-        let r = lproof
-            .r
-            .iter()
-            .map(|r| (r.clone(), r.clone()))
-            .collect::<Vec<_>>();
+        let r = lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>();
 
         let decomp = Decomp {
             f: cr1cs.f,

@@ -18,10 +18,7 @@ use latticefold_plus::{
     utils::estimate_bound,
 };
 use rand::prelude::*;
-use stark_rings::{
-    balanced_decomposition::GadgetDecompose, cyclotomic_ring::models::frog_ring::RqPoly as R,
-    PolyRing, Ring,
-};
+use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing, Ring};
 use stark_rings_linalg::{Matrix, SparseMatrix};
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -68,7 +65,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     // Prover / Fold
     c.bench_function("prove", |b| {
         b.iter_batched(
-            || PoseidonTranscript::empty::<PC>(),
+            PoseidonTranscript::empty::<PC>,
             |mut ts| {
                 let (linb, _lproof) = cr1cs.linearize(&mut ts);
                 // L=3 (equal) instances are folded here
@@ -109,7 +106,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let (_acc, proof) = prover.prove(&M, &mut ts);
     c.bench_function("verify", |b| {
         b.iter_batched(
-            || PoseidonTranscript::empty::<PC>(),
+            PoseidonTranscript::empty::<PC>,
             |mut ts_v| {
                 let verifier = PlusVerifier {
                     A: A.clone(),
