@@ -190,6 +190,7 @@ impl<R: OverField> In<R> {
             .map(|x| x.into())
             .collect::<Vec<R>>();
 
+        // Step 3
         let e: Vec<Vec<Vec<R>>> = {
             let mut e = Vec::with_capacity(1 + M.len());
 
@@ -241,6 +242,9 @@ impl<R: OverField> In<R> {
             })
             .collect::<Vec<_>>();
 
+        // Prover to Verifier messages
+        absorb_evaluations(&e, &b, transcript);
+
         Out {
             nvars: self.nvars,
             e,
@@ -281,6 +285,9 @@ impl<R: OverField> Out<R> {
         let r: Vec<R> = subclaim.point.into_iter().map(|x| x.into()).collect();
 
         let v = subclaim.expected_evaluation;
+
+        // Prover to Verifier messages
+        absorb_evaluations(&self.e, &self.b, transcript);
 
         use ark_std::One;
         let mut ver = R::zero();
@@ -327,15 +334,28 @@ impl<R: OverField> Out<R> {
     }
 }
 
+fn absorb_evaluations<R: OverField>(
+    e: &[Vec<Vec<R>>],
+    b: &[R],
+    transcript: &mut impl Transcript<R>,
+) {
+    for ek in e {
+        for ej in ek {
+            transcript.absorb_slice(ej);
+        }
+    }
+    transcript.absorb_slice(b);
+}
+
 #[cfg(test)]
 mod tests {
     use ark_std::One;
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-    use latticefold::transcript::poseidon::PoseidonTS;
     use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, unit_monomial};
     use stark_rings_linalg::SparseMatrix;
 
     use super::*;
+    use crate::transcript::PoseidonTranscript;
 
     #[test]
     fn test_set_check() {
@@ -347,10 +367,10 @@ mod tests {
             nvars: log2(n) as usize,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let out = scin.set_check(&[], &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
     }
 
@@ -368,10 +388,10 @@ mod tests {
             nvars: log2(n) as usize,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let out = scin.set_check(&[], &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
     }
 
@@ -386,10 +406,10 @@ mod tests {
             nvars: log2(n) as usize,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let out = scin.set_check(&[], &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
     }
 
@@ -408,10 +428,10 @@ mod tests {
             nvars: log2(n) as usize,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let out = scin.set_check(&[], &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
     }
 
@@ -433,10 +453,10 @@ mod tests {
             nvars: log2(n) as usize,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let out = scin.set_check(&[], &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
     }
 
@@ -459,10 +479,10 @@ mod tests {
             nvars: log2(n) as usize,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let out = scin.set_check(&[], &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
     }
 }
