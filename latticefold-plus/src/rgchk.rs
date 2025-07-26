@@ -2,7 +2,7 @@ use ark_std::iter::once;
 use latticefold::transcript::Transcript;
 use stark_rings::{
     balanced_decomposition::{Decompose, DecomposeToVec},
-    exp, psi, CoeffRing, PolyRing, Ring, Zq,
+    exp, psi, CoeffRing, OverField, PolyRing, Ring, Zq,
 };
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
 use stark_rings_poly::mle::DenseMultilinearExtension;
@@ -153,6 +153,8 @@ where
             })
             .collect::<Vec<_>>();
 
+        absorb_evaluations(&evals, transcript);
+
         Dcom {
             evals,
             out: out_rel,
@@ -167,6 +169,8 @@ where
 {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), ()> {
         self.out.verify(transcript).unwrap(); //.map_err(|_| ())?;
+
+        absorb_evaluations(&self.evals, transcript);
 
         for (l, eval) in self.evals.iter().enumerate() {
             // ct(psi b) =? a
@@ -293,15 +297,22 @@ where
     }
 }
 
+fn absorb_evaluations<R: OverField>(evals: &[DcomEvals<R>], transcript: &mut impl Transcript<R>) {
+    evals.iter().for_each(|eval| {
+        transcript.absorb_slice(&eval.a.iter().map(|z| R::from(*z)).collect::<Vec<R>>());
+        transcript.absorb_slice(&eval.c);
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use ark_ff::PrimeField;
     use ark_std::{log2, Zero};
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-    use latticefold::transcript::poseidon::PoseidonTS;
     use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 
     use super::*;
+    use crate::transcript::PoseidonTranscript;
 
     #[test]
     fn test_range_check() {
@@ -335,10 +346,10 @@ mod tests {
             dparams,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let dcom = rg.range_check(&[], &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         dcom.verify(&mut ts).unwrap();
     }
 
@@ -378,10 +389,10 @@ mod tests {
             dparams,
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let dcom = rg.range_check(&M, &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         dcom.verify(&mut ts).unwrap();
     }
 }

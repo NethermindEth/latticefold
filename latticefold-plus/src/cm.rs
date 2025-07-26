@@ -10,7 +10,7 @@ use latticefold::{
         MLSumcheck, Proof, SumCheckError,
     },
 };
-use stark_rings::{unit_monomial, CoeffRing, PolyRing, Ring, Zq};
+use stark_rings::{unit_monomial, CoeffRing, OverField, PolyRing, Ring, Zq};
 use stark_rings_linalg::SparseMatrix;
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
@@ -133,6 +133,8 @@ where
                 comh
             })
             .collect();
+
+        absorb_comh(&comh, transcript);
 
         let kappa = comh[0].len();
         let log_kappa = log2(kappa) as usize;
@@ -324,6 +326,8 @@ where
             })
             .collect::<Vec<_>>();
 
+        absorb_evaluations(&evals, transcript);
+
         (sumcheck_proof, evals, ro)
     }
 }
@@ -356,6 +360,8 @@ where
             })
             .collect::<Vec<_>>();
         let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
+
+        absorb_comh(&self.comh, transcript);
 
         let kappa = self.comh[0].len();
         let log_kappa = log2(kappa) as usize;
@@ -476,6 +482,9 @@ where
                 let t1_ro = t1.evaluate(&ro).unwrap();
 
                 let expected_eval = subclaim.expected_evaluation;
+
+                absorb_evaluations(evals, transcript);
+
                 let eq = eq_eval(&r, &ro).unwrap();
 
                 let eval = evals
@@ -559,6 +568,21 @@ where
     }
 }
 
+fn absorb_comh<R: OverField>(comh: &[Vec<R>], transcript: &mut impl Transcript<R>) {
+    comh.iter().for_each(|ci| transcript.absorb_slice(ci));
+}
+
+fn absorb_evaluations<R: OverField>(
+    evals: &[InstanceEvals<R>],
+    transcript: &mut impl Transcript<R>,
+) {
+    evals.iter().for_each(|ieval| {
+        ieval.0.iter().for_each(|vals| {
+            transcript.absorb_slice(vals);
+        });
+    });
+}
+
 /// t(z) = tensor(c(z)) ⊗ s' ⊗ (1, d', ..., d'^(ℓ-1)) ⊗ (1, X, ..., X^(d-1))
 fn calculate_t_z<T>(c_z: &[T], s_prime: &[T], d_prime_powers: &[T], x_powers: &[T]) -> Vec<T>
 where
@@ -575,12 +599,14 @@ mod tests {
     use ark_ff::PrimeField;
     use ark_std::Zero;
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-    use latticefold::transcript::poseidon::PoseidonTS;
     use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
     use stark_rings_linalg::{Matrix, SparseMatrix};
 
     use super::*;
-    use crate::rgchk::{DecompParameters, RgInstance};
+    use crate::{
+        rgchk::{DecompParameters, RgInstance},
+        transcript::PoseidonTranscript,
+    };
 
     #[test]
     fn test_com() {
@@ -633,10 +659,10 @@ mod tests {
             }],
         };
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let (_com, proof) = cm.prove(&M, &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         proof.verify(&M, &mut ts).unwrap();
     }
 }

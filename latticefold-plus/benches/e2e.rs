@@ -7,13 +7,14 @@ use ark_ff::PrimeField;
 use ark_std::time::Duration;
 use criterion::{criterion_group, criterion_main, Criterion};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-use latticefold::{arith::r1cs::R1CS, transcript::poseidon::PoseidonTS};
+use latticefold::arith::r1cs::R1CS;
 use latticefold_plus::{
     lin::{LinParameters, Linearize, Verify},
     mlin::Mlin,
     plus::{PlusParameters, PlusProver, PlusVerifier},
     r1cs::{r1cs_decomposed_square, ComR1CS},
     rgchk::DecompParameters,
+    transcript::PoseidonTranscript,
     utils::estimate_bound,
 };
 use rand::prelude::*;
@@ -67,7 +68,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     // Prover / Fold
     c.bench_function("prove", |b| {
         b.iter_batched(
-            || PoseidonTS::default::<PC>(),
+            || PoseidonTranscript::empty::<PC>(),
             |mut ts| {
                 let (linb, _lproof) = cr1cs.linearize(&mut ts);
                 // L=3 (equal) instances are folded here
@@ -91,7 +92,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Verifier
-    let mut ts = PoseidonTS::default::<PC>();
+    let mut ts = PoseidonTranscript::empty::<PC>();
     let (linb, lproof) = cr1cs.linearize(&mut ts);
     let mlin = Mlin {
         lins: vec![linb.clone(), linb.clone(), linb],
@@ -108,7 +109,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let (_acc, proof) = prover.prove(&M, &mut ts);
     c.bench_function("verify", |b| {
         b.iter_batched(
-            || PoseidonTS::default::<PC>(),
+            || PoseidonTranscript::empty::<PC>(),
             |mut ts_v| {
                 let verifier = PlusVerifier {
                     A: A.clone(),

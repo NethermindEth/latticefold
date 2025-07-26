@@ -127,18 +127,16 @@ mod tests {
     use ark_ff::PrimeField;
     use ark_std::One;
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-    use latticefold::{arith::r1cs::R1CS, transcript::poseidon::PoseidonTS};
-    use stark_rings::{
-        balanced_decomposition::GadgetDecompose, cyclotomic_ring::models::frog_ring::RqPoly as R,
-        PolyRing,
-    };
+    use latticefold::arith::r1cs::R1CS;
+    use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing};
     use stark_rings_linalg::SparseMatrix;
 
     use super::*;
     use crate::{
         lin::{Linearize, Verify},
-        r1cs::ComR1CS,
+        r1cs::{r1cs_decomposed_square, ComR1CS},
         rgchk::DecompParameters,
+        transcript::PoseidonTranscript,
     };
 
     #[test]
@@ -160,29 +158,27 @@ mod tests {
         let mut z1 = vec![R::one(); n / k];
         z1[0] = R::from(0u128);
 
-        let mut r1cs = R1CS::<R> {
-            l: 1,
-            A: SparseMatrix::identity(n / k),
-            B: SparseMatrix::identity(n / k),
-            C: SparseMatrix::identity(n / k),
-        };
+        let mut r1cs = r1cs_decomposed_square(
+            R1CS::<R> {
+                l: 1,
+                A: SparseMatrix::identity(n / k),
+                B: SparseMatrix::identity(n / k),
+                C: SparseMatrix::identity(n / k),
+            },
+            n,
+            B,
+            k,
+        );
 
         r1cs.A.coeffs[0][0].0 = 2u128.into();
         r1cs.C.coeffs[0][0].0 = 2u128.into();
-
-        r1cs.A = r1cs.A.gadget_decompose(B, k);
-        r1cs.B = r1cs.B.gadget_decompose(B, k);
-        r1cs.C = r1cs.C.gadget_decompose(B, k);
-        r1cs.A.pad_rows(n);
-        r1cs.B.pad_rows(n);
-        r1cs.C.pad_rows(n);
 
         let A = Matrix::<R>::rand(&mut rand::thread_rng(), params.kappa, n);
 
         let cr1cs0 = ComR1CS::new(r1cs.clone(), z0, 1, B, k, &A);
         let cr1cs1 = ComR1CS::new(r1cs, z1, 1, B, k, &A);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
         let (linb1, lproof1) = cr1cs1.linearize(&mut ts);
 
@@ -197,7 +193,7 @@ mod tests {
 
         let (_linb2, cmproof) = mlin.mlin(&A, &M, &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         lproof0.verify(&mut ts);
         lproof1.verify(&mut ts);
         cmproof.verify(&M, &mut ts).unwrap();

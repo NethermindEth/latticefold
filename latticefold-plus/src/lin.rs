@@ -68,7 +68,7 @@ mod tests {
     use ark_ff::PrimeField;
     use ark_std::One;
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-    use latticefold::{arith::r1cs::R1CS, transcript::poseidon::PoseidonTS};
+    use latticefold::arith::r1cs::R1CS;
     use stark_rings::{
         balanced_decomposition::GadgetDecompose, cyclotomic_ring::models::frog_ring::RqPoly as R,
         PolyRing,
@@ -76,7 +76,7 @@ mod tests {
     use stark_rings_linalg::SparseMatrix;
 
     use super::*;
-    use crate::r1cs::ComR1CS;
+    use crate::{r1cs::ComR1CS, transcript::PoseidonTranscript};
 
     #[test]
     fn test_lin() {
@@ -117,11 +117,11 @@ mod tests {
 
         let M = cr1cs.x.matrices();
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let (linb, lproof) = cr1cs.linearize(&mut ts);
         let (_linb2, cmproof) = linb.lin(&A, &M, &params, &mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         lproof.verify(&mut ts);
         cmproof.verify(&M, &mut ts).unwrap();
     }

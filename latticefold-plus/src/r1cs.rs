@@ -104,6 +104,8 @@ impl<R: OverField> Linearize<R> for ComR1CS<R> {
         let vb = mle_gb.evaluate(&ro).unwrap();
         let vc = mle_gc.evaluate(&ro).unwrap();
 
+        absorb_evaluations(&[v, va, vb, vc], transcript);
+
         let proof = Self::Proof {
             sumcheck_proof,
             nvars,
@@ -149,12 +151,19 @@ impl<R: OverField> Verify<R> for ComR1CSProof<R> {
 
         let ro: Vec<R> = subclaim.point.into_iter().map(|x| x.into()).collect();
         let s = subclaim.expected_evaluation;
+
+        absorb_evaluations(&[self.v, self.va, self.vb, self.vc], transcript);
+
         let e = eq_eval(&r, &ro).unwrap();
 
         assert_eq!(e * (self.va * self.vb - self.vc), s);
 
         true
     }
+}
+
+fn absorb_evaluations<R: OverField>(evals: &[R; 4], transcript: &mut impl Transcript<R>) {
+    transcript.absorb_slice(evals);
 }
 
 /// Decomposes and squares a R1CS
@@ -179,13 +188,13 @@ pub fn r1cs_decomposed_square<R: Decompose + Ring>(
 mod tests {
     use ark_std::One;
     use cyclotomic_rings::rings::GoldilocksPoseidonConfig as PC;
-    use latticefold::transcript::poseidon::PoseidonTS;
     use stark_rings::{
         balanced_decomposition::GadgetDecompose, cyclotomic_ring::models::goldilocks::RqPoly as R,
     };
     use stark_rings_linalg::SparseMatrix;
 
     use super::*;
+    use crate::transcript::PoseidonTranscript;
 
     fn identity_cs(n: usize) -> (R1CS<R>, Vec<R>) {
         let r1cs = R1CS::<R> {
@@ -215,10 +224,10 @@ mod tests {
         let cr1cs = ComR1CS::new(r1cs, z, 1, b, k, &A);
         cr1cs.x.r1cs.check_relation(&cr1cs.f).unwrap();
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         let (_linb, lproof) = cr1cs.linearize(&mut ts);
 
-        let mut ts = PoseidonTS::default::<PC>();
+        let mut ts = PoseidonTranscript::empty::<PC>();
         lproof.verify(&mut ts);
     }
 }
