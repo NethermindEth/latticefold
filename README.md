@@ -1,14 +1,14 @@
 # LatticeFold
 
-A proof-of-concept implementation of the LatticeFold folding scheme engineered by [Nethermind](https://nethermind.io) based on the work 
-[LatticeFold: A Lattice-based Folding Scheme and its Applications to Succinct Proof Systems](https://eprint.iacr.org/2024/257) by Dan Boneh and Binyi Chen.
+A proof-of-concept implementation of the LatticeFold and LatticeFold+ folding schemes engineered by [Nethermind](https://nethermind.io) based on the works 
+[LatticeFold: A Lattice-based Folding Scheme and its Applications to Succinct Proof Systems](https://eprint.iacr.org/2024/257) and [LatticeFold+: Faster, Simpler, Shorter Lattice-Based Folding for Succinct Proof Systems](https://eprint.iacr.org/2025/247) by Dan Boneh and Binyi Chen.
 
 **DISCLAIMER:** This is a proof-of-concept prototype, and in particular has not received careful code review. This implementation is provided "as is" and NOT ready for production use. Use at your own risk.
 
 ## Benchmarks
 
 To run the benchmarks on your local machine, simply execute `cargo bench`. This will take around 48 hours.
-Use `cargo bench --bench` to measure relevant parts of the protocol as well as the ajtai commitment scheme, and comment the prime fields you don't want to measure.
+Use `cargo bench --bench` to measure relevant parts of the protocol as well as the Ajtai commitment scheme, and comment the prime fields you don't want to measure.
 
 ## Building
 
@@ -36,6 +36,7 @@ latticefold = { git = "https://github.com/NethermindEth/latticefold.git", packag
 
 Available packages:
 - `latticefold`: main crate, contains the non-interactive folding scheme implementation, together with the Ajtai commitment scheme, R1CS/CCS structures, Fiat-Shamir transcript machinery, etc.
+- `latticefold-plus`: an improved version of LatticeFold. Currently a work-in-progress implementation. See [more](latticefold-plus/README.md). 
 - `cyclotomic-rings`: contains the trait definition of a ring suitable to be used in the LatticeFold protocol, a few ready-to-use rings and short challenge set machinery.
 
 ## Performance report
