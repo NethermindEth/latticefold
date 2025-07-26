@@ -50,7 +50,7 @@ where
         let instances = self
             .lins
             .iter()
-            .map(|lin| RgInstance::from_f(lin.f.clone(), &A, &self.params.decomp))
+            .map(|lin| RgInstance::from_f(lin.f.clone(), A, &self.params.decomp))
             .collect::<Vec<_>>();
 
         let coms = instances

@@ -6,6 +6,7 @@ use stark_rings::{
 };
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
 use stark_rings_poly::mle::DenseMultilinearExtension;
+use thiserror::Error;
 
 use crate::{
     setchk::{In, MonomialSet, Out},
@@ -51,6 +52,14 @@ pub struct DcomEvals<R: PolyRing> {
     pub a: Vec<R::BaseRing>, // eval over tau
     pub b: Vec<R>,           // eval over m_tau
     pub c: Vec<R>,           // eval over f
+}
+
+#[derive(Debug, Error)]
+pub enum RangeCheckError<R: PolyRing> {
+    #[error("Psi check failed: a = {0}, b = {1}")]
+    PsiCheckAB(R::BaseRing, R),
+    #[error("Psi check failed: v = {0}, u-comb = {1}")]
+    PsiCheckVU(Vec<R::BaseRing>, Vec<R>),
 }
 
 impl<R: CoeffRing> Rg<R>
@@ -167,7 +176,7 @@ impl<R: CoeffRing> Dcom<R>
 where
     R::BaseRing: Zq,
 {
-    pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), ()> {
+    pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), RangeCheckError<R>> {
         self.out.verify(transcript).unwrap(); //.map_err(|_| ())?;
 
         absorb_evaluations(&self.evals, transcript);
@@ -177,8 +186,7 @@ where
             for (&a_i, b_i) in eval.a.iter().zip(eval.b.iter()) {
                 ((psi::<R>() * b_i).ct() == a_i)
                     .then_some(())
-                    .ok_or(())
-                    .unwrap();
+                    .ok_or(RangeCheckError::PsiCheckAB(a_i, *b_i))?;
             }
 
             let d = R::dimension();
@@ -204,12 +212,13 @@ where
                     .collect::<Vec<_>>();
 
                 if ni == 0 {
-                    (eval.v == v_rec).then_some(()).ok_or(()).unwrap();
+                    (eval.v == v_rec)
+                        .then_some(())
+                        .ok_or(RangeCheckError::PsiCheckVU(v_rec, u_comb))?;
                 } else {
                     (eval.c[ni].coeffs() == v_rec)
                         .then_some(())
-                        .ok_or(())
-                        .unwrap();
+                        .ok_or(RangeCheckError::PsiCheckVU(v_rec, u_comb))?;
                 }
             }
         }
