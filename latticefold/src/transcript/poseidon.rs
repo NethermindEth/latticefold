@@ -55,6 +55,10 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
         <R::BaseRing as Field>::from_base_prime_field_elems(&c)
             .expect("something went wrong: c does not contain extension_degree elements")
     }
+
+    fn squeeze_bytes(&mut self, n: usize) -> Vec<u8> {
+        self.sponge.squeeze_bytes(n)
+    }
 }
 
 impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithShortChallenges<R>

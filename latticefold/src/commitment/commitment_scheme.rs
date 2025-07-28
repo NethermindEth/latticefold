@@ -2,7 +2,7 @@ use cyclotomic_rings::rings::SuitableRing;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use stark_rings::{
-    balanced_decomposition::decompose_balanced_vec,
+    balanced_decomposition::DecomposeToVec,
     cyclotomic_ring::{CRT, ICRT},
     OverField,
 };
@@ -101,7 +101,8 @@ impl<const C: usize, const W: usize, NTT: SuitableRing> AjtaiCommitmentScheme<C,
         &self,
         f: &[NTT::CoefficientRepresentation],
     ) -> Result<Commitment<C, NTT>, CommitmentError> {
-        let f = decompose_balanced_vec(f, P::B, P::L)
+        let f = f
+            .decompose_to_vec(P::B, P::L)
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();

@@ -1,6 +1,6 @@
 use cyclotomic_rings::rings::SuitableRing;
 use stark_rings::{
-    balanced_decomposition::{decompose_balanced_vec, gadget_decompose, recompose},
+    balanced_decomposition::{recompose, DecomposeToVec, GadgetDecompose},
     cyclotomic_ring::{CRT, ICRT},
 };
 use stark_rings_linalg::ops::Transpose;
@@ -20,12 +20,13 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 
     // radix-B
     let decomposed_in_B: Vec<NTT::CoefficientRepresentation> =
-        gadget_decompose(&coeff_repr, DP::B, DP::L);
+        coeff_repr.gadget_decompose(DP::B, DP::L);
 
     // We now have a m * l length vector
     // Each element from original vector is mapped to l-length chunk
 
-    decompose_balanced_vec(&decomposed_in_B, DP::B_SMALL as u128, DP::K)
+    decomposed_in_B
+        .decompose_to_vec(DP::B_SMALL as u128, DP::K)
         // We have a k by (m*l) matrix
         .transpose()
         // We have a (m*l) by k matrix
@@ -44,7 +45,7 @@ pub(super) fn decompose_big_vec_into_k_vec_and_compose_back<
 pub(super) fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionParams>(
     x: &[NTT::CoefficientRepresentation],
 ) -> Vec<Vec<NTT::CoefficientRepresentation>> {
-    decompose_balanced_vec(x, DP::B_SMALL as u128, DP::K).transpose()
+    x.decompose_to_vec(DP::B_SMALL as u128, DP::K).transpose()
 }
 
 #[cfg(test)]
@@ -52,7 +53,7 @@ mod tests {
     use cyclotomic_rings::rings::SuitableRing;
     use rand::Rng;
     use stark_rings::{
-        balanced_decomposition::{decompose_balanced_vec, recompose},
+        balanced_decomposition::{recompose, Decompose},
         cyclotomic_ring::{
             models::goldilocks::{RqNTT, RqPoly},
             CRT,
@@ -125,8 +126,7 @@ mod tests {
             .iter()
             .map(|vec| {
                 vec.iter()
-                    .flat_map(|&x| decompose_balanced_vec(&[x.icrt()], DP::B, DP::L))
-                    .flatten()
+                    .flat_map(|&x| x.icrt().decompose(DP::B, DP::L))
                     .collect()
             })
             .collect();
