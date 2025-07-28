@@ -14,18 +14,18 @@ use stark_rings::{
 use stark_rings_linalg::{Matrix, SparseMatrix};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
-use crate::lin::{LinB, LinBX, Linearize, Verify};
+use crate::lin::{LinB, LinBX, Linearize, LinearizedVerify};
 
 /// Committed R1CS
 ///
 /// Assume $n=m*\hat{l}$.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ComR1CS<R: Ring> {
     pub x: ComR1CSX<R>,
     pub f: Vec<R>, // n
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ComR1CSX<R: Ring> {
     pub r1cs: R1CS<R>,
     pub z: Vec<R>,    // m
@@ -34,7 +34,7 @@ pub struct ComR1CSX<R: Ring> {
     pub l_in: usize,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ComR1CSProof<R: Ring> {
     pub sumcheck_proof: Proof<R>,
     pub nvars: usize,
@@ -133,7 +133,7 @@ impl<R: OverField> Linearize<R> for ComR1CS<R> {
     }
 }
 
-impl<R: OverField> Verify<R> for ComR1CSProof<R> {
+impl<R: OverField> LinearizedVerify<R> for ComR1CSProof<R> {
     fn verify(&self, transcript: &mut impl Transcript<R>) -> bool {
         let r: Vec<R> = transcript
             .get_challenges(self.nvars)

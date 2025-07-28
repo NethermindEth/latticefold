@@ -5,12 +5,11 @@
 
 use ark_ff::PrimeField;
 use ark_std::time::Duration;
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold::arith::r1cs::R1CS;
 use latticefold_plus::{
-    lin::{LinParameters, Linearize, Verify},
-    mlin::Mlin,
+    lin::LinParameters,
     plus::{PlusParameters, PlusProver, PlusVerifier},
     r1cs::{r1cs_decomposed_square, ComR1CS},
     rgchk::DecompParameters,
@@ -61,62 +60,44 @@ fn criterion_benchmark(c: &mut Criterion) {
     let cr1cs = ComR1CS::new(r1cs, z, 1, B, k, &A);
 
     let M = cr1cs.x.matrices();
+    let pparams = PlusParameters { lin: params, B };
 
     // Prover / Fold
     c.bench_function("prove", |b| {
         b.iter_batched(
-            PoseidonTranscript::empty::<PC>,
-            |mut ts| {
-                let (linb, _lproof) = cr1cs.linearize(&mut ts);
+            || {
+                let ts = PoseidonTranscript::empty::<PC>();
                 // L=3 (equal) instances are folded here
                 // TODO Do accumulated instance (2) + one online (1)
-                let mlin = Mlin {
-                    lins: vec![linb.clone(), linb.clone(), linb],
-                    params: params.clone(),
-                };
-                let prover = PlusProver {
-                    instances: mlin,
-                    A: A.clone(),
-                    params: PlusParameters {
-                        lin: params.clone(),
-                        B,
-                    },
-                };
-                let (_acc, _proof) = prover.prove(&M, &mut ts);
+                (
+                    PlusProver::init(A.clone(), M.clone(), 1, pparams.clone(), ts),
+                    [cr1cs.clone(), cr1cs.clone(), cr1cs.clone()],
+                )
+            },
+            |(mut prover, c1rcs)| {
+                black_box(prover.prove(&c1rcs));
             },
             criterion::BatchSize::SmallInput,
         )
     });
 
     // Verifier
-    let mut ts = PoseidonTranscript::empty::<PC>();
-    let (linb, lproof) = cr1cs.linearize(&mut ts);
-    let mlin = Mlin {
-        lins: vec![linb.clone(), linb.clone(), linb],
-        params: params.clone(),
-    };
-    let prover = PlusProver {
-        instances: mlin,
-        A: A.clone(),
-        params: PlusParameters {
-            lin: params.clone(),
-            B,
-        },
-    };
-    let (_acc, proof) = prover.prove(&M, &mut ts);
+    let ts = PoseidonTranscript::empty::<PC>();
+    let mut prover = PlusProver::init(A.clone(), M.clone(), 1, pparams.clone(), ts);
+    let proof = prover.prove(&[cr1cs.clone(), cr1cs.clone(), cr1cs.clone()]);
+
     c.bench_function("verify", |b| {
         b.iter_batched(
-            PoseidonTranscript::empty::<PC>,
-            |mut ts_v| {
-                let verifier = PlusVerifier {
-                    A: A.clone(),
-                    params: PlusParameters {
-                        lin: params.clone(),
-                        B,
-                    },
-                };
-                lproof.verify(&mut ts_v);
-                verifier.verify(&proof, &M, &mut ts_v);
+            || {
+                PlusVerifier::init(
+                    A.clone(),
+                    M.clone(),
+                    pparams.clone(),
+                    PoseidonTranscript::empty::<PC>(),
+                )
+            },
+            |mut verifier| {
+                black_box(verifier.verify(&proof));
             },
             criterion::BatchSize::SmallInput,
         )
