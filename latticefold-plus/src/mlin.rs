@@ -133,7 +133,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        lin::{Linearize, Verify},
+        lin::{Linearize, LinearizedVerify},
         r1cs::{r1cs_decomposed_square, ComR1CS},
         rgchk::DecompParameters,
         transcript::PoseidonTranscript,

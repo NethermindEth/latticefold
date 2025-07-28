@@ -135,7 +135,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        lin::{LinParameters, Linearize, Verify},
+        lin::{LinParameters, Linearize, LinearizedVerify},
         mlin::Mlin,
         r1cs::{r1cs_decomposed_square, ComR1CS},
         rgchk::DecompParameters,

@@ -12,11 +12,11 @@ use crate::{
 };
 
 pub trait Linearize<R: OverField> {
-    type Proof: Verify<R>;
+    type Proof: LinearizedVerify<R>;
     fn linearize(&self, transcript: &mut impl Transcript<R>) -> (LinB<R>, Self::Proof);
 }
 
-pub trait Verify<R: OverField> {
+pub trait LinearizedVerify<R: OverField> {
     fn verify(&self, transcript: &mut impl Transcript<R>) -> bool;
 }
 
