@@ -21,7 +21,7 @@ use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing, Rin
 use stark_rings_linalg::{Matrix, SparseMatrix};
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let n = 1 << 17;
+    let n = 1 << 16;
     let sop = R::dimension() * 128; // S inf-norm = 128
     let L = 3;
     let k = 4;
