@@ -512,20 +512,20 @@ impl<R: Ring> ConstraintSystem<R> {
 
         // Create empty sparse matrices
         let mut A = SparseMatrix {
-            n_rows: nconstraints,
-            n_cols: nvars,
+            nrows: nconstraints,
+            ncols: nvars,
             coeffs: vec![vec![]; nconstraints],
         };
 
         let mut B = SparseMatrix {
-            n_rows: nconstraints,
-            n_cols: nvars,
+            nrows: nconstraints,
+            ncols: nvars,
             coeffs: vec![vec![]; nconstraints],
         };
 
         let mut C = SparseMatrix {
-            n_rows: nconstraints,
-            n_cols: nvars,
+            nrows: nconstraints,
+            ncols: nvars,
             coeffs: vec![vec![]; nconstraints],
         };
 
@@ -667,12 +667,12 @@ mod tests {
 
         // Check that the R1CS is correct
         assert_eq!(r1cs.l, 2);
-        assert_eq!(r1cs.A.n_rows, 1);
-        assert_eq!(r1cs.A.n_cols, 3);
-        assert_eq!(r1cs.B.n_rows, 1);
-        assert_eq!(r1cs.B.n_cols, 3);
-        assert_eq!(r1cs.C.n_rows, 1);
-        assert_eq!(r1cs.C.n_cols, 3);
+        assert_eq!(r1cs.A.nrows, 1);
+        assert_eq!(r1cs.A.ncols, 3);
+        assert_eq!(r1cs.B.nrows, 1);
+        assert_eq!(r1cs.B.ncols, 3);
+        assert_eq!(r1cs.C.nrows, 1);
+        assert_eq!(r1cs.C.ncols, 3);
 
         // Test with a valid assignment
         let z = vec![RqNTT::from(3u64), RqNTT::from(4u64), RqNTT::from(12u64)]; // x=3, y=4, z=12
