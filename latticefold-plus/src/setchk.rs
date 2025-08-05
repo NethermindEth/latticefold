@@ -113,7 +113,7 @@ impl<R: OverField> In<R> {
             let eq = build_eq_x_r(&c).unwrap();
             mles.push(eq);
 
-            let alpha: R = transcript.get_challenge().into();
+            let alpha = transcript.get_challenge();
             alphas.push(alpha);
         }
 
@@ -140,7 +140,7 @@ impl<R: OverField> In<R> {
             let eq = build_eq_x_r(&c).unwrap();
             mles.push(eq);
 
-            let alpha: R = transcript.get_challenge().into();
+            let alpha = transcript.get_challenge();
             alphas.push(alpha);
         }
 
@@ -154,8 +154,8 @@ impl<R: OverField> In<R> {
                 let s = i * (2 * ncols + 1);
                 let mut res = R::zero();
                 for j in 0..ncols {
-                    res += alpha.pow([j as u64])
-                        * (vals[s + j * 2] * vals[s + j * 2] - vals[s + j * 2 + 1])
+                    res += (vals[s + j * 2] * vals[s + j * 2] - vals[s + j * 2 + 1])
+                        * alpha.pow([j as u64])
                 }
                 res *= vals[s + 2 * ncols]; // eq
                 lc += if let Some(rc) = &rc {
@@ -169,7 +169,7 @@ impl<R: OverField> In<R> {
                 let s = s_base + i * 3;
                 let mut res = R::zero();
                 let alpha_idx = Ms.len() + i;
-                res += alphas[alpha_idx] * (vals[s] * vals[s] - vals[s + 1]);
+                res += (vals[s] * vals[s] - vals[s + 1]) * alphas[alpha_idx];
                 res *= vals[s + 2]; // eq
                 lc += if let Some(rc) = &rc {
                     res * rc.pow([alpha_idx as u64])
@@ -259,7 +259,7 @@ impl<R: OverField> Out<R> {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), SetCheckError<R>> {
         let nclaims = self.e[0].len() + self.b.len();
 
-        let cba: Vec<(Vec<R>, R::BaseRing, R)> = (0..nclaims)
+        let cba: Vec<(Vec<R>, R::BaseRing, R::BaseRing)> = (0..nclaims)
             .map(|_| {
                 let c: Vec<R> = transcript
                     .get_challenges(self.nvars)
@@ -267,7 +267,7 @@ impl<R: OverField> Out<R> {
                     .map(|x| x.into())
                     .collect();
                 let beta = transcript.get_challenge();
-                let alpha: R = transcript.get_challenge().into();
+                let alpha = transcript.get_challenge();
                 (c, beta, alpha)
             })
             .collect();
@@ -302,7 +302,7 @@ impl<R: OverField> Out<R> {
                 .map(|(j, e_j)| {
                     let ev1 = R::from(ev(e_j, *beta));
                     let ev2 = R::from(ev(e_j, *beta * beta));
-                    alpha.pow([j as u64]) * (ev1 * ev1 - ev2)
+                    (ev1 * ev1 - ev2) * alpha.pow([j as u64])
                 })
                 .sum::<R>();
             ver += eq * e_sum * rc.as_ref().unwrap_or(&R::BaseRing::one()).pow([i as u64]);
