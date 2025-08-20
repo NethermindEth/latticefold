@@ -266,7 +266,7 @@ mod tests {
         let mut verifier = PlusVerifier::init(A, M, pparams, ts_v);
 
         for _ in 0..3 {
-            let proof = prover.prove(&[cr1cs.clone()]);
+            let proof = prover.prove(std::slice::from_ref(&cr1cs));
             verifier.verify(&proof);
         }
     }

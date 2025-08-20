@@ -591,7 +591,7 @@ impl VariableMap {
         self.one
     }
 
-    pub fn vars(&self) -> btree_map::Iter<String, (usize, usize)> {
+    pub fn vars(&self) -> btree_map::Iter<'_, String, (usize, usize)> {
         self.map.iter()
     }
 
