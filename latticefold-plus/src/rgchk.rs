@@ -24,6 +24,13 @@ pub struct DecompParameters {
 }
 
 #[derive(Clone, Debug)]
+pub struct FComs<R> {
+    pub cm_f: Vec<R>,
+    pub C_Mf: Vec<R>,
+    pub cm_mtau: Vec<R>,
+}
+
+#[derive(Clone, Debug)]
 pub struct Rg<R: PolyRing> {
     pub nvars: usize,
     pub instances: Vec<RgInstance<R>>, // L instances
@@ -37,11 +44,13 @@ pub struct RgInstance<R: PolyRing> {
     pub m_tau: Vec<R>,         // n, monomials
     pub f: Vec<R>,             // n
     pub comM_f: Vec<Matrix<R>>,
+    pub fcoms: FComs<R>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Dcom<R: PolyRing> {
     pub evals: Vec<DcomEvals<R>>, // L evals
+    pub fcoms: Vec<FComs<R>>,     // L commitments
     pub out: Out<R>,              // set checks
     pub dparams: DecompParameters,
 }
@@ -166,6 +175,11 @@ where
 
         Dcom {
             evals,
+            fcoms: self
+                .instances
+                .iter()
+                .map(|inst| inst.fcoms.clone())
+                .collect(),
             out: out_rel,
             dparams: self.dparams.clone(),
         }
@@ -296,12 +310,24 @@ where
             .map(|c| exp::<R>(*c).unwrap())
             .collect::<Vec<_>>();
 
+        let cm_f = A.try_mul_vec(&f).unwrap();
+        let C_Mf = A
+            .try_mul_vec(&tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
+            .unwrap();
+        let cm_mtau = A.try_mul_vec(&m_tau).unwrap();
+        let fcoms = FComs {
+            cm_f,
+            C_Mf,
+            cm_mtau,
+        };
+
         Self {
             M_f,
             tau,
             m_tau,
             f,
             comM_f,
+            fcoms,
         }
     }
 }

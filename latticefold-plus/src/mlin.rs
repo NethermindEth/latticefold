@@ -7,7 +7,7 @@ use stark_rings::{
 use stark_rings_linalg::{Matrix, SparseMatrix};
 
 use crate::{
-    cm::{Cm, CmComs, CmProof},
+    cm::{Cm, CmProof},
     lin::{LinB, LinParameters},
     rgchk::{Rg, RgInstance},
 };
@@ -53,30 +53,13 @@ where
             .map(|lin| RgInstance::from_f(lin.f.clone(), A, &self.params.decomp))
             .collect::<Vec<_>>();
 
-        let coms = instances
-            .iter()
-            .map(|inst| {
-                let cm_f = A.try_mul_vec(&inst.f).unwrap();
-                let C_Mf = A
-                    .try_mul_vec(&inst.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-                    .unwrap();
-                let cm_mtau = A.try_mul_vec(&inst.m_tau).unwrap();
-
-                CmComs {
-                    cm_f,
-                    C_Mf,
-                    cm_mtau,
-                }
-            })
-            .collect::<Vec<_>>();
-
         let rg = Rg {
             nvars: log2(n) as usize,
             instances,
             dparams: self.params.decomp.clone(),
         };
 
-        let cm = Cm { rg, coms };
+        let cm = Cm { rg };
 
         let (com, proof) = cm.prove(M, transcript);
 

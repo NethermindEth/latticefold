@@ -22,14 +22,6 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct Cm<R: PolyRing> {
     pub rg: Rg<R>,
-    pub coms: Vec<CmComs<R>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct CmComs<R> {
-    pub cm_f: Vec<R>,
-    pub C_Mf: Vec<R>,
-    pub cm_mtau: Vec<R>,
 }
 
 // eval over r_o of [tau (a), m_tau (b), f (c), h (u)] over 1 + n_lin
@@ -42,8 +34,6 @@ pub struct CmProof<R: PolyRing> {
     pub comh: Vec<Vec<R>>,
     pub sumcheck_proofs: (Proof<R>, Proof<R>),
     pub evals: (Vec<InstanceEvals<R>>, Vec<InstanceEvals<R>>),
-
-    pub cm_coms: Vec<CmComs<R>>,
 }
 
 #[derive(Clone, Debug)]
@@ -197,7 +187,6 @@ where
             comh,
             sumcheck_proofs: (proof_a, proof_b),
             evals: (evals_a, evals_b),
-            cm_coms: self.coms.clone(),
         };
 
         let ro = ro_a.into_iter().zip(ro_b).collect::<Vec<_>>();
@@ -528,11 +517,12 @@ where
     }
 
     pub fn x(&self, s: &[R], ro: Vec<(R, R)>) -> ComX<R> {
-        let L = self.cm_coms.len();
+        let L = self.dcom.fcoms.len();
 
         // TODO needs more folding challenges `s` for the L instances
         let cm_g = self
-            .cm_coms
+            .dcom
+            .fcoms
             .iter()
             .enumerate()
             .map(|(l, cmc)| {
@@ -638,26 +628,13 @@ mod tests {
         let dparams = DecompParameters { b, k, l };
         let instance = RgInstance::from_f(f.clone(), &A, &dparams);
 
-        let cm_f = A.try_mul_vec(&instance.f).unwrap();
-        let C_Mf = A
-            .try_mul_vec(&instance.tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-            .unwrap();
-        let cm_mtau = A.try_mul_vec(&instance.m_tau).unwrap();
-
         let rg = Rg {
             nvars: log2(n) as usize,
             instances: vec![instance],
             dparams: DecompParameters { b, k, l },
         };
 
-        let cm = Cm {
-            rg,
-            coms: vec![CmComs {
-                cm_f,
-                C_Mf,
-                cm_mtau,
-            }],
-        };
+        let cm = Cm { rg };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         let (_com, proof) = cm.prove(&M, &mut ts);
