@@ -1,5 +1,9 @@
 [workspace] 
-members = [ "latticefold-plus", "latticefold", "cyclotomic-rings" ]
+members = [
+    "crates/cyclotomic-rings",
+    "crates/latticefold",
+    "crates/latticefold-plus",
+]
 resolver = "2"
 
 [workspace.package]
@@ -14,9 +18,8 @@ ark-ff = { version = "0.4.2", default-features = false }
 ark-serialize = { version = "0.4.2", features = ["derive"] }
 ark-std = { version = "0.4.0", default-features = false }
 criterion = "0.5.1"
-stark-rings = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
-stark-rings-linalg = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
-stark-rings-poly = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+cyclotomic-rings = { path = "crates/cyclotomic-rings", default-features = false }
+latticefold = { path = "crates/latticefold", default-features = false }
 num-bigint = { version = "0.4.5", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
 proc-macro2 = "1.0.92"
@@ -24,11 +27,12 @@ quote = "1.0.37"
 rand = { version = "0.8.5", default-features = false }
 rayon = "1.10.0"
 serde = { version = "1.0.216", features = ["derive"] }
-toml = "0.8.19"
+stark-rings = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+stark-rings-linalg = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+stark-rings-poly = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
 thiserror = { version = "2.0.3", default-features = false }
-cyclotomic-rings = { path = "cyclotomic-rings", default-features = false }
-latticefold = { path = "latticefold", default-features = false }
+toml = "0.8.19"
 [workspace.metadata.docs.rs]
 # To build locally, use 
 # RUSTDOCFLAGS="--html-in-header docs-header.html" cargo doc --no-deps --document-private-items --open
-rustdoc-args = [ "--html-in-header", "docs-header.html" ]
+rustdoc-args = ["--html-in-header", "docs-header.html"]

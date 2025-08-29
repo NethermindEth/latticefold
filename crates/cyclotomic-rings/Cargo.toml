@@ -4,18 +4,18 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["std"]
+std = []
+getrandom = ["ark-std/getrandom"]
+
 [dependencies]
+ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
 ark-std = { workspace = true } 
-ark-crypto-primitives = { workspace = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }
 stark-rings = { workspace = true }
 stark-rings-linalg = { workspace = true }
 stark-rings-poly = { workspace = true }
 thiserror = { workspace = true }
-
-[features]
-default = [ "std" ]
-std = []
-getrandom = [ "ark-std/getrandom" ]
