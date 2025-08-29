@@ -1,0 +1,41 @@
+
+#!/bin/sh
+set -e 
+
+# Dependency sorting
+if ! cargo sort --workspace --check; then
+    echo "❌ Dependencies should be sorted (run 'cargo sort --workspace')"
+    exit 1
+fi
+
+# Dependency audit
+if ! cargo deny check; then
+    echo "❌ Critical: Vulnerable dependencies detected (run 'cargo deny check')"
+    exit 2
+fi
+
+# Formatting check
+if ! cargo fmt --all -- --check; then
+    echo "❌ Formatting issues (run 'cargo fmt --all')"
+    exit 3
+fi
+
+# Typo check
+if ! typos; then
+    echo "❌ Spelling mistakes found (run 'typos --write-changes')"
+    exit 4
+fi
+
+# Linting
+if ! cargo clippy --all-targets --all-features -- -D warnings; then
+    echo "❌ Clippy violations (check warnings above)"
+    exit 5
+fi
+
+# Tests
+if ! cargo test --workspace --verbose; then
+    echo "❌ Test failures detected"
+    exit 6
+fi
+
+echo "✅ All checks passed!"
