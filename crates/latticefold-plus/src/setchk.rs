@@ -46,9 +46,14 @@ pub enum SetCheckError<R: Ring> {
 fn ev<R: PolyRing>(r: &R, x: R::BaseRing) -> R::BaseRing {
     r.coeffs()
         .iter()
-        .enumerate()
-        .map(|(i, c)| *c * x.pow([i as u64]))
-        .sum()
+        .fold(
+            (R::BaseRing::ZERO, R::BaseRing::ONE),
+            |(mut acc, exp), c| {
+                acc += *c * exp;
+                (acc, exp * x)
+            },
+        )
+        .0
 }
 
 impl<R: OverField> In<R> {
