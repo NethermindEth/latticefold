@@ -8,7 +8,7 @@ use latticefold::{
 };
 use stark_rings::{OverField, PolyRing, Ring};
 use stark_rings_linalg::{ops::Transpose, SparseMatrix};
-use stark_rings_poly::mle::{DenseMultilinearExtension, SparseMultilinearExtension};
+use stark_rings_poly::mle::DenseMultilinearExtension;
 use thiserror::Error;
 
 // cM: double commitment, commitment to M
@@ -200,9 +200,11 @@ impl<R: OverField> In<R> {
                     MT.coeffs
                         .iter()
                         .map(|row| {
-                            let evals: Vec<(usize, R)> = row.iter().map(|&(r, i)| (i, r)).collect();
-                            let mle = SparseMultilinearExtension::from_evaluations(tnvars, &evals);
-                            mle.evaluate(&r_poly)
+                            let mut evals = vec![R::ZERO; MT.ncols];
+                            row.iter().for_each(|&(r, i)| evals[i] = r);
+                            let mle =
+                                DenseMultilinearExtension::from_evaluations_vec(tnvars, evals);
+                            mle.evaluate(&r_poly).unwrap()
                         })
                         .collect::<Vec<_>>()
                 })
