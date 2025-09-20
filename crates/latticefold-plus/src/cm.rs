@@ -209,7 +209,7 @@ where
         let nvars = self.rg.nvars;
         let r: Vec<R> = dcom.out.r.iter().map(|x| R::from(*x)).collect();
 
-        let rc: R = transcript.get_challenge().into();
+        let rc = transcript.get_challenge();
 
         let L = self.rg.instances.len();
 
@@ -260,26 +260,47 @@ where
         mles.push(t1_mle);
 
         let Mlen = M.len();
+
+        // Pre-compute random-combinator powers
+        let mut rcps = vec![];
+        let mut rcp = R::BaseRing::ONE;
+        for _ in 0..L {
+            // [tau, m_tau, f, h]
+            for _ in 0..4 {
+                rcps.push(rcp);
+                rcp *= rc;
+            }
+            for _ in 0..Mlen {
+                // M_i * [tau, m_tau, f, h]
+                for _ in 0..4 {
+                    rcps.push(rcp);
+                    rcp *= rc;
+                }
+            }
+        }
+        rcps.push(rcp); // t(0)
+        rcp *= rc;
+        rcps.push(rcp); // t(1)
+
         let comb_fn = |vals: &[R]| -> R {
             (0..L)
                 .map(|l| {
                     let l_idx = 1 + l * (4 + 4 * Mlen);
                     vals[0] * ( // eq
-                    vals[l_idx] * rc.pow([l_idx as u64 - 1])  // tau
-                    + vals[l_idx + 1] * rc.pow([l_idx as u64]) // m_tau
-                    + vals[l_idx + 2] * rc.pow([l_idx as u64 + 1]) // f
-                    + vals[l_idx + 3] * rc.pow([l_idx as u64 + 2]) // h
+                    vals[l_idx] * rcps[l_idx - 1]  // tau
+                    + vals[l_idx + 1] * rcps[l_idx] // m_tau
+                    + vals[l_idx + 2] * rcps[l_idx + 1] // f
+                    + vals[l_idx + 3] * rcps[l_idx + 2] // h
                     + (0..Mlen).map(|i| {
                         let idx = l_idx + 4 + i * 4;
-                        vals[idx] * rc.pow([idx as u64 - 1]) // M_i * tau
-                        + vals[idx + 1] * rc.pow([idx as u64]) // M_i * m_tau
-                        + vals[idx + 2] * rc.pow([idx as u64 + 1]) // M_i * f
-                        + vals[idx + 3] * rc.pow([idx as u64 + 2]) // M_i * h
+                        vals[idx] * rcps[idx - 1] // M_i * tau
+                        + vals[idx + 1] * rcps[idx] // M_i * m_tau
+                        + vals[idx + 2] * rcps[idx + 1] // M_i * f
+                        + vals[idx + 3] * rcps[idx + 2] // M_i * h
                      }).sum::<R>()
                 )
-            + (vals[l_idx] * vals[vals.len()-2]) * rc.pow([vals.len() as u64 - 3]) // t(0)
-            + (vals[l_idx] * vals[vals.len()-1]) * rc.pow([vals.len() as u64 - 2])
-                    // t(1)
+            + (vals[l_idx] * vals[vals.len()-2]) * rcps[vals.len() - 3] // t(0)
+            + (vals[l_idx] * vals[vals.len()-1]) * rcps[vals.len() - 2] // t(1)
                 })
                 .sum::<R>()
         };
