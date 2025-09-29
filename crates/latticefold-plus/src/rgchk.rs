@@ -2,7 +2,7 @@ use ark_std::iter::once;
 use latticefold::transcript::Transcript;
 use stark_rings::{
     balanced_decomposition::{Decompose, DecomposeToVec},
-    exp, psi, CoeffRing, OverField, PolyRing, Ring, Zq,
+    exp, exp_i, psi, CoeffRing, OverField, PolyRing, Ring, Zq, Monomial,
 };
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
 use stark_rings_poly::mle::DenseMultilinearExtension;
@@ -282,14 +282,14 @@ where
             });
         });
 
-        let M_f: Vec<Matrix<R>> = D_f
+        let M_f: Vec<Matrix<Monomial<R>>> = D_f
             .iter()
             .map(|m| {
                 m.vals
                     .iter()
                     .map(|row| {
                         row.iter()
-                            .map(|c| exp::<R>(*c).unwrap())
+                            .map(|c| exp_i::<R>(*c).unwrap())
                             .collect::<Vec<_>>()
                     })
                     .collect::<Vec<_>>()
@@ -303,23 +303,25 @@ where
             .collect::<Vec<_>>();
         let com = Matrix::hconcat(&comM_f).unwrap();
 
+        let M_f: Vec<Matrix<R>> = M_f.iter().map(|m| m.vals.iter().map(|v| v.iter().map(CoeffRing::from_monomial).collect::<Vec<_>>()).collect::<Vec<Vec<_>>>().into()).collect();
+
         let tau = split(&com, n, (R::dimension() / 2) as u128, decomp.l);
 
-        let m_tau = tau
+        let m_tau: Vec<Monomial<R>> = tau
             .iter()
-            .map(|c| exp::<R>(*c).unwrap())
+            .map(|c| exp_i::<R>(*c).unwrap())
             .collect::<Vec<_>>();
 
         let cm_f = A.try_mul_vec(&f).unwrap();
-        let C_Mf = A
-            .try_mul_vec(&tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>())
-            .unwrap();
+        let C_Mf = A.try_mul_vec(&tau).unwrap();
         let cm_mtau = A.try_mul_vec(&m_tau).unwrap();
         let fcoms = FComs {
             cm_f,
             C_Mf,
             cm_mtau,
         };
+
+        let m_tau: Vec<R> = m_tau.iter().map(CoeffRing::from_monomial).collect();
 
         Self {
             M_f,

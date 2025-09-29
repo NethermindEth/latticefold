@@ -27,9 +27,12 @@ quote = "1.0.37"
 rand = { version = "0.8.5", default-features = false }
 rayon = "1.10.0"
 serde = { version = "1.0.216", features = ["derive"] }
-stark-rings = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
-stark-rings-linalg = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
-stark-rings-poly = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+#stark-rings = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+#stark-rings-linalg = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+#stark-rings-poly = { git = "https://github.com/NethermindEth/stark-rings.git", branch = "main", default-features = false }
+stark-rings = { path = "../stark-rings/crates/ring", default-features = false }
+stark-rings-linalg = { path = "../stark-rings/crates/linear_algebra", default-features = false }
+stark-rings-poly = { path = "../stark-rings/crates/poly", default-features = false }
 thiserror = { version = "2.0.3", default-features = false }
 toml = "0.8.19"
 [workspace.metadata.docs.rs]
