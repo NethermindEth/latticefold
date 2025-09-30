@@ -54,7 +54,9 @@ where
             .collect::<Vec<_>>();
 
         let rg = Rg {
-            nvars: log2(n) as usize,
+           
+            let nvars = (usize::BITS - (n as usize).leading_zeros() - 1) as usize;
+
             instances,
             dparams: self.params.decomp.clone(),
         };
