@@ -308,11 +308,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         Ok(())
     }
 
-    fn calculate_claims(
-        alpha_s: &[NTT],
-        zeta_s: &[NTT],
-        cm_i_s: &[LCCCS<NTT>],
-    ) -> (NTT, NTT) {
+    fn calculate_claims(alpha_s: &[NTT], zeta_s: &[NTT], cm_i_s: &[LCCCS<NTT>]) -> (NTT, NTT) {
         let vs = cm_i_s
             .iter()
             .map(|cm_i| cm_i.v.clone())

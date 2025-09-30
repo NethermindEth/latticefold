@@ -4,10 +4,7 @@ use std::{fmt::Debug, time::Instant};
 
 use ark_serialize::{CanonicalSerialize, Compress};
 use ark_std::{vec::Vec, UniformRand};
-use cyclotomic_rings::{
-    challenge_set::LatticefoldChallengeSet,
-    rings::SuitableRing,
-};
+use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use latticefold::{
     arith::{
         ccs::get_test_dummy_degree_three_ccs_non_scalar, r1cs::get_test_dummy_z_split_ntt, Arith,
@@ -33,12 +30,7 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
     wit_len: usize,
     r1cs_rows: usize,
     kappa: usize,
-) -> (
-    CCCS<R>,
-    Witness<R>,
-    CCS<R>,
-    AjtaiCommitmentScheme<R>,
-) {
+) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
     let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
@@ -57,7 +49,6 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
 
     let scheme: AjtaiCommitmentScheme<R> = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
     let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
-
 
     let cm_i: CCCS<R> = CCCS {
         cm: wit.commit::<P>(&scheme).unwrap(),
@@ -112,11 +103,7 @@ fn main() {
     println!("\tB_SMALL: {}", DP::B_SMALL);
     println!("\tK: {}", DP::K);
 
-    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<
-        RqNTT,
-        DP,
-        CS,
-    >();
+    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<RqNTT, DP, CS>();
 
     let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
@@ -160,14 +147,8 @@ fn main() {
 
     println!("Verifying proof");
     let start = Instant::now();
-    NIFSVerifier::<RqNTT, DP, T>::verify(
-        &acc,
-        &cm_i,
-        &proof,
-        &mut verifier_transcript,
-        &ccs,
-    )
-    .unwrap();
+    NIFSVerifier::<RqNTT, DP, T>::verify(&acc, &cm_i, &proof, &mut verifier_transcript, &ccs)
+        .unwrap();
     let duration = start.elapsed();
     println!("Proof verified in {:?}", duration);
 }

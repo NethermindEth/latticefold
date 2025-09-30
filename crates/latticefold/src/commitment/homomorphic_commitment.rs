@@ -1,12 +1,8 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::{
-    ops::{AddAssign, MulAssign, SubAssign},
-};
+use ark_std::ops::{AddAssign, MulAssign, SubAssign};
 use stark_rings::Ring;
 
-use crate::{
-    ark_base::*, impl_additive_ops, impl_multiplicative_ops, impl_subtractive_ops
-};
+use crate::{ark_base::*, impl_additive_ops, impl_multiplicative_ops, impl_subtractive_ops};
 
 /// The Ajtai commitment type. Meant to contain the output of the
 /// matrix-vector multiplication `A \cdot x`.
@@ -23,7 +19,9 @@ impl<R: Ring> Commitment<R> {
     }
 
     pub(crate) fn zeroed(kappa: usize) -> Self {
-        Self { val: vec![R::zero(); kappa] }
+        Self {
+            val: vec![R::zero(); kappa],
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -73,9 +71,7 @@ impl<'a, R: Ring> SubAssign<&'a Commitment<R>> for Commitment<R> {
 
 impl<'a, R: Ring> MulAssign<&'a R> for Commitment<R> {
     fn mul_assign(&mut self, rhs: &'a R) {
-        self.val
-            .iter_mut()
-            .for_each(|a| *a *= rhs)
+        self.val.iter_mut().for_each(|a| *a *= rhs)
     }
 }
 

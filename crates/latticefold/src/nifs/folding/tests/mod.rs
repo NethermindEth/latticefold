@@ -173,10 +173,15 @@ where
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
-    let (_, _, folding_proof) = LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<
-        DP,
-    >(lcccs, wit_s, prover_transcript, ccs, &mz_mles)
-    .unwrap();
+    let (_, _, folding_proof) =
+        LFFoldingProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove::<DP>(
+            lcccs,
+            wit_s,
+            prover_transcript,
+            ccs,
+            &mz_mles,
+        )
+        .unwrap();
     folding_proof
 }
 
@@ -705,17 +710,16 @@ fn test_verify_evaluation() {
         )
         .unwrap();
 
-    let result =
-        LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_evaluation::<DP>(
-            &alpha_s,
-            &beta_s,
-            &mu_s,
-            &zeta_s,
-            &r_0,
-            expected_evaluation,
-            &proof,
-            &lccs_vec,
-        );
+    let result = LFFoldingVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify_evaluation::<DP>(
+        &alpha_s,
+        &beta_s,
+        &mu_s,
+        &zeta_s,
+        &r_0,
+        expected_evaluation,
+        &proof,
+        &lccs_vec,
+    );
 
     assert!(result.is_ok());
 }

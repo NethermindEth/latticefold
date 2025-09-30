@@ -107,47 +107,39 @@ fn generate_code_for_examples() {
     );
 
     match ring.as_str() {
-        "Goldilocks" => {
-            generated_code.push_str(
+        "Goldilocks" => generated_code.push_str(
             r#"
             const N: usize = N_GOLDILOCKS;
             type DP = GoldilocksExampleDP;
             type RqNTT = cyclotomic_rings::rings::GoldilocksRingNTT;
             type CS = cyclotomic_rings::rings::GoldilocksChallengeSet;
-            "#
-            )
-        },
-        "BabyBear" => {
-            generated_code.push_str(
+            "#,
+        ),
+        "BabyBear" => generated_code.push_str(
             r#"
             const N: usize = N_BABYBEAR;
             type DP = BabyBearExampleDP;
             type RqNTT = cyclotomic_rings::rings::BabyBearRingNTT;
             type CS = cyclotomic_rings::rings::BabyBearChallengeSet;
-            "#
-            )
-        },
-        "Frog" => {
-            generated_code.push_str(
+            "#,
+        ),
+        "Frog" => generated_code.push_str(
             r#"
             const N: usize = N_FROG;
             type DP = FrogExampleDP;
             type RqNTT = cyclotomic_rings::rings::FrogRingNTT;
             type CS = cyclotomic_rings::rings::FrogChallengeSet;
-            "#
-            )
-        },
-        "StarkPrime" => {
-            generated_code.push_str(
+            "#,
+        ),
+        "StarkPrime" => generated_code.push_str(
             r#"
             const N: usize = N_STARK;
             type DP = StarkPrimeExampleDP;
             type RqNTT = cyclotomic_rings::rings::StarkRingNTT;
             type CS = cyclotomic_rings::rings::StarkChallengeSet;
-            "#
-            )
-        },
-        _ => panic!("Unknown ring configuration")
+            "#,
+        ),
+        _ => panic!("Unknown ring configuration"),
     };
 
     fs::write(&dest_path, generated_code).unwrap();

@@ -42,11 +42,8 @@ pub struct NIFSProver<NTT, P, T> {
     _t: PhantomData<T>,
 }
 
-impl<
-        NTT: SuitableRing,
-        P: DecompositionParams,
-        T: TranscriptWithShortChallenges<NTT>,
-    > NIFSProver<NTT, P, T>
+impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges<NTT>>
+    NIFSProver<NTT, P, T>
 {
     pub fn prove(
         acc: &LCCCS<NTT>,
@@ -114,11 +111,8 @@ pub struct NIFSVerifier<NTT, P, T> {
     _t: PhantomData<T>,
 }
 
-impl<
-        NTT: SuitableRing,
-        P: DecompositionParams,
-        T: TranscriptWithShortChallenges<NTT>,
-    > NIFSVerifier<NTT, P, T>
+impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges<NTT>>
+    NIFSVerifier<NTT, P, T>
 {
     pub fn verify(
         acc: &LCCCS<NTT>,

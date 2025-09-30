@@ -17,11 +17,15 @@ fn setup_test_environment<
     RqNTT: SuitableRing,
     DP: DecompositionParams,
     CS: LatticefoldChallengeSet<RqNTT>,
->(kappa: usize, n: usize, wit_len: usize) -> (
-    LCCCS<RqNTT>, // acc
-    Witness<RqNTT>,  // w_acc
-    CCCS<RqNTT>,  // cm_i
-    Witness<RqNTT>,  // w_i
+>(
+    kappa: usize,
+    n: usize,
+    wit_len: usize,
+) -> (
+    LCCCS<RqNTT>,   // acc
+    Witness<RqNTT>, // w_acc
+    CCCS<RqNTT>,    // cm_i
+    Witness<RqNTT>, // w_i
     CCS<RqNTT>,
     AjtaiCommitmentScheme<RqNTT>,
 ) {
@@ -56,7 +60,11 @@ fn test_nifs_prove<
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
->(kappa: usize, n: usize, wit_len: usize) {
+>(
+    kappa: usize,
+    n: usize,
+    wit_len: usize,
+) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
         setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
 
@@ -80,7 +88,11 @@ fn test_nifs_verify<
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
->(kappa: usize, n: usize, wit_len: usize) {
+>(
+    kappa: usize,
+    n: usize,
+    wit_len: usize,
+) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
         setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
 
@@ -98,13 +110,8 @@ fn test_nifs_verify<
     )
     .unwrap();
 
-    let result = NIFSVerifier::<RqNTT, DP, T>::verify(
-        &acc,
-        &cm_i,
-        &proof,
-        &mut verifier_transcript,
-        &ccs,
-    );
+    let result =
+        NIFSVerifier::<RqNTT, DP, T>::verify(&acc, &cm_i, &proof, &mut verifier_transcript, &ccs);
 
     assert!(result.is_ok());
 }

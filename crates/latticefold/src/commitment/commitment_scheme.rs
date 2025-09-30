@@ -1,6 +1,4 @@
 use cyclotomic_rings::rings::SuitableRing;
-#[cfg(feature = "parallel")]
-use rayon::prelude::*;
 use stark_rings::{
     balanced_decomposition::DecomposeToVec,
     cyclotomic_ring::{CRT, ICRT},
@@ -38,10 +36,19 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
     /// Commit to a witness
     pub fn commit(&self, f: &[R]) -> Result<Commitment<R>, CommitmentError> {
         if f.len() != self.matrix.ncols {
-            return Err(CommitmentError::WrongWitnessLength(f.len(), self.matrix.ncols));
+            return Err(CommitmentError::WrongWitnessLength(
+                f.len(),
+                self.matrix.ncols,
+            ));
         }
 
-        let commitment = self.matrix.checked_mul_vec(f).ok_or(CommitmentError::WrongWitnessLength(f.len(), self.matrix.ncols))?;
+        let commitment =
+            self.matrix
+                .checked_mul_vec(f)
+                .ok_or(CommitmentError::WrongWitnessLength(
+                    f.len(),
+                    self.matrix.ncols,
+                ))?;
 
         Ok(Commitment::from_vec_raw(commitment))
     }
@@ -64,10 +71,10 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
 // SuitableRing helpers
 impl<NTT: SuitableRing> AjtaiCommitmentScheme<NTT> {
     /// Commit to a witness in the NTT form.
-   /// The most basic one just multiplies by the matrix.
+    /// The most basic one just multiplies by the matrix.
     pub fn commit_ntt(&self, f: &[NTT]) -> Result<Commitment<NTT>, CommitmentError> {
         self.commit(f)
-     }
+    }
 
     /// Commit to a witness in the coefficient form.
     /// Performs NTT on each component of the witness and then does Ajtai commitment.

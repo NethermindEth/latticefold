@@ -34,7 +34,11 @@ use crate::{
     utils::mle_helpers::{evaluate_mles, to_mles_err},
 };
 
-fn generate_decomposition_args<RqNTT, CS, DP>(kappa: usize, n: usize, wit_len: usize) -> (
+fn generate_decomposition_args<RqNTT, CS, DP>(
+    kappa: usize,
+    n: usize,
+    wit_len: usize,
+) -> (
     LCCCS<RqNTT>,
     PoseidonTranscript<RqNTT, CS>,
     PoseidonTranscript<RqNTT, CS>,
@@ -205,7 +209,8 @@ fn test_commit_witnesses() {
     const WIT_LEN: usize = 4;
     const N: usize = WIT_LEN * DP::L;
 
-    let (cm_i, _, _, _, wit, scheme) = generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    let (cm_i, _, _, _, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
 
     let wit_vec =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
@@ -269,7 +274,8 @@ fn test_compute_u_s() {
     const WIT_LEN: usize = 4;
     const N: usize = WIT_LEN * DP::L;
 
-    let (lcccs, _, _, ccs, wit, _) = generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    let (lcccs, _, _, ccs, wit, _) =
+        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
     let wit_vec =
         LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
     let x_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_x_s::<DP>(

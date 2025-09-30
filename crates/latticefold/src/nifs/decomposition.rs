@@ -189,7 +189,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
         let b_sum = commitments_k1
             .iter()
             .rev()
-            .fold(Commitment::zeroed(scheme.kappa()), |acc, y_i| (acc + y_i) * b);
+            .fold(Commitment::zeroed(scheme.kappa()), |acc, y_i| {
+                (acc + y_i) * b
+            });
 
         let mut result = Vec::with_capacity(wit_s.len());
         result.push(&cm_i.cm - b_sum);

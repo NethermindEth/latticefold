@@ -467,7 +467,8 @@ pub(super) fn compute_v0_u0_x0_cm_0<NTT: SuitableRing>(
 ) -> (Vec<NTT>, Commitment<NTT>, Vec<NTT>, Vec<NTT>) {
     let v_0: Vec<NTT> = rot_lin_combination(rho_s_coeff, theta_s);
 
-    let empty_commitment = Commitment::zeroed(cm_i_s.first().map(|cm_i| cm_i.cm.len()).unwrap_or(0));
+    let empty_commitment =
+        Commitment::zeroed(cm_i_s.first().map(|cm_i| cm_i.cm.len()).unwrap_or(0));
     let cm_0: Commitment<NTT> = rho_s
         .iter()
         .zip(cm_i_s.iter())

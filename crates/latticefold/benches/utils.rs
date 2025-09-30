@@ -38,9 +38,7 @@ pub enum R1CS {
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
-pub fn get_test_dummy_ccs<
-    R: Clone + UniformRand + Debug + SuitableRing,
->(
+pub fn get_test_dummy_ccs<R: Clone + UniformRand + Debug + SuitableRing>(
     x_len: usize,
     n: usize,
     wit_len: usize,
@@ -52,21 +50,13 @@ pub fn get_test_dummy_ccs<
 }
 
 #[allow(dead_code)]
-pub fn wit_and_ccs_gen<
-    P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing,
->(
+pub fn wit_and_ccs_gen<P: DecompositionParams, R: Clone + UniformRand + Debug + SuitableRing>(
     x_len: usize,
     n: usize,
     wit_len: usize,
     r1cs_rows: usize,
     kappa: usize,
-) -> (
-    CCCS<R>,
-    Witness<R>,
-    CCS<R>,
-    AjtaiCommitmentScheme<R>,
-) {
+) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
     let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
@@ -102,12 +92,7 @@ pub fn wit_and_ccs_gen_non_scalar<
     wit_len: usize,
     r1cs_rows: usize,
     kappa: usize,
-) -> (
-    CCCS<R>,
-    Witness<R>,
-    CCS<R>,
-    AjtaiCommitmentScheme<R>,
-) {
+) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
     let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
@@ -120,8 +105,7 @@ pub fn wit_and_ccs_gen_non_scalar<
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
-    let ccs: CCS<R> =
-        get_test_dummy_ccs_non_scalar::<R>(x_len, n, new_r1cs_rows, P::L, &z);
+    let ccs: CCS<R> = get_test_dummy_ccs_non_scalar::<R>(x_len, n, new_r1cs_rows, P::L, &z);
     ccs.check_relation(&z).expect("R1CS invalid!");
 
     let scheme: AjtaiCommitmentScheme<R> = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
@@ -137,9 +121,7 @@ pub fn wit_and_ccs_gen_non_scalar<
 
 #[allow(dead_code)]
 #[allow(non_snake_case)]
-pub fn get_test_dummy_ccs_non_scalar<
-    R: Clone + UniformRand + Debug + SuitableRing,
->(
+pub fn get_test_dummy_ccs_non_scalar<R: Clone + UniformRand + Debug + SuitableRing>(
     x_len: usize,
     n: usize,
     r1cs_rows: usize,
@@ -160,12 +142,7 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
     wit_len: usize,
     r1cs_rows: usize,
     kappa: usize,
-) -> (
-    CCCS<R>,
-    Witness<R>,
-    CCS<R>,
-    AjtaiCommitmentScheme<R>,
-) {
+) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
     let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
@@ -202,11 +179,8 @@ pub struct Bencher<
 }
 
 #[allow(dead_code)]
-impl<
-        P: DecompositionParams,
-        R: SuitableRing + Clone,
-        CS: LatticefoldChallengeSet<R> + Clone,
-    > Bencher<P, R, CS>
+impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSet<R> + Clone>
+    Bencher<P, R, CS>
 {
     pub fn setup_r1cs(
         x_len: usize,
@@ -214,17 +188,14 @@ impl<
         wit_len: usize,
         kappa: usize,
         t: R1CS,
-    ) -> (
-        CCCS<R>,
-        Witness<R>,
-        CCS<R>,
-        AjtaiCommitmentScheme<R>,
-    ) {
+    ) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
         let r1cs_rows = x_len + wit_len + 1;
 
         match t {
             R1CS::Scalar => wit_and_ccs_gen::<P, R>(x_len, n, wit_len, r1cs_rows, kappa),
-            R1CS::NonScalar => wit_and_ccs_gen_non_scalar::<P, R>(x_len, n, wit_len, r1cs_rows, kappa),
+            R1CS::NonScalar => {
+                wit_and_ccs_gen_non_scalar::<P, R>(x_len, n, wit_len, r1cs_rows, kappa)
+            }
             R1CS::DegreeThreeNonScalar => {
                 wit_and_ccs_gen_degree_three_non_scalar::<P, R>(x_len, n, wit_len, r1cs_rows, kappa)
             }
@@ -243,7 +214,14 @@ impl<
         .expect("Failed to verify linearization proof")
     }
 
-    pub fn bench_linearization_prover(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_linearization_prover(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "Linearization Prover",
@@ -277,7 +255,14 @@ impl<
         );
     }
 
-    pub fn bench_linearization_verifier(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_linearization_verifier(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "Linearization Verifier",
@@ -316,7 +301,14 @@ impl<
         );
     }
 
-    pub fn bench_decomposition_prover(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_decomposition_prover(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "Decomposition Prover",
@@ -345,21 +337,27 @@ impl<
                     Self::verify_linearization_proof(&proof, &mut verifier_transcript, &cm_i, &ccs);
 
                 b.iter(|| {
-                    let _ =
-                        LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<P>(
-                            &lcccs,
-                            &wit,
-                            &mut prover_transcript,
-                            &ccs,
-                            &scheme,
-                        )
-                        .expect("Failed to generate decomposition proof");
+                    let _ = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<P>(
+                        &lcccs,
+                        &wit,
+                        &mut prover_transcript,
+                        &ccs,
+                        &scheme,
+                    )
+                    .expect("Failed to generate decomposition proof");
                 });
             },
         );
     }
 
-    pub fn bench_decomposition_verifier(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_decomposition_verifier(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "Decomposition Verifier",
@@ -406,12 +404,14 @@ impl<
                 b.iter_batched(
                     || verifier_transcript.clone(),
                     |mut bench_verifier_transcript| {
-                        let _ = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<
-                            P,
-                        >(
-                            &lcccs, &proof, &mut bench_verifier_transcript, &ccs
-                        )
-                        .expect("Failed to verify decomposition proof");
+                        let _ =
+                            LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<P>(
+                                &lcccs,
+                                &proof,
+                                &mut bench_verifier_transcript,
+                                &ccs,
+                            )
+                            .expect("Failed to verify decomposition proof");
                     },
                     criterion::BatchSize::SmallInput,
                 );
@@ -419,7 +419,14 @@ impl<
         );
     }
 
-    pub fn bench_folding_prover(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_folding_prover(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "Folding Prover",
@@ -465,12 +472,14 @@ impl<
                     )
                     .unwrap();
 
-                let lcccs_vec = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<
-                    P,
-                >(
-                    &lcccs, &decomposition_proof, &mut verifier_transcript, &ccs
-                )
-                .unwrap();
+                let lcccs_vec =
+                    LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<P>(
+                        &lcccs,
+                        &decomposition_proof,
+                        &mut verifier_transcript,
+                        &ccs,
+                    )
+                    .unwrap();
                 let (lcccs, wit_s, mz_mles) = {
                     let mut lcccs = lcccs_vec.clone();
                     let mut lcccs_r = lcccs_vec.clone();
@@ -504,7 +513,14 @@ impl<
         );
     }
 
-    pub fn bench_folding_verifier(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_folding_verifier(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "Folding Verifier",
@@ -549,12 +565,14 @@ impl<
                     )
                     .expect("Failed to generate decomposition proof");
 
-                let lcccs_vec = LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<
-                    P,
-                >(
-                    &lcccs, &decomposition_proof, &mut verifier_transcript, &ccs
-                )
-                .expect("Failed to verify decomposition proof");
+                let lcccs_vec =
+                    LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<P>(
+                        &lcccs,
+                        &decomposition_proof,
+                        &mut verifier_transcript,
+                        &ccs,
+                    )
+                    .expect("Failed to verify decomposition proof");
 
                 let (lcccs, wit_s, mz_mles) = {
                     let mut lcccs = lcccs_vec.clone();
@@ -598,7 +616,14 @@ impl<
         );
     }
 
-    pub fn bench_e2e_prover(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_e2e_prover(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "E2E Prover",
@@ -615,7 +640,7 @@ impl<
             |b| {
                 let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
                 let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa,t);
+                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
 
                 let (_, linearization_proof) =
                     LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
@@ -654,7 +679,14 @@ impl<
         );
     }
 
-    pub fn bench_e2e_verifier(group: &mut BenchmarkGroup<WallTime>, x_len: usize, n: usize, wit_len: usize, kappa: usize, t: R1CS) {
+    pub fn bench_e2e_verifier(
+        group: &mut BenchmarkGroup<WallTime>,
+        x_len: usize,
+        n: usize,
+        wit_len: usize,
+        kappa: usize,
+        t: R1CS,
+    ) {
         group.bench_function(
             BenchmarkId::new(
                 "E2E Verifier",
