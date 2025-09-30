@@ -16,7 +16,7 @@ use crate::{
 
 /// The proof structure of the decomposition subprotocol.
 #[derive(Clone, Debug, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct DecompositionProof<const C: usize, NTT: Ring> {
+pub struct DecompositionProof<NTT: Ring> {
     /// CCS-linearization evaluation claims w.r.t. decomposed witnesses.
     ///
     /// After a run of the decomposition subprotocol prover this field contains
@@ -42,34 +42,34 @@ pub struct DecompositionProof<const C: usize, NTT: Ring> {
     /// on the verifier's side thus the prover computes them by itself and sends to the verifier.
     pub x_s: Vec<Vec<NTT>>,
     /// Commitments to the decomposed witnesses.
-    pub y_s: Vec<Commitment<C, NTT>>,
+    pub y_s: Vec<Commitment<NTT>>,
 }
 
 pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
-    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
+    fn prove<P: DecompositionParams>(
+        cm_i: &LCCCS<NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
+        scheme: &AjtaiCommitmentScheme<NTT>,
     ) -> Result<
         (
             Vec<Vec<DenseMultilinearExtension<NTT>>>,
-            Vec<LCCCS<C, NTT>>,
+            Vec<LCCCS<NTT>>,
             Vec<Witness<NTT>>,
-            DecompositionProof<C, NTT>,
+            DecompositionProof<NTT>,
         ),
         DecompositionError,
     >;
 }
 
 pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
-        proof: &DecompositionProof<C, NTT>,
+    fn verify<P: DecompositionParams>(
+        cm_i: &LCCCS<NTT>,
+        proof: &DecompositionProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError>;
+    ) -> Result<Vec<LCCCS<NTT>>, DecompositionError>;
 }
 
 pub struct LFDecompositionProver<NTT, T> {

@@ -43,12 +43,12 @@ pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
     ///
     /// Returns an error if asked to evaluate MLEs with incorrect number of variables
     ///
-    fn prove<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
+    fn prove(
+        cm_i: &CCCS<NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
+    ) -> Result<(LCCCS<NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
 }
 
 /// Verifier for the Linearization subprotocol.
@@ -67,12 +67,12 @@ pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
     /// * `Ok(LCCCS<C, NTT>)` - On success, returns a linearized version of the CCS witness commitment.
     /// * `Err(LinearizationError<NTT>)` - If verification fails, returns a `LinearizationError<NTT>`.
     ///
-    fn verify<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
+    fn verify(
+        cm_i: &CCCS<NTT>,
         proof: &LinearizationProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>>;
+    ) -> Result<LCCCS<NTT>, LinearizationError<NTT>>;
 }
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
@@ -142,12 +142,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
     for LFLinearizationProver<NTT, T>
 {
-    fn prove<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
+    fn prove(
+        cm_i: &CCCS<NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<(LCCCS<C, NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
+    ) -> Result<(LCCCS<NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         // Step 1: Generate beta challenges (done in construct_polynomial_g because they are not needed
         // elsewhere.
 
@@ -242,11 +242,11 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         Ok(())
     }
 
-    fn prepare_verifier_output<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
+    fn prepare_verifier_output(
+        cm_i: &CCCS<NTT>,
         point_r: Vec<NTT>,
         proof: &LinearizationProof<NTT>,
-    ) -> LCCCS<C, NTT> {
+    ) -> LCCCS<NTT> {
         LCCCS {
             r: point_r,
             v: proof.v.clone(),
@@ -261,12 +261,12 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
 impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
     for LFLinearizationVerifier<NTT, T>
 {
-    fn verify<const C: usize>(
-        cm_i: &CCCS<C, NTT>,
+    fn verify(
+        cm_i: &CCCS<NTT>,
         proof: &LinearizationProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, LinearizationError<NTT>> {
+    ) -> Result<LCCCS<NTT>, LinearizationError<NTT>> {
         // Step 1: Generate the beta challenges.
         let beta_s = transcript.squeeze_beta_challenges(ccs.s);
 

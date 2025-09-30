@@ -14,32 +14,29 @@ use crate::{
 };
 
 fn setup_test_environment<
-    const C: usize,
     RqNTT: SuitableRing,
     DP: DecompositionParams,
-    const W: usize,
-    const WIT_LEN: usize,
     CS: LatticefoldChallengeSet<RqNTT>,
->() -> (
-    LCCCS<C, RqNTT>, // acc
+>(kappa: usize, n: usize, wit_len: usize) -> (
+    LCCCS<RqNTT>, // acc
     Witness<RqNTT>,  // w_acc
-    CCCS<C, RqNTT>,  // cm_i
+    CCCS<RqNTT>,  // cm_i
     Witness<RqNTT>,  // w_i
     CCS<RqNTT>,
-    AjtaiCommitmentScheme<C, W, RqNTT>,
+    AjtaiCommitmentScheme<RqNTT>,
 ) {
-    let ccs = get_test_ccs::<RqNTT>(W, DP::L);
+    let ccs = get_test_ccs::<RqNTT>(n, DP::L);
     let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(rng.gen_range(0..64));
-    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
+    let scheme = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
 
     let wit_i = Witness::from_w_ccs::<DP>(w_ccs);
     let cm_i = CCCS {
-        cm: wit_i.commit::<C, W, DP>(&scheme).unwrap(),
+        cm: wit_i.commit::<DP>(&scheme).unwrap(),
         x_ccs: x_ccs.clone(),
     };
 
-    let rand_w_ccs: Vec<RqNTT> = (0..WIT_LEN).map(|i| RqNTT::from(i as u64)).collect();
+    let rand_w_ccs: Vec<RqNTT> = (0..wit_len).map(|i| RqNTT::from(i as u64)).collect();
     let wit_acc = Witness::from_w_ccs::<DP>(rand_w_ccs);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
@@ -55,20 +52,17 @@ fn setup_test_environment<
 }
 
 fn test_nifs_prove<
-    const C: usize,
-    const W: usize,
-    const WIT_LEN: usize,
     RqNTT: SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
->() {
+>(kappa: usize, n: usize, wit_len: usize) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
-        setup_test_environment::<C, RqNTT, DP, W, WIT_LEN, CS>();
+        setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let result = NIFSProver::<C, W, RqNTT, DP, T>::prove(
+    let result = NIFSProver::<RqNTT, DP, T>::prove(
         &acc,
         &w_acc,
         &cm_i,
@@ -82,21 +76,18 @@ fn test_nifs_prove<
 }
 
 fn test_nifs_verify<
-    const C: usize,
-    const W: usize,
-    const WIT_LEN: usize,
     RqNTT: SuitableRing,
     CS: LatticefoldChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
->() {
+>(kappa: usize, n: usize, wit_len: usize) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
-        setup_test_environment::<C, RqNTT, DP, W, WIT_LEN, CS>();
+        setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
 
     let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
     let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let (_, _, proof) = NIFSProver::<C, W, RqNTT, DP, T>::prove(
+    let (_, _, proof) = NIFSProver::<RqNTT, DP, T>::prove(
         &acc,
         &w_acc,
         &cm_i,
@@ -107,7 +98,7 @@ fn test_nifs_verify<
     )
     .unwrap();
 
-    let result = NIFSVerifier::<C, RqNTT, DP, T>::verify(
+    let result = NIFSVerifier::<RqNTT, DP, T>::verify(
         &acc,
         &cm_i,
         &proof,
@@ -134,20 +125,20 @@ mod e2e_tests {
         type DP = StarkDP;
         type T = PoseidonTranscript<RqNTT, CS>;
 
-        const C: usize = 4;
+        const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
-        const W: usize = WIT_LEN * DP::L;
+        const N: usize = WIT_LEN * DP::L;
 
         #[ignore]
         #[test]
         fn test_prove() {
-            test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
         }
 
         #[ignore]
         #[test]
         fn test_verify() {
-            test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
         }
     }
 
@@ -162,18 +153,18 @@ mod e2e_tests {
         type DP = GoldilocksDP;
         type T = PoseidonTranscript<RqNTT, CS>;
 
-        const C: usize = 4;
+        const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
-        const W: usize = WIT_LEN * DP::L;
+        const N: usize = WIT_LEN * DP::L;
 
         #[test]
         fn test_prove() {
-            test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
         }
 
         #[test]
         fn test_verify() {
-            test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
         }
     }
 
@@ -188,18 +179,18 @@ mod e2e_tests {
         type DP = BabyBearDP;
         type T = PoseidonTranscript<RqNTT, CS>;
 
-        const C: usize = 4;
+        const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
-        const W: usize = WIT_LEN * DP::L;
+        const N: usize = WIT_LEN * DP::L;
 
         #[test]
         fn test_prove() {
-            test_nifs_prove::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
         }
 
         #[test]
         fn test_verify() {
-            test_nifs_verify::<C, W, WIT_LEN, RqNTT, CS, DP, T>();
+            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
         }
     }
 }

@@ -1,118 +1,84 @@
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{
-    ops::{Add, Mul, Sub},
-    Zero,
+    ops::{AddAssign, MulAssign, SubAssign},
 };
 use stark_rings::Ring;
 
 use crate::{
-    ark_base::*, commitment::CommitmentError, impl_additive_ops_from_ref,
-    impl_multiplicative_ops_from_ref, impl_subtractive_ops_from_ref,
+    ark_base::*, impl_additive_ops, impl_multiplicative_ops, impl_subtractive_ops
 };
 
 /// The Ajtai commitment type. Meant to contain the output of the
 /// matrix-vector multiplication `A \cdot x`.
-/// Enforced to have the length `C`.
 /// Since Ajtai commitment is bounded-additively homomorphic
 /// one can add commitments and multiply them by a scalar.
 #[derive(Clone, Debug, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
-pub struct Commitment<const C: usize, R1: Ring> {
+pub struct Commitment<R1: Ring> {
     val: Vec<R1>,
 }
 
-impl<const C: usize, R: Ring> Commitment<C, R> {
-    pub(super) fn from_vec_raw(vec: Vec<R>) -> Self {
+impl<R: Ring> Commitment<R> {
+    pub(crate) fn from_vec_raw(vec: Vec<R>) -> Self {
         Self { val: vec }
     }
-}
 
-impl<const C: usize, R: Ring> From<[R; C]> for Commitment<C, R> {
-    fn from(val: [R; C]) -> Self {
-        Self { val: val.into() }
+    pub(crate) fn zeroed(kappa: usize) -> Self {
+        Self { val: vec![R::zero(); kappa] }
+    }
+
+    pub fn len(&self) -> usize {
+        self.val.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.val.is_empty()
     }
 }
 
-impl<'a, const C: usize, R: Ring> From<&'a [R]> for Commitment<C, R> {
+impl<'a, R: Ring> From<&'a [R]> for Commitment<R> {
     fn from(slice: &'a [R]) -> Self {
         Self { val: slice.into() }
     }
 }
 
-impl<const C: usize, R: Ring> TryFrom<Vec<R>> for Commitment<C, R> {
-    type Error = CommitmentError;
-
-    fn try_from(vec: Vec<R>) -> Result<Self, Self::Error> {
-        if vec.len() != C {
-            return Err(CommitmentError::WrongCommitmentLength(vec.len(), C));
-        }
-
-        Ok(Self { val: vec })
+impl<R: Ring> From<Vec<R>> for Commitment<R> {
+    fn from(vec: Vec<R>) -> Self {
+        Self::from_vec_raw(vec)
     }
 }
 
-impl<const C: usize, R: Ring> AsRef<[R]> for Commitment<C, R> {
+impl<R: Ring> AsRef<[R]> for Commitment<R> {
     fn as_ref(&self) -> &[R] {
         &self.val
     }
 }
 
-impl<'a, const C: usize, R: Ring> Add<&'a Commitment<C, R>> for &Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn add(self, rhs: &'a Commitment<C, R>) -> Self::Output {
-        let mut res_vec = vec![R::zero(); C];
-
-        res_vec
+impl<'a, R: Ring> AddAssign<&'a Commitment<R>> for Commitment<R> {
+    fn add_assign(&mut self, rhs: &'a Commitment<R>) {
+        self.val
             .iter_mut()
-            .zip(self.val.iter())
             .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a + b);
-
-        Commitment::from_vec_raw(res_vec)
+            .for_each(|(a, b)| *a += b);
     }
 }
 
-impl<'a, const C: usize, R: Ring> Sub<&'a Commitment<C, R>> for &Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn sub(self, rhs: &'a Commitment<C, R>) -> Self::Output {
-        let mut res_vec = vec![R::zero(); C];
-
-        res_vec
+impl<'a, R: Ring> SubAssign<&'a Commitment<R>> for Commitment<R> {
+    fn sub_assign(&mut self, rhs: &'a Commitment<R>) {
+        self.val
             .iter_mut()
-            .zip(self.val.iter())
             .zip(rhs.val.iter())
-            .for_each(|((res, &a), &b)| *res = a - b);
-
-        Commitment::from_vec_raw(res_vec)
+            .for_each(|(a, b)| *a -= b)
     }
 }
 
-impl<'a, const C: usize, R: Ring> Mul<&'a R> for &Commitment<C, R> {
-    type Output = Commitment<C, R>;
-
-    fn mul(self, rhs: &'a R) -> Self::Output {
-        let mut res_vec = vec![R::zero(); C];
-
-        res_vec
+impl<'a, R: Ring> MulAssign<&'a R> for Commitment<R> {
+    fn mul_assign(&mut self, rhs: &'a R) {
+        self.val
             .iter_mut()
-            .zip(self.val.iter())
-            .for_each(|(res, &a)| *res = a * rhs);
-
-        Commitment::from_vec_raw(res_vec)
+            .for_each(|a| *a *= rhs)
     }
 }
 
-impl_additive_ops_from_ref!(Commitment, Ring, usize);
-impl_subtractive_ops_from_ref!(Commitment, Ring, usize);
-impl_multiplicative_ops_from_ref!(Commitment, Ring, usize);
-
-impl<const C: usize, R: Ring> Zero for Commitment<C, R> {
-    fn zero() -> Self {
-        Self::from([R::zero(); C])
-    }
-
-    fn is_zero(&self) -> bool {
-        self.val == [R::zero(); C]
-    }
-}
+impl_additive_ops!(Commitment, Ring, usize);
+impl_subtractive_ops!(Commitment, Ring, usize);
+impl_multiplicative_ops!(Commitment, Ring, usize);

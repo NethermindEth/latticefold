@@ -174,13 +174,12 @@ impl<R: Ring> CCS<R> {
 /// A representation of a CCS witness commitment and statement.
 ///
 /// # Type Parameters
-/// - `C`: The length of the commitment vector.
 /// - `R`: The ring in which the CCS is operating.
 ///
 #[derive(Debug, Clone, PartialEq)]
-pub struct CCCS<const C: usize, R: Ring> {
+pub struct CCCS<R: Ring> {
     /// A commitment to the B-decomposed CCS witness.
-    pub cm: Commitment<C, R>,
+    pub cm: Commitment<R>,
     /// A CCS statement
     pub x_ccs: Vec<R>,
 }
@@ -188,17 +187,16 @@ pub struct CCCS<const C: usize, R: Ring> {
 /// A representation a linearized CCS witness commitment and statement.
 ///
 /// # Type Parameters
-/// - `C`: The length of the commitment vector.
 /// - `R`: The ring in which the CCS is operating.
 ///
 #[derive(Debug, Clone, PartialEq)]
-pub struct LCCCS<const C: usize, R: Ring> {
+pub struct LCCCS<R: Ring> {
     /// The linearization sumcheck challenge vector
     pub r: Vec<R>,
     /// The evaluation of the linearized CCS commitment at `r`.
     pub v: Vec<R>,
     /// The commitment to the B-decomposed CCS witness.
-    pub cm: Commitment<C, R>,
+    pub cm: Commitment<R>,
     /// The evaluation of the MLEs of $\\{ M_j \mathbf{z} \mid j = 1, 2, \dots, t \\}$ at `r`.
     pub u: Vec<R>,
     /// The CCS statement
@@ -356,10 +354,10 @@ impl<NTT: SuitableRing> Witness<NTT> {
     /// Produces a commitment from a witness
     ///
     /// Ajtai commitments are produced by multiplying an Ajtai matrix by the witness vector
-    pub fn commit<const C: usize, const W: usize, P: DecompositionParams>(
+    pub fn commit<P: DecompositionParams>(
         &self,
-        ajtai: &AjtaiCommitmentScheme<C, W, NTT>,
-    ) -> Result<Commitment<C, NTT>, CommitmentError> {
+        ajtai: &AjtaiCommitmentScheme<NTT>,
+    ) -> Result<Commitment<NTT>, CommitmentError> {
         ajtai.commit_ntt(&self.f)
     }
 
@@ -398,7 +396,7 @@ pub trait Instance<R: Ring> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R>;
 }
 
-impl<const C: usize, R: Ring> Instance<R> for CCCS<C, R> {
+impl<R: Ring> Instance<R> for CCCS<R> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_ccs.len() + w.len() + 1);
 
@@ -410,7 +408,7 @@ impl<const C: usize, R: Ring> Instance<R> for CCCS<C, R> {
     }
 }
 
-impl<const C: usize, R: Ring> Instance<R> for LCCCS<C, R> {
+impl<R: Ring> Instance<R> for LCCCS<R> {
     fn get_z_vector(&self, w: &[R]) -> Vec<R> {
         let mut z: Vec<R> = Vec::with_capacity(self.x_w.len() + w.len() + 1);
 

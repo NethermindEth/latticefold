@@ -2,7 +2,6 @@
 
 use ark_std::{cfg_into_iter, cfg_iter};
 use cyclotomic_rings::rings::SuitableRing;
-use num_traits::Zero;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use stark_rings::OverField;
@@ -31,18 +30,18 @@ mod utils;
 impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     for LFDecompositionProver<NTT, T>
 {
-    fn prove<const W: usize, const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
+    fn prove<P: DecompositionParams>(
+        cm_i: &LCCCS<NTT>,
         wit: &Witness<NTT>,
         transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
-        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
+        scheme: &AjtaiCommitmentScheme<NTT>,
     ) -> Result<
         (
             Vec<Vec<DenseMultilinearExtension<NTT>>>,
-            Vec<LCCCS<C, NTT>>,
+            Vec<LCCCS<NTT>>,
             Vec<Witness<NTT>>,
-            DecompositionProof<C, NTT>,
+            DecompositionProof<NTT>,
         ),
         DecompositionError,
     > {
@@ -53,7 +52,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let x_s = Self::compute_x_s::<P>(cm_i.x_w.clone(), cm_i.h);
 
-        let y_s: Vec<Commitment<C, NTT>> = Self::commit_witnesses::<C, W, P>(&wit_s, scheme, cm_i)?;
+        let y_s: Vec<Commitment<NTT>> = Self::commit_witnesses::<P>(&wit_s, scheme, cm_i)?;
 
         let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, &cm_i.r)?;
 
@@ -92,13 +91,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
     for LFDecompositionVerifier<NTT, T>
 {
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i: &LCCCS<C, NTT>,
-        proof: &DecompositionProof<C, NTT>,
+    fn verify<P: DecompositionParams>(
+        cm_i: &LCCCS<NTT>,
+        proof: &DecompositionProof<NTT>,
         transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
-    ) -> Result<Vec<LCCCS<C, NTT>>, DecompositionError> {
-        let mut lcccs_s = Vec::<LCCCS<C, NTT>>::with_capacity(P::K);
+    ) -> Result<Vec<LCCCS<NTT>>, DecompositionError> {
+        let mut lcccs_s = Vec::<LCCCS<NTT>>::with_capacity(P::K);
 
         for (((x, y), u), v) in proof
             .x_s
@@ -128,7 +127,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
 
         let b_s: Vec<_> = Self::calculate_b_s::<P>();
 
-        let y = Self::recompose_commitment::<C>(&proof.y_s, &b_s)?;
+        let y = Self::recompose_commitment(&proof.y_s, &b_s)?;
         if y != cm_i.cm {
             return Err(DecompositionError::RecomposedError);
         }
@@ -176,21 +175,21 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     }
 
     /// Ajtai commits to witnesses `wit_s` using Ajtai commitment scheme `scheme`.
-    fn commit_witnesses<const C: usize, const W: usize, P: DecompositionParams>(
+    fn commit_witnesses<P: DecompositionParams>(
         wit_s: &[Witness<NTT>],
-        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
-        cm_i: &LCCCS<C, NTT>,
-    ) -> Result<Vec<Commitment<C, NTT>>, CommitmentError> {
+        scheme: &AjtaiCommitmentScheme<NTT>,
+        cm_i: &LCCCS<NTT>,
+    ) -> Result<Vec<Commitment<NTT>>, CommitmentError> {
         let b = NTT::from(P::B_SMALL as u128);
 
         let commitments_k1: Vec<_> = cfg_iter!(wit_s[1..])
-            .map(|wit| wit.commit::<C, W, P>(scheme))
+            .map(|wit| wit.commit::<P>(scheme))
             .collect::<Result<_, _>>()?;
 
         let b_sum = commitments_k1
             .iter()
             .rev()
-            .fold(Commitment::zero(), |acc, y_i| (acc + y_i) * b);
+            .fold(Commitment::zeroed(scheme.kappa()), |acc, y_i| (acc + y_i) * b);
 
         let mut result = Vec::with_capacity(wit_s.len());
         result.push(&cm_i.cm - b_sum);
@@ -273,13 +272,13 @@ impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
     }
 
     /// Computes the linear combination `coeffs[0] * y_s[0] + coeffs[1] * y_s[1] + ... + coeffs[y_s.len() - 1] * y_s[y_s.len() - 1]`.
-    pub fn recompose_commitment<const C: usize>(
-        y_s: &[Commitment<C, NTT>],
+    pub fn recompose_commitment(
+        y_s: &[Commitment<NTT>],
         coeffs: &[NTT],
-    ) -> Result<Commitment<C, NTT>, DecompositionError> {
+    ) -> Result<Commitment<NTT>, DecompositionError> {
         y_s.iter()
             .zip(coeffs)
-            .map(|(y_i, b_i)| y_i * b_i)
+            .map(|(y_i, b_i)| y_i.clone() * b_i)
             .reduce(|acc, bi_part| acc + bi_part)
             .ok_or(DecompositionError::RecomposedError)
     }

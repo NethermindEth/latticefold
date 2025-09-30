@@ -24,54 +24,49 @@ pub mod linearization;
 #[cfg(test)]
 mod tests;
 
-/// `C` is the length of Ajtai commitment vectors.
 /// `NTT` is a cyclotomic ring in the NTT form.
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
-pub struct LFProof<const C: usize, NTT: OverField> {
+pub struct LFProof<NTT: OverField> {
     pub linearization_proof: LinearizationProof<NTT>,
-    pub decomposition_proof_l: DecompositionProof<C, NTT>,
-    pub decomposition_proof_r: DecompositionProof<C, NTT>,
+    pub decomposition_proof_l: DecompositionProof<NTT>,
+    pub decomposition_proof_r: DecompositionProof<NTT>,
     pub folding_proof: FoldingProof<NTT>,
 }
 
-/// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
-/// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
 /// `NTT` is a suitable cyclotomic ring.
 /// `P` is the decomposition parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSProver<const C: usize, const W: usize, NTT, P, T> {
+pub struct NIFSProver<NTT, P, T> {
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
 impl<
-        const C: usize,
-        const W: usize,
         NTT: SuitableRing,
         P: DecompositionParams,
         T: TranscriptWithShortChallenges<NTT>,
-    > NIFSProver<C, W, NTT, P, T>
+    > NIFSProver<NTT, P, T>
 {
     pub fn prove(
-        acc: &LCCCS<C, NTT>,
+        acc: &LCCCS<NTT>,
         w_acc: &Witness<NTT>,
-        cm_i: &CCCS<C, NTT>,
+        cm_i: &CCCS<NTT>,
         w_i: &Witness<NTT>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-        scheme: &AjtaiCommitmentScheme<C, W, NTT>,
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, LFProof<C, NTT>), LatticefoldError<NTT>> {
+        scheme: &AjtaiCommitmentScheme<NTT>,
+    ) -> Result<(LCCCS<NTT>, Witness<NTT>, LFProof<NTT>), LatticefoldError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
 
-        absorb_public_input::<NTT, C>(acc, cm_i, transcript);
+        absorb_public_input::<NTT>(acc, cm_i, transcript);
 
         let (linearized_cm_i, linearization_proof) =
             LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
         let (mz_mles_l, decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            LFDecompositionProver::<_, T>::prove::<W, C, P>(acc, w_acc, transcript, ccs, scheme)?;
+            LFDecompositionProver::<_, T>::prove::<P>(acc, w_acc, transcript, ccs, scheme)?;
         let (mz_mles_r, decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
-            LFDecompositionProver::<_, T>::prove::<W, C, P>(
+            LFDecompositionProver::<_, T>::prove::<P>(
                 &linearized_cm_i,
                 w_i,
                 transcript,
@@ -95,7 +90,7 @@ impl<
         };
 
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<C, P>(&lcccs, wit_s, transcript, ccs, &mz_mles)?;
+            LFFoldingProver::<_, T>::prove::<P>(&lcccs, wit_s, transcript, ccs, &mz_mles)?;
 
         Ok((
             folded_lcccs,
@@ -110,34 +105,31 @@ impl<
     }
 }
 
-/// `C` is the length of commitment vectors or, equivalently, the number of rows of the Ajtai matrix.
-/// `W` is the length of witness vectors or, equivalently, the number of columns of the Ajtai matrix.
 /// `NTT` is a suitable cyclotomic ring.
 /// `P` is the decomposition parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSVerifier<const C: usize, NTT, P, T> {
+pub struct NIFSVerifier<NTT, P, T> {
     _r: PhantomData<NTT>,
     _p: PhantomData<P>,
     _t: PhantomData<T>,
 }
 
 impl<
-        const C: usize,
         NTT: SuitableRing,
         P: DecompositionParams,
         T: TranscriptWithShortChallenges<NTT>,
-    > NIFSVerifier<C, NTT, P, T>
+    > NIFSVerifier<NTT, P, T>
 {
     pub fn verify(
-        acc: &LCCCS<C, NTT>,
-        cm_i: &CCCS<C, NTT>,
-        proof: &LFProof<C, NTT>,
+        acc: &LCCCS<NTT>,
+        cm_i: &CCCS<NTT>,
+        proof: &LFProof<NTT>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, LatticefoldError<NTT>> {
+    ) -> Result<LCCCS<NTT>, LatticefoldError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
 
-        absorb_public_input::<NTT, C>(acc, cm_i, transcript);
+        absorb_public_input::<NTT>(acc, cm_i, transcript);
 
         let linearized_cm_i = LFLinearizationVerifier::<_, T>::verify(
             cm_i,
@@ -145,13 +137,13 @@ impl<
             transcript,
             ccs,
         )?;
-        let decomposed_acc = LFDecompositionVerifier::<_, T>::verify::<C, P>(
+        let decomposed_acc = LFDecompositionVerifier::<_, T>::verify::<P>(
             acc,
             &proof.decomposition_proof_l,
             transcript,
             ccs,
         )?;
-        let decomposed_cm_i = LFDecompositionVerifier::<_, T>::verify::<C, P>(
+        let decomposed_cm_i = LFDecompositionVerifier::<_, T>::verify::<P>(
             &linearized_cm_i,
             &proof.decomposition_proof_r,
             transcript,
@@ -167,7 +159,7 @@ impl<
             decomposed_acc
         };
 
-        Ok(LFFoldingVerifier::<NTT, T>::verify::<C, P>(
+        Ok(LFFoldingVerifier::<NTT, T>::verify::<P>(
             &lcccs_s,
             &proof.folding_proof,
             transcript,
@@ -186,9 +178,9 @@ fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
     Ok(())
 }
 
-fn absorb_public_input<NTT: SuitableRing, const C: usize>(
-    acc: &LCCCS<C, NTT>,
-    cm_i: &CCCS<C, NTT>,
+fn absorb_public_input<NTT: SuitableRing>(
+    acc: &LCCCS<NTT>,
+    cm_i: &CCCS<NTT>,
     transcript: &mut impl Transcript<NTT>,
 ) {
     transcript.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(

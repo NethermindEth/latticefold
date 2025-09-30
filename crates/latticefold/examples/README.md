@@ -4,15 +4,14 @@ This file explains how to use the examples in this repository. Examples demonstr
 
 ## Implemented examples
 
-- goldilocks
-- babybear
-- frog
-- starkprime
+- e2e
 
 ## Customization with Environment Variables
 
 The examples in this repository support customization via environment variables. Most examples use the following parameters, except for `starkprime`, which has its own set of parameters detailed below, to tailor their behavior:
 
+- **`RING`**: Establishes the used ring. Ring configurations are: `Goldilocks`, `BabyBear`, `Frog`, and `StarkPrime`.
+    - Default: `Goldilocks`
 - **`PARAM_B`**: Sets the value of `B` in `DecompositionParams`.
     - Default: `32768` (`1 << 15`)
 - **`PARAM_L`**: Sets the value of `L` in `DecompositionParams`.
@@ -21,24 +20,24 @@ The examples in this repository support customization via environment variables.
     - Default: `2`
 - **`PARAM_K`**: Sets the value of `K` in `DecompositionParams`.
     - Default: `15`
-- **`PARAM_C`**: Sets the value of `C`, controlling challenge set parameters.
+- **`PARAM_KAPPA`**: Sets the value of `KAPPA`, controlling challenge set parameters.
     - Default: `4`
 - **`PARAM_WIT_LEN`**: Sets the witness length.
     - Default: `4`
 
-### starkprime-specific Parameters
+### starkprime default values
 
-- **`PARAM_B_STARK`**: Sets the value of `B` in `DecompositionParams`.
+- **`PARAM_B`**: Sets the value of `B` in `DecompositionParams`.
     - Default: `1073741824u128`
-- **`PARAM_L_STARK`**: Sets the value of `L` in `DecompositionParams`.
+- **`PARAM_L`**: Sets the value of `L` in `DecompositionParams`.
     - Default: `9`
-- **`PARAM_B_SMALL_STARK`**: Sets the value of `B_SMALL` in `DecompositionParams`.
+- **`PARAM_B_SMALL`**: Sets the value of `B_SMALL` in `DecompositionParams`.
     - Default: `2`
-- **`PARAM_K_STARK`**: Sets the value of `K` in `DecompositionParams`.
+- **`PARAM_K`**: Sets the value of `K` in `DecompositionParams`.
     - Default: `30`
-- **`PARAM_C_STARK`**: Sets the value of `C`, controlling challenge set parameters.
+- **`PARAM_KAPPA`**: Sets the value of `KAPPA`, controlling challenge set parameters.
     - Default: `4`
-- **`PARAM_WIT_LEN_STARK`**: Sets the witness length.
+- **`PARAM_WIT_LEN`**: Sets the witness length.
     - Default: `4`
 
 These parameters influence the behavior and output of the examples.
@@ -56,7 +55,7 @@ These parameters influence the behavior and output of the examples.
    export PARAM_L=6
    export PARAM_B_SMALL=2
    export PARAM_K=16
-   export PARAM_C=5
+   export PARAM_KAPPA=5
    export PARAM_WIT_LEN=5
 
    cargo run --example <example_name>
@@ -75,7 +74,7 @@ These parameters influence the behavior and output of the examples.
    $env:PARAM_L=6
    $env:PARAM_B_SMALL=2
    $env:PARAM_K=16
-   $env:PARAM_C=5
+   $env:PARAM_KAPPA=5
    $env:PARAM_WIT_LEN=5
 
    cargo run --example <example_name>
@@ -95,7 +94,7 @@ If no environment variables are specified, the examples will run with the follow
 - `PARAM_L`: `5`
 - `PARAM_B_SMALL`: `2`
 - `PARAM_K`: `15`
-- `PARAM_C`: `4`
+- `PARAM_KAPPA`: `4`
 - `PARAM_WIT_LEN`: `4`
 
 ## Notes

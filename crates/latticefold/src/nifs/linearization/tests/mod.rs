@@ -22,29 +22,26 @@ use crate::{
     transcript::poseidon::PoseidonTranscript,
 };
 
-const C: usize = 4;
+const KAPPA: usize = 4;
 const WIT_LEN: usize = 4;
-fn setup_test_environment<
-    RqNTT: SuitableRing,
-    DP: DecompositionParams,
-    const C: usize,
-    const W: usize,
->(
+
+fn setup_test_environment<RqNTT: SuitableRing, DP: DecompositionParams>(
     input: Option<usize>,
+    n: usize,
 ) -> (
     Witness<RqNTT>,
-    CCCS<C, RqNTT>,
+    CCCS<RqNTT>,
     CCS<RqNTT>,
-    AjtaiCommitmentScheme<C, W, RqNTT>,
+    AjtaiCommitmentScheme<RqNTT>,
 ) {
-    let ccs = get_test_ccs::<RqNTT>(W, DP::L);
+    let ccs = get_test_ccs::<RqNTT>(n, DP::L);
     let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(input.unwrap_or(rng.gen_range(0..64)));
-    let scheme = AjtaiCommitmentScheme::rand(&mut rng);
+    let scheme = AjtaiCommitmentScheme::rand(KAPPA, n, &mut rng);
 
     let wit = Witness::from_w_ccs::<DP>(w_ccs);
     let cm_i = CCCS {
-        cm: wit.commit::<C, W, DP>(&scheme).unwrap(),
+        cm: wit.commit::<DP>(&scheme).unwrap(),
         x_ccs,
     };
 
@@ -55,8 +52,8 @@ fn setup_test_environment<
 fn test_compute_z_ccs() {
     type RqNTT = StarkRqNTT;
     type DP = StarkDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, _, scheme) = setup_test_environment::<RqNTT, DP>(None, n);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -65,7 +62,7 @@ fn test_compute_z_ccs() {
     assert_eq!(z_ccs[cm_i.x_ccs.len()], RqNTT::one());
 
     // Check commitment
-    assert_eq!(cm_i.cm, wit.commit::<C, W, StarkDP>(&scheme).unwrap());
+    assert_eq!(cm_i.cm, wit.commit::<StarkDP>(&scheme).unwrap());
 }
 
 #[test]
@@ -73,8 +70,8 @@ fn test_construct_polynomial() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
     type DP = GoldilocksDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -99,8 +96,8 @@ fn test_generate_sumcheck() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
     type DP = FrogDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
 
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
 
@@ -131,7 +128,7 @@ fn test_generate_sumcheck() {
 
 fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>(
     wit: &Witness<RqNTT>,
-    cm_i: &CCCS<C, RqNTT>,
+    cm_i: &CCCS<RqNTT>,
     ccs: &CCS<RqNTT>,
 ) -> (Vec<RqNTT>, Vec<DenseMultilinearExtension<RqNTT>>) {
     let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
@@ -165,10 +162,10 @@ fn test_compute_v() {
     type RqNTT = BabyBearRqNTT;
     type CS = BabyBearChallengeSet;
     type DP = BabyBearDP;
-    const W: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * DP::L;
 
     // Setup shared test state
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
     let (point_r, Mz_mles) = prepare_test_vectors::<RqNTT, CS>(&wit, &cm_i, &ccs);
 
     // Compute actual v vector
@@ -196,9 +193,9 @@ fn test_compute_u() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
     type DP = FrogDP;
-    const W: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * DP::L;
     // Setup shared test state
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
     let (point_r, Mz_mles) = prepare_test_vectors::<RqNTT, CS>(&wit, &cm_i, &ccs);
 
     // Compute actual u vector
@@ -230,8 +227,8 @@ fn test_full_prove() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
     type DP = GoldilocksDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (lcccs, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
@@ -252,8 +249,8 @@ fn test_verify_sumcheck_proof() {
     type RqNTT = StarkRqNTT;
     type CS = StarkChallengeSet;
     type DP = StarkDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
     let mut prove_transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
@@ -294,8 +291,8 @@ fn test_verify_evaluation_claim() {
     type RqNTT = BabyBearRqNTT;
     type CS = BabyBearChallengeSet;
     type DP = BabyBearDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     // Generate proof
@@ -333,8 +330,8 @@ fn test_prepare_verifier_output() {
     type RqNTT = FrogRqNTT;
     type CS = FrogChallengeSet;
     type DP = FrogDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (_, proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
@@ -348,7 +345,7 @@ fn test_prepare_verifier_output() {
     let point_r = vec![RqNTT::one(); ccs.s]; // Example point_r
 
     let lcccs =
-        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_verifier_output::<C>(
+        LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prepare_verifier_output(
             &cm_i,
             point_r.clone(),
             &proof,
@@ -368,8 +365,8 @@ fn test_verify_invalid_proof() {
     type RqNTT = GoldilocksRqNTT;
     type CS = GoldilocksChallengeSet;
     type DP = GoldilocksDP;
-    const W: usize = WIT_LEN * DP::L;
-    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP, C, W>(None);
+    let n = WIT_LEN * DP::L;
+    let (wit, cm_i, ccs, _) = setup_test_environment::<RqNTT, DP>(None, n);
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
     let (_, mut proof) = LFLinearizationProver::<RqNTT, PoseidonTranscript<RqNTT, CS>>::prove(
@@ -388,7 +385,7 @@ fn test_verify_invalid_proof() {
     // Reset transcript for verification
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let result = LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify::<C>(
+    let result = LFLinearizationVerifier::<RqNTT, PoseidonTranscript<RqNTT, CS>>::verify(
         &cm_i,
         &proof,
         &mut transcript,

@@ -415,7 +415,6 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 ///
 /// # Type Parameters
 ///
-/// - `C`: Length of the Ajtai commitment.
 /// - `NTT`: A ring suitable to be used in the LatticeFold protocol.
 ///
 /// # Arguments
@@ -428,7 +427,7 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 ///   $$
 ///   \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
 ///   $$
-/// - `cm_i_s: &[LCCCS<C, NTT>]`
+/// - `cm_i_s: &[LCCCS<NTT>]`
 ///
 ///     Decomposed linearized commitments
 ///
@@ -448,31 +447,32 @@ pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionP
 ///
 /// # Returns
 ///
-/// - `(Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>)`  
+/// - `(Vec<NTT>, Commitment<NTT>, Vec<NTT>, Vec<NTT>)`  
 ///   A tuple containing:
 ///   - `v0: Vec<NTT>`  
 ///     Evaluation of linearized folded witness at $\vec{r}\_o$
-///   - `u_0: Commitment<C, NTT>`
+///   - `u_0: Commitment<NTT>`
 ///     A linear combination of $\left[ eta_s[i] \right]\_{i=1}^{2k}$
 ///   - `x0: Vec<NTT>`
 ///     Folded CCS statement
 ///   - `cm_0: Vec<NTT>`
 ///     Folded commitment
-pub(super) fn compute_v0_u0_x0_cm_0<const C: usize, NTT: SuitableRing>(
+pub(super) fn compute_v0_u0_x0_cm_0<NTT: SuitableRing>(
     rho_s_coeff: &[NTT::CoefficientRepresentation],
     rho_s: &[NTT],
     theta_s: &[Vec<NTT>],
-    cm_i_s: &[LCCCS<C, NTT>],
+    cm_i_s: &[LCCCS<NTT>],
     eta_s: &[Vec<NTT>],
     ccs: &CCS<NTT>,
-) -> (Vec<NTT>, Commitment<C, NTT>, Vec<NTT>, Vec<NTT>) {
+) -> (Vec<NTT>, Commitment<NTT>, Vec<NTT>, Vec<NTT>) {
     let v_0: Vec<NTT> = rot_lin_combination(rho_s_coeff, theta_s);
 
-    let cm_0: Commitment<C, NTT> = rho_s
+    let empty_commitment = Commitment::zeroed(cm_i_s.first().map(|cm_i| cm_i.cm.len()).unwrap_or(0));
+    let cm_0: Commitment<NTT> = rho_s
         .iter()
         .zip(cm_i_s.iter())
         .map(|(&rho_i, cm_i)| cm_i.cm.clone() * rho_i)
-        .sum();
+        .fold(empty_commitment, |acc, c| acc + c);
 
     let u_0: Vec<NTT> = rho_s
         .iter()

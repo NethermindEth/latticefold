@@ -39,13 +39,13 @@ mod structs;
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT, T>
     for LFFoldingProver<NTT, T>
 {
-    fn prove<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
+    fn prove<P: DecompositionParams>(
+        cm_i_s: &[LCCCS<NTT>],
         mut w_s: Vec<Witness<NTT>>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
         mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
+    ) -> Result<(LCCCS<NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
 
         // Free some unneeded vars/memory
@@ -133,12 +133,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
     for LFFoldingVerifier<NTT, T>
 {
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
+    fn verify<P: DecompositionParams>(
+        cm_i_s: &[LCCCS<NTT>],
         proof: &FoldingProof<NTT>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>> {
+    ) -> Result<LCCCS<NTT>, FoldingError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges and validate input
@@ -155,7 +155,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
             Self::verify_sumcheck_proof(transcript, nvars, degree, claim_g1 + claim_g3, proof)?;
 
         // Verify evaluation claim
-        Self::verify_evaluation::<C, P>(
+        Self::verify_evaluation::<P>(
             &alpha_s,
             &beta_s,
             &mu_s,
@@ -201,7 +201,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
             .collect::<Vec<Vec<DenseMultilinearExtension<NTT>>>>()
     }
 
-    fn get_ris<const C: usize>(cm_i_s: &[LCCCS<C, NTT>]) -> Vec<Vec<NTT>> {
+    fn get_ris(cm_i_s: &[LCCCS<NTT>]) -> Vec<Vec<NTT>> {
         cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>()
     }
 
@@ -270,7 +270,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
 
 impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier<NTT, T> {
     #[allow(clippy::too_many_arguments)]
-    fn verify_evaluation<const C: usize, P: DecompositionParams>(
+    fn verify_evaluation<P: DecompositionParams>(
         alpha_s: &[NTT],
         beta_s: &[NTT],
         mu_s: &[NTT],
@@ -278,7 +278,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         r_0: &[NTT],
         expected_evaluation: NTT,
         proof: &FoldingProof<NTT>,
-        cm_i_s: &[LCCCS<C, NTT>],
+        cm_i_s: &[LCCCS<NTT>],
     ) -> Result<(), FoldingError<NTT>> {
         let ris = cm_i_s.iter().map(|cm_i| cm_i.r.clone()).collect::<Vec<_>>();
 
@@ -308,10 +308,10 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         Ok(())
     }
 
-    fn calculate_claims<const C: usize>(
+    fn calculate_claims(
         alpha_s: &[NTT],
         zeta_s: &[NTT],
-        cm_i_s: &[LCCCS<C, NTT>],
+        cm_i_s: &[LCCCS<NTT>],
     ) -> (NTT, NTT) {
         let vs = cm_i_s
             .iter()
@@ -383,14 +383,14 @@ fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
     Ok(())
 }
 
-fn prepare_public_output<const C: usize, NTT: SuitableRing>(
+fn prepare_public_output<NTT: SuitableRing>(
     r_0: Vec<NTT>,
     v_0: Vec<NTT>,
-    cm_0: Commitment<C, NTT>,
+    cm_0: Commitment<NTT>,
     u_0: Vec<NTT>,
     x_0: Vec<NTT>,
     h: NTT,
-) -> LCCCS<C, NTT> {
+) -> LCCCS<NTT> {
     LCCCS {
         r: r_0,
         v: v_0,

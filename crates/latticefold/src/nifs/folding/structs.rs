@@ -45,14 +45,14 @@ pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>
     ///
     /// # Arguments
     ///
-    /// * `cm_i_s` - A reference to `[LCCCS<C, NTT>]`, representing decomposed linearized commitments to be folded together.
+    /// * `cm_i_s` - A reference to `[LCCCS<NTT>]`, representing decomposed linearized commitments to be folded together.
     /// * `w_s` - A vector of decomposed witnesses to be folded together.
     /// * `transcript` - A mutable reference to a sponge for generating NI challenges.
     /// * `ccs` -  A reference to a Customizable Constraint System instance used in the protocol.
     /// # Returns
     ///
-    /// On success, returns a tuple `(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>)` where:
-    ///   * `LCCCS<C, NTT>` is a folded linearized version of the CCS witness commitment.
+    /// On success, returns a tuple `(LCCCS<NTT>, Witness<NTT>, FoldingProof<NTT>)` where:
+    ///   * `LCCCS<NTT>` is a folded linearized version of the CCS witness commitment.
     ///   * `Witness<NTT>` is a folded CCS and Ajtai witness.
     ///   * `LinearizationProof<NTT>` is a proof that the linearization subprotocol was executed correctly.
     ///
@@ -60,13 +60,13 @@ pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>
     ///
     /// Returns an error if asked to evaluate MLEs with incorrect number of variables
     ///
-    fn prove<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
+    fn prove<P: DecompositionParams>(
+        cm_i_s: &[LCCCS<NTT>],
         w_s: Vec<Witness<NTT>>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
         mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
-    ) -> Result<(LCCCS<C, NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
+    ) -> Result<(LCCCS<NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
 }
 
 /// Verifier for folding subprotocol
@@ -75,22 +75,22 @@ pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NT
     ///
     /// # Arguments
     ///
-    /// * `cm_i` - A reference to a vector of `CCCS<C, NTT>`, which represents decomposed LCCS statements and commitments to witnesses.
+    /// * `cm_i` - A reference to a vector of `CCCS<NTT>`, which represents decomposed LCCS statements and commitments to witnesses.
     /// * `proof` - A reference to a `FoldingProof<NTT>` containing the folding proof.
     /// * `transcript` - A mutable reference to a sponge for generating NI challenges.
     /// * `ccs` - A reference to a Customizable Constraint System instance used in the protocol.
     ///
     /// # Returns
     ///
-    /// * `Ok(LCCCS<C, NTT>)` - On success, returns the folded linearized version of the CCS witness commitment.
+    /// * `Ok(LCCCS<NTT>)` - On success, returns the folded linearized version of the CCS witness commitment.
     /// * `Err(FoldingError<NTT>)` - If verification fails, returns a `FoldingError<NTT>`.
     ///
-    fn verify<const C: usize, P: DecompositionParams>(
-        cm_i_s: &[LCCCS<C, NTT>],
+    fn verify<P: DecompositionParams>(
+        cm_i_s: &[LCCCS<NTT>],
         proof: &FoldingProof<NTT>,
         transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
-    ) -> Result<LCCCS<C, NTT>, FoldingError<NTT>>;
+    ) -> Result<LCCCS<NTT>, FoldingError<NTT>>;
 }
 
 /// The LatticeFold folding prover

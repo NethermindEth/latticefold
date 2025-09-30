@@ -152,10 +152,12 @@ pub(crate) fn get_test_r1cs<R: Ring>() -> R1CS<R> {
 
 /// Return a R1CS instance of arbitrary size, useful for benching.
 /// Only works when z vector consists of multiplicative identities.
-pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
+pub fn get_test_dummy_r1cs<R: Ring>(
+    x_len: usize, 
+    wit_len: usize,
     rows: usize,
 ) -> R1CS<R> {
-    let R1CS_A = create_dummy_identity_sparse_matrix(rows, X_LEN + WIT_LEN + 1);
+    let R1CS_A = create_dummy_identity_sparse_matrix(rows, x_len + wit_len + 1);
     let R1CS_B = R1CS_A.clone();
     let R1CS_C = R1CS_A.clone();
 
@@ -169,13 +171,15 @@ pub fn get_test_dummy_r1cs<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
 
 /// Return a R1CS instance of arbitrary size, useful for benching.
 /// Works for arbitrary z vector.
-pub fn get_test_dummy_r1cs_non_scalar<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
+pub fn get_test_dummy_r1cs_non_scalar<R: Ring>(
+    x_len: usize, 
+    wit_len: usize,
     rows: usize,
     witness: &[R],
 ) -> R1CS<R> {
-    let R1CS_A = create_dummy_identity_sparse_matrix(rows, X_LEN + WIT_LEN + 1);
+    let R1CS_A = create_dummy_identity_sparse_matrix(rows, x_len + wit_len + 1);
     let R1CS_B = R1CS_A.clone();
-    let R1CS_C = create_dummy_squaring_sparse_matrix(rows, X_LEN + WIT_LEN + 1, witness);
+    let R1CS_C = create_dummy_squaring_sparse_matrix(rows, x_len + wit_len + 1, witness);
 
     R1CS::<R> {
         l: 1,
@@ -276,22 +280,24 @@ pub fn get_test_z_ntt_split<R: SuitableRing>() -> (R, Vec<R>, Vec<R>) {
 
 /// Return z vector consisting only of multiplicative identities,
 /// split into statement, constant, and witness.
-pub fn get_test_dummy_z_split<R: Ring, const X_LEN: usize, const WIT_LEN: usize>(
+pub fn get_test_dummy_z_split<R: Ring>(
+    x_len: usize, wit_len: usize
 ) -> (R, Vec<R>, Vec<R>) {
     (
         R::one(),
-        to_F_vec(vec![1; X_LEN]),
-        to_F_vec(vec![1; WIT_LEN]),
+        to_F_vec(vec![1; x_len]),
+        to_F_vec(vec![1; wit_len]),
     )
 }
 
 /// Return z vector consisting of non scalar ring elements,
 /// split into statement, constant, and witness.
-pub fn get_test_dummy_z_split_ntt<R: SuitableRing, const X_LEN: usize, const WIT_LEN: usize>(
+pub fn get_test_dummy_z_split_ntt<R: SuitableRing>(
+    x_len: usize, wit_len: usize
 ) -> (R, Vec<R>, Vec<R>) {
-    let statement_vec = (0..X_LEN).map(|_| R::one()).collect();
+    let statement_vec = (0..x_len).map(|_| R::one()).collect();
 
-    let witness_vec = (0..WIT_LEN)
+    let witness_vec = (0..wit_len)
         .map(|_| {
             R::from(
                 (0..R::dimension())
