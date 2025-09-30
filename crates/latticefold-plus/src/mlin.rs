@@ -63,16 +63,13 @@ where
 
         let (com, proof) = cm.prove(M, transcript);
 
-        let cm_g = com
-            .x
-            .cm_g
-            .iter()
-            .fold(vec![R::zero(); self.params.kappa], |mut acc, cm| {
-                acc.iter_mut().zip(cm.iter()).for_each(|(acc_r, cm_r)| {
-                    *acc_r += cm_r;
-                });
-                acc
-            });
+      let mut cm_g = vec![R::zero(); self.params.kappa];
+for cm in &com.x.cm_g {
+    for (acc_r, cm_r) in cm_g.iter_mut().zip(cm.iter()) {
+        *acc_r += cm_r;
+    }
+}
+
 
         let nlin = com.x.vo[0].len();
         let vo = com
