@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, AxisScale, Criterion, PlotConfiguration};
 use env::ENV;
-use latticefold::decomposition_parameters::DecompositionParams;
 
 mod env;
 

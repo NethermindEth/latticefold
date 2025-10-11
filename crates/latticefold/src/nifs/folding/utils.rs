@@ -1,10 +1,7 @@
 #![allow(non_snake_case)]
 
 use ark_ff::{Field, PrimeField, Zero};
-use ark_std::{
-    iter::{self, successors},
-    iterable::Iterable,
-};
+use ark_std::{iter, iterable::Iterable};
 use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use stark_rings::{cyclotomic_ring::CRT, OverField, PolyRing, Ring};
 use stark_rings_poly::mle::DenseMultilinearExtension;
@@ -13,10 +10,7 @@ use crate::{
     arith::{CCS, LCCCS},
     ark_base::*,
     commitment::Commitment,
-    decomposition_parameters::DecompositionParams,
-    nifs::error::FoldingError,
     transcript::{Transcript, TranscriptWithShortChallenges},
-    utils::sumcheck::utils::build_eq_x_r,
 };
 
 /// A trait for squeezing challenges (`alpha`, `beta`, `zeta`, `mu`) from a cryptographic sponge.
@@ -42,22 +36,24 @@ pub(crate) trait SqueezeAlphaBetaZetaMu<NTT: SuitableRing> {
     ///   - `zeta`: A challenge vector of length $2 \cdot k$, where $k$ is defined in the decomposition parameters.
     ///   - `mu`: A challenge vector of length $2 \cdot k$, where $k$ is defined in the decomposition parameters.
     ///
-    fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
+    fn squeeze_alpha_beta_zeta_mu(
         &mut self,
         log_m: usize,
+        k: usize,
     ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>);
 }
 
 impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
-    fn squeeze_alpha_beta_zeta_mu<P: DecompositionParams>(
+    fn squeeze_alpha_beta_zeta_mu(
         &mut self,
         log_m: usize,
+        k: usize,
     ) -> (Vec<NTT>, Vec<NTT>, Vec<NTT>, Vec<NTT>) {
         self.absorb_field_element(&<NTT::BaseRing as Field>::from_base_prime_field(
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"alpha_s"),
         ));
         let alpha_s = self
-            .get_challenges(2 * P::K)
+            .get_challenges(2 * k)
             .into_iter()
             .map(|x| NTT::from(x))
             .collect::<Vec<_>>();
@@ -66,7 +62,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"zeta_s"),
         ));
         let zeta_s = self
-            .get_challenges(2 * P::K)
+            .get_challenges(2 * k)
             .into_iter()
             .map(|x| NTT::from(x))
             .collect::<Vec<_>>();
@@ -75,7 +71,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
             <NTT::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"mu_s"),
         ));
         let mut mu_s = self
-            .get_challenges((2 * P::K) - 1)
+            .get_challenges((2 * k) - 1)
             .into_iter()
             .map(|x| NTT::from(x))
             .collect::<Vec<_>>(); // Note is one challenge less
@@ -113,149 +109,18 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
 ///   - The first element is a vector of challenges in coefficient form.
 ///   - The second element is the same vector of challenges in NTT form.
 ///
-pub(super) fn get_rhos<
-    R: SuitableRing,
-    T: TranscriptWithShortChallenges<R>,
-    P: DecompositionParams,
->(
+pub(super) fn get_rhos<R: SuitableRing, T: TranscriptWithShortChallenges<R>>(
+    k: usize,
     transcript: &mut T,
 ) -> (Vec<R::CoefficientRepresentation>, Vec<R>) {
     transcript.absorb_field_element(&<R::BaseRing as Field>::from_base_prime_field(
         <R::BaseRing as Field>::BasePrimeField::from_be_bytes_mod_order(b"rho_s"),
     ));
 
-    let mut rhos_coeff = transcript.get_small_challenges((2 * P::K) - 1); // Note that we are missing the first element
+    let mut rhos_coeff = transcript.get_small_challenges((2 * k) - 1); // Note that we are missing the first element
     rhos_coeff.push(R::CoefficientRepresentation::ONE);
     let rhos = CRT::elementwise_crt(rhos_coeff.clone());
     (rhos_coeff, rhos)
-}
-
-/// Creates sumcheck polynomial
-///
-/// $$
-/// g(\vec{x}) := \sum_{i=1}^{2k} \left[\alpha_i g_{1,i}(\vec{x}) + \mu_i g_{2,i}(\vec{x}) + \zeta_i g_{3,i}(\vec{x})\right]
-/// $$
-///
-/// where, for all $i \in \[2k\]$,
-///
-/// $$
-/// g_{1,i}(\vec{x}) := \sum\_{j=0}^{\tau - 1} \alpha_i^j \cdot \left( eq(\vec{r}_i, \vec{x}) \cdot \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) \right),
-/// $$
-///
-/// $$
-/// g_{2,i,j}(\vec{x}) := \sum\_{j=0}^{\tau - 1} \mu_i^j \left( eq(\vec{\beta}, \vec{x}) \cdot
-/// \prod_{j=-(b-1)}^{b-1} \( \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) - j \)\right),
-/// $$
-///
-/// $$
-/// g_{3,i}(\vec{x}) := \sum\_{j=0}^{t-1} \zeta_i^j \cdot \left(eq(\vec{r}_i, \vec{x}) \cdot
-/// \left(
-/// \sum\_{
-/// \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
-/// }
-/// \text{mle}\[M_j\]\(\vec{x}, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
-/// \right)
-/// \right).
-/// $$
-///
-/// # Arguments
-///
-/// - `log_m: usize`  
-///   The number of variables in the final polynomial.
-///
-/// - `f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>]`  
-///   A reference to the multilinear extension of the decomposed NTT witnesses
-///
-/// - `alpha_s: &[NTT]`  
-///   A slice containing the $\alpha$ challenges.
-///
-/// - `challenged_Ms_1: &DenseMultilinearExtension<NTT>`  
-///   A reference to the M matrices multiplied by the first $k$ decomposed vectors, and then taken a linear combination of.
-///
-/// - `challenged_Ms_2: &DenseMultilinearExtension<NTT>`  
-///   A reference to the M matrices multiplied by the second $k$ decomposed vectors, and then taken a linear combination of.
-///
-/// - `r_s: &[Vec<NTT>]`  
-///   The linearization challenge vectors
-///
-/// - `beta_s: &[NTT]`  
-///   The $\beta$ challenges
-///
-/// - `mu_s: &[NTT]`  
-///   The $\mu$ challenges
-///
-/// # Returns
-///
-/// - `Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), FoldingError<NTT>>`  
-///   - On success, returns a tuple containing:
-///     - A `Vec<RefCounter<DenseMultilinearExtension<NTT>>>`, the MLEs that make up the polynomial.
-///     - A `usize` of the degree of the final polynomial.
-///
-/// # Errors
-///
-/// This function will return a `FoldingError<NTT>` if any of the multilinear extensions or vectors are of the wrong size.
-///
-/// $$
-#[allow(clippy::too_many_arguments)]
-pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams>(
-    log_m: usize,
-    f_hat_mles: Vec<Vec<DenseMultilinearExtension<NTT>>>,
-    alpha_s: &[NTT],
-    challenged_Ms_1: &DenseMultilinearExtension<NTT>,
-    challenged_Ms_2: &DenseMultilinearExtension<NTT>,
-    r_s: &[Vec<NTT>],
-    beta_s: &[NTT],
-    mu_s: &[NTT],
-) -> Result<(Vec<DenseMultilinearExtension<NTT>>, usize), FoldingError<NTT>> {
-    if alpha_s.len() != 2 * DP::K
-        || f_hat_mles.len() != 2 * DP::K
-        || r_s.len() != 2 * DP::K
-        || beta_s.len() != log_m
-        || mu_s.len() != 2 * DP::K
-    {
-        return Err(FoldingError::IncorrectLength);
-    }
-
-    #[cfg(test)]
-    {
-        if r_s[..DP::K].iter().any(|r| r != &r_s[0])
-            || r_s[DP::K..].iter().any(|r| r != &r_s[DP::K])
-        {
-            return Err(FoldingError::SumcheckChallengeError);
-        }
-    }
-
-    let len = 2 + 2 + // g1 + g3
-        1 + f_hat_mles.len() * f_hat_mles[0].len(); // g2
-    let mut mles = Vec::with_capacity(len);
-
-    // We assume here that decomposition subprotocol puts the same r challenge point
-    // into all decomposed linearized commitments
-    let r_i_eq = build_eq_x_r(&r_s[0])?;
-    prepare_g1_and_3_k_mles_list(
-        &mut mles,
-        r_i_eq.clone(),
-        &f_hat_mles[0..DP::K],
-        &alpha_s[0..DP::K],
-        challenged_Ms_1,
-    );
-
-    let r_i_eq = build_eq_x_r(&r_s[DP::K])?;
-    prepare_g1_and_3_k_mles_list(
-        &mut mles,
-        r_i_eq,
-        &f_hat_mles[DP::K..2 * DP::K],
-        &alpha_s[DP::K..2 * DP::K],
-        challenged_Ms_2,
-    );
-
-    // g2
-    let beta_eq_x = build_eq_x_r(beta_s)?;
-    prepare_g2_i_mle_list(&mut mles, beta_eq_x, f_hat_mles);
-
-    let degree = 2 * DP::B_SMALL;
-
-    Ok((mles, degree))
 }
 
 /// Combines evaluations of MLE into evaluation of folding sumcheck polynomial
@@ -270,9 +135,10 @@ pub(super) fn create_sumcheck_polynomial<NTT: OverField, DP: DecompositionParams
 ///  # Returns
 ///  - NTT:
 ///    The value of the same evaluation point evaluated by the folding sumcheck polynomial
-pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionParams>(
+pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing>(
     vals: &[NTT],
     mu_s: &[NTT],
+    b: usize,
 ) -> NTT {
     let extension_degree = NTT::CoefficientRepresentation::dimension() / <NTT>::dimension();
 
@@ -306,7 +172,7 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
 
             let f_i_squared = f_i * f_i;
 
-            for b in 1..<P>::B_SMALL {
+            for b in 1..b {
                 let multiplicand = f_i_squared - NTT::from(b as u128 * b as u128);
                 if multiplicand.is_zero() {
                     eval = NTT::zero();
@@ -322,93 +188,6 @@ pub(crate) fn sumcheck_polynomial_comb_fn<NTT: SuitableRing, P: DecompositionPar
     }
 
     result
-}
-
-/// Computes the grand sum from point 4 of the Latticefold folding protocol.
-///
-/// # Arguments
-///
-/// - `alpha_s: &[NTT]`  
-///   A slice containing the $\alpha$ challenges.
-///
-/// - `mu_s: &[NTT]`  
-///   A slice containing the $\mu$ challenges.
-///
-/// - `theta_s: &[Vec<NTT>]`  
-///   $$
-///   \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
-///   $$
-///
-/// - `e_asterisk: NTT`  
-///   $$
-///   \mathbf{e}^* := eq(\boldsymbol{\beta}, \mathbf{r}_o)
-///   $$
-///
-/// - `e_s: &[NTT]`  
-///   $$
-///   \left[ e_i := eq(\vec{r}\_i, \vec{r}\_o) \right]\_{i=1}^{2k}
-///   $$
-/// - `zeta_s: &[NTT]`  
-///
-///     A slice containing the $\zeta$ challenges.
-///
-/// - `eta_s: &[Vec<NTT>]`  
-///   $$
-///   \eta[i] :=
-///   \sum\_{
-///   \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
-///   }
-///   \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
-///   $$
-///
-/// # Returns
-///
-/// - `NTT`  
-///   Returns the expected value of the sumcheck claim.
-///
-pub(super) fn compute_sumcheck_claim_expected_value<NTT: Ring, P: DecompositionParams>(
-    alpha_s: &[NTT],
-    mu_s: &[NTT],
-    theta_s: &[Vec<NTT>],
-    e_asterisk: NTT,
-    e_s: &[NTT],
-    zeta_s: &[NTT],
-    eta_s: &[Vec<NTT>],
-) -> NTT {
-    (0..(2 * P::K))
-        .map(|i| {
-            // Evaluation claims about f hats.
-            let mut s_summand: NTT = successors(Some(alpha_s[i]), |alpha_power| {
-                Some(alpha_s[i] * alpha_power)
-            })
-            .zip(theta_s[i].iter())
-            .map(|(pow_of_alpha_i, theta)| pow_of_alpha_i * e_s[i] * theta) // Might need to change e_s[i] double check
-            .sum();
-
-            // norm range check contribution
-            s_summand += e_asterisk
-                * successors(Some(mu_s[i]), |mu_power| Some(mu_s[i] * mu_power))
-                    .zip(theta_s[i].iter())
-                    .map(|(mu_power, &theta)| {
-                        mu_power
-                            * theta
-                            * (1..P::B_SMALL)
-                                .map(|x| NTT::from(x as u128))
-                                .map(|j_hat| (theta - j_hat) * (theta + j_hat))
-                                .product::<NTT>()
-                    })
-                    .sum::<NTT>();
-
-            // linearisation claims contribuition
-            s_summand += e_s[i]
-                * successors(Some(zeta_s[i]), |&zeta| Some(zeta * zeta_s[i]))
-                    .zip(eta_s[i].iter())
-                    .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
-                    .sum::<NTT>();
-
-            s_summand
-        })
-        .sum()
 }
 
 /// Computes `v0`, `u0`, `x0`, and `cm_0` as folding subprotocol.
@@ -521,7 +300,7 @@ pub(super) fn compute_v0_u0_x0_cm_0<NTT: SuitableRing>(
 }
 
 /// Get the MLEs needed for $k$ g1 and g3 components of the sumcheck polynomial
-fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
+pub fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     mles: &mut Vec<DenseMultilinearExtension<NTT>>,
     r_i_eq: DenseMultilinearExtension<NTT>,
     f_hat_mle_s: &[Vec<DenseMultilinearExtension<NTT>>],
@@ -545,7 +324,7 @@ fn prepare_g1_and_3_k_mles_list<NTT: OverField>(
     mles.push(combined_mle);
 }
 /// Get the MLEs needed for one g2 component of the sumcheck polynomial
-fn prepare_g2_i_mle_list<NTT: OverField>(
+pub fn prepare_g2_i_mle_list<NTT: OverField>(
     mles: &mut Vec<DenseMultilinearExtension<NTT>>,
     beta_eq_x: DenseMultilinearExtension<NTT>,
     f_hat_mles: Vec<Vec<DenseMultilinearExtension<NTT>>>,

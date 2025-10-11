@@ -46,10 +46,10 @@ pub struct DecompositionProof<NTT: Ring> {
 }
 
 pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
-    fn prove<P: DecompositionParams>(
+    fn prove(
+        &mut self,
         cm_i: &LCCCS<NTT>,
         wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<NTT>,
     ) -> Result<
@@ -64,20 +64,42 @@ pub trait DecompositionProver<NTT: SuitableRing, T: Transcript<NTT>> {
 }
 
 pub trait DecompositionVerifier<NTT: OverField, T: Transcript<NTT>> {
-    fn verify<P: DecompositionParams>(
+    fn verify(
+        &mut self,
         cm_i: &LCCCS<NTT>,
         proof: &DecompositionProof<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<Vec<LCCCS<NTT>>, DecompositionError>;
 }
 
-pub struct LFDecompositionProver<NTT, T> {
+pub struct LFDecompositionProver<'t, NTT, T: Sync> {
     _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
+    pub dparams: DecompositionParams,
+    pub transcript: &'t mut T,
 }
 
-pub struct LFDecompositionVerifier<NTT, T> {
+impl<'t, R, T: Sync> LFDecompositionProver<'t, R, T> {
+    pub fn new(dparams: DecompositionParams, transcript: &'t mut T) -> Self {
+        Self {
+            _ntt: Default::default(),
+            dparams,
+            transcript,
+        }
+    }
+}
+
+pub struct LFDecompositionVerifier<'t, NTT, T> {
     _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
+    pub dparams: DecompositionParams,
+    pub transcript: &'t mut T,
+}
+
+impl<'t, R, T> LFDecompositionVerifier<'t, R, T> {
+    pub fn new(dparams: DecompositionParams, transcript: &'t mut T) -> Self {
+        Self {
+            _ntt: Default::default(),
+            dparams,
+            transcript,
+        }
+    }
 }
