@@ -22,6 +22,7 @@ pub type GoldilocksRingPoly = RqPoly;
 impl SuitableRing for GoldilocksRingNTT {
     type CoefficientRepresentation = RqPoly;
     type PoseidonParams = GoldilocksPoseidonConfig;
+    type ChallengeSet = GoldilocksChallengeSet;
 }
 
 pub struct GoldilocksPoseidonConfig;

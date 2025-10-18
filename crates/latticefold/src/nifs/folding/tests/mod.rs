@@ -1,7 +1,7 @@
 use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::{io::Cursor, test_rng};
-use cyclotomic_rings::{
+use latticefold_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{
         BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,

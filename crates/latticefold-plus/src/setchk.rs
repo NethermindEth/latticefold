@@ -357,7 +357,7 @@ fn absorb_evaluations<R: OverField>(
 #[cfg(test)]
 mod tests {
     use ark_std::One;
-    use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
+    use latticefold_rings::rings::FrogPoseidonConfig as PC;
     use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, unit_monomial};
     use stark_rings_linalg::SparseMatrix;
 

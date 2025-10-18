@@ -1,5 +1,5 @@
 use ark_std::test_rng;
-use cyclotomic_rings::{
+use latticefold_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet},
 };

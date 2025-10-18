@@ -22,6 +22,7 @@ pub type BabyBearRingPoly = RqPoly;
 impl SuitableRing for BabyBearRingNTT {
     type CoefficientRepresentation = RqPoly;
     type PoseidonParams = BabyBearPoseidonConfig;
+    type ChallengeSet = BabyBearChallengeSet;
 }
 
 pub struct BabyBearPoseidonConfig;

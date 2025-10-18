@@ -4,7 +4,7 @@ use ark_crypto_primitives::sponge::{
 };
 use ark_ff::Field;
 use ark_std::marker::PhantomData;
-use cyclotomic_rings::{
+use latticefold_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{GetPoseidonParams, SuitableRing},
 };
@@ -77,7 +77,7 @@ impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithShortChallen
 #[cfg(test)]
 mod tests {
     use ark_ff::BigInt;
-    use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, GoldilocksRingPoly};
+    use latticefold_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, GoldilocksRingPoly};
     use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     use super::*;

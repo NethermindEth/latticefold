@@ -4,7 +4,6 @@ use std::{fmt::Debug, time::Instant};
 
 use ark_serialize::{CanonicalSerialize, Compress};
 use ark_std::{vec::Vec, UniformRand};
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use latticefold::{
     arith::{
         ccs::get_test_dummy_degree_three_ccs_non_scalar, r1cs::get_test_dummy_z_split_ntt, Arith,
@@ -17,6 +16,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 
 include!(concat!(env!("OUT_DIR"), "/examples_generated.rs"));
 

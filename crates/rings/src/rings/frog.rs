@@ -22,6 +22,7 @@ pub type FrogRingPoly = RqPoly;
 impl SuitableRing for FrogRingNTT {
     type CoefficientRepresentation = RqPoly;
     type PoseidonParams = FrogPoseidonConfig;
+    type ChallengeSet = FrogChallengeSet;
 }
 
 pub struct FrogPoseidonConfig;

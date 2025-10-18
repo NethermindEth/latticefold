@@ -108,7 +108,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+    use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
     use rand::Rng;
 
     use crate::{
@@ -224,7 +224,7 @@ mod tests {
     }
 
     mod stark {
-        use cyclotomic_rings::rings::StarkChallengeSet;
+        use latticefold_rings::rings::StarkChallengeSet;
         use stark_rings::cyclotomic_ring::models::stark_prime::RqNTT;
 
         type CS = StarkChallengeSet;
@@ -246,7 +246,7 @@ mod tests {
     }
 
     mod frog {
-        use cyclotomic_rings::rings::FrogChallengeSet;
+        use latticefold_rings::rings::FrogChallengeSet;
         use stark_rings::cyclotomic_ring::models::frog_ring::RqNTT;
 
         type CS = FrogChallengeSet;
@@ -268,7 +268,7 @@ mod tests {
     }
 
     mod goldilocks {
-        use cyclotomic_rings::rings::GoldilocksChallengeSet;
+        use latticefold_rings::rings::GoldilocksChallengeSet;
         use stark_rings::cyclotomic_ring::models::goldilocks::RqNTT;
 
         type CS = GoldilocksChallengeSet;
@@ -290,7 +290,7 @@ mod tests {
     }
 
     mod babybear {
-        use cyclotomic_rings::rings::BabyBearChallengeSet;
+        use latticefold_rings::rings::BabyBearChallengeSet;
         use stark_rings::cyclotomic_ring::models::babybear::RqNTT;
 
         type CS = BabyBearChallengeSet;

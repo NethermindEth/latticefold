@@ -5,7 +5,7 @@ use ark_std::{
     iter::{self, successors},
     iterable::Iterable,
 };
-use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
+use latticefold_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use stark_rings::{cyclotomic_ring::CRT, OverField, PolyRing, Ring};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 

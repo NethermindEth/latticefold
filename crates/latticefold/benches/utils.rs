@@ -2,7 +2,6 @@ use std::{fmt::Debug, marker::PhantomData};
 
 use ark_std::UniformRand;
 use criterion::{measurement::WallTime, BenchmarkGroup, BenchmarkId};
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use latticefold::{
     arith::{
         ccs::get_test_dummy_degree_three_ccs_non_scalar,
@@ -28,6 +27,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 
 #[derive(Clone, Copy)]
 pub enum R1CS {

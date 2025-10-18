@@ -1,5 +1,5 @@
 use ark_std::vec::Vec;
-use cyclotomic_rings::{
+use latticefold_rings::{
     challenge_set::LatticefoldChallengeSet,
     rings::{
         BabyBearChallengeSet, BabyBearRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT,

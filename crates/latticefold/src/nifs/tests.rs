@@ -1,5 +1,5 @@
 use ark_std::{test_rng, vec::Vec};
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use rand::Rng;
 
 use crate::{
@@ -119,7 +119,7 @@ fn test_nifs_verify<
 mod e2e_tests {
     use super::*;
     mod stark {
-        use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
+        use latticefold_rings::rings::{StarkChallengeSet, StarkRingNTT};
 
         use crate::{
             decomposition_parameters::{test_params::StarkDP, DecompositionParams},
@@ -150,7 +150,7 @@ mod e2e_tests {
     }
 
     mod goldilocks {
-        use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
+        use latticefold_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
 
         use super::*;
         use crate::decomposition_parameters::test_params::GoldilocksDP;
@@ -176,7 +176,7 @@ mod e2e_tests {
     }
 
     mod babybear {
-        use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
+        use latticefold_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
 
         use super::*;
         use crate::decomposition_parameters::test_params::BabyBearDP;

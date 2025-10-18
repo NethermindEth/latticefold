@@ -12,6 +12,8 @@ use stark_rings::{
     Cyclotomic, OverField, PolyRing,
 };
 
+use crate::challenge_set::LatticefoldChallengeSet;
+
 mod babybear;
 mod frog;
 mod goldilocks;
@@ -69,6 +71,9 @@ where
 
     /// Poseidon sponge parameters for the base prime field.
     type PoseidonParams: GetPoseidonParams<<<Self as PolyRing>::BaseRing as Field>::BasePrimeField>;
+
+    /// LatticeFold challenge set.
+    type ChallengeSet: LatticefoldChallengeSet<Self>;
 }
 
 /// A trait for types with an associated Poseidon sponge configuration.

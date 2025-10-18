@@ -109,8 +109,8 @@ where
 mod tests {
     use ark_ff::PrimeField;
     use ark_std::One;
-    use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use latticefold::arith::r1cs::R1CS;
+    use latticefold_rings::rings::FrogPoseidonConfig as PC;
     use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing};
     use stark_rings_linalg::SparseMatrix;
 

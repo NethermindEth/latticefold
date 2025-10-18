@@ -1,4 +1,4 @@
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use stark_rings::{
     balanced_decomposition::{recompose, DecomposeToVec, GadgetDecompose},
     cyclotomic_ring::{CRT, ICRT},
@@ -50,7 +50,7 @@ pub(super) fn decompose_B_vec_into_k_vec<NTT: SuitableRing, DP: DecompositionPar
 
 #[cfg(test)]
 mod tests {
-    use cyclotomic_rings::rings::SuitableRing;
+    use latticefold_rings::rings::SuitableRing;
     use rand::Rng;
     use stark_rings::{
         balanced_decomposition::{recompose, Decompose},

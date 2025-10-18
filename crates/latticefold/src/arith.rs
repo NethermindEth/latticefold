@@ -6,7 +6,7 @@ use core::mem;
 
 use ark_ff::Field;
 use ark_std::log2;
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use r1cs::R1CS;
 use stark_rings::{
     balanced_decomposition::{GadgetDecompose, GadgetRecompose},
@@ -423,7 +423,7 @@ impl<R: Ring> Instance<R> for LCCCS<R> {
 #[cfg(test)]
 pub mod tests {
     use ark_ff::{One, Zero};
-    use cyclotomic_rings::rings::{
+    use latticefold_rings::rings::{
         BabyBearRingNTT, GoldilocksRingNTT, GoldilocksRingPoly, StarkRingNTT,
     };
     use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};

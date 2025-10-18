@@ -5,7 +5,7 @@
 use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::{marker::PhantomData, vec::Vec};
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use stark_rings::OverField;
 
 use self::{decomposition::*, error::LatticefoldError, folding::*, linearization::*};

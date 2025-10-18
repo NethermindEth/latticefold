@@ -7,7 +7,7 @@
 
 use ark_ff::Zero;
 use ark_std::{cfg_iter, iter::successors, iterable::Iterable};
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use stark_rings_poly::mle::DenseMultilinearExtension;

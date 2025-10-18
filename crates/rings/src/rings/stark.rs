@@ -21,8 +21,8 @@ pub type StarkRingPoly = RqPoly;
 
 impl SuitableRing for StarkRingNTT {
     type CoefficientRepresentation = StarkRingPoly;
-
     type PoseidonParams = StarkPoseidonConfig;
+    type ChallengeSet = StarkChallengeSet;
 }
 
 pub struct StarkPoseidonConfig;
