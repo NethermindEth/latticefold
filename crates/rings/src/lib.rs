@@ -1,6 +1,6 @@
 //!
 //! A crate containing the trait definition of a ring suitable to be used in the LatticeFold protocol,
-//! a few ready-to-use rings and short challenge set machinery.
+//! a few ready-to-use rings and small challenge set machinery.
 //!
 
 #![cfg_attr(not(feature = "std"), no_std)]

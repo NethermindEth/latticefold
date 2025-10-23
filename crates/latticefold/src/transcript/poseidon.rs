@@ -9,7 +9,7 @@ use latticefold_rings::{
 };
 use stark_rings::OverField;
 
-use super::{Transcript, TranscriptWithShortChallenges};
+use super::{Transcript, TranscriptWithSmallChallenges};
 use crate::ark_base::*;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
@@ -56,13 +56,13 @@ impl<R: OverField> Transcript<R> for PoseidonTranscript<R> {
     }
 }
 
-impl<R: SuitableRing> TranscriptWithShortChallenges<R> for PoseidonTranscript<R> {
+impl<R: SuitableRing> TranscriptWithSmallChallenges<R> for PoseidonTranscript<R> {
     type ChallengeSet = R::ChallengeSet;
 
-    fn get_short_challenge(&mut self) -> R::CoefficientRepresentation {
+    fn get_small_challenge(&mut self) -> R::CoefficientRepresentation {
         let random_bytes = self.sponge.squeeze_bytes(Self::ChallengeSet::BYTES_NEEDED);
 
-        Self::ChallengeSet::short_challenge_from_random_bytes(&random_bytes)
+        Self::ChallengeSet::small_challenge_from_random_bytes(&random_bytes)
             .expect("not enough bytes to get a small challenge")
     }
 }
@@ -129,6 +129,6 @@ mod tests {
 
         let expected = GoldilocksRingPoly::from(expected_coeffs);
 
-        assert_eq!(expected, transcript.get_short_challenge())
+        assert_eq!(expected, transcript.get_small_challenge())
     }
 }

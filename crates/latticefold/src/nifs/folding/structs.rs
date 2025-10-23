@@ -9,7 +9,7 @@ use crate::{
     ark_base::Vec,
     decomposition_parameters::DecompositionParams,
     nifs::error::FoldingError,
-    transcript::TranscriptWithShortChallenges,
+    transcript::TranscriptWithSmallChallenges,
     utils::sumcheck,
 };
 
@@ -40,7 +40,7 @@ pub struct FoldingProof<NTT: OverField> {
 }
 
 /// Prover for the folding subprotocol
-pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
+pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> {
     /// Generates a folded witness and its linearized commitment, along with proof to the correctness of the folding.
     ///
     /// # Arguments
@@ -63,14 +63,14 @@ pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>
     fn prove<P: DecompositionParams>(
         cm_i_s: &[LCCCS<NTT>],
         w_s: Vec<Witness<NTT>>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
         mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     ) -> Result<(LCCCS<NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
 }
 
 /// Verifier for folding subprotocol
-pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> {
+pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> {
     /// Verifies a proof for the folding subprotocol.
     ///
     /// # Arguments
@@ -88,7 +88,7 @@ pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NT
     fn verify<P: DecompositionParams>(
         cm_i_s: &[LCCCS<NTT>],
         proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, FoldingError<NTT>>;
 }

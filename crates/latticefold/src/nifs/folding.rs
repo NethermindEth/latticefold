@@ -19,7 +19,7 @@ use crate::{
     ark_base::*,
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,
-    transcript::TranscriptWithShortChallenges,
+    transcript::TranscriptWithSmallChallenges,
     utils::{
         mle_helpers::evaluate_mles,
         sumcheck::{
@@ -36,13 +36,13 @@ pub use structs::*;
 
 mod structs;
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT, T>
+impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingProver<NTT, T>
     for LFFoldingProver<NTT, T>
 {
     fn prove<P: DecompositionParams>(
         cm_i_s: &[LCCCS<NTT>],
         mut w_s: Vec<Witness<NTT>>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
         mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     ) -> Result<(LCCCS<NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
@@ -130,13 +130,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
+impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> FoldingVerifier<NTT, T>
     for LFFoldingVerifier<NTT, T>
 {
     fn verify<P: DecompositionParams>(
         cm_i_s: &[LCCCS<NTT>],
         proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, FoldingError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;
@@ -194,7 +194,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<NTT, T> {
+impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> LFFoldingProver<NTT, T> {
     fn setup_f_hat_mles(w_s: &mut [Witness<NTT>]) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
         cfg_iter_mut!(w_s)
             .map(|w| w.take_f_hat())
@@ -268,7 +268,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier<NTT, T> {
+impl<NTT: SuitableRing, T: TranscriptWithSmallChallenges<NTT>> LFFoldingVerifier<NTT, T> {
     #[allow(clippy::too_many_arguments)]
     fn verify_evaluation<P: DecompositionParams>(
         alpha_s: &[NTT],
@@ -343,7 +343,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
     }
 
     fn verify_sumcheck_proof(
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         nvars: usize,
         degree: usize,
         total_claim: NTT,

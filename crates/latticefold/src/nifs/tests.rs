@@ -10,7 +10,7 @@ use crate::{
         linearization::{LFLinearizationProver, LinearizationProver},
         NIFSProver, NIFSVerifier,
     },
-    transcript::{poseidon::PoseidonTranscript, TranscriptWithShortChallenges},
+    transcript::{poseidon::PoseidonTranscript, TranscriptWithSmallChallenges},
 };
 
 fn setup_test_environment<RqNTT: SuitableRing, DP: DecompositionParams>(
@@ -54,7 +54,7 @@ fn setup_test_environment<RqNTT: SuitableRing, DP: DecompositionParams>(
 fn test_nifs_prove<
     RqNTT: SuitableRing,
     DP: DecompositionParams,
-    T: TranscriptWithShortChallenges<RqNTT>,
+    T: TranscriptWithSmallChallenges<RqNTT>,
 >(
     kappa: usize,
     n: usize,
@@ -81,7 +81,7 @@ fn test_nifs_prove<
 fn test_nifs_verify<
     RqNTT: SuitableRing,
     DP: DecompositionParams,
-    T: TranscriptWithShortChallenges<RqNTT>,
+    T: TranscriptWithSmallChallenges<RqNTT>,
 >(
     kappa: usize,
     n: usize,

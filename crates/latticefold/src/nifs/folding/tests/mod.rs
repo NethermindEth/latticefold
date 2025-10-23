@@ -45,7 +45,7 @@ use crate::{
         },
         FoldingProof,
     },
-    transcript::{poseidon::PoseidonTranscript, Transcript, TranscriptWithShortChallenges},
+    transcript::{poseidon::PoseidonTranscript, Transcript, TranscriptWithSmallChallenges},
     utils::sumcheck::MLSumcheck,
 };
 

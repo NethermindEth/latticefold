@@ -13,7 +13,7 @@ use crate::{
     arith::{error::CSError, Witness, CCCS, CCS, LCCCS},
     commitment::AjtaiCommitmentScheme,
     decomposition_parameters::DecompositionParams,
-    transcript::{Transcript, TranscriptWithShortChallenges},
+    transcript::{Transcript, TranscriptWithSmallChallenges},
 };
 
 pub mod decomposition;
@@ -42,7 +42,7 @@ pub struct NIFSProver<NTT, P, T> {
     _t: PhantomData<T>,
 }
 
-impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges<NTT>>
+impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithSmallChallenges<NTT>>
     NIFSProver<NTT, P, T>
 {
     pub fn prove(
@@ -50,7 +50,7 @@ impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges
         w_acc: &Witness<NTT>,
         cm_i: &CCCS<NTT>,
         w_i: &Witness<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<NTT>,
     ) -> Result<(LCCCS<NTT>, Witness<NTT>, LFProof<NTT>), LatticefoldError<NTT>> {
@@ -111,14 +111,14 @@ pub struct NIFSVerifier<NTT, P, T> {
     _t: PhantomData<T>,
 }
 
-impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges<NTT>>
+impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithSmallChallenges<NTT>>
     NIFSVerifier<NTT, P, T>
 {
     pub fn verify(
         acc: &LCCCS<NTT>,
         cm_i: &CCCS<NTT>,
         proof: &LFProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        transcript: &mut impl TranscriptWithSmallChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, LatticefoldError<NTT>> {
         sanity_check::<NTT, P>(ccs)?;

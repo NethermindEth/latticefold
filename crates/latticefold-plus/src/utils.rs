@@ -84,7 +84,7 @@ where
     result
 }
 
-pub fn short_challenge<R: OverField>(lambda: usize, transcript: &mut impl Transcript<R>) -> R {
+pub fn small_challenge<R: OverField>(lambda: usize, transcript: &mut impl Transcript<R>) -> R {
     let u = 2usize.pow(lambda as u32 / R::dimension() as u32);
     let bytes = transcript.squeeze_bytes(R::dimension());
 

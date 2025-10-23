@@ -38,14 +38,14 @@ pub trait Transcript<R: OverField> {
     fn squeeze_bytes(&mut self, n: usize) -> Vec<u8>;
 }
 
-pub trait TranscriptWithShortChallenges<R: SuitableRing>: Transcript<R> {
+pub trait TranscriptWithSmallChallenges<R: SuitableRing>: Transcript<R> {
     type ChallengeSet: ChallengeSet<R>;
 
-    fn get_short_challenge(&mut self) -> R::CoefficientRepresentation;
+    fn get_small_challenge(&mut self) -> R::CoefficientRepresentation;
 
     fn get_small_challenges(&mut self, n: usize) -> Vec<R::CoefficientRepresentation> {
         let mut challenges = Vec::with_capacity(n);
-        challenges.extend((0..n).map(|_| self.get_short_challenge()));
+        challenges.extend((0..n).map(|_| self.get_small_challenge()));
         challenges
     }
 }
