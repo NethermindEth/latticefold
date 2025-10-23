@@ -1,5 +1,5 @@
 use ark_std::{test_rng, vec::Vec};
-use latticefold_rings::{challenge_set::ChallengeSet, rings::SuitableRing};
+use latticefold_rings::rings::SuitableRing;
 use rand::Rng;
 
 use crate::{
@@ -13,11 +13,7 @@ use crate::{
     transcript::{poseidon::PoseidonTranscript, TranscriptWithShortChallenges},
 };
 
-fn setup_test_environment<
-    RqNTT: SuitableRing,
-    DP: DecompositionParams,
-    CS: ChallengeSet<RqNTT>,
->(
+fn setup_test_environment<RqNTT: SuitableRing, DP: DecompositionParams>(
     kappa: usize,
     n: usize,
     wit_len: usize,
@@ -43,9 +39,9 @@ fn setup_test_environment<
     let rand_w_ccs: Vec<RqNTT> = (0..wit_len).map(|i| RqNTT::from(i as u64)).collect();
     let wit_acc = Witness::from_w_ccs::<DP>(rand_w_ccs);
 
-    let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let mut transcript = PoseidonTranscript::<RqNTT>::default();
 
-    let (acc, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
+    let (acc, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT>>::prove(
         &cm_i,
         &wit_acc,
         &mut transcript,
@@ -57,7 +53,6 @@ fn setup_test_environment<
 
 fn test_nifs_prove<
     RqNTT: SuitableRing,
-    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
 >(
@@ -66,9 +61,9 @@ fn test_nifs_prove<
     wit_len: usize,
 ) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
-        setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
+        setup_test_environment::<RqNTT, DP>(kappa, n, wit_len);
 
-    let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let mut transcript = PoseidonTranscript::<RqNTT>::default();
 
     let result = NIFSProver::<RqNTT, DP, T>::prove(
         &acc,
@@ -85,7 +80,6 @@ fn test_nifs_prove<
 
 fn test_nifs_verify<
     RqNTT: SuitableRing,
-    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
 >(
@@ -94,10 +88,10 @@ fn test_nifs_verify<
     wit_len: usize,
 ) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
-        setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
+        setup_test_environment::<RqNTT, DP>(kappa, n, wit_len);
 
-    let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let mut prover_transcript = PoseidonTranscript::<RqNTT>::default();
+    let mut verifier_transcript = PoseidonTranscript::<RqNTT>::default();
 
     let (_, _, proof) = NIFSProver::<RqNTT, DP, T>::prove(
         &acc,
@@ -119,7 +113,7 @@ fn test_nifs_verify<
 mod e2e_tests {
     use super::*;
     mod stark {
-        use latticefold_rings::rings::{StarkChallengeSet, StarkRingNTT};
+        use latticefold_rings::rings::StarkRingNTT;
 
         use crate::{
             decomposition_parameters::{test_params::StarkDP, DecompositionParams},
@@ -128,9 +122,8 @@ mod e2e_tests {
         };
 
         type RqNTT = StarkRingNTT;
-        type CS = StarkChallengeSet;
         type DP = StarkDP;
-        type T = PoseidonTranscript<RqNTT, CS>;
+        type T = PoseidonTranscript<RqNTT>;
 
         const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
@@ -139,26 +132,25 @@ mod e2e_tests {
         #[ignore]
         #[test]
         fn test_prove() {
-            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            test_nifs_prove::<RqNTT, DP, T>(KAPPA, N, WIT_LEN);
         }
 
         #[ignore]
         #[test]
         fn test_verify() {
-            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            test_nifs_verify::<RqNTT, DP, T>(KAPPA, N, WIT_LEN);
         }
     }
 
     mod goldilocks {
-        use latticefold_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
+        use latticefold_rings::rings::GoldilocksRingNTT;
 
         use super::*;
         use crate::decomposition_parameters::test_params::GoldilocksDP;
 
         type RqNTT = GoldilocksRingNTT;
-        type CS = GoldilocksChallengeSet;
         type DP = GoldilocksDP;
-        type T = PoseidonTranscript<RqNTT, CS>;
+        type T = PoseidonTranscript<RqNTT>;
 
         const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
@@ -166,25 +158,24 @@ mod e2e_tests {
 
         #[test]
         fn test_prove() {
-            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            test_nifs_prove::<RqNTT, DP, T>(KAPPA, N, WIT_LEN);
         }
 
         #[test]
         fn test_verify() {
-            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            test_nifs_verify::<RqNTT, DP, T>(KAPPA, N, WIT_LEN);
         }
     }
 
     mod babybear {
-        use latticefold_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
+        use latticefold_rings::rings::BabyBearRingNTT;
 
         use super::*;
         use crate::decomposition_parameters::test_params::BabyBearDP;
 
         type RqNTT = BabyBearRingNTT;
-        type CS = BabyBearChallengeSet;
         type DP = BabyBearDP;
-        type T = PoseidonTranscript<RqNTT, CS>;
+        type T = PoseidonTranscript<RqNTT>;
 
         const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
@@ -192,12 +183,12 @@ mod e2e_tests {
 
         #[test]
         fn test_prove() {
-            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            test_nifs_prove::<RqNTT, DP, T>(KAPPA, N, WIT_LEN);
         }
 
         #[test]
         fn test_verify() {
-            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            test_nifs_verify::<RqNTT, DP, T>(KAPPA, N, WIT_LEN);
         }
     }
 }

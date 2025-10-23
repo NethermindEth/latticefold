@@ -108,7 +108,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use latticefold_rings::{challenge_set::ChallengeSet, rings::SuitableRing};
+    use latticefold_rings::rings::SuitableRing;
     use rand::Rng;
 
     use crate::{
@@ -120,15 +120,14 @@ mod tests {
         },
     };
 
-    fn generate_sumcheck_proof<R, CS>(
+    fn generate_sumcheck_proof<R>(
         nvars: usize,
         mut rng: &mut (impl Rng + Sized),
     ) -> (usize, R, Proof<R>)
     where
         R: SuitableRing,
-        CS: ChallengeSet<R>,
     {
-        let mut transcript = PoseidonTranscript::<R, CS>::default();
+        let mut transcript = PoseidonTranscript::<R>::default();
 
         let ((poly_mles, poly_degree), products, sum) =
             rand_poly(nvars, (2, 5), 3, &mut rng).unwrap();
@@ -145,33 +144,31 @@ mod tests {
         (poly_degree, sum, proof)
     }
 
-    fn test_sumcheck<R, CS>()
+    fn test_sumcheck<R>()
     where
         R: SuitableRing,
-        CS: ChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
         let nvars = 5;
 
         for _ in 0..20 {
-            let (poly_degree, sum, proof) = generate_sumcheck_proof::<R, CS>(nvars, &mut rng);
+            let (poly_degree, sum, proof) = generate_sumcheck_proof::<R>(nvars, &mut rng);
 
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+            let mut transcript: PoseidonTranscript<R> = PoseidonTranscript::default();
             let res =
                 MLSumcheck::verify_as_subprotocol(&mut transcript, nvars, poly_degree, sum, &proof);
             assert!(res.is_ok())
         }
     }
 
-    fn test_sumcheck_proof_serialization<R, CS>()
+    fn test_sumcheck_proof_serialization<R>()
     where
         R: SuitableRing,
-        CS: ChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
         let nvars = 5;
 
-        let proof = generate_sumcheck_proof::<R, CS>(nvars, &mut rng).2;
+        let proof = generate_sumcheck_proof::<R>(nvars, &mut rng).2;
 
         let mut serialized = Vec::new();
         proof
@@ -186,15 +183,14 @@ mod tests {
         );
     }
 
-    fn test_failing_sumcheck<R, CS>()
+    fn test_failing_sumcheck<R>()
     where
         R: SuitableRing,
-        CS: ChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
 
         for _ in 0..20 {
-            let mut transcript: PoseidonTranscript<R, CS> = PoseidonTranscript::default();
+            let mut transcript: PoseidonTranscript<R> = PoseidonTranscript::default();
 
             let nvars = 5;
             let ((poly_mles, poly_degree), products, _) =
@@ -224,90 +220,78 @@ mod tests {
     }
 
     mod stark {
-        use latticefold_rings::rings::StarkChallengeSet;
         use stark_rings::cyclotomic_ring::models::stark_prime::RqNTT;
-
-        type CS = StarkChallengeSet;
 
         #[test]
         fn test_sumcheck() {
-            super::test_sumcheck::<RqNTT, CS>();
+            super::test_sumcheck::<RqNTT>();
         }
 
         #[test]
         fn test_sumcheck_proof_serialization() {
-            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+            super::test_sumcheck_proof_serialization::<RqNTT>();
         }
 
         #[test]
         fn test_failing_sumcheck() {
-            super::test_failing_sumcheck::<RqNTT, CS>();
+            super::test_failing_sumcheck::<RqNTT>();
         }
     }
 
     mod frog {
-        use latticefold_rings::rings::FrogChallengeSet;
         use stark_rings::cyclotomic_ring::models::frog_ring::RqNTT;
-
-        type CS = FrogChallengeSet;
 
         #[test]
         fn test_sumcheck() {
-            super::test_sumcheck::<RqNTT, CS>();
+            super::test_sumcheck::<RqNTT>();
         }
 
         #[test]
         fn test_sumcheck_proof_serialization() {
-            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+            super::test_sumcheck_proof_serialization::<RqNTT>();
         }
 
         #[test]
         fn test_failing_sumcheck() {
-            super::test_failing_sumcheck::<RqNTT, CS>();
+            super::test_failing_sumcheck::<RqNTT>();
         }
     }
 
     mod goldilocks {
-        use latticefold_rings::rings::GoldilocksChallengeSet;
         use stark_rings::cyclotomic_ring::models::goldilocks::RqNTT;
-
-        type CS = GoldilocksChallengeSet;
 
         #[test]
         fn test_sumcheck() {
-            super::test_sumcheck::<RqNTT, CS>();
+            super::test_sumcheck::<RqNTT>();
         }
 
         #[test]
         fn test_sumcheck_proof_serialization() {
-            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+            super::test_sumcheck_proof_serialization::<RqNTT>();
         }
 
         #[test]
         fn test_failing_sumcheck() {
-            super::test_failing_sumcheck::<RqNTT, CS>();
+            super::test_failing_sumcheck::<RqNTT>();
         }
     }
 
     mod babybear {
-        use latticefold_rings::rings::BabyBearChallengeSet;
         use stark_rings::cyclotomic_ring::models::babybear::RqNTT;
-
-        type CS = BabyBearChallengeSet;
 
         #[test]
         fn test_sumcheck() {
-            super::test_sumcheck::<RqNTT, CS>();
+            super::test_sumcheck::<RqNTT>();
         }
 
         #[test]
         fn test_sumcheck_proof_serialization() {
-            super::test_sumcheck_proof_serialization::<RqNTT, CS>();
+            super::test_sumcheck_proof_serialization::<RqNTT>();
         }
 
         #[test]
         fn test_failing_sumcheck() {
-            super::test_failing_sumcheck::<RqNTT, CS>();
+            super::test_failing_sumcheck::<RqNTT>();
         }
     }
 }
