@@ -27,7 +27,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+use latticefold_rings::{challenge_set::ChallengeSet, rings::SuitableRing};
 
 #[derive(Clone, Copy)]
 pub enum R1CS {
@@ -173,13 +173,13 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
 pub struct Bencher<
     P: DecompositionParams,
     R: SuitableRing + Clone,
-    CS: LatticefoldChallengeSet<R> + Clone,
+    CS: ChallengeSet<R> + Clone,
 > {
     phantom_data: PhantomData<(P, R, CS)>,
 }
 
 #[allow(dead_code)]
-impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSet<R> + Clone>
+impl<P: DecompositionParams, R: SuitableRing + Clone, CS: ChallengeSet<R> + Clone>
     Bencher<P, R, CS>
 {
     pub fn setup_r1cs(

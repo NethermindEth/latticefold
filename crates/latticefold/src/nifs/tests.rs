@@ -1,5 +1,5 @@
 use ark_std::{test_rng, vec::Vec};
-use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+use latticefold_rings::{challenge_set::ChallengeSet, rings::SuitableRing};
 use rand::Rng;
 
 use crate::{
@@ -16,7 +16,7 @@ use crate::{
 fn setup_test_environment<
     RqNTT: SuitableRing,
     DP: DecompositionParams,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
 >(
     kappa: usize,
     n: usize,
@@ -57,7 +57,7 @@ fn setup_test_environment<
 
 fn test_nifs_prove<
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
 >(
@@ -85,7 +85,7 @@ fn test_nifs_prove<
 
 fn test_nifs_verify<
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
     T: TranscriptWithShortChallenges<RqNTT>,
 >(

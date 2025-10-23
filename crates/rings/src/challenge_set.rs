@@ -9,7 +9,7 @@ use crate::{ark_base::*, rings::SuitableRing};
 pub mod error;
 
 /// A trait to specify short challenge set for use in the LatticeFold protocol.
-pub trait LatticefoldChallengeSet<R: SuitableRing> {
+pub trait ChallengeSet<R: SuitableRing> {
     /// Amount of bytes needed to obtain a single short challenge.
     const BYTES_NEEDED: usize;
 

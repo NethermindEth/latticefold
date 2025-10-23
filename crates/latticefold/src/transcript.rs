@@ -3,7 +3,7 @@
 //! Transcripts allow provers and verifiers to independently draw the same challenges.
 
 use ark_std::fmt::Debug;
-use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+use latticefold_rings::{challenge_set::ChallengeSet, rings::SuitableRing};
 use stark_rings::OverField;
 
 use crate::ark_base::*;
@@ -39,7 +39,7 @@ pub trait Transcript<R: OverField> {
 }
 
 pub trait TranscriptWithShortChallenges<R: SuitableRing>: Transcript<R> {
-    type ChallengeSet: LatticefoldChallengeSet<R>;
+    type ChallengeSet: ChallengeSet<R>;
 
     fn get_short_challenge(&mut self) -> R::CoefficientRepresentation;
 

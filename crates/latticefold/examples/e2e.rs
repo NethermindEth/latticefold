@@ -16,7 +16,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
-use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+use latticefold_rings::{challenge_set::ChallengeSet, rings::SuitableRing};
 
 include!(concat!(env!("OUT_DIR"), "/examples_generated.rs"));
 
@@ -62,7 +62,7 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
 fn setup_example_environment<
     RqNTT: SuitableRing,
     DP: DecompositionParams,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
 >() -> (
     LCCCS<RqNTT>,
     Witness<RqNTT>,

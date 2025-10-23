@@ -108,7 +108,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 mod tests {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
     use ark_std::io::Cursor;
-    use latticefold_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
+    use latticefold_rings::{challenge_set::ChallengeSet, rings::SuitableRing};
     use rand::Rng;
 
     use crate::{
@@ -126,7 +126,7 @@ mod tests {
     ) -> (usize, R, Proof<R>)
     where
         R: SuitableRing,
-        CS: LatticefoldChallengeSet<R>,
+        CS: ChallengeSet<R>,
     {
         let mut transcript = PoseidonTranscript::<R, CS>::default();
 
@@ -148,7 +148,7 @@ mod tests {
     fn test_sumcheck<R, CS>()
     where
         R: SuitableRing,
-        CS: LatticefoldChallengeSet<R>,
+        CS: ChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
         let nvars = 5;
@@ -166,7 +166,7 @@ mod tests {
     fn test_sumcheck_proof_serialization<R, CS>()
     where
         R: SuitableRing,
-        CS: LatticefoldChallengeSet<R>,
+        CS: ChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
         let nvars = 5;
@@ -189,7 +189,7 @@ mod tests {
     fn test_failing_sumcheck<R, CS>()
     where
         R: SuitableRing,
-        CS: LatticefoldChallengeSet<R>,
+        CS: ChallengeSet<R>,
     {
         let mut rng = ark_std::test_rng();
 

@@ -1,6 +1,6 @@
 use ark_std::test_rng;
 use latticefold_rings::{
-    challenge_set::LatticefoldChallengeSet,
+    challenge_set::ChallengeSet,
     rings::{BabyBearChallengeSet, FrogChallengeSet, GoldilocksChallengeSet, StarkChallengeSet},
 };
 use num_traits::One;
@@ -126,7 +126,7 @@ fn test_generate_sumcheck() {
     assert_eq!(point_r.len(), ccs.s);
 }
 
-fn prepare_test_vectors<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>(
+fn prepare_test_vectors<RqNTT: SuitableRing, CS: ChallengeSet<RqNTT>>(
     wit: &Witness<RqNTT>,
     cm_i: &CCCS<RqNTT>,
     ccs: &CCS<RqNTT>,

@@ -3,7 +3,7 @@ use stark_rings::cyclotomic_ring::models::frog_ring::{Fq, RqNTT, RqPoly};
 use super::SuitableRing;
 use crate::{
     ark_base::*,
-    challenge_set::{error, LatticefoldChallengeSet},
+    challenge_set::{error, ChallengeSet},
 };
 
 /// Frog ring in the NTT form.
@@ -32,7 +32,7 @@ pub struct FrogChallengeSet;
 
 /// For Frog prime the challenge set is the set of all
 /// ring elements whose coefficients are in the range [-128, 128[.
-impl LatticefoldChallengeSet<FrogRingNTT> for FrogChallengeSet {
+impl ChallengeSet<FrogRingNTT> for FrogChallengeSet {
     const BYTES_NEEDED: usize = 16;
 
     fn short_challenge_from_random_bytes(

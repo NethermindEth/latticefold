@@ -2,7 +2,7 @@ use ark_ff::{Field, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress, Validate};
 use ark_std::{io::Cursor, test_rng};
 use latticefold_rings::{
-    challenge_set::LatticefoldChallengeSet,
+    challenge_set::ChallengeSet,
     rings::{
         BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, GoldilocksChallengeSet,
         StarkChallengeSet, SuitableRing,
@@ -71,7 +71,7 @@ fn setup_test_environment<RqNTT, CS, DP>(
 )
 where
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
     let ccs = get_test_degree_three_ccs_padded::<RqNTT>(n, DP::L);
@@ -170,7 +170,7 @@ fn generate_folding_proof<RqNTT, CS, DP>(
 ) -> FoldingProof<RqNTT>
 where
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
     let (_, _, folding_proof) =

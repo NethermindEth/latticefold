@@ -12,7 +12,7 @@ use stark_rings::{
     Cyclotomic, OverField, PolyRing,
 };
 
-use crate::challenge_set::LatticefoldChallengeSet;
+use crate::challenge_set::ChallengeSet;
 
 mod babybear;
 mod frog;
@@ -73,7 +73,7 @@ where
     type PoseidonParams: GetPoseidonParams<<<Self as PolyRing>::BaseRing as Field>::BasePrimeField>;
 
     /// LatticeFold challenge set.
-    type ChallengeSet: LatticefoldChallengeSet<Self>;
+    type ChallengeSet: ChallengeSet<Self>;
 }
 
 /// A trait for types with an associated Poseidon sponge configuration.

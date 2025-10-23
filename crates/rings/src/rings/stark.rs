@@ -4,7 +4,7 @@ use stark_rings::cyclotomic_ring::models::stark_prime::{Fq, RqNTT, RqPoly};
 use super::SuitableRing;
 use crate::{
     ark_base::*,
-    challenge_set::{error, LatticefoldChallengeSet},
+    challenge_set::{error, ChallengeSet},
 };
 
 /// Starknet prime ring in the NTT form.
@@ -31,7 +31,7 @@ pub struct StarkPoseidonConfig;
 pub struct StarkChallengeSet;
 
 /// Small challenges are the ring elements with coefficients in range [0; 2^8[.
-impl LatticefoldChallengeSet<StarkRingNTT> for StarkChallengeSet {
+impl ChallengeSet<StarkRingNTT> for StarkChallengeSet {
     const BYTES_NEEDED: usize = 16;
 
     fn short_challenge_from_random_bytes(

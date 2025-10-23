@@ -1,6 +1,6 @@
 use ark_std::vec::Vec;
 use latticefold_rings::{
-    challenge_set::LatticefoldChallengeSet,
+    challenge_set::ChallengeSet,
     rings::{
         BabyBearChallengeSet, BabyBearRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT,
         StarkChallengeSet, StarkRingNTT, SuitableRing,
@@ -48,7 +48,7 @@ fn generate_decomposition_args<RqNTT, CS, DP>(
 )
 where
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
     let mut rng = ark_std::test_rng();
@@ -106,7 +106,7 @@ where
 fn test_decomposition<RqNTT, CS, DP>(kappa: usize, n: usize, wit_len: usize)
 where
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
+    CS: ChallengeSet<RqNTT>,
     DP: DecompositionParams,
 {
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =

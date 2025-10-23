@@ -5,7 +5,7 @@ use ark_crypto_primitives::sponge::{
 use ark_ff::Field;
 use ark_std::marker::PhantomData;
 use latticefold_rings::{
-    challenge_set::LatticefoldChallengeSet,
+    challenge_set::ChallengeSet,
     rings::{GetPoseidonParams, SuitableRing},
 };
 use stark_rings::OverField;
@@ -20,7 +20,7 @@ pub struct PoseidonTranscript<R: OverField, CS> {
     sponge: PoseidonSponge<<R::BaseRing as Field>::BasePrimeField>,
 }
 
-impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscript<R, CS> {
+impl<R: SuitableRing, CS: ChallengeSet<R>> Default for PoseidonTranscript<R, CS> {
     fn default() -> Self {
         Self::new(&R::PoseidonParams::get_poseidon_config())
     }
@@ -61,7 +61,7 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
     }
 }
 
-impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithShortChallenges<R>
+impl<R: SuitableRing, CS: ChallengeSet<R>> TranscriptWithShortChallenges<R>
     for PoseidonTranscript<R, CS>
 {
     type ChallengeSet = CS;
