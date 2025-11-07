@@ -20,7 +20,7 @@ cargo bench
 - Various paper-provided performance improvements;
 - Explore NTT (e.g. `SuitableRing`);
 - Support CCS;
-- Enhance main (Prover/Verifier) and and more internal interfaces (sub-protocols): target real usability, reduce cloning;
+- Enhance main (Prover/Verifier) and more internal interfaces (sub-protocols): target real usability, reduce cloning;
 - Add error types / error handling. Remove `unwrap`s;
 - Docs;
 - Add examples;
