@@ -4,7 +4,6 @@ use std::{fmt::Debug, time::Instant};
 
 use ark_serialize::{CanonicalSerialize, Compress};
 use ark_std::{vec::Vec, UniformRand};
-use cyclotomic_rings::{challenge_set::LatticefoldChallengeSet, rings::SuitableRing};
 use latticefold::{
     arith::{
         ccs::get_test_dummy_degree_three_ccs_non_scalar, r1cs::get_test_dummy_z_split_ntt, Arith,
@@ -17,6 +16,7 @@ use latticefold::{
     },
     transcript::poseidon::PoseidonTranscript,
 };
+use latticefold_rings::rings::SuitableRing;
 
 include!(concat!(env!("OUT_DIR"), "/examples_generated.rs"));
 
@@ -59,11 +59,7 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
 }
 
 #[allow(clippy::type_complexity)]
-fn setup_example_environment<
-    RqNTT: SuitableRing,
-    DP: DecompositionParams,
-    CS: LatticefoldChallengeSet<RqNTT>,
->() -> (
+fn setup_example_environment<RqNTT: SuitableRing, DP: DecompositionParams>() -> (
     LCCCS<RqNTT>,
     Witness<RqNTT>,
     CCCS<RqNTT>,
@@ -79,9 +75,9 @@ fn setup_example_environment<
     let rand_w_ccs: Vec<RqNTT> = (0..WIT_LEN).map(|i| RqNTT::from(i as u64)).collect();
     let wit_acc = Witness::from_w_ccs::<DP>(rand_w_ccs);
 
-    let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let mut transcript = PoseidonTranscript::<RqNTT>::default();
 
-    let (acc, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
+    let (acc, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT>>::prove(
         &cm_i,
         &wit_acc,
         &mut transcript,
@@ -92,7 +88,7 @@ fn setup_example_environment<
     (acc, wit_acc, cm_i, wit, ccs, scheme)
 }
 
-type T = PoseidonTranscript<RqNTT, CS>;
+type T = PoseidonTranscript<RqNTT>;
 
 fn main() {
     println!("Setting up example environment...");
@@ -103,10 +99,10 @@ fn main() {
     println!("\tB_SMALL: {}", DP::B_SMALL);
     println!("\tK: {}", DP::K);
 
-    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<RqNTT, DP, CS>();
+    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<RqNTT, DP>();
 
-    let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let mut prover_transcript = PoseidonTranscript::<RqNTT>::default();
+    let mut verifier_transcript = PoseidonTranscript::<RqNTT>::default();
     println!("Generating proof...");
     let start = Instant::now();
 

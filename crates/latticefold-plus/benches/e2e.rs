@@ -6,7 +6,6 @@
 use ark_ff::PrimeField;
 use ark_std::time::Duration;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold::arith::r1cs::R1CS;
 use latticefold_plus::{
     lin::LinParameters,
@@ -16,6 +15,7 @@ use latticefold_plus::{
     transcript::PoseidonTranscript,
     utils::estimate_bound,
 };
+use latticefold_rings::rings::FrogPoseidonConfig as PC;
 use rand::prelude::*;
 use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing, Ring};
 use stark_rings_linalg::{Matrix, SparseMatrix};

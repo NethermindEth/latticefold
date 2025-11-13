@@ -1,4 +1,4 @@
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use stark_rings::OverField;
 use stark_rings_poly::mle::DenseMultilinearExtension;
 

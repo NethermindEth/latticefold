@@ -111,32 +111,32 @@ fn generate_code_for_examples() {
             r#"
             const N: usize = N_GOLDILOCKS;
             type DP = GoldilocksExampleDP;
-            type RqNTT = cyclotomic_rings::rings::GoldilocksRingNTT;
-            type CS = cyclotomic_rings::rings::GoldilocksChallengeSet;
+            type RqNTT = latticefold_rings::rings::GoldilocksRingNTT;
+            type CS = latticefold_rings::rings::GoldilocksChallengeSet;
             "#,
         ),
         "BabyBear" => generated_code.push_str(
             r#"
             const N: usize = N_BABYBEAR;
             type DP = BabyBearExampleDP;
-            type RqNTT = cyclotomic_rings::rings::BabyBearRingNTT;
-            type CS = cyclotomic_rings::rings::BabyBearChallengeSet;
+            type RqNTT = latticefold_rings::rings::BabyBearRingNTT;
+            type CS = latticefold_rings::rings::BabyBearChallengeSet;
             "#,
         ),
         "Frog" => generated_code.push_str(
             r#"
             const N: usize = N_FROG;
             type DP = FrogExampleDP;
-            type RqNTT = cyclotomic_rings::rings::FrogRingNTT;
-            type CS = cyclotomic_rings::rings::FrogChallengeSet;
+            type RqNTT = latticefold_rings::rings::FrogRingNTT;
+            type CS = latticefold_rings::rings::FrogChallengeSet;
             "#,
         ),
         "StarkPrime" => generated_code.push_str(
             r#"
             const N: usize = N_STARK;
             type DP = StarkPrimeExampleDP;
-            type RqNTT = cyclotomic_rings::rings::StarkRingNTT;
-            type CS = cyclotomic_rings::rings::StarkChallengeSet;
+            type RqNTT = latticefold_rings::rings::StarkRingNTT;
+            type CS = latticefold_rings::rings::StarkChallengeSet;
             "#,
         ),
         _ => panic!("Unknown ring configuration"),
@@ -243,28 +243,28 @@ fn parse_benches() {
         File::create(&linearization_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut linearization_file, "use utils::{{Bencher, R1CS}};").unwrap();
-    writeln!(&mut linearization_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+    writeln!(&mut linearization_file, "use latticefold_rings::rings::{{BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT}};").unwrap();
 
     let decomposition_file_path = Path::new(&out_dir).join("generated_decomposition_benchmarks.rs");
     let mut decomposition_file =
         File::create(&decomposition_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut decomposition_file, "use utils::{{Bencher, R1CS}};").unwrap();
-    writeln!(&mut decomposition_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+    writeln!(&mut decomposition_file, "use latticefold_rings::rings::{{BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT}};").unwrap();
 
     let folding_file_path = Path::new(&out_dir).join("generated_folding_benchmarks.rs");
     let mut folding_file =
         File::create(&folding_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut folding_file, "use utils::{{Bencher, R1CS}};").unwrap();
-    writeln!(&mut folding_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+    writeln!(&mut folding_file, "use latticefold_rings::rings::{{BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT}};").unwrap();
 
     let e2e_file_path = Path::new(&out_dir).join("generated_e2e_benchmarks.rs");
     let mut e2e_file =
         File::create(&e2e_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut e2e_file, "use utils::{{Bencher, R1CS}};").unwrap();
-    writeln!(&mut e2e_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
+    writeln!(&mut e2e_file, "use latticefold_rings::rings::{{BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT}};").unwrap();
 
     let mut files = (
         linearization_file,
@@ -576,7 +576,7 @@ fn write_function(
     scalar: R1CS,
     group_name: &str,
 ) -> TokenStream {
-    let cs = Ident::new(cs, Span::call_site());
+    let _cs = Ident::new(cs, Span::call_site());
     let ring = Ident::new(ring, Span::call_site());
     let prover_function = Ident::new(&format!("bench_{subprotocol}_prover"), Span::call_site());
     let verifier_function = Ident::new(&format!("bench_{subprotocol}_verifier"), Span::call_site());
@@ -603,10 +603,9 @@ fn write_function(
                         const K: usize = #k;
                     }
 
-                    type CS = #cs;
                     type R = #ring;
 
-                    type BlockBencher = Bencher<DP, R, CS>;
+                    type BlockBencher = Bencher<DP, R>;
 
                     if X_LEN == ENV.x_len.unwrap_or(X_LEN) &&
                         KAPPA == ENV.kappa.unwrap_or(KAPPA) &&

@@ -187,7 +187,7 @@ pub fn r1cs_decomposed_square<R: Decompose + Ring>(
 #[cfg(test)]
 mod tests {
     use ark_std::One;
-    use cyclotomic_rings::rings::GoldilocksPoseidonConfig as PC;
+    use latticefold_rings::rings::GoldilocksPoseidonConfig as PC;
     use stark_rings::{
         balanced_decomposition::GadgetDecompose, cyclotomic_ring::models::goldilocks::RqPoly as R,
     };

@@ -3,7 +3,7 @@
 //!  
 
 use ark_std::{cfg_into_iter, cfg_iter, vec::Vec};
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 #[cfg(feature = "parallel")]
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use stark_rings::Ring;

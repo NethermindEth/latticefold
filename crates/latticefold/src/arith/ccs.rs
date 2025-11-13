@@ -1,7 +1,7 @@
 //! Provide test and benchmark utility for CCS
 
 use ark_std::{log2, vec::Vec};
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use stark_rings::Ring;
 use stark_rings_linalg::SparseMatrix;
 
@@ -165,7 +165,7 @@ pub(crate) fn create_dummy_cubing_sparse_matrix<R: Ring>(
 #[allow(clippy::upper_case_acronyms)]
 #[cfg(test)]
 mod tests {
-    use cyclotomic_rings::rings::GoldilocksRingNTT;
+    use latticefold_rings::rings::GoldilocksRingNTT;
 
     use super::{get_test_degree_three_ccs, get_test_dummy_degree_three_ccs_non_scalar};
     use crate::arith::{

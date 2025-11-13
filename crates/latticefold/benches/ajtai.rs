@@ -3,9 +3,9 @@ use criterion::{
     criterion_group, criterion_main, AxisScale, BatchSize::SmallInput, BenchmarkId, Criterion,
     PlotConfiguration,
 };
-use cyclotomic_rings::rings::{BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT};
 use env::ENV;
 use latticefold::commitment::AjtaiCommitmentScheme;
+use latticefold_rings::rings::{BabyBearRingNTT, FrogRingNTT, GoldilocksRingNTT, StarkRingNTT};
 use stark_rings::cyclotomic_ring::{CRT, ICRT};
 
 mod env;

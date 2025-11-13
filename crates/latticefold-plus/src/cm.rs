@@ -16,7 +16,7 @@ use stark_rings_poly::mle::DenseMultilinearExtension;
 
 use crate::{
     rgchk::{Dcom, Rg},
-    utils::{short_challenge, tensor, tensor_product},
+    utils::{small_challenge, tensor, tensor_product},
 };
 
 #[derive(Clone, Debug)]
@@ -67,13 +67,13 @@ where
         let dcom = self.rg.range_check(M, transcript);
 
         let s = (0..3)
-            .map(|_| short_challenge(128, transcript))
+            .map(|_| small_challenge(128, transcript))
             .collect::<Vec<R>>();
 
         let s_prime = (0..k)
             .map(|_| {
                 (0..d)
-                    .map(|_| short_challenge(128, transcript))
+                    .map(|_| small_challenge(128, transcript))
                     .collect::<Vec<R>>()
             })
             .collect::<Vec<_>>();
@@ -359,13 +359,13 @@ where
         self.dcom.verify(transcript).unwrap();
 
         let s = (0..3)
-            .map(|_| short_challenge(128, transcript))
+            .map(|_| small_challenge(128, transcript))
             .collect::<Vec<R>>();
 
         let s_prime = (0..k)
             .map(|_| {
                 (0..d)
-                    .map(|_| short_challenge(128, transcript))
+                    .map(|_| small_challenge(128, transcript))
                     .collect::<Vec<R>>()
             })
             .collect::<Vec<_>>();
@@ -609,7 +609,7 @@ where
 mod tests {
     use ark_ff::PrimeField;
     use ark_std::Zero;
-    use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
+    use latticefold_rings::rings::FrogPoseidonConfig as PC;
     use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
     use stark_rings_linalg::{Matrix, SparseMatrix};
 

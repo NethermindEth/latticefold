@@ -1,7 +1,7 @@
 //! Defines behaviour of R1CS, a degree two constraint system
 
 use ark_std::collections::{btree_map, BTreeMap};
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use stark_rings::Ring;
 use stark_rings_linalg::{Matrix, SparseMatrix};
 
@@ -603,7 +603,7 @@ impl VariableMap {
 
 #[cfg(test)]
 mod tests {
-    use cyclotomic_rings::rings::GoldilocksRingNTT;
+    use latticefold_rings::rings::GoldilocksRingNTT;
 
     use super::*;
 

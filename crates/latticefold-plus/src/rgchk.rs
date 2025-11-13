@@ -343,7 +343,7 @@ fn absorb_evaluations<R: OverField>(evals: &[DcomEvals<R>], transcript: &mut imp
 mod tests {
     use ark_ff::PrimeField;
     use ark_std::{log2, Zero};
-    use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
+    use latticefold_rings::rings::FrogPoseidonConfig as PC;
     use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 
     use super::*;
