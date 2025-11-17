@@ -12,8 +12,8 @@ jobs:
   linter_check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 #v5.0.0
+      - uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f #v1.0.7
         with:
           components: rustfmt, clippy
           override: true
@@ -25,4 +25,4 @@ jobs:
         run: cargo clippy --all-targets --all-features
 
       - name: Check typos
-        uses: crate-ci/typos@master
+        uses: crate-ci/typos@626c4bedb751ce0b7f03262ca97ddda9a076ae1c #v1.39.2
