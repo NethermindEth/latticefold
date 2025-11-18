@@ -23,7 +23,6 @@ use self::{
 use crate::{
     ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
-    decomposition_parameters::DecompositionParams,
 };
 
 pub mod ccs;
@@ -48,7 +47,7 @@ pub trait Arith<R: Ring> {
 /// CCS represents the Customizable Constraint Systems structure defined in
 /// the [CCS paper](https://eprint.iacr.org/2023/552)
 #[derive(Debug, Clone, PartialEq)]
-pub struct CCS<R: Ring> {
+pub struct CCS<R> {
     /// m: number of rows in M_i (such that M_i \in F^{m, n})
     pub m: usize,
     /// n = |z|, number of cols in M_i
@@ -227,12 +226,12 @@ impl<NTT: SuitableRing> Witness<NTT> {
     ///
     /// The main operations that need to be done are decomposing the ccs witness.
     /// We can then construct [`f_hat`](crate::arith::Witness::get_fhat).
-    pub fn from_w_ccs<P: DecompositionParams>(w_ccs: Vec<NTT>) -> Self {
+    pub fn from_w_ccs(w_ccs: Vec<NTT>, B: u128, l: usize) -> Self {
         // iNTT
         let w_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w_ccs.clone());
 
         // decompose radix-B
-        let f_coeff: Vec<NTT::CoefficientRepresentation> = w_coeff.gadget_decompose(P::B, P::L);
+        let f_coeff: Vec<NTT::CoefficientRepresentation> = w_coeff.gadget_decompose(B, l);
 
         // NTT(coef_repr_decomposed)
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
@@ -296,13 +295,13 @@ impl<NTT: SuitableRing> Witness<NTT> {
         fhat
     }
 
-    pub(crate) fn from_f<P: DecompositionParams>(f: Vec<NTT>) -> Self {
+    pub(crate) fn from_f(f: Vec<NTT>, B: u128, l: usize) -> Self {
         let f_coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(f.clone());
         let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
         // Reconstruct the original CCS witness from the Ajtai witness
         // Ajtai witness has bound B
         // WE multiply by the base B gadget matrix to reconstruct w_ccs
-        let w_ccs = f.gadget_recompose(P::B, P::L);
+        let w_ccs = f.gadget_recompose(B, l);
 
         Self {
             f,
@@ -313,21 +312,19 @@ impl<NTT: SuitableRing> Witness<NTT> {
     }
 
     #[allow(dead_code)]
-    fn from_f_slice<P: DecompositionParams>(f: &[NTT]) -> Self {
-        Self::from_f::<P>(f.into())
+    fn from_f_slice(f: &[NTT], B: u128, l: usize) -> Self {
+        Self::from_f(f.into(), B, l)
     }
 
     /// Reconstruct the original CCS witness from the Ajtai witness
     ///
     /// Assume that Ajtai witness has bound B.
     /// We can multiply by the base B gadget matrix to reconstruct w_ccs.
-    pub fn from_f_coeff<P: DecompositionParams>(
-        f_coeff: Vec<NTT::CoefficientRepresentation>,
-    ) -> Self {
+    pub fn from_f_coeff(f_coeff: Vec<NTT::CoefficientRepresentation>, B: u128, l: usize) -> Self {
         let f: Vec<NTT> = CRT::elementwise_crt(f_coeff.clone());
         let f_hat: Vec<DenseMultilinearExtension<NTT>> = Self::get_fhat(&f_coeff);
 
-        let w_ccs = f.gadget_recompose(P::B, P::L);
+        let w_ccs = f.gadget_recompose(B, l);
 
         Self {
             f,
@@ -344,17 +341,19 @@ impl<NTT: SuitableRing> Witness<NTT> {
     /// # Arguments
     /// * `rng` is a mutable reference to the random number generator.
     /// * `w_ccs_len` is the length of the non-decomposed witness (a.k.a. the CCS witness).
-    pub fn rand<Rng: rand::Rng + ?Sized, P: DecompositionParams>(
+    pub fn rand<Rng: rand::Rng + ?Sized>(
         rng: &mut Rng,
         w_ccs_len: usize,
+        B: u128,
+        l: usize,
     ) -> Self {
-        Self::from_w_ccs::<P>((0..w_ccs_len).map(|_| NTT::rand(rng)).collect())
+        Self::from_w_ccs((0..w_ccs_len).map(|_| NTT::rand(rng)).collect(), B, l)
     }
 
     /// Produces a commitment from a witness
     ///
     /// Ajtai commitments are produced by multiplying an Ajtai matrix by the witness vector
-    pub fn commit<P: DecompositionParams>(
+    pub fn commit(
         &self,
         ajtai: &AjtaiCommitmentScheme<NTT>,
     ) -> Result<Commitment<NTT>, CommitmentError> {
@@ -431,7 +430,10 @@ pub mod tests {
     use super::*;
     use crate::{
         arith::r1cs::{get_test_r1cs, get_test_z as r1cs_get_test_z},
-        decomposition_parameters::test_params::{BabyBearDP, GoldilocksDP, StarkDP},
+        decomposition_parameters::{
+            test_params::{dp_babybear, dp_goldilocks, dp_stark},
+            DecompositionParams,
+        },
     };
 
     pub(crate) fn get_test_ccs<R: Ring>(W: usize, L: usize) -> CCS<R> {
@@ -502,10 +504,10 @@ pub mod tests {
     }
 
     impl<NTT: SuitableRing> Witness<NTT> {
-        fn check_data<P: DecompositionParams>(&self) -> bool {
+        fn check_data(&self, dparams: &DecompositionParams) -> bool {
             let w_coeff = ICRT::elementwise_icrt(self.w_ccs.clone());
 
-            (self.f_coeff == w_coeff.gadget_decompose(P::B, P::L))
+            (self.f_coeff == w_coeff.gadget_decompose(dparams.B, dparams.l))
                 && (CRT::elementwise_crt(self.f_coeff.clone()) == self.f)
                 && (self.f_hat == Self::get_fhat(&self.f_coeff))
         }
@@ -516,34 +518,41 @@ pub mod tests {
     #[test]
     fn test_from_w_ccs() {
         let mut rng = ark_std::test_rng();
+        let dparams = dp_goldilocks();
 
         let random_witness =
-            Witness::<GoldilocksRingNTT>::rand::<_, GoldilocksDP>(&mut rng, WIT_LEN);
-        let recreated_witness = Witness::from_w_ccs::<GoldilocksDP>(random_witness.w_ccs.clone());
+            Witness::<GoldilocksRingNTT>::rand::<_>(&mut rng, WIT_LEN, dparams.B, dparams.l);
+        let recreated_witness =
+            Witness::from_w_ccs(random_witness.w_ccs.clone(), dparams.B, dparams.l);
 
-        assert!(recreated_witness.check_data::<GoldilocksDP>());
+        assert!(recreated_witness.check_data(&dparams));
         assert_eq!(recreated_witness, random_witness);
     }
 
     #[test]
     fn test_from_f() {
         let mut rng = ark_std::test_rng();
+        let dparams = dp_babybear();
 
-        let random_witness = Witness::<BabyBearRingNTT>::rand::<_, BabyBearDP>(&mut rng, WIT_LEN);
-        let recreated_witness = Witness::from_f::<BabyBearDP>(random_witness.f.clone());
+        let random_witness =
+            Witness::<BabyBearRingNTT>::rand::<_>(&mut rng, WIT_LEN, dparams.B, dparams.l);
+        let recreated_witness = Witness::from_f(random_witness.f.clone(), dparams.B, dparams.l);
 
-        assert!(recreated_witness.check_data::<BabyBearDP>());
+        assert!(recreated_witness.check_data(&dparams));
         assert_eq!(recreated_witness, random_witness);
     }
 
     #[test]
     fn test_from_f_coeff() {
         let mut rng = ark_std::test_rng();
+        let dparams = dp_stark();
 
-        let random_witness = Witness::<StarkRingNTT>::rand::<_, StarkDP>(&mut rng, WIT_LEN);
-        let recreated_witness = Witness::from_f_coeff::<StarkDP>(random_witness.f_coeff.clone());
+        let random_witness =
+            Witness::<StarkRingNTT>::rand::<_>(&mut rng, WIT_LEN, dparams.B, dparams.l);
+        let recreated_witness =
+            Witness::from_f_coeff(random_witness.f_coeff.clone(), dparams.B, dparams.l);
 
-        assert!(recreated_witness.check_data::<StarkDP>());
+        assert!(recreated_witness.check_data(&dparams));
         assert_eq!(recreated_witness, random_witness);
     }
 }

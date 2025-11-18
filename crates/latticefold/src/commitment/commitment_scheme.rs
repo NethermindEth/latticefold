@@ -7,9 +7,7 @@ use stark_rings::{
 use stark_rings_linalg::Matrix;
 
 use super::homomorphic_commitment::Commitment;
-use crate::{
-    ark_base::*, commitment::CommitmentError, decomposition_parameters::DecompositionParams,
-};
+use crate::{ark_base::*, commitment::CommitmentError};
 
 /// A concrete instantiation of the Ajtai commitment scheme.
 /// Contains a random Ajtai matrix (kappa x n).
@@ -78,7 +76,7 @@ impl<NTT: SuitableRing> AjtaiCommitmentScheme<NTT> {
 
     /// Commit to a witness in the coefficient form.
     /// Performs NTT on each component of the witness and then does Ajtai commitment.
-    pub fn commit_coeff<P: DecompositionParams>(
+    pub fn commit_coeff(
         &self,
         f: Vec<NTT::CoefficientRepresentation>,
     ) -> Result<Commitment<NTT>, CommitmentError> {
@@ -87,29 +85,33 @@ impl<NTT: SuitableRing> AjtaiCommitmentScheme<NTT> {
 
     /// Takes a coefficient form witness, decomposes it vertically in radix-B,
     /// i.e. computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
-    pub fn decompose_and_commit_coeff<P: DecompositionParams>(
+    pub fn decompose_and_commit_coeff(
         &self,
         f: &[NTT::CoefficientRepresentation],
+        B: u128,
+        l: usize,
     ) -> Result<Commitment<NTT>, CommitmentError> {
         let f = f
-            .decompose_to_vec(P::B, P::L)
+            .decompose_to_vec(B, l)
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
 
-        self.commit_coeff::<P>(f)
+        self.commit_coeff(f)
     }
 
     /// Takes an NTT form witness, transforms it into the coefficient form,
     /// decomposes it vertically in radix-B, i.e.
     /// computes a preimage G_B^{-1}(w), and Ajtai commits to the result.
-    pub fn decompose_and_commit_ntt<P: DecompositionParams>(
+    pub fn decompose_and_commit_ntt(
         &self,
         w: Vec<NTT>,
+        B: u128,
+        l: usize,
     ) -> Result<Commitment<NTT>, CommitmentError> {
         let coeff: Vec<NTT::CoefficientRepresentation> = ICRT::elementwise_icrt(w);
 
-        self.decompose_and_commit_coeff::<P>(&coeff)
+        self.decompose_and_commit_coeff(&coeff, B, l)
     }
 }
 

@@ -14,7 +14,6 @@ use crate::{
     arith::{error::CSError, utils::mat_vec_mul, Witness, CCS, LCCCS},
     ark_base::*,
     commitment::{AjtaiCommitmentScheme, Commitment, CommitmentError},
-    decomposition_parameters::DecompositionParams,
     nifs::error::DecompositionError,
     transcript::Transcript,
     utils::mle_helpers::{evaluate_mles, to_mles_err},
@@ -27,13 +26,13 @@ mod tests;
 
 mod utils;
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
-    for LFDecompositionProver<NTT, T>
+impl<'t, NTT: SuitableRing, T: Transcript<NTT> + Sync> DecompositionProver<NTT, T>
+    for LFDecompositionProver<'t, NTT, T>
 {
-    fn prove<P: DecompositionParams>(
+    fn prove(
+        &mut self,
         cm_i: &LCCCS<NTT>,
         wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<NTT>,
     ) -> Result<
@@ -45,14 +44,14 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
         ),
         DecompositionError,
     > {
-        sanity_check::<NTT, P>(ccs)?;
+        sanity_check::<NTT>(ccs, self.dparams.l)?;
         let log_m = ccs.s;
 
-        let wit_s: Vec<Witness<NTT>> = Self::decompose_witness::<P>(wit);
+        let wit_s: Vec<Witness<NTT>> = self.decompose_witness(wit);
 
-        let x_s = Self::compute_x_s::<P>(cm_i.x_w.clone(), cm_i.h);
+        let x_s = self.compute_x_s(cm_i.x_w.clone(), cm_i.h);
 
-        let y_s: Vec<Commitment<NTT>> = Self::commit_witnesses::<P>(&wit_s, scheme, cm_i)?;
+        let y_s: Vec<Commitment<NTT>> = self.commit_witnesses(&wit_s, scheme, cm_i)?;
 
         let v_s: Vec<Vec<NTT>> = Self::compute_v_s(&wit_s, &cm_i.r)?;
 
@@ -60,13 +59,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
 
         let u_s = Self::compute_u_s(&mz_mles, &cm_i.r)?;
 
-        let mut lcccs_s = Vec::with_capacity(P::K);
+        let mut lcccs_s = Vec::with_capacity(self.dparams.k);
 
         for (((x, y), u), v) in x_s.iter().zip(&y_s).zip(&u_s).zip(&v_s) {
-            transcript.absorb_slice(x);
-            transcript.absorb_slice(y.as_ref());
-            transcript.absorb_slice(u);
-            transcript.absorb_slice(v);
+            self.transcript.absorb_slice(x);
+            self.transcript.absorb_slice(y.as_ref());
+            self.transcript.absorb_slice(u);
+            self.transcript.absorb_slice(v);
 
             let h = x
                 .last()
@@ -88,16 +87,16 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> DecompositionProver<NTT, T>
     }
 }
 
-impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
-    for LFDecompositionVerifier<NTT, T>
+impl<'t, NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
+    for LFDecompositionVerifier<'t, NTT, T>
 {
-    fn verify<P: DecompositionParams>(
+    fn verify(
+        &mut self,
         cm_i: &LCCCS<NTT>,
         proof: &DecompositionProof<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         _ccs: &CCS<NTT>,
     ) -> Result<Vec<LCCCS<NTT>>, DecompositionError> {
-        let mut lcccs_s = Vec::<LCCCS<NTT>>::with_capacity(P::K);
+        let mut lcccs_s = Vec::<LCCCS<NTT>>::with_capacity(self.dparams.k);
 
         for (((x, y), u), v) in proof
             .x_s
@@ -106,10 +105,10 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             .zip(&proof.u_s)
             .zip(&proof.v_s)
         {
-            transcript.absorb_slice(x);
-            transcript.absorb_slice(y.as_ref());
-            transcript.absorb_slice(u);
-            transcript.absorb_slice(v);
+            self.transcript.absorb_slice(x);
+            self.transcript.absorb_slice(y.as_ref());
+            self.transcript.absorb_slice(u);
+            self.transcript.absorb_slice(v);
 
             let h = x
                 .last()
@@ -125,7 +124,7 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
             });
         }
 
-        let b_s: Vec<_> = Self::calculate_b_s::<P>();
+        let b_s: Vec<_> = self.calculate_b_s();
 
         let y = Self::recompose_commitment(&proof.y_s, &b_s)?;
         if y != cm_i.cm {
@@ -155,35 +154,36 @@ impl<NTT: OverField, T: Transcript<NTT>> DecompositionVerifier<NTT, T>
     }
 }
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
+impl<'t, NTT: SuitableRing, T: Sync> LFDecompositionProver<'t, NTT, T> {
     /// Decomposes a witness `wit` into `P::K` vectors norm `< P::B_SMALL` such that
     /// $$ \text{wit} = \sum\limits_{i=0}^{\text{P::K} - 1} \text{P::B\\_SMALL}^i \cdot \text{wit}_i.$$
     ///
-    fn decompose_witness<P: DecompositionParams>(wit: &Witness<NTT>) -> Vec<Witness<NTT>> {
-        let f_s = decompose_B_vec_into_k_vec::<NTT, P>(&wit.f_coeff);
+    fn decompose_witness(&self, wit: &Witness<NTT>) -> Vec<Witness<NTT>> {
+        let f_s = decompose_B_vec_into_k_vec::<NTT>(&wit.f_coeff, self.dparams.b, self.dparams.k);
         cfg_into_iter!(f_s)
-            .map(|f| Witness::from_f_coeff::<P>(f))
+            .map(|f| Witness::from_f_coeff(f, self.dparams.B, self.dparams.l))
             .collect()
     }
 
     /// Takes the concatenation `x_w || h`, performs gadget decomposition of it,
     /// decomposes the resulting `P::B`-short vector into `P::K` `P::B_SMALL`-vectors
     /// and gadget-composes each of the vectors back to obtain `P::K` vectors in their NTT form.
-    fn compute_x_s<P: DecompositionParams>(mut x_w: Vec<NTT>, h: NTT) -> Vec<Vec<NTT>> {
+    fn compute_x_s(&self, mut x_w: Vec<NTT>, h: NTT) -> Vec<Vec<NTT>> {
         x_w.push(h);
-        decompose_big_vec_into_k_vec_and_compose_back::<NTT, P>(x_w)
+        decompose_big_vec_into_k_vec_and_compose_back::<NTT>(x_w, &self.dparams)
     }
 
     /// Ajtai commits to witnesses `wit_s` using Ajtai commitment scheme `scheme`.
-    fn commit_witnesses<P: DecompositionParams>(
+    fn commit_witnesses(
+        &self,
         wit_s: &[Witness<NTT>],
         scheme: &AjtaiCommitmentScheme<NTT>,
         cm_i: &LCCCS<NTT>,
     ) -> Result<Vec<Commitment<NTT>>, CommitmentError> {
-        let b = NTT::from(P::B_SMALL as u128);
+        let b = NTT::from(self.dparams.b as u128);
 
         let commitments_k1: Vec<_> = cfg_iter!(wit_s[1..])
-            .map(|wit| wit.commit::<P>(scheme))
+            .map(|wit| wit.commit(scheme))
             .collect::<Result<_, _>>()?;
 
         let b_sum = commitments_k1
@@ -256,7 +256,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFDecompositionProver<NTT, T> {
     }
 }
 
-impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
+impl<'t, NTT: OverField, T> LFDecompositionVerifier<'t, NTT, T> {
     /// Recomposes `s`, calculating the linear combination `b[0] * s[0][j] + b[1] * s[1][j] + ... + b[s.len() - 1] * s[s.len() - 1][j]`
     /// for each element indexed at `j`.
     pub fn recompose(s: &[Vec<NTT>], b: &[NTT]) -> Result<Vec<NTT>, DecompositionError> {
@@ -285,18 +285,16 @@ impl<NTT: OverField, T: Transcript<NTT>> LFDecompositionVerifier<NTT, T> {
             .ok_or(DecompositionError::RecomposedError)
     }
 
-    fn calculate_b_s<P: DecompositionParams>() -> Vec<NTT> {
-        (0..P::K)
-            .map(|i| NTT::from((P::B_SMALL as u128).pow(i as u32)))
+    fn calculate_b_s(&self) -> Vec<NTT> {
+        (0..self.dparams.k)
+            .map(|i| NTT::from((self.dparams.b as u128).pow(i as u32)))
             .collect()
     }
 }
 
-fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
-    ccs: &CCS<NTT>,
-) -> Result<(), DecompositionError> {
-    if ccs.m != usize::max((ccs.n - ccs.l - 1) * DP::L, ccs.m).next_power_of_two() {
-        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
+fn sanity_check<NTT: SuitableRing>(ccs: &CCS<NTT>, l: usize) -> Result<(), DecompositionError> {
+    if ccs.m != usize::max((ccs.n - ccs.l - 1) * l, ccs.m).next_power_of_two() {
+        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, l).into());
     }
 
     Ok(())

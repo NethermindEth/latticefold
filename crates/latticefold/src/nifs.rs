@@ -34,42 +34,47 @@ pub struct LFProof<NTT: OverField> {
 }
 
 /// `NTT` is a suitable cyclotomic ring.
-/// `P` is the decomposition parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSProver<NTT, P, T> {
+#[derive(Clone)]
+pub struct NIFSProver<NTT, T> {
     _r: PhantomData<NTT>,
-    _p: PhantomData<P>,
-    _t: PhantomData<T>,
+    dparams: DecompositionParams,
+    transcript: T,
 }
 
-impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges<NTT>>
-    NIFSProver<NTT, P, T>
-{
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT> + Sync> NIFSProver<NTT, T> {
+    pub fn new(dparams: DecompositionParams, transcript: T) -> Self {
+        Self {
+            _r: Default::default(),
+            dparams,
+            transcript,
+        }
+    }
+}
+
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT> + Sync> NIFSProver<NTT, T> {
     pub fn prove(
+        &mut self,
         acc: &LCCCS<NTT>,
         w_acc: &Witness<NTT>,
         cm_i: &CCCS<NTT>,
         w_i: &Witness<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
         scheme: &AjtaiCommitmentScheme<NTT>,
     ) -> Result<(LCCCS<NTT>, Witness<NTT>, LFProof<NTT>), LatticefoldError<NTT>> {
-        sanity_check::<NTT, P>(ccs)?;
+        sanity_check::<NTT>(ccs, self.dparams.l)?;
 
-        absorb_public_input::<NTT>(acc, cm_i, transcript);
+        absorb_public_input::<NTT>(acc, cm_i, &mut self.transcript);
 
-        let (linearized_cm_i, linearization_proof) =
-            LFLinearizationProver::<_, T>::prove(cm_i, w_i, transcript, ccs)?;
+        let mut linearization_prover = LFLinearizationProver::new(&mut self.transcript);
+        let (linearized_cm_i, linearization_proof) = linearization_prover.prove(cm_i, w_i, ccs)?;
+
+        let mut decomposition_prover =
+            LFDecompositionProver::new(self.dparams.clone(), &mut self.transcript);
         let (mz_mles_l, decomposed_lcccs_l, decomposed_wit_l, decomposition_proof_l) =
-            LFDecompositionProver::<_, T>::prove::<P>(acc, w_acc, transcript, ccs, scheme)?;
+            decomposition_prover.prove(acc, w_acc, ccs, scheme)?;
         let (mz_mles_r, decomposed_lcccs_r, decomposed_wit_r, decomposition_proof_r) =
-            LFDecompositionProver::<_, T>::prove::<P>(
-                &linearized_cm_i,
-                w_i,
-                transcript,
-                ccs,
-                scheme,
-            )?;
+            decomposition_prover.prove(&linearized_cm_i, w_i, ccs, scheme)?;
 
         let (mz_mles, lcccs, wit_s) = {
             let mut lcccs = decomposed_lcccs_l;
@@ -86,8 +91,9 @@ impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges
             (mz_mles, lcccs, wit_s)
         };
 
+        let mut folding_prover = LFFoldingProver::new(self.dparams.clone(), &mut self.transcript);
         let (folded_lcccs, wit, folding_proof) =
-            LFFoldingProver::<_, T>::prove::<P>(&lcccs, wit_s, transcript, ccs, &mz_mles)?;
+            folding_prover.prove(&lcccs, wit_s, ccs, &mz_mles)?;
 
         Ok((
             folded_lcccs,
@@ -103,46 +109,46 @@ impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges
 }
 
 /// `NTT` is a suitable cyclotomic ring.
-/// `P` is the decomposition parameters.
 /// `T` is the FS-transform transcript.
-pub struct NIFSVerifier<NTT, P, T> {
+#[derive(Clone)]
+pub struct NIFSVerifier<NTT, T> {
     _r: PhantomData<NTT>,
-    _p: PhantomData<P>,
-    _t: PhantomData<T>,
+    dparams: DecompositionParams,
+    transcript: T,
 }
 
-impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges<NTT>>
-    NIFSVerifier<NTT, P, T>
-{
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT> + Sync> NIFSVerifier<NTT, T> {
+    pub fn new(dparams: DecompositionParams, transcript: T) -> Self {
+        Self {
+            _r: Default::default(),
+            dparams,
+            transcript,
+        }
+    }
+}
+
+impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT> + Sync> NIFSVerifier<NTT, T> {
     pub fn verify(
+        &mut self,
         acc: &LCCCS<NTT>,
         cm_i: &CCCS<NTT>,
         proof: &LFProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, LatticefoldError<NTT>> {
-        sanity_check::<NTT, P>(ccs)?;
+        sanity_check::<NTT>(ccs, self.dparams.l)?;
 
-        absorb_public_input::<NTT>(acc, cm_i, transcript);
+        absorb_public_input::<NTT>(acc, cm_i, &mut self.transcript);
 
-        let linearized_cm_i = LFLinearizationVerifier::<_, T>::verify(
-            cm_i,
-            &proof.linearization_proof,
-            transcript,
-            ccs,
-        )?;
-        let decomposed_acc = LFDecompositionVerifier::<_, T>::verify::<P>(
-            acc,
-            &proof.decomposition_proof_l,
-            transcript,
-            ccs,
-        )?;
-        let decomposed_cm_i = LFDecompositionVerifier::<_, T>::verify::<P>(
-            &linearized_cm_i,
-            &proof.decomposition_proof_r,
-            transcript,
-            ccs,
-        )?;
+        let mut linearization_verifier = LFLinearizationVerifier::new(&mut self.transcript);
+        let linearized_cm_i =
+            linearization_verifier.verify(cm_i, &proof.linearization_proof, ccs)?;
+
+        let mut decomposition_verifier =
+            LFDecompositionVerifier::new(self.dparams.clone(), &mut self.transcript);
+        let decomposed_acc =
+            decomposition_verifier.verify(acc, &proof.decomposition_proof_l, ccs)?;
+        let decomposed_cm_i =
+            decomposition_verifier.verify(&linearized_cm_i, &proof.decomposition_proof_r, ccs)?;
 
         let lcccs_s = {
             let mut decomposed_acc = decomposed_acc;
@@ -153,20 +159,15 @@ impl<NTT: SuitableRing, P: DecompositionParams, T: TranscriptWithShortChallenges
             decomposed_acc
         };
 
-        Ok(LFFoldingVerifier::<NTT, T>::verify::<P>(
-            &lcccs_s,
-            &proof.folding_proof,
-            transcript,
-            ccs,
-        )?)
+        let mut folding_verifier =
+            LFFoldingVerifier::new(self.dparams.clone(), &mut self.transcript);
+        Ok(folding_verifier.verify(&lcccs_s, &proof.folding_proof, ccs)?)
     }
 }
 
-fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
-    ccs: &CCS<NTT>,
-) -> Result<(), LatticefoldError<NTT>> {
-    if ccs.m != usize::max((ccs.n - ccs.l - 1) * DP::L, ccs.m).next_power_of_two() {
-        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
+fn sanity_check<NTT: SuitableRing>(ccs: &CCS<NTT>, l: usize) -> Result<(), LatticefoldError<NTT>> {
+    if ccs.m != usize::max((ccs.n - ccs.l - 1) * l, ccs.m).next_power_of_two() {
+        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, l).into());
     }
 
     Ok(())

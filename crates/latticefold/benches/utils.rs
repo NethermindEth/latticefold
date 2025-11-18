@@ -50,7 +50,8 @@ pub fn get_test_dummy_ccs<R: Clone + UniformRand + Debug + SuitableRing>(
 }
 
 #[allow(dead_code)]
-pub fn wit_and_ccs_gen<P: DecompositionParams, R: Clone + UniformRand + Debug + SuitableRing>(
+pub fn wit_and_ccs_gen<R: Clone + UniformRand + Debug + SuitableRing>(
+    dparams: &DecompositionParams,
     x_len: usize,
     n: usize,
     wit_len: usize,
@@ -59,12 +60,12 @@ pub fn wit_and_ccs_gen<P: DecompositionParams, R: Clone + UniformRand + Debug + 
 ) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
-    let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
+    let new_r1cs_rows = if dparams.l == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
         r1cs_rows - 2
     } else {
         r1cs_rows // This makes a square matrix but is too much memory
     };
-    let ccs: CCS<R> = get_test_dummy_ccs::<R>(x_len, n, wit_len, new_r1cs_rows, P::L);
+    let ccs: CCS<R> = get_test_dummy_ccs::<R>(x_len, n, wit_len, new_r1cs_rows, dparams.l);
     let (one, x_ccs, w_ccs) = get_test_dummy_z_split::<R>(x_len, wit_len);
     let mut z = vec![one];
     z.extend(&x_ccs);
@@ -72,10 +73,10 @@ pub fn wit_and_ccs_gen<P: DecompositionParams, R: Clone + UniformRand + Debug + 
     ccs.check_relation(&z).expect("R1CS invalid!");
 
     let scheme: AjtaiCommitmentScheme<R> = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
+    let wit: Witness<R> = Witness::from_w_ccs(w_ccs, dparams.B, dparams.l);
 
     let cm_i: CCCS<R> = CCCS {
-        cm: wit.commit::<P>(&scheme).unwrap(),
+        cm: wit.commit(&scheme).unwrap(),
         x_ccs,
     };
 
@@ -83,10 +84,8 @@ pub fn wit_and_ccs_gen<P: DecompositionParams, R: Clone + UniformRand + Debug + 
 }
 
 #[allow(dead_code)]
-pub fn wit_and_ccs_gen_non_scalar<
-    P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing,
->(
+pub fn wit_and_ccs_gen_non_scalar<R: Clone + UniformRand + Debug + SuitableRing>(
+    dparams: &DecompositionParams,
     x_len: usize,
     n: usize,
     wit_len: usize,
@@ -95,7 +94,7 @@ pub fn wit_and_ccs_gen_non_scalar<
 ) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
-    let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
+    let new_r1cs_rows = if dparams.l == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
         r1cs_rows - 2
     } else {
         r1cs_rows // This makes a square matrix but is too much memory
@@ -105,14 +104,14 @@ pub fn wit_and_ccs_gen_non_scalar<
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
-    let ccs: CCS<R> = get_test_dummy_ccs_non_scalar::<R>(x_len, n, new_r1cs_rows, P::L, &z);
+    let ccs: CCS<R> = get_test_dummy_ccs_non_scalar::<R>(x_len, n, new_r1cs_rows, dparams.l, &z);
     ccs.check_relation(&z).expect("R1CS invalid!");
 
     let scheme: AjtaiCommitmentScheme<R> = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
+    let wit: Witness<R> = Witness::from_w_ccs(w_ccs, dparams.B, dparams.l);
 
     let cm_i: CCCS<R> = CCCS {
-        cm: wit.commit::<P>(&scheme).unwrap(),
+        cm: wit.commit(&scheme).unwrap(),
         x_ccs,
     };
 
@@ -133,10 +132,8 @@ pub fn get_test_dummy_ccs_non_scalar<R: Clone + UniformRand + Debug + SuitableRi
 }
 
 #[allow(dead_code)]
-pub fn wit_and_ccs_gen_degree_three_non_scalar<
-    P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing,
->(
+pub fn wit_and_ccs_gen_degree_three_non_scalar<R: Clone + UniformRand + Debug + SuitableRing>(
+    dparams: &DecompositionParams,
     x_len: usize,
     n: usize,
     wit_len: usize,
@@ -145,7 +142,7 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
 ) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
-    let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
+    let new_r1cs_rows = if dparams.l == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
         r1cs_rows - 2
     } else {
         r1cs_rows // This makes a square matrix but is too much memory
@@ -155,34 +152,35 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
-    let ccs: CCS<R> =
-        get_test_dummy_degree_three_ccs_non_scalar::<R>(&z, x_len, n, wit_len, P::L, new_r1cs_rows);
+    let ccs: CCS<R> = get_test_dummy_degree_three_ccs_non_scalar::<R>(
+        &z,
+        x_len,
+        n,
+        wit_len,
+        dparams.l,
+        new_r1cs_rows,
+    );
     ccs.check_relation(&z).expect("R1CS invalid!");
 
     let scheme: AjtaiCommitmentScheme<R> = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
+    let wit: Witness<R> = Witness::from_w_ccs(w_ccs, dparams.B, dparams.l);
 
     let cm_i: CCCS<R> = CCCS {
-        cm: wit.commit::<P>(&scheme).unwrap(),
+        cm: wit.commit(&scheme).unwrap(),
         x_ccs,
     };
 
     (cm_i, wit, ccs, scheme)
 }
 
-pub struct Bencher<
-    P: DecompositionParams,
-    R: SuitableRing + Clone,
-    CS: LatticefoldChallengeSet<R> + Clone,
-> {
-    phantom_data: PhantomData<(P, R, CS)>,
+pub struct Bencher<R: SuitableRing + Clone, CS: LatticefoldChallengeSet<R> + Clone + Sync> {
+    phantom_data: PhantomData<(R, CS)>,
 }
 
 #[allow(dead_code)]
-impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSet<R> + Clone>
-    Bencher<P, R, CS>
-{
+impl<R: SuitableRing + Clone, CS: LatticefoldChallengeSet<R> + Clone + Sync> Bencher<R, CS> {
     pub fn setup_r1cs(
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -192,13 +190,13 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
         let r1cs_rows = x_len + wit_len + 1;
 
         match t {
-            R1CS::Scalar => wit_and_ccs_gen::<P, R>(x_len, n, wit_len, r1cs_rows, kappa),
+            R1CS::Scalar => wit_and_ccs_gen::<R>(dparams, x_len, n, wit_len, r1cs_rows, kappa),
             R1CS::NonScalar => {
-                wit_and_ccs_gen_non_scalar::<P, R>(x_len, n, wit_len, r1cs_rows, kappa)
+                wit_and_ccs_gen_non_scalar::<R>(dparams, x_len, n, wit_len, r1cs_rows, kappa)
             }
-            R1CS::DegreeThreeNonScalar => {
-                wit_and_ccs_gen_degree_three_non_scalar::<P, R>(x_len, n, wit_len, r1cs_rows, kappa)
-            }
+            R1CS::DegreeThreeNonScalar => wit_and_ccs_gen_degree_three_non_scalar::<R>(
+                dparams, x_len, n, wit_len, r1cs_rows, kappa,
+            ),
         }
     }
 
@@ -208,14 +206,15 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
         cm_i: &CCCS<R>,
         ccs: &CCS<R>,
     ) -> LCCCS<R> {
-        LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-            cm_i, proof, transcript, ccs,
-        )
-        .expect("Failed to verify linearization proof")
+        let mut verifier = LFLinearizationVerifier::new(transcript);
+        verifier
+            .verify(cm_i, proof, ccs)
+            .expect("Failed to verify linearization proof")
     }
 
     pub fn bench_linearization_prover(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -228,26 +227,23 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
                 let transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, _) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
+                let (cm_i, wit, ccs, _) = Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
                 b.iter_batched(
                     || transcript.clone(),
                     |mut bench_transcript| {
-                        let _ = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                            &cm_i,
-                            &wit,
-                            &mut bench_transcript,
-                            &ccs,
-                        )
-                        .expect("Failed to generate linearization proof");
+                        let mut prover = LFLinearizationProver::new(&mut bench_transcript);
+                        let _ = prover
+                            .prove(&cm_i, &wit, &ccs)
+                            .expect("Failed to generate linearization proof");
                     },
                     criterion::BatchSize::SmallInput,
                 );
@@ -257,6 +253,7 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
 
     pub fn bench_linearization_verifier(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -269,33 +266,27 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
                 let mut transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, _) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
-                let (_, proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                    &cm_i,
-                    &wit,
-                    &mut transcript,
-                    &ccs,
-                )
-                .expect("Failed to generate linearization proof");
+                let (cm_i, wit, ccs, _) = Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
+                let mut prover = LFLinearizationProver::new(&mut transcript);
+                let (_, proof) = prover
+                    .prove(&cm_i, &wit, &ccs)
+                    .expect("Failed to generate linearization proof");
 
                 b.iter(|| {
                     let mut transcript = PoseidonTranscript::<R, CS>::default();
-                    let _ = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                        &cm_i,
-                        &proof,
-                        &mut transcript,
-                        &ccs,
-                    )
-                    .expect("Failed to verify linearization proof");
+                    let mut verifier = LFLinearizationVerifier::new(&mut transcript);
+                    let _ = verifier
+                        .verify(&cm_i, &proof, &ccs)
+                        .expect("Failed to verify linearization proof");
                 });
             },
         );
@@ -303,6 +294,7 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
 
     pub fn bench_decomposition_prover(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -315,36 +307,31 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
                 let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
                 let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
-                let (_, proof) = LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                    &cm_i,
-                    &wit,
-                    &mut prover_transcript,
-                    &ccs,
-                )
-                .expect("Failed to generate linearization proof");
+                let (cm_i, wit, ccs, scheme) =
+                    Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
+                let mut linearization_prover = LFLinearizationProver::new(&mut prover_transcript);
+                let (_, proof) = linearization_prover
+                    .prove(&cm_i, &wit, &ccs)
+                    .expect("Failed to generate linearization proof");
                 let lcccs =
                     Self::verify_linearization_proof(&proof, &mut verifier_transcript, &cm_i, &ccs);
 
                 b.iter(|| {
-                    let _ = LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<P>(
-                        &lcccs,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                        &scheme,
-                    )
-                    .expect("Failed to generate decomposition proof");
+                    let mut prover =
+                        LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+                    let _ = prover
+                        .prove(&lcccs, &wit, &ccs, &scheme)
+                        .expect("Failed to generate decomposition proof");
                 });
             },
         );
@@ -352,6 +339,7 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
 
     pub fn bench_decomposition_verifier(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -364,53 +352,43 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
                 let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
                 let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
-                let (_, linearization_proof) =
-                    LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                        &cm_i,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                    )
+                let (cm_i, wit, ccs, scheme) =
+                    Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
+                let mut linearization_prover = LFLinearizationProver::new(&mut prover_transcript);
+                let (_, linearization_proof) = linearization_prover
+                    .prove(&cm_i, &wit, &ccs)
                     .expect("Failed to generate linearization proof");
-                let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                    &cm_i,
-                    &linearization_proof,
-                    &mut verifier_transcript,
-                    &ccs,
-                )
-                .expect("Failed to verify linearization proof");
+                let mut linearization_verifier =
+                    LFLinearizationVerifier::new(&mut verifier_transcript);
+                let lcccs = linearization_verifier
+                    .verify(&cm_i, &linearization_proof, &ccs)
+                    .expect("Failed to verify linearization proof");
 
-                let (_, _, _, proof) =
-                    LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<P>(
-                        &lcccs,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                        &scheme,
-                    )
+                let mut prover =
+                    LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+                let (_, _, _, proof) = prover
+                    .prove(&lcccs, &wit, &ccs, &scheme)
                     .expect("Failed to generate decomposition proof");
 
                 b.iter_batched(
                     || verifier_transcript.clone(),
                     |mut bench_verifier_transcript| {
-                        let _ =
-                            LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<P>(
-                                &lcccs,
-                                &proof,
-                                &mut bench_verifier_transcript,
-                                &ccs,
-                            )
+                        let mut verifier = LFDecompositionVerifier::new(
+                            dparams.clone(),
+                            &mut bench_verifier_transcript,
+                        );
+                        let _ = verifier
+                            .verify(&lcccs, &proof, &ccs)
                             .expect("Failed to verify decomposition proof");
                     },
                     criterion::BatchSize::SmallInput,
@@ -421,6 +399,7 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
 
     pub fn bench_folding_prover(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -433,52 +412,39 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
-                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
+                let (cm_i, wit, ccs, scheme) =
+                    Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
                 let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
                 let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
 
+                let mut linearization_prover = LFLinearizationProver::new(&mut prover_transcript);
                 let (_, linearization_proof) =
-                    LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                        &cm_i,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                    )
+                    linearization_prover.prove(&cm_i, &wit, &ccs).unwrap();
+
+                let mut linearization_verifier =
+                    LFLinearizationVerifier::new(&mut verifier_transcript);
+                let lcccs = linearization_verifier
+                    .verify(&cm_i, &linearization_proof, &ccs)
                     .unwrap();
 
-                let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                    &cm_i,
-                    &linearization_proof,
-                    &mut verifier_transcript,
-                    &ccs,
-                )
-                .unwrap();
-
-                let (mz_mles, _, wit_vec, decomposition_proof) =
-                    LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<P>(
-                        &lcccs,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                        &scheme,
-                    )
+                let mut decomposition_prover =
+                    LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+                let (mz_mles, _, wit_vec, decomposition_proof) = decomposition_prover
+                    .prove(&lcccs, &wit, &ccs, &scheme)
                     .unwrap();
 
-                let lcccs_vec =
-                    LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<P>(
-                        &lcccs,
-                        &decomposition_proof,
-                        &mut verifier_transcript,
-                        &ccs,
-                    )
+                let mut decomposition_verifier =
+                    LFDecompositionVerifier::new(dparams.clone(), &mut verifier_transcript);
+                let lcccs_vec = decomposition_verifier
+                    .verify(&lcccs, &decomposition_proof, &ccs)
                     .unwrap();
                 let (lcccs, wit_s, mz_mles) = {
                     let mut lcccs = lcccs_vec.clone();
@@ -498,14 +464,9 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 b.iter_batched(
                     || (lcccs.clone(), wit_s.clone()),
                     |(lcccs_vec, wit_vec)| {
-                        let _ = LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<P>(
-                            &lcccs_vec,
-                            wit_vec,
-                            &mut prover_transcript,
-                            &ccs,
-                            &mz_mles,
-                        )
-                        .unwrap();
+                        let mut prover =
+                            LFFoldingProver::new(dparams.clone(), &mut prover_transcript);
+                        let _ = prover.prove(&lcccs_vec, wit_vec, &ccs, &mz_mles).unwrap();
                     },
                     criterion::BatchSize::SmallInput,
                 );
@@ -515,6 +476,7 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
 
     pub fn bench_folding_verifier(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -527,51 +489,39 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={},  B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
                 let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
                 let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
-                let (_, linearization_proof) =
-                    LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                        &cm_i,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                    )
+                let (cm_i, wit, ccs, scheme) =
+                    Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
+                let mut linearization_prover = LFLinearizationProver::new(&mut prover_transcript);
+                let (_, linearization_proof) = linearization_prover
+                    .prove(&cm_i, &wit, &ccs)
                     .expect("Failed to generate linearization proof");
 
-                let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                    &cm_i,
-                    &linearization_proof,
-                    &mut verifier_transcript,
-                    &ccs,
-                )
-                .expect("Failed to verify linearization proof");
+                let mut linearization_verifier =
+                    LFLinearizationVerifier::new(&mut verifier_transcript);
+                let lcccs = linearization_verifier
+                    .verify(&cm_i, &linearization_proof, &ccs)
+                    .expect("Failed to verify linearization proof");
 
-                let (mz_mles, _, wit_vec, decomposition_proof) =
-                    LFDecompositionProver::<_, PoseidonTranscript<R, CS>>::prove::<P>(
-                        &lcccs,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                        &scheme,
-                    )
+                let mut decomposition_prover =
+                    LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+                let (mz_mles, _, wit_vec, decomposition_proof) = decomposition_prover
+                    .prove(&lcccs, &wit, &ccs, &scheme)
                     .expect("Failed to generate decomposition proof");
 
-                let lcccs_vec =
-                    LFDecompositionVerifier::<_, PoseidonTranscript<R, CS>>::verify::<P>(
-                        &lcccs,
-                        &decomposition_proof,
-                        &mut verifier_transcript,
-                        &ccs,
-                    )
+                let mut decomposition_verifier =
+                    LFDecompositionVerifier::new(dparams.clone(), &mut verifier_transcript);
+                let lcccs_vec = decomposition_verifier
+                    .verify(&lcccs, &decomposition_proof, &ccs)
                     .expect("Failed to verify decomposition proof");
 
                 let (lcccs, wit_s, mz_mles) = {
@@ -589,26 +539,20 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                     (lcccs, wit_s, mz_mles_vec)
                 };
 
-                let (_, _, folding_proof) =
-                    LFFoldingProver::<R, PoseidonTranscript<R, CS>>::prove::<P>(
-                        &lcccs,
-                        wit_s,
-                        &mut prover_transcript,
-                        &ccs,
-                        &mz_mles,
-                    )
+                let mut folding_prover =
+                    LFFoldingProver::new(dparams.clone(), &mut prover_transcript);
+                let (_, _, folding_proof) = folding_prover
+                    .prove(&lcccs, wit_s, &ccs, &mz_mles)
                     .expect("Failed to generate folding proof");
 
                 b.iter_batched(
                     || verifier_transcript.clone(),
                     |mut bench_verifier_transcript| {
-                        let _ = LFFoldingVerifier::<_, PoseidonTranscript<R, CS>>::verify::<P>(
-                            &lcccs,
-                            &folding_proof,
-                            &mut bench_verifier_transcript,
-                            &ccs,
-                        )
-                        .expect("Failed to verify folding proof");
+                        let mut verifier =
+                            LFFoldingVerifier::new(dparams.clone(), &mut bench_verifier_transcript);
+                        let _ = verifier
+                            .verify(&lcccs, &folding_proof, &ccs)
+                            .expect("Failed to verify folding proof");
                     },
                     criterion::BatchSize::SmallInput,
                 );
@@ -618,6 +562,7 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
 
     pub fn bench_e2e_prover(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -630,48 +575,38 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={}, B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
                 let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
                 let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
+                let (cm_i, wit, ccs, scheme) =
+                    Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
 
-                let (_, linearization_proof) =
-                    LFLinearizationProver::<_, PoseidonTranscript<R, CS>>::prove(
-                        &cm_i,
-                        &wit,
-                        &mut prover_transcript,
-                        &ccs,
-                    )
+                let mut linearization_prover = LFLinearizationProver::new(&mut prover_transcript);
+                let (_, linearization_proof) = linearization_prover
+                    .prove(&cm_i, &wit, &ccs)
                     .expect("Failed to generate linearization proof");
 
-                let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                    &cm_i,
-                    &linearization_proof,
-                    &mut verifier_transcript,
-                    &ccs,
-                )
-                .expect("Failed to verify linearization");
+                let mut linearization_verifier =
+                    LFLinearizationVerifier::new(&mut verifier_transcript);
+                let lcccs = linearization_verifier
+                    .verify(&cm_i, &linearization_proof, &ccs)
+                    .expect("Failed to verify linearization");
 
                 b.iter_batched(
                     || prover_transcript.clone(),
-                    |mut bench_prover_transcript| {
-                        let _ = NIFSProver::<R, P, PoseidonTranscript<R, CS>>::prove(
-                            &lcccs,
-                            &wit,
-                            &cm_i,
-                            &wit,
-                            &mut bench_prover_transcript,
-                            &ccs,
-                            &scheme,
-                        )
-                        .expect("Failed to generate proof");
+                    |bench_prover_transcript| {
+                        let mut nifs_prover =
+                            NIFSProver::new(dparams.clone(), bench_prover_transcript);
+                        let _ = nifs_prover
+                            .prove(&lcccs, &wit, &cm_i, &wit, &ccs, &scheme)
+                            .expect("Failed to generate proof");
                     },
                     criterion::BatchSize::SmallInput,
                 );
@@ -681,6 +616,7 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
 
     pub fn bench_e2e_verifier(
         group: &mut BenchmarkGroup<WallTime>,
+        dparams: &DecompositionParams,
         x_len: usize,
         n: usize,
         wit_len: usize,
@@ -693,55 +629,41 @@ impl<P: DecompositionParams, R: SuitableRing + Clone, CS: LatticefoldChallengeSe
                 format!(
                     "Param. Kappa={}, Cols={}, B={}, L={}, B_small={}, K={}",
                     kappa,
-                    { n / P::L },
-                    P::B,
-                    P::L,
-                    P::B_SMALL,
-                    P::K
+                    { n / dparams.l },
+                    dparams.B,
+                    dparams.l,
+                    dparams.b,
+                    dparams.k
                 ),
             ),
             |b| {
                 let mut prover_transcript = PoseidonTranscript::<R, CS>::default();
                 let mut verifier_transcript = PoseidonTranscript::<R, CS>::default();
-                let (cm_i, wit, ccs, scheme) = Self::setup_r1cs(x_len, n, wit_len, kappa, t);
+                let (cm_i, wit, ccs, scheme) =
+                    Self::setup_r1cs(dparams, x_len, n, wit_len, kappa, t);
 
-                let (acc_lcccs, linearization_proof) = LFLinearizationProver::<
-                    _,
-                    PoseidonTranscript<R, CS>,
-                >::prove(
-                    &cm_i, &wit, &mut prover_transcript, &ccs
-                )
-                .expect("Failed to generate linearization proof");
+                let mut linearization_prover = LFLinearizationProver::new(&mut prover_transcript);
+                let (acc_lcccs, linearization_proof) = linearization_prover
+                    .prove(&cm_i, &wit, &ccs)
+                    .expect("Failed to generate linearization proof");
 
-                let lcccs = LFLinearizationVerifier::<_, PoseidonTranscript<R, CS>>::verify(
-                    &cm_i,
-                    &linearization_proof,
-                    &mut verifier_transcript,
-                    &ccs,
-                )
-                .expect("Failed to verify linearization");
+                let mut linearization_verifier =
+                    LFLinearizationVerifier::new(&mut verifier_transcript);
+                let lcccs = linearization_verifier
+                    .verify(&cm_i, &linearization_proof, &ccs)
+                    .expect("Failed to verify linearization");
 
-                let (_, _, proof) = NIFSProver::<R, P, PoseidonTranscript<R, CS>>::prove(
-                    &lcccs,
-                    &wit,
-                    &cm_i,
-                    &wit,
-                    &mut prover_transcript,
-                    &ccs,
-                    &scheme,
-                )
-                .expect("Failed to generate proof");
+                let mut nifs_prover = NIFSProver::new(dparams.clone(), prover_transcript);
+                let (_, _, proof) = nifs_prover
+                    .prove(&lcccs, &wit, &cm_i, &wit, &ccs, &scheme)
+                    .expect("Failed to generate proof");
 
                 b.iter_batched(
                     || verifier_transcript.clone(),
-                    |mut bench_verifier_transcript| {
-                        let result = NIFSVerifier::<R, P, PoseidonTranscript<R, CS>>::verify(
-                            &acc_lcccs,
-                            &cm_i,
-                            &proof,
-                            &mut bench_verifier_transcript,
-                            &ccs,
-                        );
+                    |bench_verifier_transcript| {
+                        let mut nifs_verifier =
+                            NIFSVerifier::new(dparams.clone(), bench_verifier_transcript);
+                        let result = nifs_verifier.verify(&acc_lcccs, &cm_i, &proof, &ccs);
                         assert!(result.is_ok());
                     },
                     criterion::BatchSize::SmallInput,

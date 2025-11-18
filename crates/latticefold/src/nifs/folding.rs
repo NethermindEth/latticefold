@@ -18,12 +18,14 @@ use crate::{
     arith::{error::CSError, Witness, CCS, LCCCS},
     ark_base::*,
     commitment::Commitment,
-    decomposition_parameters::DecompositionParams,
     transcript::TranscriptWithShortChallenges,
     utils::{
         mle_helpers::evaluate_mles,
         sumcheck::{
-            prover::ProverState, utils::eq_eval, MLSumcheck, SumCheckError::SumCheckFailed,
+            prover::ProverState,
+            utils::{build_eq_x_r, eq_eval},
+            MLSumcheck,
+            SumCheckError::SumCheckFailed,
         },
     },
 };
@@ -36,17 +38,17 @@ pub use structs::*;
 
 mod structs;
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT, T>
-    for LFFoldingProver<NTT, T>
+impl<'t, NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT, T>
+    for LFFoldingProver<'t, NTT, T>
 {
-    fn prove<P: DecompositionParams>(
+    fn prove(
+        &mut self,
         cm_i_s: &[LCCCS<NTT>],
         mut w_s: Vec<Witness<NTT>>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
         mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     ) -> Result<(LCCCS<NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>> {
-        sanity_check::<NTT, P>(ccs)?;
+        sanity_check::<NTT>(ccs, self.dparams.l)?;
 
         // Free some unneeded vars/memory
         w_s.iter_mut().for_each(|w_i| {
@@ -56,14 +58,16 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             w_i.w_ccs.shrink_to_fit();
         });
 
-        if cm_i_s.len() != 2 * P::K {
+        if cm_i_s.len() != 2 * self.dparams.k {
             return Err(FoldingError::IncorrectLength);
         }
 
         let log_m = ccs.s;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges
-        let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<P>(log_m);
+        let (alpha_s, beta_s, zeta_s, mu_s) = self
+            .transcript
+            .squeeze_alpha_beta_zeta_mu(log_m, self.dparams.k);
 
         // Step 2: Compute g polynomial and sumcheck on it
         // Setup f_hat_mle for later evaluation of thetas
@@ -71,11 +75,15 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         let ris = Self::get_ris(cm_i_s);
 
-        let prechallenged_Ms_1 =
-            Self::calculate_challenged_mz_mle(&mz_mles[0..P::K], &zeta_s[0..P::K])?;
-        let prechallenged_Ms_2 =
-            Self::calculate_challenged_mz_mle(&mz_mles[P::K..2 * P::K], &zeta_s[P::K..2 * P::K])?;
-        let (g_mles, g_degree) = create_sumcheck_polynomial::<_, P>(
+        let prechallenged_Ms_1 = Self::calculate_challenged_mz_mle(
+            &mz_mles[0..self.dparams.k],
+            &zeta_s[0..self.dparams.k],
+        )?;
+        let prechallenged_Ms_2 = Self::calculate_challenged_mz_mle(
+            &mz_mles[self.dparams.k..2 * self.dparams.k],
+            &zeta_s[self.dparams.k..2 * self.dparams.k],
+        )?;
+        let (g_mles, g_degree) = self.create_sumcheck_polynomial(
             log_m,
             f_hat_mles.clone(),
             &alpha_s,
@@ -86,11 +94,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
             &mu_s,
         )?;
 
-        let comb_fn = |vals: &[NTT]| -> NTT { sumcheck_polynomial_comb_fn::<NTT, P>(vals, &mu_s) };
+        let comb_fn = |vals: &[NTT]| -> NTT {
+            sumcheck_polynomial_comb_fn::<NTT>(vals, &mu_s, self.dparams.b)
+        };
 
         // Step 5: Run sum check prover
         let (sum_check_proof, prover_state) =
-            MLSumcheck::prove_as_subprotocol(transcript, g_mles, log_m, g_degree, comb_fn);
+            MLSumcheck::prove_as_subprotocol(self.transcript, g_mles, log_m, g_degree, comb_fn);
 
         let r_0 = Self::get_sumcheck_randomness(prover_state);
 
@@ -101,11 +111,13 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
         // Absorb them into the transcript
         theta_s
             .iter()
-            .for_each(|thetas| transcript.absorb_slice(thetas));
-        eta_s.iter().for_each(|etas| transcript.absorb_slice(etas));
+            .for_each(|thetas| self.transcript.absorb_slice(thetas));
+        eta_s
+            .iter()
+            .for_each(|etas| self.transcript.absorb_slice(etas));
 
         // Step 5 get rho challenges
-        let (rho_s_coeff, rho_s) = get_rhos::<_, _, P>(transcript);
+        let (rho_s_coeff, rho_s) = get_rhos::<_, _>(self.dparams.k, self.transcript);
 
         let f_0: Vec<NTT> = Self::compute_f_0(&rho_s, &w_s);
 
@@ -118,7 +130,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
 
         let lcccs = prepare_public_output(r_0, v_0, cm_0, u_0, x_0, h);
 
-        let w_0 = Witness::from_f::<P>(f_0);
+        let w_0 = Witness::from_f(f_0, self.dparams.B, self.dparams.l);
 
         let folding_proof = FoldingProof {
             pointshift_sumcheck_proof: sum_check_proof,
@@ -130,32 +142,34 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingProver<NTT
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
-    for LFFoldingVerifier<NTT, T>
+impl<'t, NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<NTT, T>
+    for LFFoldingVerifier<'t, NTT, T>
 {
-    fn verify<P: DecompositionParams>(
+    fn verify(
+        &mut self,
         cm_i_s: &[LCCCS<NTT>],
         proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, FoldingError<NTT>> {
-        sanity_check::<NTT, P>(ccs)?;
+        sanity_check::<NTT>(ccs, self.dparams.l)?;
 
         // Step 1: Generate alpha, zeta, mu, beta challenges and validate input
-        let (alpha_s, beta_s, zeta_s, mu_s) = transcript.squeeze_alpha_beta_zeta_mu::<P>(ccs.s);
+        let (alpha_s, beta_s, zeta_s, mu_s) = self
+            .transcript
+            .squeeze_alpha_beta_zeta_mu(ccs.s, self.dparams.k);
 
         // Calculate claims for sumcheck verification
         let (claim_g1, claim_g3) = Self::calculate_claims(&alpha_s, &zeta_s, cm_i_s);
 
         let nvars = ccs.s;
-        let degree = 2 * P::B_SMALL;
+        let degree = 2 * self.dparams.b;
 
         //Step 2: The sumcheck.
         let (r_0, expected_evaluation) =
-            Self::verify_sumcheck_proof(transcript, nvars, degree, claim_g1 + claim_g3, proof)?;
+            self.verify_sumcheck_proof(nvars, degree, claim_g1 + claim_g3, proof)?;
 
         // Verify evaluation claim
-        Self::verify_evaluation::<P>(
+        self.verify_evaluation(
             &alpha_s,
             &beta_s,
             &mu_s,
@@ -170,12 +184,12 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
         proof
             .theta_s
             .iter()
-            .for_each(|thetas| transcript.absorb_slice(thetas));
+            .for_each(|thetas| self.transcript.absorb_slice(thetas));
         proof
             .eta_s
             .iter()
-            .for_each(|etas| transcript.absorb_slice(etas));
-        let (rho_s_coeff, rho_s) = get_rhos::<_, _, P>(transcript);
+            .for_each(|etas| self.transcript.absorb_slice(etas));
+        let (rho_s_coeff, rho_s) = get_rhos::<_, _>(self.dparams.k, self.transcript);
 
         // Step 6
         let (v_0, cm_0, u_0, x_0) = compute_v0_u0_x0_cm_0(
@@ -194,7 +208,136 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> FoldingVerifier<N
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<NTT, T> {
+impl<'t, NTT: SuitableRing, T> LFFoldingProver<'t, NTT, T> {
+    /// Creates sumcheck polynomial
+    ///
+    /// $$
+    /// g(\vec{x}) := \sum_{i=1}^{2k} \left[\alpha_i g_{1,i}(\vec{x}) + \mu_i g_{2,i}(\vec{x}) + \zeta_i g_{3,i}(\vec{x})\right]
+    /// $$
+    ///
+    /// where, for all $i \in \[2k\]$,
+    ///
+    /// $$
+    /// g_{1,i}(\vec{x}) := \sum\_{j=0}^{\tau - 1} \alpha_i^j \cdot \left( eq(\vec{r}_i, \vec{x}) \cdot \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) \right),
+    /// $$
+    ///
+    /// $$
+    /// g_{2,i,j}(\vec{x}) := \sum\_{j=0}^{\tau - 1} \mu_i^j \left( eq(\vec{\beta}, \vec{x}) \cdot
+    /// \prod_{j=-(b-1)}^{b-1} \( \mathrm{mle} \[\hat{f}\_{ij}\](\vec{x}) - j \)\right),
+    /// $$
+    ///
+    /// $$
+    /// g_{3,i}(\vec{x}) := \sum\_{j=0}^{t-1} \zeta_i^j \cdot \left(eq(\vec{r}_i, \vec{x}) \cdot
+    /// \left(
+    /// \sum\_{
+    /// \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
+    /// }
+    /// \text{mle}\[M_j\]\(\vec{x}, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+    /// \right)
+    /// \right).
+    /// $$
+    ///
+    /// # Arguments
+    ///
+    /// - `log_m: usize`  
+    ///   The number of variables in the final polynomial.
+    ///
+    /// - `f_hat_mles: &[Vec<DenseMultilinearExtension<NTT>>]`  
+    ///   A reference to the multilinear extension of the decomposed NTT witnesses
+    ///
+    /// - `alpha_s: &[NTT]`  
+    ///   A slice containing the $\alpha$ challenges.
+    ///
+    /// - `challenged_Ms_1: &DenseMultilinearExtension<NTT>`  
+    ///   A reference to the M matrices multiplied by the first $k$ decomposed vectors, and then taken a linear combination of.
+    ///
+    /// - `challenged_Ms_2: &DenseMultilinearExtension<NTT>`  
+    ///   A reference to the M matrices multiplied by the second $k$ decomposed vectors, and then taken a linear combination of.
+    ///
+    /// - `r_s: &[Vec<NTT>]`  
+    ///   The linearization challenge vectors
+    ///
+    /// - `beta_s: &[NTT]`  
+    ///   The $\beta$ challenges
+    ///
+    /// - `mu_s: &[NTT]`  
+    ///   The $\mu$ challenges
+    ///
+    /// # Returns
+    ///
+    /// - `Result<(Vec<RefCounter<DenseMultilinearExtension<NTT>>>, usize), FoldingError<NTT>>`  
+    ///   - On success, returns a tuple containing:
+    ///     - A `Vec<RefCounter<DenseMultilinearExtension<NTT>>>`, the MLEs that make up the polynomial.
+    ///     - A `usize` of the degree of the final polynomial.
+    ///
+    /// # Errors
+    ///
+    /// This function will return a `FoldingError<NTT>` if any of the multilinear extensions or vectors are of the wrong size.
+    ///
+    /// $$
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn create_sumcheck_polynomial(
+        &self,
+        log_m: usize,
+        f_hat_mles: Vec<Vec<DenseMultilinearExtension<NTT>>>,
+        alpha_s: &[NTT],
+        challenged_Ms_1: &DenseMultilinearExtension<NTT>,
+        challenged_Ms_2: &DenseMultilinearExtension<NTT>,
+        r_s: &[Vec<NTT>],
+        beta_s: &[NTT],
+        mu_s: &[NTT],
+    ) -> Result<(Vec<DenseMultilinearExtension<NTT>>, usize), FoldingError<NTT>> {
+        let k = self.dparams.k;
+
+        if alpha_s.len() != 2 * k
+            || f_hat_mles.len() != 2 * k
+            || r_s.len() != 2 * k
+            || beta_s.len() != log_m
+            || mu_s.len() != 2 * k
+        {
+            return Err(FoldingError::IncorrectLength);
+        }
+
+        #[cfg(test)]
+        {
+            if r_s[..k].iter().any(|r| r != &r_s[0]) || r_s[k..].iter().any(|r| r != &r_s[k]) {
+                return Err(FoldingError::SumcheckChallengeError);
+            }
+        }
+
+        let len = 2 + 2 + // g1 + g3
+            1 + f_hat_mles.len() * f_hat_mles[0].len(); // g2
+        let mut mles = Vec::with_capacity(len);
+
+        // We assume here that decomposition subprotocol puts the same r challenge point
+        // into all decomposed linearized commitments
+        let r_i_eq = build_eq_x_r(&r_s[0])?;
+        prepare_g1_and_3_k_mles_list(
+            &mut mles,
+            r_i_eq.clone(),
+            &f_hat_mles[0..k],
+            &alpha_s[0..k],
+            challenged_Ms_1,
+        );
+
+        let r_i_eq = build_eq_x_r(&r_s[k])?;
+        prepare_g1_and_3_k_mles_list(
+            &mut mles,
+            r_i_eq,
+            &f_hat_mles[k..2 * k],
+            &alpha_s[k..2 * k],
+            challenged_Ms_2,
+        );
+
+        // g2
+        let beta_eq_x = build_eq_x_r(beta_s)?;
+        prepare_g2_i_mle_list(&mut mles, beta_eq_x, f_hat_mles);
+
+        let degree = 2 * self.dparams.b;
+
+        Ok((mles, degree))
+    }
+
     fn setup_f_hat_mles(w_s: &mut [Witness<NTT>]) -> Vec<Vec<DenseMultilinearExtension<NTT>>> {
         cfg_iter_mut!(w_s)
             .map(|w| w.take_f_hat())
@@ -268,9 +411,10 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingProver<N
     }
 }
 
-impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier<NTT, T> {
+impl<'t, NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier<'t, NTT, T> {
     #[allow(clippy::too_many_arguments)]
-    fn verify_evaluation<P: DecompositionParams>(
+    fn verify_evaluation(
+        &self,
         alpha_s: &[NTT],
         beta_s: &[NTT],
         mu_s: &[NTT],
@@ -288,7 +432,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
             .map(|r_i: &Vec<NTT>| eq_eval(r_i, r_0))
             .collect::<Result<Vec<_>, _>>()?;
 
-        let should_equal_s: NTT = compute_sumcheck_claim_expected_value::<NTT, P>(
+        let should_equal_s: NTT = self.compute_sumcheck_claim_expected_value(
             alpha_s,
             mu_s,
             &proof.theta_s,
@@ -342,8 +486,97 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         (claim_g1, claim_g3)
     }
 
+    /// Computes the grand sum from point 4 of the Latticefold folding protocol.
+    ///
+    /// # Arguments
+    ///
+    /// - `alpha_s: &[NTT]`  
+    ///   A slice containing the $\alpha$ challenges.
+    ///
+    /// - `mu_s: &[NTT]`  
+    ///   A slice containing the $\mu$ challenges.
+    ///
+    /// - `theta_s: &[Vec<NTT>]`  
+    ///   $$
+    ///   \left[\theta\_{i} := \text{mle}\[\hat{f}\_i\](\vec{r}_o) \right]\_{i=1}^{2k},
+    ///   $$
+    ///
+    /// - `e_asterisk: NTT`  
+    ///   $$
+    ///   \mathbf{e}^* := eq(\boldsymbol{\beta}, \mathbf{r}_o)
+    ///   $$
+    ///
+    /// - `e_s: &[NTT]`  
+    ///   $$
+    ///   \left[ e_i := eq(\vec{r}\_i, \vec{r}\_o) \right]\_{i=1}^{2k}
+    ///   $$
+    /// - `zeta_s: &[NTT]`  
+    ///
+    ///     A slice containing the $\zeta$ challenges.
+    ///
+    /// - `eta_s: &[Vec<NTT>]`  
+    ///   $$
+    ///   \eta[i] :=
+    ///   \sum\_{
+    ///   \vec{b} \in \\{0,1\\}^\{log\(n + n\_{in}\)\}
+    ///   }
+    ///   \text{mle}\[M_1\]\(\vec{r}\_o, \vec{b}\) \cdot \text{mle}\[z_i\]\(\vec{b}\)
+    ///   $$
+    ///
+    /// # Returns
+    ///
+    /// - `NTT`  
+    ///   Returns the expected value of the sumcheck claim.
+    ///
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn compute_sumcheck_claim_expected_value(
+        &self,
+        alpha_s: &[NTT],
+        mu_s: &[NTT],
+        theta_s: &[Vec<NTT>],
+        e_asterisk: NTT,
+        e_s: &[NTT],
+        zeta_s: &[NTT],
+        eta_s: &[Vec<NTT>],
+    ) -> NTT {
+        (0..(2 * self.dparams.k))
+            .map(|i| {
+                // Evaluation claims about f hats.
+                let mut s_summand: NTT = successors(Some(alpha_s[i]), |alpha_power| {
+                    Some(alpha_s[i] * alpha_power)
+                })
+                .zip(theta_s[i].iter())
+                .map(|(pow_of_alpha_i, theta)| pow_of_alpha_i * e_s[i] * theta) // Might need to change e_s[i] double check
+                .sum();
+
+                // norm range check contribution
+                s_summand += e_asterisk
+                    * successors(Some(mu_s[i]), |mu_power| Some(mu_s[i] * mu_power))
+                        .zip(theta_s[i].iter())
+                        .map(|(mu_power, &theta)| {
+                            mu_power
+                                * theta
+                                * (1..self.dparams.b)
+                                    .map(|x| NTT::from(x as u128))
+                                    .map(|j_hat| (theta - j_hat) * (theta + j_hat))
+                                    .product::<NTT>()
+                        })
+                        .sum::<NTT>();
+
+                // linearisation claims contribuition
+                s_summand += e_s[i]
+                    * successors(Some(zeta_s[i]), |&zeta| Some(zeta * zeta_s[i]))
+                        .zip(eta_s[i].iter())
+                        .map(|(pow_of_zeta, eta_i_j)| pow_of_zeta * eta_i_j)
+                        .sum::<NTT>();
+
+                s_summand
+            })
+            .sum()
+    }
+
     fn verify_sumcheck_proof(
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
+        &mut self,
         nvars: usize,
         degree: usize,
         total_claim: NTT,
@@ -352,7 +585,7 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
         //Step 2: The sumcheck.
         // Verify the sumcheck proof.
         let sub_claim = MLSumcheck::verify_as_subprotocol(
-            transcript,
+            self.transcript,
             nvars,
             degree,
             total_claim,
@@ -369,11 +602,9 @@ impl<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>> LFFoldingVerifier
     }
 }
 
-fn sanity_check<NTT: SuitableRing, DP: DecompositionParams>(
-    ccs: &CCS<NTT>,
-) -> Result<(), FoldingError<NTT>> {
-    if ccs.m != usize::max((ccs.n - ccs.l - 1) * DP::L, ccs.m).next_power_of_two() {
-        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, DP::L).into());
+fn sanity_check<NTT: SuitableRing>(ccs: &CCS<NTT>, l: usize) -> Result<(), FoldingError<NTT>> {
+    if ccs.m != usize::max((ccs.n - ccs.l - 1) * l, ccs.m).next_power_of_two() {
+        return Err(CSError::InvalidSizeBounds(ccs.m, ccs.n, l).into());
     }
 
     Ok(())

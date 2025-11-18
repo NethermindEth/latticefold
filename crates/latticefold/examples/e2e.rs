@@ -21,10 +21,8 @@ use latticefold::{
 include!(concat!(env!("OUT_DIR"), "/examples_generated.rs"));
 
 #[allow(dead_code)]
-pub fn wit_and_ccs_gen_degree_three_non_scalar<
-    P: DecompositionParams,
-    R: Clone + UniformRand + Debug + SuitableRing,
->(
+pub fn wit_and_ccs_gen_degree_three_non_scalar<R: Clone + UniformRand + Debug + SuitableRing>(
+    dparams: &DecompositionParams,
     x_len: usize,
     n: usize,
     wit_len: usize,
@@ -33,7 +31,7 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
 ) -> (CCCS<R>, Witness<R>, CCS<R>, AjtaiCommitmentScheme<R>) {
     let mut rng = ark_std::test_rng();
 
-    let new_r1cs_rows = if P::L == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
+    let new_r1cs_rows = if dparams.l == 1 && (wit_len > 0 && (wit_len & (wit_len - 1)) == 0) {
         r1cs_rows - 2
     } else {
         r1cs_rows // This makes a square matrix but is too much memory
@@ -43,15 +41,21 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
     let mut z = vec![one];
     z.extend(&x_ccs);
     z.extend(&w_ccs);
-    let ccs: CCS<R> =
-        get_test_dummy_degree_three_ccs_non_scalar::<R>(&z, x_len, n, wit_len, P::L, new_r1cs_rows);
+    let ccs: CCS<R> = get_test_dummy_degree_three_ccs_non_scalar::<R>(
+        &z,
+        x_len,
+        n,
+        wit_len,
+        dparams.l,
+        new_r1cs_rows,
+    );
     ccs.check_relation(&z).expect("R1CS invalid!");
 
     let scheme: AjtaiCommitmentScheme<R> = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
-    let wit: Witness<R> = Witness::from_w_ccs::<P>(w_ccs);
+    let wit: Witness<R> = Witness::from_w_ccs(w_ccs, dparams.B, dparams.l);
 
     let cm_i: CCCS<R> = CCCS {
-        cm: wit.commit::<P>(&scheme).unwrap(),
+        cm: wit.commit(&scheme).unwrap(),
         x_ccs,
     };
 
@@ -59,11 +63,9 @@ pub fn wit_and_ccs_gen_degree_three_non_scalar<
 }
 
 #[allow(clippy::type_complexity)]
-fn setup_example_environment<
-    RqNTT: SuitableRing,
-    DP: DecompositionParams,
-    CS: LatticefoldChallengeSet<RqNTT>,
->() -> (
+fn setup_example_environment<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>(
+    dparams: &DecompositionParams,
+) -> (
     LCCCS<RqNTT>,
     Witness<RqNTT>,
     CCCS<RqNTT>,
@@ -73,21 +75,19 @@ fn setup_example_environment<
 ) {
     let r1cs_rows = X_LEN + WIT_LEN + 1;
 
-    let (cm_i, wit, ccs, scheme) =
-        wit_and_ccs_gen_degree_three_non_scalar::<DP, RqNTT>(X_LEN, N, WIT_LEN, r1cs_rows, KAPPA);
+    let (cm_i, wit, ccs, scheme) = wit_and_ccs_gen_degree_three_non_scalar::<RqNTT>(
+        dparams, X_LEN, N, WIT_LEN, r1cs_rows, KAPPA,
+    );
 
     let rand_w_ccs: Vec<RqNTT> = (0..WIT_LEN).map(|i| RqNTT::from(i as u64)).collect();
-    let wit_acc = Witness::from_w_ccs::<DP>(rand_w_ccs);
+    let wit_acc = Witness::from_w_ccs(rand_w_ccs, dparams.B, dparams.l);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let (acc, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
-        &cm_i,
-        &wit_acc,
-        &mut transcript,
-        &ccs,
-    )
-    .expect("Failed to generate linearization proof");
+    let mut prover = LFLinearizationProver::new(&mut transcript);
+    let (acc, _) = prover
+        .prove(&cm_i, &wit_acc, &ccs)
+        .expect("Failed to generate linearization proof");
 
     (acc, wit_acc, cm_i, wit, ccs, scheme)
 }
@@ -97,29 +97,25 @@ type T = PoseidonTranscript<RqNTT, CS>;
 fn main() {
     println!("Setting up example environment...");
 
+    let dparams = DP;
+
     println!("Decomposition parameters:");
-    println!("\tB: {}", DP::B);
-    println!("\tL: {}", DP::L);
-    println!("\tB_SMALL: {}", DP::B_SMALL);
-    println!("\tK: {}", DP::K);
+    println!("\tB: {}", dparams.B);
+    println!("\tL: {}", dparams.l);
+    println!("\tB_SMALL: {}", dparams.b);
+    println!("\tK: {}", dparams.k);
 
-    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<RqNTT, DP, CS>();
+    let (acc, wit_acc, cm_i, wit_i, ccs, scheme) = setup_example_environment::<RqNTT, CS>(&dparams);
 
-    let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
     println!("Generating proof...");
     let start = Instant::now();
 
-    let (_, _, proof) = NIFSProver::<RqNTT, DP, T>::prove(
-        &acc,
-        &wit_acc,
-        &cm_i,
-        &wit_i,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let mut nifs_prover = NIFSProver::new(dparams.clone(), prover_transcript);
+    let (_, _, proof) = nifs_prover
+        .prove(&acc, &wit_acc, &cm_i, &wit_i, &ccs, &scheme)
+        .unwrap();
     let duration = start.elapsed();
     println!("Proof generated in {:?}", duration);
 
@@ -147,8 +143,8 @@ fn main() {
 
     println!("Verifying proof");
     let start = Instant::now();
-    NIFSVerifier::<RqNTT, DP, T>::verify(&acc, &cm_i, &proof, &mut verifier_transcript, &ccs)
-        .unwrap();
+    let mut nifs_verifier = NIFSVerifier::new(dparams.clone(), verifier_transcript);
+    nifs_verifier.verify(&acc, &cm_i, &proof, &ccs).unwrap();
     let duration = start.elapsed();
     println!("Proof verified in {:?}", duration);
 }

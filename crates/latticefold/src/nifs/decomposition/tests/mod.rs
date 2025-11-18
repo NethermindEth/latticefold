@@ -18,7 +18,7 @@ use crate::{
     arith::{r1cs::get_test_z_split, tests::get_test_ccs, utils::mat_vec_mul, Witness, CCS, LCCCS},
     commitment::{AjtaiCommitmentScheme, Commitment},
     decomposition_parameters::{
-        test_params::{BabyBearDP, GoldilocksDP, StarkDP},
+        test_params::{dp_babybear, dp_goldilocks, dp_stark},
         DecompositionParams,
     },
     nifs::{
@@ -34,7 +34,8 @@ use crate::{
     utils::mle_helpers::{evaluate_mles, to_mles_err},
 };
 
-fn generate_decomposition_args<RqNTT, CS, DP>(
+fn generate_decomposition_args<RqNTT, CS>(
+    dparams: &DecompositionParams,
     kappa: usize,
     n: usize,
     wit_len: usize,
@@ -48,18 +49,17 @@ fn generate_decomposition_args<RqNTT, CS, DP>(
 )
 where
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-    DP: DecompositionParams,
+    CS: LatticefoldChallengeSet<RqNTT> + Sync,
 {
     let mut rng = ark_std::test_rng();
     let input: usize = rng.gen_range(1..101);
-    let ccs = get_test_ccs(n, DP::L);
+    let ccs = get_test_ccs(n, dparams.l);
     let log_m = ccs.s;
 
     let scheme = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
     let (_, x_ccs, _) = get_test_z_split::<RqNTT>(input);
 
-    let wit = Witness::rand::<_, DP>(&mut rng, wit_len);
+    let wit = Witness::rand(&mut rng, wit_len, dparams.B, dparams.l);
     let mut z: Vec<RqNTT> = Vec::with_capacity(x_ccs.len() + wit_len + 1);
 
     z.extend_from_slice(&x_ccs);
@@ -103,29 +103,26 @@ where
     )
 }
 
-fn test_decomposition<RqNTT, CS, DP>(kappa: usize, n: usize, wit_len: usize)
-where
+fn test_decomposition<RqNTT, CS>(
+    dparams: &DecompositionParams,
+    kappa: usize,
+    n: usize,
+    wit_len: usize,
+) where
     RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-    DP: DecompositionParams,
+    CS: LatticefoldChallengeSet<RqNTT> + Sync,
 {
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(kappa, n, wit_len);
+        generate_decomposition_args::<RqNTT, CS>(dparams, kappa, n, wit_len);
 
     let (_, _, _, decomposition_proof) =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::prove::<DP>(
-            &lcccs,
-            &wit,
-            &mut prover_transcript,
-            &ccs,
-            &scheme,
-        )
-        .unwrap();
+        LFDecompositionProver::new(dparams.clone(), &mut prover_transcript)
+            .prove(&lcccs, &wit, &ccs, &scheme)
+            .unwrap();
 
-    let res = LFDecompositionVerifier::<_, PoseidonTranscript<RqNTT, CS>>::verify::<DP>(
+    let res = LFDecompositionVerifier::new(dparams.clone(), &mut verifier_transcript).verify(
         &lcccs,
         &decomposition_proof,
-        &mut verifier_transcript,
         &ccs,
     );
     assert!(res.is_ok())
@@ -135,20 +132,20 @@ where
 fn test_decompose_witness() {
     type RqNTT = StarkRingNTT;
     type CS = StarkChallengeSet;
-    type DP = StarkDP;
+    let dparams = dp_stark();
     const KAPPA: usize = 4;
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
 
-    let (_, _, _, _, wit, _) = generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    let (_, _, mut ts, _, wit, _) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 
-    let wit_vec =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
+    let wit_vec = LFDecompositionProver::new(dparams.clone(), &mut ts).decompose_witness(&wit);
 
     // Compute expected result
-    let f_s = decompose_B_vec_into_k_vec::<RqNTT, DP>(&wit.f_coeff);
+    let f_s = decompose_B_vec_into_k_vec::<RqNTT>(&wit.f_coeff, dparams.b, dparams.k);
     let expected_wit_vec: Vec<Witness<RqNTT>> = cfg_into_iter!(f_s)
-        .map(Witness::from_f_coeff::<DP>)
+        .map(|f| Witness::from_f_coeff(f, dparams.B, dparams.l))
         .collect();
 
     // Validate
@@ -158,7 +155,7 @@ fn test_decompose_witness() {
     );
     assert_eq!(
         wit_vec.len() * wit_vec[0].f_coeff.len(),
-        wit.f_coeff.len() * DP::K,
+        wit.f_coeff.len() * dparams.k,
         "Mismatch in decomposed witness vector length"
     );
     assert_eq!(
@@ -171,27 +168,26 @@ fn test_decompose_witness() {
 fn test_compute_x_s() {
     type RqNTT = BabyBearRingNTT;
     type CS = BabyBearChallengeSet;
-    type DP = BabyBearDP;
+    let dparams = dp_babybear();
     const KAPPA: usize = 4;
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
 
-    let (lcccs, _, _, _, _, _) = generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
-    let x_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_x_s::<DP>(
-        lcccs.x_w.clone(),
-        lcccs.h,
-    );
+    let (lcccs, mut ts, _, _, _, _) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
+    let x_s = LFDecompositionProver::new(dparams.clone(), &mut ts)
+        .compute_x_s(lcccs.x_w.clone(), lcccs.h);
 
     // Compute expected result
     let mut x_w_clone = lcccs.x_w.clone();
     x_w_clone.push(lcccs.h);
-    let expected_x_s = decompose_big_vec_into_k_vec_and_compose_back::<RqNTT, DP>(x_w_clone);
+    let expected_x_s = decompose_big_vec_into_k_vec_and_compose_back::<RqNTT>(x_w_clone, &dparams);
 
     // Validate
     assert!(!x_s.is_empty(), "X_s vector should not be empty");
     assert_eq!(
         x_s.len(),
-        lcccs.x_w.len() * DP::K,
+        lcccs.x_w.len() * dparams.k,
         "Mismatch in X_s vector length"
     );
     assert_eq!(
@@ -204,25 +200,22 @@ fn test_compute_x_s() {
 fn test_commit_witnesses() {
     type RqNTT = GoldilocksRingNTT;
     type CS = GoldilocksChallengeSet;
-    type DP = GoldilocksDP;
+    let dparams = dp_goldilocks();
     const KAPPA: usize = 4;
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
 
-    let (cm_i, _, _, _, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    let (cm_i, _, mut ts, _, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 
-    let wit_vec =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
-    let y_s: Vec<Commitment<RqNTT>> =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::commit_witnesses::<DP>(
-            &wit_vec, &scheme, &cm_i,
-        )
-        .unwrap();
+    let prover = LFDecompositionProver::new(dparams, &mut ts);
+
+    let wit_vec = prover.decompose_witness(&wit);
+    let y_s: Vec<Commitment<RqNTT>> = prover.commit_witnesses(&wit_vec, &scheme, &cm_i).unwrap();
 
     // Compute expected result
     let expected_y_s: Vec<Commitment<RqNTT>> = cfg_iter!(wit_vec)
-        .map(|wit| wit.commit::<DP>(&scheme))
+        .map(|wit| wit.commit(&scheme))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
@@ -239,17 +232,16 @@ fn test_commit_witnesses() {
 fn test_compute_v_s() {
     type RqNTT = BabyBearRingNTT;
     type CS = BabyBearChallengeSet;
-    type DP = BabyBearDP;
+    let dparams = dp_babybear();
     const KAPPA: usize = 4;
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
 
-    let (lcccs, _, _, _, wit, _) = generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
-    let wit_vec =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
-    let v_s =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_v_s(&wit_vec, &lcccs.r)
-            .unwrap();
+    let (lcccs, _, mut ts, _, wit, _) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
+    let prover = LFDecompositionProver::new(dparams, &mut ts);
+    let wit_vec = prover.decompose_witness(&wit);
+    let v_s = LFDecompositionProver::<_, ()>::compute_v_s(&wit_vec, &lcccs.r).unwrap();
 
     // Compute expected result
     let expected_v_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
@@ -269,27 +261,20 @@ fn test_compute_v_s() {
 fn test_compute_u_s() {
     type RqNTT = GoldilocksRingNTT;
     type CS = GoldilocksChallengeSet;
-    type DP = GoldilocksDP;
+    let dparams = dp_goldilocks();
     const KAPPA: usize = 4;
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
 
-    let (lcccs, _, _, ccs, wit, _) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
-    let wit_vec =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::decompose_witness::<DP>(&wit);
-    let x_s = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_x_s::<DP>(
-        lcccs.x_w.clone(),
-        lcccs.h,
-    );
-    let mz_mles = LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_mz_mles(
-        &wit_vec, &ccs.M, &x_s, ccs.s,
-    )
-    .unwrap();
+    let (lcccs, _, mut ts, ccs, wit, _) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
+    let prover = LFDecompositionProver::new(dparams, &mut ts);
+    let wit_vec = prover.decompose_witness(&wit);
+    let x_s = prover.compute_x_s(lcccs.x_w.clone(), lcccs.h);
+    let mz_mles =
+        LFDecompositionProver::<_, ()>::compute_mz_mles(&wit_vec, &ccs.M, &x_s, ccs.s).unwrap();
 
-    let u_s =
-        LFDecompositionProver::<_, PoseidonTranscript<RqNTT, CS>>::compute_u_s(&mz_mles, &lcccs.r)
-            .unwrap();
+    let u_s = LFDecompositionProver::<_, ()>::compute_u_s(&mz_mles, &lcccs.r).unwrap();
 
     // Compute expected result
     let expected_u_s: Vec<Vec<RqNTT>> = cfg_iter!(wit_vec)
@@ -329,41 +314,34 @@ fn test_compute_u_s() {
 fn test_test_decomposition() {
     type RqNTT = StarkRingNTT;
     type CS = StarkChallengeSet;
-    type DP = StarkDP;
+    let dparams = dp_stark();
     const WIT_LEN: usize = 4;
     const KAPPA: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
 
-    test_decomposition::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    test_decomposition::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 }
 
 #[test]
 fn test_recompose_commitment() {
     type CS = GoldilocksChallengeSet;
     type RqNTT = GoldilocksRingNTT;
-    type DP = GoldilocksDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
-    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    let dparams = dp_goldilocks();
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n: usize = WIT_LEN * dparams.l;
     const KAPPA: usize = 4;
 
-    let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 
-    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<DP>(
-        &lcccs,
-        &wit,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let mut prover = LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+    let (_, _, _, proof) = prover.prove(&lcccs, &wit, &ccs, &scheme).unwrap();
 
-    let b_s = Verifier::calculate_b_s::<DP>();
+    let verifier = LFDecompositionVerifier::new(dparams.clone(), &mut verifier_transcript);
+    let b_s = verifier.calculate_b_s();
 
-    let should_equal_y0 =
-        Verifier::recompose_commitment(&proof.y_s, &b_s).expect("Recomposing proof failed");
+    let should_equal_y0 = LFDecompositionVerifier::<_, ()>::recompose_commitment(&proof.y_s, &b_s)
+        .expect("Recomposing proof failed");
 
     assert_eq!(should_equal_y0, lcccs.cm);
 }
@@ -372,27 +350,22 @@ fn test_recompose_commitment() {
 fn test_recompose_u() {
     type CS = StarkChallengeSet;
     type RqNTT = StarkRingNTT;
-    type DP = StarkDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
-    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    let dparams = dp_stark();
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
     const KAPPA: usize = 4;
 
-    let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
-    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<DP>(
-        &lcccs,
-        &wit,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
+    let (_, _, _, proof) = LFDecompositionProver::new(dparams.clone(), &mut prover_transcript)
+        .prove(&lcccs, &wit, &ccs, &scheme)
+        .unwrap();
 
-    let b_s = Verifier::calculate_b_s::<DP>();
+    let verifier = LFDecompositionVerifier::new(dparams.clone(), &mut verifier_transcript);
+    let b_s = verifier.calculate_b_s();
 
-    let u = Verifier::recompose(&proof.u_s, &b_s).expect("Recomposing proof u failed");
+    let u = LFDecompositionVerifier::<_, ()>::recompose(&proof.u_s, &b_s)
+        .expect("Recomposing proof u failed");
 
     assert_eq!(u, lcccs.u);
 }
@@ -401,28 +374,22 @@ fn test_recompose_u() {
 fn test_recompose_v() {
     type CS = BabyBearChallengeSet;
     type RqNTT = BabyBearRingNTT;
-    type DP = BabyBearDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
-    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    let dparams = dp_babybear();
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
     const KAPPA: usize = 4;
 
-    let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 
-    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<DP>(
-        &lcccs,
-        &wit,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let mut prover = LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+    let (_, _, _, proof) = prover.prove(&lcccs, &wit, &ccs, &scheme).unwrap();
 
-    let b_s = Verifier::calculate_b_s::<DP>();
+    let verifier = LFDecompositionVerifier::new(dparams.clone(), &mut verifier_transcript);
+    let b_s = verifier.calculate_b_s();
 
-    let v = Verifier::recompose(&proof.v_s, &b_s).expect("Recomposing proof u failed");
+    let v = LFDecompositionVerifier::<_, ()>::recompose(&proof.v_s, &b_s)
+        .expect("Recomposing proof u failed");
 
     assert_eq!(v, lcccs.v);
 }
@@ -431,28 +398,22 @@ fn test_recompose_v() {
 fn test_recompose_xw_and_h() {
     type CS = GoldilocksChallengeSet;
     type RqNTT = GoldilocksRingNTT;
-    type DP = GoldilocksDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
-    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    let dparams = dp_goldilocks();
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
     const KAPPA: usize = 4;
 
-    let (lcccs, _, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+    let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 
-    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<DP>(
-        &lcccs,
-        &wit,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let mut prover = LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+    let (_, _, _, proof) = prover.prove(&lcccs, &wit, &ccs, &scheme).unwrap();
 
-    let b_s = Verifier::calculate_b_s::<DP>();
+    let verifier = LFDecompositionVerifier::new(dparams.clone(), &mut verifier_transcript);
+    let b_s = verifier.calculate_b_s();
 
-    let mut x_w = Verifier::recompose(&proof.x_s, &b_s).expect("Recomposing proof x_w failed");
+    let mut x_w = LFDecompositionVerifier::<_, ()>::recompose(&proof.x_s, &b_s)
+        .expect("Recomposing proof x_w failed");
     let h = x_w.pop().expect("x_w does not contain h");
 
     assert_eq!(x_w, lcccs.x_w);
@@ -463,26 +424,20 @@ fn test_recompose_xw_and_h() {
 fn test_verify_full() {
     type CS = StarkChallengeSet;
     type RqNTT = StarkRingNTT;
-    type DP = StarkDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
-    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    let dparams = dp_stark();
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
     const KAPPA: usize = 4;
 
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 
-    let (_, _, _, proof) = LFDecompositionProver::<_, T>::prove::<DP>(
-        &lcccs,
-        &wit,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let (_, _, _, proof) = LFDecompositionProver::new(dparams.clone(), &mut prover_transcript)
+        .prove(&lcccs, &wit, &ccs, &scheme)
+        .unwrap();
 
-    let _ = Verifier::verify::<DP>(&lcccs, &proof, &mut verifier_transcript, &ccs)
+    let _ = LFDecompositionVerifier::new(dparams, &mut verifier_transcript)
+        .verify(&lcccs, &proof, &ccs)
         .expect("Failed to verify decomposition proof");
 }
 
@@ -490,31 +445,24 @@ fn test_verify_full() {
 fn test_verify_invalid_proof() {
     type CS = GoldilocksChallengeSet;
     type RqNTT = GoldilocksRingNTT;
-    type DP = GoldilocksDP;
-    type T = PoseidonTranscript<RqNTT, CS>;
-    type Verifier = LFDecompositionVerifier<RqNTT, T>;
+    let dparams = dp_goldilocks();
     const WIT_LEN: usize = 4;
-    const N: usize = WIT_LEN * DP::L;
+    let n = WIT_LEN * dparams.l;
     const KAPPA: usize = 4;
 
     let (lcccs, mut verifier_transcript, mut prover_transcript, ccs, wit, scheme) =
-        generate_decomposition_args::<RqNTT, CS, DP>(KAPPA, N, WIT_LEN);
+        generate_decomposition_args::<RqNTT, CS>(&dparams, KAPPA, n, WIT_LEN);
 
-    let (_, _, _, mut proof) = LFDecompositionProver::<_, T>::prove::<DP>(
-        &lcccs,
-        &wit,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let mut prover = LFDecompositionProver::new(dparams.clone(), &mut prover_transcript);
+    let (_, _, _, mut proof) = prover.prove(&lcccs, &wit, &ccs, &scheme).unwrap();
 
     // Make proof components have mismatched lengths
     if !proof.v_s.is_empty() {
         proof.v_s[0][0] += RqNTT::one();
     }
 
-    let result = Verifier::verify::<DP>(&lcccs, &proof, &mut verifier_transcript, &ccs);
+    let result = LFDecompositionVerifier::new(dparams, &mut verifier_transcript)
+        .verify(&lcccs, &proof, &ccs);
     assert!(
         result.is_err(),
         "Verification should fail with mismatched proof component lengths"
