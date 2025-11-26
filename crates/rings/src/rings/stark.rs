@@ -4,7 +4,7 @@ use stark_rings::cyclotomic_ring::models::stark_prime::{Fq, RqNTT, RqPoly};
 use super::SuitableRing;
 use crate::{
     ark_base::*,
-    challenge_set::{error, LatticefoldChallengeSet},
+    challenge_set::{error, ChallengeSet},
 };
 
 /// Starknet prime ring in the NTT form.
@@ -21,8 +21,8 @@ pub type StarkRingPoly = RqPoly;
 
 impl SuitableRing for StarkRingNTT {
     type CoefficientRepresentation = StarkRingPoly;
-
     type PoseidonParams = StarkPoseidonConfig;
+    type ChallengeSet = StarkChallengeSet;
 }
 
 pub struct StarkPoseidonConfig;
@@ -31,10 +31,10 @@ pub struct StarkPoseidonConfig;
 pub struct StarkChallengeSet;
 
 /// Small challenges are the ring elements with coefficients in range [0; 2^8[.
-impl LatticefoldChallengeSet<StarkRingNTT> for StarkChallengeSet {
+impl ChallengeSet<StarkRingNTT> for StarkChallengeSet {
     const BYTES_NEEDED: usize = 16;
 
-    fn short_challenge_from_random_bytes(
+    fn small_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<<StarkRingNTT as SuitableRing>::CoefficientRepresentation, error::ChallengeSetError>
     {
@@ -59,7 +59,7 @@ mod tests {
 
     #[test]
     fn test_small_challenge_from_random_bytes() {
-        let challenge = StarkChallengeSet::short_challenge_from_random_bytes(&[
+        let challenge = StarkChallengeSet::small_challenge_from_random_bytes(&[
             0x7b, 0x4b, 0xe5, 0x8e, 0xe5, 0x11, 0xd2, 0xd0, 0x9c, 0x22, 0xba, 0x2e, 0xeb, 0xa8,
             0xba, 0x35,
         ])

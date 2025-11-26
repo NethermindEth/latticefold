@@ -3,7 +3,7 @@ use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, RqNTT, RqPoly};
 use super::SuitableRing;
 use crate::{
     ark_base::*,
-    challenge_set::{error, LatticefoldChallengeSet},
+    challenge_set::{error, ChallengeSet},
 };
 
 /// Goldilocks ring in the NTT form.
@@ -22,6 +22,7 @@ pub type GoldilocksRingPoly = RqPoly;
 impl SuitableRing for GoldilocksRingNTT {
     type CoefficientRepresentation = RqPoly;
     type PoseidonParams = GoldilocksPoseidonConfig;
+    type ChallengeSet = GoldilocksChallengeSet;
 }
 
 pub struct GoldilocksPoseidonConfig;
@@ -33,12 +34,12 @@ const MAX_COEFF: i16 = 32;
 
 /// For Goldilocks prime the challenge set is the set of all
 /// ring elements whose coefficients are in the range [-32, 32[.
-impl LatticefoldChallengeSet<GoldilocksRingNTT> for GoldilocksChallengeSet {
+impl ChallengeSet<GoldilocksRingNTT> for GoldilocksChallengeSet {
     /// To generate an element in [-32, 32[ it is enough to use 6 bits.
     /// Thus to generate 24 coefficients in that range 18 bytes is enough.
     const BYTES_NEEDED: usize = 18;
 
-    fn short_challenge_from_random_bytes(
+    fn small_challenge_from_random_bytes(
         bs: &[u8],
     ) -> Result<GoldilocksRingPoly, error::ChallengeSetError> {
         if bs.len() != Self::BYTES_NEEDED {
@@ -76,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_small_challenge_from_random_bytes() {
-        let challenge = GoldilocksChallengeSet::short_challenge_from_random_bytes(&[
+        let challenge = GoldilocksChallengeSet::small_challenge_from_random_bytes(&[
             0x7b, 0x4b, 0xe5, 0x8e, 0xe5, 0x11, 0xd2, 0xd0, 0x9c, 0x22, 0xba, 0x2e, 0xeb, 0xa8,
             0xba, 0x35, 0xf2, 0x18,
         ])

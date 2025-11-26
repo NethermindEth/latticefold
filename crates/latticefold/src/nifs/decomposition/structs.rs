@@ -1,7 +1,7 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_std::marker::PhantomData;
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use stark_rings::{OverField, Ring};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 

@@ -5,7 +5,7 @@ use ark_std::{
     iter::{self, successors},
     iterable::Iterable,
 };
-use cyclotomic_rings::{rings::SuitableRing, rotation::rot_lin_combination};
+use latticefold_rings::{rings::SuitableRing, rotation::rot_lin_combination};
 use stark_rings::{cyclotomic_ring::CRT, OverField, PolyRing, Ring};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 
@@ -15,7 +15,7 @@ use crate::{
     commitment::Commitment,
     decomposition_parameters::DecompositionParams,
     nifs::error::FoldingError,
-    transcript::{Transcript, TranscriptWithShortChallenges},
+    transcript::{Transcript, TranscriptWithSmallChallenges},
     utils::sumcheck::utils::build_eq_x_r,
 };
 
@@ -98,7 +98,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
 /// Generates `rho` values based on the provided transcript and decomposition parameters.
 ///
 /// This function is used within the module to extract or compute values required for further
-/// operations, based on the interaction with a transcript that supports short challenges.
+/// operations, based on the interaction with a transcript that supports small challenges.
 ///
 /// # Type Parameters
 /// - `R`: A ring suitable to be used in the LatticeFold protocol.
@@ -115,7 +115,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> SqueezeAlphaBetaZetaMu<NTT> for T {
 ///
 pub(super) fn get_rhos<
     R: SuitableRing,
-    T: TranscriptWithShortChallenges<R>,
+    T: TranscriptWithSmallChallenges<R>,
     P: DecompositionParams,
 >(
     transcript: &mut T,

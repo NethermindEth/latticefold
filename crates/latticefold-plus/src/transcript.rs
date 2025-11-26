@@ -3,8 +3,8 @@ use ark_crypto_primitives::sponge::{
     CryptographicSponge,
 };
 use ark_ff::{Field, PrimeField};
-use cyclotomic_rings::rings::GetPoseidonParams;
 use latticefold::transcript::Transcript;
+use latticefold_rings::rings::GetPoseidonParams;
 use stark_rings::OverField;
 
 /// Transcript using Poseidon sponge

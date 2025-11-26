@@ -1,4 +1,4 @@
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 use stark_rings::{
     balanced_decomposition::DecomposeToVec,
     cyclotomic_ring::{CRT, ICRT},
@@ -115,7 +115,7 @@ impl<NTT: SuitableRing> AjtaiCommitmentScheme<NTT> {
 
 #[cfg(test)]
 mod tests {
-    use cyclotomic_rings::rings::GoldilocksRingNTT;
+    use latticefold_rings::rings::GoldilocksRingNTT;
     use stark_rings::OverField;
 
     use super::{AjtaiCommitmentScheme, CommitmentError};

@@ -1,7 +1,7 @@
 #![allow(non_snake_case, clippy::upper_case_acronyms)]
 
 use ark_std::{cfg_into_iter, cfg_iter};
-use cyclotomic_rings::rings::SuitableRing;
+use latticefold_rings::rings::SuitableRing;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use stark_rings::OverField;

@@ -6,7 +6,7 @@ license.workspace = true
 
 [features]
 default = ["std"]
-std = ["ark-std/std", "cyclotomic-rings/std", "rand/std"]
+std = ["ark-std/std", "latticefold-rings/std", "rand/std"]
 parallel = [
     "dep:rayon",
     "std",
@@ -21,12 +21,13 @@ getrandom = ["ark-std/getrandom"]
 dhat-heap = []
 
 [dependencies]
+latticefold-rings = { workspace = true }
+
 ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
 ark-std = { workspace = true }
 criterion = { workspace = true }
-cyclotomic-rings = { workspace = true }
 hashbrown = "0.15"
 latticefold = { workspace = true }
 num-bigint = { workspace = true }

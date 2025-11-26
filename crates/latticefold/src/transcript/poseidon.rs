@@ -3,38 +3,33 @@ use ark_crypto_primitives::sponge::{
     CryptographicSponge,
 };
 use ark_ff::Field;
-use ark_std::marker::PhantomData;
-use cyclotomic_rings::{
-    challenge_set::LatticefoldChallengeSet,
+use latticefold_rings::{
+    challenge_set::ChallengeSet,
     rings::{GetPoseidonParams, SuitableRing},
 };
 use stark_rings::OverField;
 
-use super::{Transcript, TranscriptWithShortChallenges};
+use super::{Transcript, TranscriptWithSmallChallenges};
 use crate::ark_base::*;
 
 /// PoseidonTranscript implements the Transcript trait using the Poseidon hash
 #[derive(Clone)]
-pub struct PoseidonTranscript<R: OverField, CS> {
-    _marker: PhantomData<CS>,
+pub struct PoseidonTranscript<R: OverField> {
     sponge: PoseidonSponge<<R::BaseRing as Field>::BasePrimeField>,
 }
 
-impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> Default for PoseidonTranscript<R, CS> {
+impl<R: SuitableRing> Default for PoseidonTranscript<R> {
     fn default() -> Self {
         Self::new(&R::PoseidonParams::get_poseidon_config())
     }
 }
 
-impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
+impl<R: OverField> Transcript<R> for PoseidonTranscript<R> {
     type TranscriptConfig = PoseidonConfig<<R::BaseRing as Field>::BasePrimeField>;
 
     fn new(config: &Self::TranscriptConfig) -> Self {
         let sponge = PoseidonSponge::<<R::BaseRing as Field>::BasePrimeField>::new(config);
-        Self {
-            sponge,
-            _marker: PhantomData,
-        }
+        Self { sponge }
     }
 
     fn absorb(&mut self, v: &R) {
@@ -61,15 +56,13 @@ impl<R: OverField, CS> Transcript<R> for PoseidonTranscript<R, CS> {
     }
 }
 
-impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithShortChallenges<R>
-    for PoseidonTranscript<R, CS>
-{
-    type ChallengeSet = CS;
+impl<R: SuitableRing> TranscriptWithSmallChallenges<R> for PoseidonTranscript<R> {
+    type ChallengeSet = R::ChallengeSet;
 
-    fn get_short_challenge(&mut self) -> R::CoefficientRepresentation {
+    fn get_small_challenge(&mut self) -> R::CoefficientRepresentation {
         let random_bytes = self.sponge.squeeze_bytes(Self::ChallengeSet::BYTES_NEEDED);
 
-        Self::ChallengeSet::short_challenge_from_random_bytes(&random_bytes)
+        Self::ChallengeSet::small_challenge_from_random_bytes(&random_bytes)
             .expect("not enough bytes to get a small challenge")
     }
 }
@@ -77,15 +70,14 @@ impl<R: SuitableRing, CS: LatticefoldChallengeSet<R>> TranscriptWithShortChallen
 #[cfg(test)]
 mod tests {
     use ark_ff::BigInt;
-    use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT, GoldilocksRingPoly};
+    use latticefold_rings::rings::{GoldilocksRingNTT, GoldilocksRingPoly};
     use stark_rings::cyclotomic_ring::models::goldilocks::{Fq, Fq3};
 
     use super::*;
 
     #[test]
     fn test_get_big_challenge() {
-        let mut transcript =
-            PoseidonTranscript::<GoldilocksRingNTT, GoldilocksChallengeSet>::default();
+        let mut transcript = PoseidonTranscript::<GoldilocksRingNTT>::default();
 
         transcript
             .sponge
@@ -102,8 +94,7 @@ mod tests {
 
     #[test]
     fn test_get_small_challenge() {
-        let mut transcript =
-            PoseidonTranscript::<GoldilocksRingNTT, GoldilocksChallengeSet>::default();
+        let mut transcript = PoseidonTranscript::<GoldilocksRingNTT>::default();
 
         transcript
             .sponge
@@ -138,6 +129,6 @@ mod tests {
 
         let expected = GoldilocksRingPoly::from(expected_coeffs);
 
-        assert_eq!(expected, transcript.get_short_challenge())
+        assert_eq!(expected, transcript.get_small_challenge())
     }
 }
