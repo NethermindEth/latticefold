@@ -79,3 +79,7 @@ harness = false
 [[bench]]
 name = "double_commitment"
 harness = false
+
+[[bench]]
+name = "split"
+harness = false
