@@ -87,3 +87,7 @@ harness = false
 [[bench]]
 name = "setchk"
 harness = false
+
+[[bench]]
+name = "rgchk"
+harness = false
