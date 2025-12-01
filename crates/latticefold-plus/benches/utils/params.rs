@@ -30,4 +30,21 @@ pub mod quick {
         (32768, 2, 2),
         (65536, 4, 2),
     ];
+
+    /// Commitment transformation parameters: (L, witness_size, k, kappa)
+    ///
+    /// The commitment transformation builds on range check, so the same constraint applies:
+    /// witness_size >= kappa * k * d * l * d
+    /// For FrogRing (d=16, l=22): witness_size >= kappa * k * 5632
+    ///
+    /// Parameters:
+    /// - L: number of instances to transform/fold
+    /// - witness_size: length of witness vector
+    /// - k: decomposition width (determines range B = (d/2)^k)
+    /// - kappa: number of commitment rows (security parameter)
+    pub const CM: &[(usize, usize, usize, usize)] = &[
+        (2, 32768, 2, 2),   // 32768 >= 2*2*5632=22528 ✓ Binary folding
+        (4, 65536, 2, 2),   // 65536 >= 2*2*5632=22528 ✓ Quaternary folding
+        (8, 65536, 4, 2),   // 65536 >= 2*4*5632=45056 ✓ Octary folding
+    ];
 }

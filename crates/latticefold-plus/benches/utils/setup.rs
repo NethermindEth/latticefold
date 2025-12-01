@@ -183,3 +183,110 @@ pub fn setup_rgchk_proof(
 
     (rg, dcom)
 }
+
+/// Generate test input for commitment transformation benchmarks
+///
+/// # Arguments
+/// * `L` - Number of instances to transform/fold
+/// * `witness_size` - Length of witness vector (must satisfy: witness_size >= kappa * k * d * l * d)
+/// * `k` - Decomposition width for range check
+/// * `kappa` - Number of commitment rows (security parameter)
+///
+/// # Returns
+/// `Cm<R>` structure ready for commitment transformation
+///
+/// # Panics
+/// Panics if witness_size violates the constraint: witness_size >= kappa * k * d * l * d
+pub fn setup_cm_input(L: usize, witness_size: usize, k: usize, kappa: usize) -> latticefold_plus::cm::Cm<R> {
+    let mut rng = bench_rng();
+
+    // Compute decomposition parameters from ring parameters
+    let d = R::dimension();
+    let b = (d / 2) as u128;
+
+    // Compute l = ⌈log_b(q)⌉ where q is the base ring modulus
+    let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
+        / (b as f64).ln())
+    .ceil() as usize;
+
+    // Validate constraint: witness_size >= kappa * k * d * l * d
+    let min_witness_size = kappa * k * d * l * d;
+    assert!(
+        witness_size >= min_witness_size,
+        "Invalid parameters: witness_size ({}) must be >= kappa * k * d * l * d = {} * {} * {} * {} * {} = {}",
+        witness_size, kappa, k, d, l, d, min_witness_size
+    );
+
+    let dparams = DecompParameters { b, k, l };
+
+    // Create L instances (for folding)
+    let instances: Vec<RgInstance<R>> = (0..L)
+        .map(|_| {
+            // Generate witness vector with small coefficients
+            let f: Vec<R> = (0..witness_size)
+                .map(|_| {
+                    let mut r = R::zero();
+                    // Use small coefficients (range [0, 10))
+                    r.coeffs_mut()[0] = ((rng.next_u32() % 10) as u64).into();
+                    r
+                })
+                .collect();
+
+            // Generate Ajtai commitment matrix (size: kappa × witness_size)
+            let A = Matrix::<R>::rand(&mut rng, kappa, witness_size);
+
+            // Create range check instance using from_f
+            RgInstance::from_f(f, &A, &dparams)
+        })
+        .collect();
+
+    let nvars = (witness_size as f64).log2().ceil() as usize;
+
+    let rg = Rg {
+        nvars,
+        instances,
+        dparams,
+    };
+
+    latticefold_plus::cm::Cm { rg }
+}
+
+/// Generate commitment transformation proof for verification benchmarks
+///
+/// # Arguments
+/// * `L` - Number of instances to transform/fold
+/// * `witness_size` - Length of witness vector
+/// * `k` - Decomposition width
+/// * `kappa` - Number of commitment rows
+///
+/// # Returns
+/// Tuple of (input, proof)
+///
+/// # Validation
+/// Proof is verified to be valid before returning
+pub fn setup_cm_proof(
+    L: usize,
+    witness_size: usize,
+    k: usize,
+    kappa: usize,
+) -> (latticefold_plus::cm::Cm<R>, latticefold_plus::cm::CmProof<R>) {
+    let cm = setup_cm_input(L, witness_size, k, kappa);
+
+    // Create modified identity matrix M
+    let mut m = SparseMatrix::identity(witness_size);
+    m.coeffs[0][0].0 = 2u128.into();
+    let M = vec![m];
+
+    let mut ts = PoseidonTranscript::empty::<PC>();
+
+    // Generate proof via commitment transformation
+    let (_com, proof) = cm.prove(&M, &mut ts);
+
+    // Verify proof is valid
+    let mut verify_ts = PoseidonTranscript::empty::<PC>();
+    proof
+        .verify(&M, &mut verify_ts)
+        .expect("Generated commitment transformation proof should be valid");
+
+    (cm, proof)
+}
