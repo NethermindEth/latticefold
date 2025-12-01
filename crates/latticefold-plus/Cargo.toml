@@ -83,3 +83,7 @@ harness = false
 [[bench]]
 name = "split"
 harness = false
+
+[[bench]]
+name = "setchk"
+harness = false
