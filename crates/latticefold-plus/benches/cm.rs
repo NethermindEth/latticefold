@@ -22,7 +22,7 @@ use utils::{quick, setup_cm_input, setup_cm_proof};
 
 /// Configure benchmark group with benchmark settings
 fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
-    group.sample_size(10);
+    group.sample_size(50);
     group.measurement_time(std::time::Duration::from_secs(10));
     group.warm_up_time(std::time::Duration::from_secs(3));
 }
@@ -39,8 +39,8 @@ fn bench_cm_prover(c: &mut Criterion) {
     configure_benchmark_group(&mut group);
 
     for &(L, witness_size, k, kappa) in quick::CM {
-        // Throughput: number of ring elements transformed
-        group.throughput(Throughput::Elements(witness_size as u64));
+        // Throughput: number of instances folded
+        group.throughput(Throughput::Elements(L as u64));
 
         let param_label = format!("L={}_w={}_k={}_κ={}", L, witness_size, k, kappa);
 
@@ -78,7 +78,8 @@ fn bench_cm_verifier(c: &mut Criterion) {
     configure_benchmark_group(&mut group);
 
     for &(L, witness_size, k, kappa) in quick::CM {
-        group.throughput(Throughput::Elements(witness_size as u64));
+        // Throughput: number of instances folded
+        group.throughput(Throughput::Elements(L as u64));
 
         let param_label = format!("L={}_w={}_k={}_κ={}", L, witness_size, k, kappa);
 
@@ -119,7 +120,8 @@ fn bench_cm_scaling_L(c: &mut Criterion) {
     const L_VALUES: [usize; 4] = [2, 4, 6, 8];
 
     for L in L_VALUES {
-        group.throughput(Throughput::Elements(WITNESS_SIZE as u64));
+        // Throughput: number of instances folded
+        group.throughput(Throughput::Elements(L as u64));
 
         group.bench_with_input(
             BenchmarkId::from_parameter(L),
