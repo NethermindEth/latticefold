@@ -43,8 +43,24 @@ pub mod quick {
     /// - k: decomposition width (determines range B = (d/2)^k)
     /// - kappa: number of commitment rows (security parameter)
     pub const CM: &[(usize, usize, usize, usize)] = &[
-        (2, 32768, 2, 2),   // 32768 >= 2*2*5632=22528 ✓ Binary folding
-        (4, 65536, 2, 2),   // 65536 >= 2*2*5632=22528 ✓ Quaternary folding
-        (8, 65536, 4, 2),   // 65536 >= 2*4*5632=45056 ✓ Octary folding
+        (2, 65536, 2, 2),
+        (4, 65536, 2, 2),
+        (8, 65536, 2, 2),
+    ];
+
+    /// Multilinear folding parameters: (L, n, k, κ, B)
+    ///
+    /// Parameters:
+    /// - L: number of instances to fold (higher L = better amortization)
+    /// - n: witness size (length of witness vector after decomposition)
+    /// - k: decomposition width (determines range bound)
+    /// - κ (kappa): number of commitment rows (security parameter)
+    /// - B: norm bound parameter
+    ///
+    /// These parameters hold n, k, kappa, and B constant to isolate L's impact
+    pub const MLIN: &[(usize, usize, usize, usize, usize)] = &[
+        (2, 65536, 2, 2, 50),   // 65536 >= 2*2*5632=22528 ✓ Baseline
+        (4, 65536, 2, 2, 50),   // 65536 >= 2*2*5632=22528 ✓ 2x instances, same difficulty
+        (8, 65536, 2, 2, 50),   // 65536 >= 2*2*5632=22528 ✓ 4x instances, same difficulty
     ];
 }

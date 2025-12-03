@@ -6,7 +6,11 @@ use stark_rings::{
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
+use latticefold::arith::r1cs::R1CS;
 use latticefold_plus::{
+    lin::{LinB, Linearize, LinParameters, LinearizedVerify},
+    mlin::{LinB2, Mlin},
+    r1cs::{r1cs_decomposed_square, ComR1CS},
     rgchk::{DecompParameters, Rg, RgInstance},
     setchk::{In, MonomialSet, Out},
     transcript::PoseidonTranscript,
@@ -289,4 +293,136 @@ pub fn setup_cm_proof(
         .expect("Generated commitment transformation proof should be valid");
 
     (cm, proof)
+}
+
+/// Generate test input for multilinear folding benchmarks
+///
+/// Creates valid Mlin<R> input.
+/// This function creates L linearized R1CS instances ready for multilinear folding.
+///
+/// # Arguments
+/// * `L` - Number of instances to fold (higher L = better amortization)
+/// * `n` - Witness size (length of witness vector after decomposition)
+/// * `k` - Decomposition width
+/// * `kappa` - Number of commitment rows
+/// * `B` - Norm bound parameter
+///
+/// # Returns
+/// `Mlin<R>`
+///
+/// # Panics
+/// Panics if n violates the constraint: n >= kappa * k * d * l * d
+pub fn setup_mlin_input(L: usize, n: usize, k: usize, kappa: usize, B: usize) -> Mlin<R> {
+    let mut rng = bench_rng();
+
+    // Compute decomposition parameters from ring parameters
+    let d = R::dimension();
+    let b = (d / 2) as u128;
+
+    // Compute l = ⌈log_b(q)⌉ where q is the base ring modulus
+    let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
+        / (b as f64).ln())
+    .ceil() as usize;
+
+    // Validate constraint: n >= kappa * k * d * l * d
+    let min_witness_size = kappa * k * d * l * d;
+    assert!(
+        n >= min_witness_size,
+        "Invalid parameters: n ({}) must be >= kappa * k * d * l * d = {} * {} * {} * {} * {} = {}",
+        n, kappa, k, d, l, d, min_witness_size
+    );
+
+    let params = LinParameters {
+        kappa,
+        decomp: DecompParameters { b, k, l },
+    };
+
+    // Create R1CS with modified first entry
+    let mut r1cs = r1cs_decomposed_square(
+        R1CS::<R> {
+            l: 1,
+            A: SparseMatrix::identity(n / k),
+            B: SparseMatrix::identity(n / k),
+            C: SparseMatrix::identity(n / k),
+        },
+        n,
+        B as u128,
+        k,
+    );
+
+    r1cs.A.coeffs[0][0].0 = 2u128.into();
+    r1cs.C.coeffs[0][0].0 = 2u128.into();
+
+    // Generate Ajtai commitment matrix (size: kappa × n)
+    let A = Matrix::<R>::rand(&mut rng, kappa, n);
+
+    // Create L different witnesses with small variations
+    let mut lins = Vec::with_capacity(L);
+    let mut ts = PoseidonTranscript::empty::<PC>();
+
+    for i in 0..L {
+        // Create witness: mostly ones, with small variations
+        let mut z = vec![R::one(); n / k];
+        if i > 0 {
+            // Vary first element for non-first instances
+            z[0] = R::from((i % 10) as u128);
+        }
+
+        // Create ComR1CS instance
+        let cr1cs = ComR1CS::new(r1cs.clone(), z, 1, B as u128, k, &A);
+
+        // Linearize to get LinB instance
+        let (linb, _lproof) = cr1cs.linearize(&mut ts);
+        lins.push(linb);
+    }
+
+    Mlin { lins, params }
+}
+
+/// Generate multilinear folding proof for verification benchmarks
+///
+/// Creates a complete valid proof by running the prover.
+///
+/// # Arguments
+/// * `L` - Number of instances to fold
+/// * `n` - Witness size (length of witness vector after decomposition)
+/// * `k` - Decomposition width
+/// * `kappa` - Number of commitment rows
+/// * `B` - Norm bound parameter
+///
+/// # Returns
+/// Tuple of (input Mlin, folded LinB2, proof)
+///
+/// # Validation
+/// Proof is verified to be valid before returning
+pub fn setup_mlin_proof(
+    L: usize,
+    n: usize,
+    k: usize,
+    kappa: usize,
+    B: usize,
+) -> (Mlin<R>, LinB2<R>, latticefold_plus::cm::CmProof<R>) {
+    let mlin = setup_mlin_input(L, n, k, kappa, B);
+    let mut rng = bench_rng();
+
+    // Create M matrix
+    let mut m = SparseMatrix::identity(n);
+    m.coeffs[0][0].0 = 2u128.into();
+    let M = vec![m];
+
+    // Create another A matrix for folding
+    let A = Matrix::<R>::rand(&mut rng, kappa, n);
+
+    let mut ts = PoseidonTranscript::empty::<PC>();
+
+    // Execute multilinear folding
+    let (linb2, proof) = mlin.mlin(&A, &M, &mut ts);
+
+    // Cryptographic validation: verify proof is valid
+    let mut verify_ts = PoseidonTranscript::empty::<PC>();
+    proof
+        .verify(&M, &mut verify_ts)
+        .expect("Generated multilinear folding proof should be valid");
+
+    (mlin, linb2, proof)
 }
