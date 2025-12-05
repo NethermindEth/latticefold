@@ -59,8 +59,28 @@ pub mod quick {
     ///
     /// These parameters hold n, k, kappa, and B constant to isolate L's impact
     pub const MLIN: &[(usize, usize, usize, usize, usize)] = &[
-        (2, 65536, 2, 2, 50),   // 65536 >= 2*2*5632=22528 ✓ Baseline
-        (4, 65536, 2, 2, 50),   // 65536 >= 2*2*5632=22528 ✓ 2x instances, same difficulty
-        (8, 65536, 2, 2, 50),   // 65536 >= 2*2*5632=22528 ✓ 4x instances, same difficulty
+        (2, 65536, 2, 2, 50),
+        (4, 65536, 2, 2, 50),
+        (8, 65536, 2, 2, 50),
+    ];
+
+    /// Decomposition parameters: (n, k, κ, B)
+    ///
+    /// This is Construction 5.3 (Π_decomp,B) - decomposes norm B² to 2×B
+    ///
+    /// Constraint: n >= κ * k * d * l * d
+    /// For FrogRing (d=16, l=22): n >= κ * k * 5632
+    ///
+    /// Parameters:
+    /// - n: witness size (before decomposition, with norm B²)
+    /// - k: decomposition width
+    /// - κ (kappa): number of commitment rows
+    /// - B: norm bound for output (input has bound B²)
+    ///
+    /// These parameters hold n, k, and B constant to isolate kappa scaling
+    pub const DECOMP_PARAMS: &[(usize, usize, usize, usize)] = &[
+        (131072, 4, 2, 50),
+        (131072, 4, 3, 50),
+        (131072, 4, 4, 50),
     ];
 }

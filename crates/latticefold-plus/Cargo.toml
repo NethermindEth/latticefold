@@ -99,3 +99,7 @@ harness = false
 [[bench]]
 name = "mlin"
 harness = false
+
+[[bench]]
+name = "decomp"
+harness = false

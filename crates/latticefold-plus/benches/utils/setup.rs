@@ -8,6 +8,7 @@ use stark_rings_linalg::{Matrix, SparseMatrix};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold::arith::r1cs::R1CS;
 use latticefold_plus::{
+    decomp::{Decomp, DecompProof},
     lin::{LinB, Linearize, LinParameters, LinearizedVerify},
     mlin::{LinB2, Mlin},
     r1cs::{r1cs_decomposed_square, ComR1CS},
@@ -425,4 +426,136 @@ pub fn setup_mlin_proof(
         .expect("Generated multilinear folding proof should be valid");
 
     (mlin, linb2, proof)
+}
+
+/// Generate test input for decomposition benchmarks
+///
+/// Creates valid Decomp<R> input for Construction 5.3 (Π_decomp,B).
+/// This decomposes a LinB2 instance (norm B²) into 2 LinB instances (norm B each).
+///
+/// # Arguments
+/// * `n` - Witness size (with norm B² before decomposition)
+/// * `k` - Decomposition width
+/// * `kappa` - Number of commitment rows
+/// * `B` - Norm bound parameter (output will have norm B, input has B²)
+///
+/// # Returns
+/// `Decomp<R>` structure ready for decomposition
+///
+/// # Panics
+/// Panics if n violates the constraint: n >= kappa * k * d * l * d
+pub fn setup_decomp_input(n: usize, k: usize, kappa: usize, _B: usize) -> Decomp<R> {
+    use ark_std::One;
+    use latticefold::arith::r1cs::R1CS;
+    use latticefold_plus::r1cs::r1cs_decomposed_square;
+
+    // Create identity R1CS
+    let mut r1cs = R1CS::<R> {
+        l: 1,
+        A: SparseMatrix::identity(n / k),
+        B: SparseMatrix::identity(n / k),
+        C: SparseMatrix::identity(n / k),
+    };
+    r1cs.A.coeffs[0][0].0 = 2u128.into();
+    r1cs.C.coeffs[0][0].0 = 2u128.into();
+
+    // Apply r1cs_decomposed_square transformation
+    let r1cs = r1cs_decomposed_square(r1cs, n, 2, k);
+
+    // Create witness (all ones)
+    let z = vec![R::one(); n / k];
+
+    let mut rng = bench_rng();
+    let A = Matrix::<R>::rand(&mut rng, kappa, n);
+
+    // Create ComR1CS
+    let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
+
+    // Linearize to get random challenges
+    let mut ts = PoseidonTranscript::empty::<PC>();
+    let (linb, lproof) = cr1cs.linearize(&mut ts);
+
+    // Verify linearization
+    let mut ts = PoseidonTranscript::empty::<PC>();
+    lproof.verify(&mut ts);
+
+    // Create Decomp with witness f for prover
+    // Note: f is the witness vector (needed for decompose), not the commitment
+    Decomp {
+        f: cr1cs.f,
+        r: lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>(),
+        M: cr1cs.x.matrices(),
+    }
+}
+
+/// Generate decomposition proof for verification benchmarks
+///
+/// Creates a complete valid proof by running the decomposition prover.
+///
+/// # Arguments
+/// * `n` - Witness size
+/// * `k` - Decomposition width
+/// * `kappa` - Number of commitment rows
+/// * `B` - Norm bound parameter
+///
+/// # Returns
+/// Tuple of (input Decomp, two output LinB instances, proof)
+///
+/// # Validation
+/// Proof is verified to be valid before returning
+pub fn setup_decomp_proof(
+    n: usize,
+    k: usize,
+    kappa: usize,
+    B: usize,
+) -> (Decomp<R>, (LinB<R>, LinB<R>), DecompProof<R>) {
+    use ark_std::One;
+    use latticefold::arith::r1cs::R1CS;
+    use latticefold_plus::r1cs::r1cs_decomposed_square;
+
+    // Create identity R1CS
+    let mut r1cs = R1CS::<R> {
+        l: 1,
+        A: SparseMatrix::identity(n / k),
+        B: SparseMatrix::identity(n / k),
+        C: SparseMatrix::identity(n / k),
+    };
+    r1cs.A.coeffs[0][0].0 = 2u128.into();
+    r1cs.C.coeffs[0][0].0 = 2u128.into();
+    let r1cs = r1cs_decomposed_square(r1cs, n, 2, k);
+
+    let z = vec![R::one(); n / k];
+
+    let mut rng = bench_rng();
+    let A = Matrix::<R>::rand(&mut rng, kappa, n);
+
+    let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
+
+    let mut ts = PoseidonTranscript::empty::<PC>();
+    let (linb, lproof) = cr1cs.linearize(&mut ts);
+
+    let mut ts = PoseidonTranscript::empty::<PC>();
+    lproof.verify(&mut ts);
+
+    // Create Decomp with witness f for calling decompose
+    let decomp_prover = Decomp {
+        f: cr1cs.f,
+        r: lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>(),
+        M: cr1cs.x.matrices(),
+    };
+
+    // Execute decomposition with B
+    let ((linb0, linb1), proof) = decomp_prover.decompose(&A, B as u128);
+
+    // Verify proof
+    proof.verify(&cr1cs.x.cm_f, &linb.x.v, B as u128);
+
+    // Create Decomp with commitment and v for verifier
+    let decomp_verifier = Decomp {
+        f: cr1cs.x.cm_f,
+        r: linb.x.v,
+        M: decomp_prover.M,
+    };
+
+    (decomp_verifier, (linb0, linb1), proof)
 }

@@ -49,7 +49,7 @@ impl DecompParams {
 
 /// Configure benchmark group with standard cryptographic benchmark settings
 fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
-    group.sample_size(50);
+    group.sample_size(10);
     group.measurement_time(std::time::Duration::from_secs(10));
     group.warm_up_time(std::time::Duration::from_secs(3));
 }
