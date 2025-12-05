@@ -1,18 +1,17 @@
 pub mod quick {
 
-    pub const SPLIT: &[(usize, usize, usize)] = &[
-        (16384, 2, 1),    
+    pub const SPLIT: &[(usize, usize, usize)] = &[    
         (32768, 2, 2),    
-        (65536, 4, 2),    
-        (131072, 4, 3),  
+        (65536, 2, 2),    
+        (131072, 2, 2),  
     ];
 
     /// Set check parameters: (set_size, num_batches)
     /// - set_size: monomial set cardinality
     /// - num_batches: number of sets to check simultaneously (tests batching efficiency)
     pub const SETCHK: &[(usize, usize)] = &[
-        (256, 1),
-        (512, 2),
+        (1024, 1),
+        (1024, 2),
         (1024, 4),
     ];
 
@@ -26,9 +25,9 @@ pub mod quick {
     /// - k: decomposition width (determines range B = (d/2)^k)
     /// - kappa: number of commitment rows (security parameter)
     pub const RGCHK: &[(usize, usize, usize)] = &[
-        (16384, 2, 1),
         (32768, 2, 2),
-        (65536, 4, 2),
+        (65536, 2, 2),
+        (131072, 2, 2),
     ];
 
     /// Commitment transformation parameters: (L, witness_size, k, kappa)

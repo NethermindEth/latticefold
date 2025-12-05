@@ -147,10 +147,10 @@ fn bench_decomp_roundtrip(c: &mut Criterion) {
                 },
                 |(decomp, A)| {
                     // Decompose: LinB2 (norm B²) → 2×LinB (norm B)
-                    let ((linb0, linb1), proof) = decomp.decompose(&A, B as u128);
+                    let ((linb0, linb1), _proof) = decomp.decompose(&A, B as u128);
 
-                    // Verify the decomposition
-                    proof.verify(&decomp.f, &decomp.r, B as u128);
+                    // Note: Verification is tested separately in bench_decomp_verifier
+                    // This roundtrip focuses on decomposition performance only
 
                     // Return both outputs to prevent dead code elimination
                     (linb0, linb1)
@@ -166,15 +166,15 @@ fn bench_decomp_roundtrip(c: &mut Criterion) {
 /// Benchmark decomposition scaling with witness size
 ///
 /// Measures how decomposition performance scales with the witness size n,
-/// while keeping other parameters constant (k=2, κ=2, B=50).
+/// while keeping other parameters constant (k=4, κ=2, B=50).
 fn bench_decomp_scaling_n(c: &mut Criterion) {
     let mut group = c.benchmark_group("Decomposition-Scaling-n");
     configure_benchmark_group(&mut group);
 
-    const K: usize = 2;
+    const K: usize = 4;
     const KAPPA: usize = 2;
     const B: usize = 50;
-    const N_VALUES: [usize; 3] = [32768, 49152, 65536];
+    const N_VALUES: [usize; 3] = [49152, 65536, 98304];
 
     for n in N_VALUES {
         group.throughput(Throughput::Elements(n as u64));
