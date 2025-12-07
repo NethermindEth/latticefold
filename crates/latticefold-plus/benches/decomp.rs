@@ -18,11 +18,10 @@ use criterion::{
 };
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings_linalg::Matrix;
+use utils::{bench_rng, decomposition, setup_decomp_input, setup_decomp_proof};
 
 #[path = "utils/mod.rs"]
 mod utils;
-
-use utils::{bench_rng, quick, setup_decomp_input, setup_decomp_proof};
 
 /// Configure benchmark group with benchmark settings
 fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
@@ -45,7 +44,7 @@ fn bench_decomp_prover(c: &mut Criterion) {
     let mut group = c.benchmark_group("Decomposition-Prover");
     configure_benchmark_group(&mut group);
 
-    for &(n, k, kappa, B) in quick::DECOMP_PARAMS {
+    for &(n, k, kappa, B) in decomposition::WITNESS_SCALING {
         // Throughput: number of ring elements in the witness being decomposed
         group.throughput(Throughput::Elements(n as u64));
 
@@ -87,7 +86,7 @@ fn bench_decomp_verifier(c: &mut Criterion) {
     let mut group = c.benchmark_group("Decomposition-Verifier");
     configure_benchmark_group(&mut group);
 
-    for &(n, k, kappa, B) in quick::DECOMP_PARAMS {
+    for &(n, k, kappa, B) in decomposition::WITNESS_SCALING {
         group.throughput(Throughput::Elements(n as u64));
 
         let param_label = format!("n={}_k={}_κ={}_B={}", n, k, kappa, B);
@@ -116,17 +115,12 @@ fn bench_decomp_verifier(c: &mut Criterion) {
 /// 1. Start with 2 LinB instances (norm B)
 /// 2. Fold them to 1 LinB2 instance (norm B²)
 /// 3. Decompose back to 2 LinB instances (norm B)
-///
-/// This demonstrates the norm management that makes repeated folding
-/// possible in IVC/PCD applications. Without decomposition, norms would
-/// grow exponentially (B → B² → B⁴ → B⁸ → ...), quickly exceeding
-/// the field modulus.
 fn bench_decomp_roundtrip(c: &mut Criterion) {
     let mut group = c.benchmark_group("Decomposition-Roundtrip");
     configure_benchmark_group(&mut group);
 
     // Use middle parameter set for roundtrip
-    let (n, k, kappa, B) = quick::DECOMP_PARAMS[1];
+    let (n, k, kappa, B) = decomposition::WITNESS_SCALING[1];
 
     group.throughput(Throughput::Elements((2 * n) as u64));
 
@@ -163,52 +157,10 @@ fn bench_decomp_roundtrip(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark decomposition scaling with witness size
-///
-/// Measures how decomposition performance scales with the witness size n,
-/// while keeping other parameters constant (k=4, κ=2, B=50).
-fn bench_decomp_scaling_n(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Decomposition-Scaling-n");
-    configure_benchmark_group(&mut group);
-
-    const K: usize = 4;
-    const KAPPA: usize = 2;
-    const B: usize = 50;
-    const N_VALUES: [usize; 3] = [49152, 65536, 98304];
-
-    for n in N_VALUES {
-        group.throughput(Throughput::Elements(n as u64));
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(n),
-            &n,
-            |bencher, &n| {
-                bencher.iter_batched(
-                    || {
-                        let mut rng = bench_rng();
-
-                        let decomp = setup_decomp_input(n, K, KAPPA, B);
-                        let A = Matrix::<R>::rand(&mut rng, KAPPA, n);
-
-                        (decomp, A)
-                    },
-                    |(decomp, A)| {
-                        decomp.decompose(&A, B as u128)
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-
-    group.finish();
-}
-
 criterion_group!(
     benches,
     bench_decomp_prover,
     bench_decomp_verifier,
     bench_decomp_roundtrip,
-    bench_decomp_scaling_n,
 );
 criterion_main!(benches);

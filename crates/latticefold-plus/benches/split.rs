@@ -17,13 +17,15 @@ use criterion::{
 use latticefold_plus::utils::split;
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings::PolyRing;
+use utils::{setup_split_input, split as split_params};
 
 #[path = "utils/mod.rs"]
 mod utils;
 
-use utils::{quick, setup_split_input};
-
 /// Decomposition parameters for the split operation
+///
+/// Computed once from ring parameters and reused across all benchmarks
+/// to avoid redundant calculations.
 struct DecompParams {
     /// Decomposition base: d/2 where d is ring dimension
     b: u128,
@@ -66,7 +68,7 @@ fn bench_split_varying_params(c: &mut Criterion) {
 
     let params = DecompParams::compute();
 
-    for &(witness_size, k_first, kappa) in quick::SPLIT {
+    for &(witness_size, k_first, kappa) in split_params::WITNESS_SCALING {
         group.throughput(Throughput::Elements(witness_size as u64));
 
         let param_label = format!("w={}_k={}_κ={}", witness_size, k_first, kappa);
@@ -97,23 +99,16 @@ fn bench_split_scaling_k_first(c: &mut Criterion) {
 
     let params = DecompParams::compute();
 
-    // Fixed parameters
-    const WITNESS_SIZE: usize = 131072;
-    const KAPPA: usize = 2;
-
-    // Vary k_first to measure scaling with input matrix width
-    const K_VALUES: [usize; 4] = [2, 4, 6, 8];
-
-    for k_first in K_VALUES {
-        group.throughput(Throughput::Elements(WITNESS_SIZE as u64));
+    for &(witness_size, k_first, kappa) in split_params::K_FIRST_SCALING {
+        group.throughput(Throughput::Elements(witness_size as u64));
 
         group.bench_with_input(
             BenchmarkId::from_parameter(k_first),
-            &k_first,
-            |bencher, &k_first| {
+            &(witness_size, k_first, kappa),
+            |bencher, &(witness_size, k_first, kappa)| {
                 bencher.iter_batched(
-                    || setup_split_input(k_first, KAPPA),
-                    |com| split(&com, WITNESS_SIZE, params.b, params.l),
+                    || setup_split_input(k_first, kappa),
+                    |com| split(&com, witness_size, params.b, params.l),
                     BatchSize::SmallInput,
                 );
             },
@@ -133,23 +128,16 @@ fn bench_split_scaling_kappa(c: &mut Criterion) {
 
     let params = DecompParams::compute();
 
-    // Fixed parameters
-    const WITNESS_SIZE: usize = 131072;
-    const K_FIRST: usize = 4;
-
-    // Vary kappa to measure scaling with security parameter
-    const KAPPA_VALUES: [usize; 4] = [1, 2, 3, 4];
-
-    for kappa in KAPPA_VALUES {
-        group.throughput(Throughput::Elements(WITNESS_SIZE as u64));
+    for &(witness_size, k_first, kappa) in split_params::KAPPA_SCALING {
+        group.throughput(Throughput::Elements(witness_size as u64));
 
         group.bench_with_input(
             BenchmarkId::from_parameter(kappa),
-            &kappa,
-            |bencher, &kappa| {
+            &(witness_size, k_first, kappa),
+            |bencher, &(witness_size, k_first, kappa)| {
                 bencher.iter_batched(
-                    || setup_split_input(K_FIRST, kappa),
-                    |com| split(&com, WITNESS_SIZE, params.b, params.l),
+                    || setup_split_input(k_first, kappa),
+                    |com| split(&com, witness_size, params.b, params.l),
                     BatchSize::SmallInput,
                 );
             },

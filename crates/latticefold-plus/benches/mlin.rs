@@ -15,11 +15,10 @@ use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold_plus::transcript::PoseidonTranscript;
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use utils::{bench_rng, multilinear_fold, setup_mlin_input, setup_mlin_proof};
 
 #[path = "utils/mod.rs"]
 mod utils;
-
-use utils::{bench_rng, quick, setup_mlin_input, setup_mlin_proof};
 
 /// Configure benchmark group with benchmark settings
 fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
@@ -28,20 +27,14 @@ fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measureme
     group.warm_up_time(std::time::Duration::from_secs(3));
 }
 
-/// Benchmark multilinear folding prover with varying parameters
+/// Benchmark multilinear folding prover
 ///
-/// Tests performance across different parameter combinations:
-/// - L: number of instances to fold (higher L = better amortization)
-/// - n: witness size (length of witness vector after decomposition)
-/// - k: decomposition width
-/// - κ (kappa): number of commitment rows
-/// - B: norm bound parameter
+/// Fixed: n=65536, k=2, kappa=2, B=50. Varying: L ∈ [2,3,4,5,6,7,8].
 fn bench_mlin_prover(c: &mut Criterion) {
     let mut group = c.benchmark_group("MultilinearFolding-Prover");
     configure_benchmark_group(&mut group);
 
-    for &(L, n, k, kappa, B) in quick::MLIN {
-        // Throughput: number of ring elements transformed across L instances
+    for &(L, n, k, kappa, B) in multilinear_fold::FOLDING_ARITY {
         group.throughput(Throughput::Elements((L * n) as u64));
 
         let param_label = format!("L={}_n={}_k={}_κ={}_B={}", L, n, k, kappa, B);
@@ -53,17 +46,13 @@ fn bench_mlin_prover(c: &mut Criterion) {
                 bencher.iter_batched(
                     || {
                         let mut rng = bench_rng();
-
                         let mlin = setup_mlin_input(L, n, k, kappa, B);
-
-                        // Create M matrix
                         let mut m = SparseMatrix::identity(n);
                         m.coeffs[0][0].0 = 2u128.into();
                         let M = vec![m];
 
                         // Create A matrix for folding
                         let A = Matrix::<R>::rand(&mut rng, kappa, n);
-
                         (mlin, A, M)
                     },
                     |(mlin, A, M)| {
@@ -81,13 +70,12 @@ fn bench_mlin_prover(c: &mut Criterion) {
 
 /// Benchmark multilinear folding verifier
 ///
-/// Measures verification time for multilinear folding proofs.
-/// The verifier checks the commitment transformation proof.
+/// Fixed: n=65536, k=2, kappa=2, B=50. Varying: L ∈ [2,3,4,5,6,7,8].
 fn bench_mlin_verifier(c: &mut Criterion) {
     let mut group = c.benchmark_group("MultilinearFolding-Verifier");
     configure_benchmark_group(&mut group);
 
-    for &(L, n, k, kappa, B) in quick::MLIN {
+    for &(L, n, k, kappa, B) in multilinear_fold::FOLDING_ARITY {
         group.throughput(Throughput::Elements((L * n) as u64));
 
         let param_label = format!("L={}_n={}_k={}_κ={}_B={}", L, n, k, kappa, B);
@@ -115,42 +103,106 @@ fn bench_mlin_verifier(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark scaling with folding arity
+/// Benchmark decomposition width (k) scaling
 ///
-/// Measures how performance scales with L (number of instances to fold).
-/// Paper recommends L=8 for optimal amortization.
-/// Fixed: n=65536, k=2, κ=2, B=50. Varying: L ∈ [2,4,8].
-fn bench_mlin_scaling_L(c: &mut Criterion) {
-    let mut group = c.benchmark_group("MultilinearFolding-Scaling-L");
+/// Fixed: L=4, kappa=2, B=50. Varying: k ∈ [2,3,4] with adjusted n.
+fn bench_mlin_k_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("MultilinearFolding-KScaling");
     configure_benchmark_group(&mut group);
 
-    const N: usize = 65536;
-    const K: usize = 2;
-    const KAPPA: usize = 2;
-    const B: usize = 50;
-    const L_VALUES: [usize; 3] = [2, 4, 8];
+    for &(L, n, k, kappa, B) in multilinear_fold::K_SCALING {
+        group.throughput(Throughput::Elements((L * n) as u64));
 
-    for L in L_VALUES {
-        group.throughput(Throughput::Elements((L * N) as u64));
+        let param_label = format!("k={}_n={}", k, n);
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(L),
-            &L,
-            |bencher, &L| {
+            BenchmarkId::from_parameter(&param_label),
+            &(L, n, k, kappa, B),
+            |bencher, &(L, n, k, kappa, B)| {
                 bencher.iter_batched(
                     || {
                         let mut rng = bench_rng();
-
-                        let mlin = setup_mlin_input(L, N, K, KAPPA, B);
-
-                        // Create M matrix (modified identity)
-                        let mut m = SparseMatrix::identity(N);
+                        let mlin = setup_mlin_input(L, n, k, kappa, B);
+                        let mut m = SparseMatrix::identity(n);
                         m.coeffs[0][0].0 = 2u128.into();
                         let M = vec![m];
+                        let A = Matrix::<R>::rand(&mut rng, kappa, n);
+                        (mlin, A, M)
+                    },
+                    |(mlin, A, M)| {
+                        let mut ts = PoseidonTranscript::empty::<PC>();
+                        mlin.mlin(&A, &M, &mut ts)
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
 
-                        // Create A matrix for folding
-                        let A = Matrix::<R>::rand(&mut rng, KAPPA, N);
+    group.finish();
+}
 
+/// Benchmark large witness scaling
+///
+/// Fixed: L=4, k=2, kappa=2, B=50. Varying: n ∈ [128K, 256K, 512K].
+fn bench_mlin_large_witness(c: &mut Criterion) {
+    let mut group = c.benchmark_group("MultilinearFolding-LargeWitness");
+    configure_benchmark_group(&mut group);
+
+    for &(L, n, k, kappa, B) in multilinear_fold::LARGE_WITNESS {
+        group.throughput(Throughput::Elements((L * n) as u64));
+
+        let param_label = format!("n={}", n);
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(&param_label),
+            &(L, n, k, kappa, B),
+            |bencher, &(L, n, k, kappa, B)| {
+                bencher.iter_batched(
+                    || {
+                        let mut rng = bench_rng();
+                        let mlin = setup_mlin_input(L, n, k, kappa, B);
+                        let mut m = SparseMatrix::identity(n);
+                        m.coeffs[0][0].0 = 2u128.into();
+                        let M = vec![m];
+                        let A = Matrix::<R>::rand(&mut rng, kappa, n);
+                        (mlin, A, M)
+                    },
+                    |(mlin, A, M)| {
+                        let mut ts = PoseidonTranscript::empty::<PC>();
+                        mlin.mlin(&A, &M, &mut ts)
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark security parameter (kappa) scaling
+///
+/// Fixed: L=4, n=65536, k=2, B=50. Varying: kappa ∈ [2,3,4,5].
+fn bench_mlin_kappa_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("MultilinearFolding-KappaScaling");
+    configure_benchmark_group(&mut group);
+
+    for &(L, n, k, kappa, B) in multilinear_fold::KAPPA_SCALING {
+        group.throughput(Throughput::Elements((L * n) as u64));
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(kappa),
+            &(L, n, k, kappa, B),
+            |bencher, &(L, n, k, kappa, B)| {
+                bencher.iter_batched(
+                    || {
+                        let mut rng = bench_rng();
+                        let mlin = setup_mlin_input(L, n, k, kappa, B);
+                        let mut m = SparseMatrix::identity(n);
+                        m.coeffs[0][0].0 = 2u128.into();
+                        let M = vec![m];
+                        let A = Matrix::<R>::rand(&mut rng, kappa, n);
                         (mlin, A, M)
                     },
                     |(mlin, A, M)| {
@@ -170,6 +222,8 @@ criterion_group!(
     benches,
     bench_mlin_prover,
     bench_mlin_verifier,
-    bench_mlin_scaling_L,
+    bench_mlin_k_scaling,
+    bench_mlin_large_witness,
+    bench_mlin_kappa_scaling,
 );
 criterion_main!(benches);

@@ -13,11 +13,10 @@ use criterion::{
 };
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold_plus::transcript::PoseidonTranscript;
+use utils::{range_check, setup_rgchk_input, setup_rgchk_proof};
 
 #[path = "utils/mod.rs"]
 mod utils;
-
-use utils::{quick, setup_rgchk_input, setup_rgchk_proof};
 
 /// Configure benchmark group with benchmark settings
 fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
@@ -26,18 +25,14 @@ fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measureme
     group.warm_up_time(std::time::Duration::from_secs(3));
 }
 
-/// Benchmark range check prover with varying parameters
+/// Benchmark range check prover with witness size scaling
 ///
-/// Tests performance across different parameter combinations:
-/// - witness_size: number of ring elements in witness
-/// - k: decomposition width (determines range B = (d/2)^k)
-/// - kappa: number of commitment rows (security parameter)
+/// Fixed: k=2, kappa=2. Varying: witness_size ∈ [32K, 64K, 128K, 256K, 512K].
 fn bench_rgchk_prover(c: &mut Criterion) {
     let mut group = c.benchmark_group("RangeCheck-Prover");
     configure_benchmark_group(&mut group);
 
-    for &(witness_size, k, kappa) in quick::RGCHK {
-        // Throughput: number of ring elements range-checked
+    for &(witness_size, k, kappa) in range_check::WITNESS_SCALING {
         group.throughput(Throughput::Elements(witness_size as u64));
 
         let param_label = format!("w={}_k={}_κ={}", witness_size, k, kappa);
@@ -61,14 +56,14 @@ fn bench_rgchk_prover(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark range check verifier
+/// Benchmark range check verifier with witness size scaling
 ///
-/// Measures verification time for range check proofs.
+/// Fixed: k=2, kappa=2. Varying: witness_size ∈ [32K, 64K, 128K, 256K, 512K].
 fn bench_rgchk_verifier(c: &mut Criterion) {
     let mut group = c.benchmark_group("RangeCheck-Verifier");
     configure_benchmark_group(&mut group);
 
-    for &(witness_size, k, kappa) in quick::RGCHK {
+    for &(witness_size, k, kappa) in range_check::WITNESS_SCALING {
         group.throughput(Throughput::Elements(witness_size as u64));
 
         let param_label = format!("w={}_k={}_κ={}", witness_size, k, kappa);
@@ -77,7 +72,6 @@ fn bench_rgchk_verifier(c: &mut Criterion) {
             BenchmarkId::from_parameter(&param_label),
             &(witness_size, k, kappa),
             |bencher, &(witness_size, k, kappa)| {
-                // Generate proof once outside benchmark loop
                 let (_input, output) = setup_rgchk_proof(witness_size, k, kappa);
 
                 bencher.iter(|| {
@@ -91,28 +85,51 @@ fn bench_rgchk_verifier(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark scaling with decomposition width
+/// Benchmark decomposition width (k) scaling
 ///
-/// Measures how performance scales with the decomposition parameter k,
-/// which determines the range B = (d/2)^k.
-/// witness_size=65536, kappa=2. Varying: k ∈ [2,3,4,5].
-fn bench_rgchk_scaling_k(c: &mut Criterion) {
-    let mut group = c.benchmark_group("RangeCheck-Scaling-K");
+/// Fixed: witness_size=65536, kappa=2. Varying: k ∈ [2,3,4,5].
+fn bench_rgchk_k_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("RangeCheck-KScaling");
     configure_benchmark_group(&mut group);
 
-    const WITNESS_SIZE: usize = 65536;
-    const KAPPA: usize = 2;
-    const K_VALUES: [usize; 4] = [2, 3, 4, 5];
-
-    for k in K_VALUES {
-        group.throughput(Throughput::Elements(WITNESS_SIZE as u64));
+    for &(witness_size, k, kappa) in range_check::K_SCALING {
+        group.throughput(Throughput::Elements(witness_size as u64));
 
         group.bench_with_input(
             BenchmarkId::from_parameter(k),
-            &k,
-            |bencher, &k| {
+            &(witness_size, k, kappa),
+            |bencher, &(witness_size, k, kappa)| {
                 bencher.iter_batched(
-                    || setup_rgchk_input(WITNESS_SIZE, k, KAPPA),
+                    || setup_rgchk_input(witness_size, k, kappa),
+                    |input| {
+                        let mut ts = PoseidonTranscript::empty::<PC>();
+                        input.range_check(&[], &mut ts)
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+/// Benchmark security parameter (kappa) scaling
+///
+/// Fixed: witness_size=65536, k=2. Varying: kappa ∈ [2,3,4,5].
+fn bench_rgchk_kappa_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("RangeCheck-KappaScaling");
+    configure_benchmark_group(&mut group);
+
+    for &(witness_size, k, kappa) in range_check::KAPPA_SCALING {
+        group.throughput(Throughput::Elements(witness_size as u64));
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(kappa),
+            &(witness_size, k, kappa),
+            |bencher, &(witness_size, k, kappa)| {
+                bencher.iter_batched(
+                    || setup_rgchk_input(witness_size, k, kappa),
                     |input| {
                         let mut ts = PoseidonTranscript::empty::<PC>();
                         input.range_check(&[], &mut ts)
@@ -130,6 +147,7 @@ criterion_group!(
     benches,
     bench_rgchk_prover,
     bench_rgchk_verifier,
-    bench_rgchk_scaling_k,
+    bench_rgchk_k_scaling,
+    bench_rgchk_kappa_scaling,
 );
 criterion_main!(benches);

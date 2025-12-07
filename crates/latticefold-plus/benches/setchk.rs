@@ -13,11 +13,10 @@ use criterion::{
 };
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold_plus::transcript::PoseidonTranscript;
+use utils::{set_check, setup_setchk_input, setup_setchk_proof};
 
 #[path = "utils/mod.rs"]
 mod utils;
-
-use utils::{quick, setup_setchk_input, setup_setchk_proof};
 
 /// Configure benchmark group with benchmark settings
 fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
@@ -35,7 +34,7 @@ fn bench_setchk_prover(c: &mut Criterion) {
     let mut group = c.benchmark_group("SetCheck-Prover");
     configure_benchmark_group(&mut group);
 
-    for &(set_size, num_batches) in quick::SETCHK {
+    for &(set_size, num_batches) in set_check::SET_SIZES {
         // Throughput: number of set elements checked
         group.throughput(Throughput::Elements((set_size * num_batches) as u64));
 
@@ -67,7 +66,7 @@ fn bench_setchk_verifier(c: &mut Criterion) {
     let mut group = c.benchmark_group("SetCheck-Verifier");
     configure_benchmark_group(&mut group);
 
-    for &(set_size, num_batches) in quick::SETCHK {
+    for &(set_size, num_batches) in set_check::SET_SIZES {
         group.throughput(Throughput::Elements((set_size * num_batches) as u64));
 
         let param_label = format!("size={}_batches={}", set_size, num_batches);
