@@ -567,3 +567,127 @@ pub fn setup_decomp_proof(
 
     (decomp_verifier, (linb0, linb1), proof)
 }
+/// Generate test input for single instance folding benchmarks
+///
+/// Creates valid LinB input for Construction 5.1 (Π_lin,B).
+/// This is equivalent to multilinear folding with L=1.
+///
+/// # Arguments
+/// * `n` - Witness size (length of witness vector after decomposition)
+/// * `k` - Decomposition width (determines range bound)
+/// * `kappa` - Number of commitment rows (security parameter)
+/// * `B` - Norm bound parameter
+///
+/// # Returns
+/// `LinB<R>` instance ready for single instance folding
+pub fn setup_lin_input(n: usize, k: usize, kappa: usize, B: usize) -> LinB<R> {
+    let mut rng = bench_rng();
+
+    let d = R::dimension();
+    let b = (d / 2) as u128;
+
+    // Compute l = ⌈log_b(q)⌉ where q is the base ring modulus
+    let l =
+        ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln() / (b as f64).ln()).ceil() as usize;
+
+    let min_witness_size = kappa * k * d * l * d;
+    assert!(
+        n >= min_witness_size,
+        "Invalid parameters: n ({}) must be >= kappa * k * d * l * d = {} * {} * {} * {} * {} = {}",
+        n,
+        kappa,
+        k,
+        d,
+        l,
+        d,
+        min_witness_size
+    );
+
+    // Create R1CS with modified first entry
+    let mut r1cs = r1cs_decomposed_square(
+        R1CS::<R> {
+            l: 1,
+            A: SparseMatrix::identity(n / k),
+            B: SparseMatrix::identity(n / k),
+            C: SparseMatrix::identity(n / k),
+        },
+        n,
+        B as u128,
+        k,
+    );
+
+    r1cs.A.coeffs[0][0].0 = 2u128.into();
+    r1cs.C.coeffs[0][0].0 = 2u128.into();
+
+    // Generate Ajtai commitment matrix (size: kappa × n)
+    let A = Matrix::<R>::rand(&mut rng, kappa, n);
+
+    // Create witness (all ones for consistency)
+    let z = vec![R::one(); n / k];
+
+    // Create ComR1CS instance
+    let cr1cs = ComR1CS::new(r1cs, z, 1, B as u128, k, &A);
+
+    // Linearize to get LinB instance
+    let mut ts = PoseidonTranscript::empty::<PC>();
+    let (linb, _lproof) = cr1cs.linearize(&mut ts);
+
+    linb
+}
+
+/// Generate single instance folding proof for verification benchmarks
+///
+/// Creates a complete valid proof by running the prover for Construction 5.1.
+///
+/// # Arguments
+/// * `n` - Witness size
+/// * `k` - Decomposition width
+/// * `kappa` - Number of commitment rows
+/// * `B` - Norm bound parameter
+///
+/// # Returns
+/// Tuple of (input LinB, output LinB2, proof)
+///
+/// # Validation
+/// Proof is verified to be valid before returning
+pub fn setup_lin_proof(
+    n: usize,
+    k: usize,
+    kappa: usize,
+    B: usize,
+) -> (LinB<R>, LinB2<R>, latticefold_plus::cm::CmProof<R>) {
+    let linb = setup_lin_input(n, k, kappa, B);
+    let mut rng = bench_rng();
+
+    // Compute decomposition parameters
+    let d = R::dimension();
+    let b = (d / 2) as u128;
+    let l =
+        ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln() / (b as f64).ln()).ceil() as usize;
+
+    let params = LinParameters {
+        kappa,
+        decomp: DecompParameters { b, k, l },
+    };
+
+    // Create M matrix
+    let mut m = SparseMatrix::identity(n);
+    m.coeffs[0][0].0 = 2u128.into();
+    let M = vec![m];
+
+    // Create A matrix for folding
+    let A = Matrix::<R>::rand(&mut rng, kappa, n);
+
+    let mut ts = PoseidonTranscript::empty::<PC>();
+
+    // Execute single instance folding (Construction 5.1)
+    let (linb2, proof) = linb.lin(&A, &M, &params, &mut ts);
+
+    // Cryptographic validation: verify proof is valid
+    let mut verify_ts = PoseidonTranscript::empty::<PC>();
+    proof
+        .verify(&M, &mut verify_ts)
+        .expect("Generated single instance folding proof should be valid");
+
+    (linb, linb2, proof)
+}
