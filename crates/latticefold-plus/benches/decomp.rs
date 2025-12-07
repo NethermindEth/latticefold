@@ -14,7 +14,7 @@
 #![allow(non_snake_case)]
 
 use criterion::{
-    criterion_group, criterion_main, BatchSize, BenchmarkId, BenchmarkGroup, Criterion, Throughput,
+    criterion_group, criterion_main, BatchSize, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings_linalg::Matrix;
@@ -65,9 +65,7 @@ fn bench_decomp_prover(c: &mut Criterion) {
 
                         (decomp, A)
                     },
-                    |(decomp, A)| {
-                        decomp.decompose(&A, B as u128)
-                    },
+                    |(decomp, A)| decomp.decompose(&A, B as u128),
                     BatchSize::SmallInput,
                 );
             },

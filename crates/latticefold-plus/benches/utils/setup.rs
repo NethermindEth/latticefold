@@ -1,21 +1,18 @@
 use ark_ff::{One, PrimeField, Zero};
-use rand::prelude::*;
-use stark_rings::{
-    cyclotomic_ring::models::frog_ring::RqPoly as R,
-    PolyRing,
-};
-use stark_rings_linalg::{Matrix, SparseMatrix};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold::arith::r1cs::R1CS;
 use latticefold_plus::{
     decomp::{Decomp, DecompProof},
-    lin::{LinB, Linearize, LinParameters, LinearizedVerify},
+    lin::{LinB, LinParameters, Linearize, LinearizedVerify},
     mlin::{LinB2, Mlin},
     r1cs::{r1cs_decomposed_square, ComR1CS},
     rgchk::{DecompParameters, Rg, RgInstance},
     setchk::{In, MonomialSet, Out},
     transcript::PoseidonTranscript,
 };
+use rand::prelude::*;
+use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing};
+use stark_rings_linalg::{Matrix, SparseMatrix};
 
 pub fn setup_split_input(k_first: usize, kappa: usize) -> Matrix<R> {
     let mut rng = bench_rng();
@@ -117,9 +114,8 @@ pub fn setup_rgchk_input(witness_size: usize, k: usize, kappa: usize) -> Rg<R> {
     let b = (d / 2) as u128;
 
     // Compute l = ⌈log_b(q)⌉ where q is the base ring modulus
-    let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
-        / (b as f64).ln())
-    .ceil() as usize;
+    let l =
+        ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln() / (b as f64).ln()).ceil() as usize;
 
     // Validate constraint: witness_size >= kappa * k * d * l * d
     let min_witness_size = kappa * k * d * l * d;
@@ -202,7 +198,12 @@ pub fn setup_rgchk_proof(
 ///
 /// # Panics
 /// Panics if witness_size violates the constraint: witness_size >= kappa * k * d * l * d
-pub fn setup_cm_input(L: usize, witness_size: usize, k: usize, kappa: usize) -> latticefold_plus::cm::Cm<R> {
+pub fn setup_cm_input(
+    L: usize,
+    witness_size: usize,
+    k: usize,
+    kappa: usize,
+) -> latticefold_plus::cm::Cm<R> {
     let mut rng = bench_rng();
 
     // Compute decomposition parameters from ring parameters
@@ -210,9 +211,8 @@ pub fn setup_cm_input(L: usize, witness_size: usize, k: usize, kappa: usize) -> 
     let b = (d / 2) as u128;
 
     // Compute l = ⌈log_b(q)⌉ where q is the base ring modulus
-    let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
-        / (b as f64).ln())
-    .ceil() as usize;
+    let l =
+        ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln() / (b as f64).ln()).ceil() as usize;
 
     // Validate constraint: witness_size >= kappa * k * d * l * d
     let min_witness_size = kappa * k * d * l * d;
@@ -274,7 +274,10 @@ pub fn setup_cm_proof(
     witness_size: usize,
     k: usize,
     kappa: usize,
-) -> (latticefold_plus::cm::Cm<R>, latticefold_plus::cm::CmProof<R>) {
+) -> (
+    latticefold_plus::cm::Cm<R>,
+    latticefold_plus::cm::CmProof<R>,
+) {
     let cm = setup_cm_input(L, witness_size, k, kappa);
 
     // Create modified identity matrix M
@@ -321,16 +324,21 @@ pub fn setup_mlin_input(L: usize, n: usize, k: usize, kappa: usize, B: usize) ->
     let b = (d / 2) as u128;
 
     // Compute l = ⌈log_b(q)⌉ where q is the base ring modulus
-    let l = ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln()
-        / (b as f64).ln())
-    .ceil() as usize;
+    let l =
+        ((<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64).ln() / (b as f64).ln()).ceil() as usize;
 
     // Validate constraint: n >= kappa * k * d * l * d
     let min_witness_size = kappa * k * d * l * d;
     assert!(
         n >= min_witness_size,
         "Invalid parameters: n ({}) must be >= kappa * k * d * l * d = {} * {} * {} * {} * {} = {}",
-        n, kappa, k, d, l, d, min_witness_size
+        n,
+        kappa,
+        k,
+        d,
+        l,
+        d,
+        min_witness_size
     );
 
     let params = LinParameters {

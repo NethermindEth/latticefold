@@ -9,7 +9,7 @@
 #![allow(non_snake_case)]
 
 use criterion::{
-    criterion_group, criterion_main, BatchSize, BenchmarkId, BenchmarkGroup, Criterion, Throughput,
+    criterion_group, criterion_main, BatchSize, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold_plus::transcript::PoseidonTranscript;

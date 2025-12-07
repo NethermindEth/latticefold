@@ -12,11 +12,10 @@
 
 use ark_ff::PrimeField;
 use criterion::{
-    criterion_group, criterion_main, BatchSize, BenchmarkId, BenchmarkGroup, Criterion, Throughput,
+    criterion_group, criterion_main, BatchSize, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
 };
 use latticefold_plus::utils::split;
-use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
-use stark_rings::PolyRing;
+use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing};
 use utils::{setup_split_input, split as split_params};
 
 #[path = "utils/mod.rs"]

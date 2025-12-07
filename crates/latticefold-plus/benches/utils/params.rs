@@ -21,22 +21,14 @@ pub mod range_check {
     /// Decomposition width scaling with fixed witness_size=65536, kappa=2.
     ///
     /// Parameters: (witness_size, k, kappa)
-    pub const K_SCALING: &[(usize, usize, usize)] = &[
-        (65536, 2, 2),
-        (65536, 3, 2),
-        (65536, 4, 2),
-        (65536, 5, 2),
-    ];
+    pub const K_SCALING: &[(usize, usize, usize)] =
+        &[(65536, 2, 2), (65536, 3, 2), (65536, 4, 2), (65536, 5, 2)];
 
     /// Security parameter scaling with fixed witness_size=65536, k=2.
     ///
     /// Parameters: (witness_size, k, kappa)
-    pub const KAPPA_SCALING: &[(usize, usize, usize)] = &[
-        (65536, 2, 2),
-        (65536, 2, 3),
-        (65536, 2, 4),
-        (65536, 2, 5),
-    ];
+    pub const KAPPA_SCALING: &[(usize, usize, usize)] =
+        &[(65536, 2, 2), (65536, 2, 3), (65536, 2, 4), (65536, 2, 5)];
 }
 
 /// Commitment transformation parameters.
@@ -104,11 +96,8 @@ pub mod single_instance_fold {
     /// Witness scaling with fixed k=4, kappa=2, B=50.
     ///
     /// Parameters: (n, k, kappa, B)
-    pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] = &[
-        (49152, 4, 2, 50),
-        (65536, 4, 2, 50),
-        (98304, 4, 2, 50),
-    ];
+    pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] =
+        &[(49152, 4, 2, 50), (65536, 4, 2, 50), (98304, 4, 2, 50)];
 }
 
 /// Decomposition parameters (Construction 5.3).
@@ -116,11 +105,8 @@ pub mod decomposition {
     /// Witness scaling with fixed k=4, kappa=2, B=50.
     ///
     /// Parameters: (n, k, kappa, B)
-    pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] = &[
-        (49152, 4, 2, 50),
-        (65536, 4, 2, 50),
-        (98304, 4, 2, 50),
-    ];
+    pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] =
+        &[(49152, 4, 2, 50), (65536, 4, 2, 50), (98304, 4, 2, 50)];
 }
 
 /// Set check parameters (Construction 4.2).
@@ -128,11 +114,7 @@ pub mod set_check {
     /// Set size and batching scaling.
     ///
     /// Parameters: (set_size, num_batches)
-    pub const SET_SIZES: &[(usize, usize)] = &[
-        (256, 1),
-        (512, 2),
-        (1024, 4),
-    ];
+    pub const SET_SIZES: &[(usize, usize)] = &[(256, 1), (512, 2), (1024, 4)];
 }
 
 /// Split function parameters (Construction 4.1).
@@ -140,11 +122,8 @@ pub mod split {
     /// Witness size scaling with varying k_first and kappa.
     ///
     /// Parameters: (witness_size, k_first, kappa)
-    pub const WITNESS_SCALING: &[(usize, usize, usize)] = &[
-        (16384, 2, 2),
-        (65536, 4, 2),
-        (131072, 8, 2),
-    ];
+    pub const WITNESS_SCALING: &[(usize, usize, usize)] =
+        &[(16384, 2, 2), (65536, 4, 2), (131072, 8, 2)];
 
     /// K_first scaling with fixed witness_size=131072, kappa=2.
     ///
