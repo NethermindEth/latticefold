@@ -1,155 +1,193 @@
-//! Benchmarks for Construction 4.1: Split function
+//! Benchmarks for Construction 4.1: Split function.
 //!
-//! The split function performs gadget decomposition on double commitments,
-//! converting ring element matrices into base ring scalar representations.
+//! The split function performs gadget decomposition on double commitment matrices,
+//! converting ring element representations into base ring scalar form. This is a
+//! critical step in the range check protocol for efficient constraint verification.
 //!
-//! Paper reference: Section 4.1
+//! ## Protocol Overview
 //!
-//! Benchmarks the second decomposition step where commitment matrices are
-//! split into base ring elements (not witness matrices).
+//! The split function operates on commitment matrices (not witness matrices):
+//! 1. **Gadget decomposition**: Applies base-b decomposition to commitment matrices
+//! 2. **Ring-to-scalar conversion**: Transforms ring elements into base field scalars
+//! 3. **Deterministic operation**: No verifier benchmark needed (computation is deterministic)
+//!
+//! ## Benchmarked Operations
+//!
+//! - **Prover**: Matrix decomposition with varying k_first and κ parameters
+//! - **No verifier**: Split is a deterministic function with no interactive proof
+//! - **Parameter scaling**: Performance across decomposition width (k_first) and
+//!   security parameter (κ) variations
+//!
+//! ## Paper Reference
+//! Section 4.1 of the LatticeFold+ paper
 
 #![allow(non_snake_case)]
 
-use ark_ff::PrimeField;
-use criterion::{
-    criterion_group, criterion_main, BatchSize, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
-};
+use criterion::Criterion;
 use latticefold_plus::utils::split;
 use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing};
-use utils::{setup_split_input, split as split_params};
+use stark_rings_linalg::Matrix;
 
 #[path = "utils/mod.rs"]
 mod utils;
+use utils::{
+    helpers::{bench_prover_protocol, bench_rng, DecompParams, ProverBenchmark},
+    split as split_params,
+};
 
-/// Decomposition parameters for the split operation
+// ============================================================================
+// Setup Functions
+// ============================================================================
+
+/// Creates split function input for prover benchmarks.
 ///
-/// Computed once from ring parameters and reused across all benchmarks
-/// to avoid redundant calculations.
-struct DecompParams {
-    /// Decomposition base: d/2 where d is ring dimension
-    b: u128,
-    /// Decomposition width: ⌈log_{b}(q)⌉ where q is the modulus
-    l: usize,
+/// Generates a random κ × (k_first·d) commitment matrix where d is the ring
+/// dimension. This matrix represents the output of a double commitment scheme
+/// that will be decomposed into base ring scalars.
+fn setup_input(k_first: usize, kappa: usize) -> Matrix<R> {
+    let mut rng = bench_rng();
+    let d = R::dimension();
+    let cols = k_first * d;
+    let mat = Matrix::<R>::rand(&mut rng, kappa, cols);
+
+    assert_eq!(mat.nrows, kappa, "Matrix should have kappa rows");
+    assert_eq!(mat.ncols, cols, "Matrix should have k_first * d columns");
+
+    mat
 }
 
-impl DecompParams {
-    /// Compute decomposition parameters for the current ring
-    fn compute() -> Self {
-        let d = R::dimension();
-        let b = (d / 2) as u128;
+// ============================================================================
+// Trait Implementations
+// ============================================================================
 
-        // Compute l = ⌈log_{b}(q)⌉ where q is the base ring modulus
-        // This determines the width of the second decomposition
-        let modulus = <<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64;
-        let base = b as f64;
-        let l = (modulus.ln() / base.ln()).ceil() as usize;
+/// Prover benchmark with varying witness size, k_first, and κ parameters.
+///
+/// Tests combined parameter scaling to measure how split performance varies
+/// across different protocol configurations. Each parameter set uses different
+/// values for witness size, decomposition width, and security parameter.
+struct SplitVaryingParams;
 
-        Self { b, l }
+impl ProverBenchmark for SplitVaryingParams {
+    type Input = Matrix<R>;
+    type Output = Vec<<R as PolyRing>::BaseRing>;
+    type Params = (usize, usize, usize);
+
+    fn group_name() -> &'static str {
+        "Split-VaryingParams"
+    }
+
+    fn setup_input((_witness_size, k_first, kappa): Self::Params) -> Self::Input {
+        setup_input(k_first, kappa)
+    }
+
+    fn param_label((witness_size, k_first, kappa): Self::Params) -> String {
+        format!("w={}_k={}_κ={}", witness_size, k_first, kappa)
+    }
+
+    fn throughput((witness_size, _, _): Self::Params) -> u64 {
+        witness_size as u64
+    }
+
+    fn run_prover(com: Self::Input) -> Self::Output {
+        let params = DecompParams::compute();
+        let witness_size = 65536;
+        split(&com, witness_size, params.b, params.l)
     }
 }
 
-/// Configure benchmark group with standard cryptographic benchmark settings
-fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
-    group.sample_size(10);
-    group.measurement_time(std::time::Duration::from_secs(10));
-    group.warm_up_time(std::time::Duration::from_secs(3));
+/// Prover benchmark measuring first decomposition width (k_first) scaling.
+///
+/// Tests how performance scales with k_first ∈ [2,4,6,8] while keeping
+/// witness_size=131072 and κ=2 fixed. Higher k_first values increase
+/// the commitment matrix width, affecting decomposition cost.
+struct SplitScalingKFirst;
+
+impl ProverBenchmark for SplitScalingKFirst {
+    type Input = Matrix<R>;
+    type Output = Vec<<R as PolyRing>::BaseRing>;
+    type Params = (usize, usize, usize);
+
+    fn group_name() -> &'static str {
+        "Split-Scaling-KFirst"
+    }
+
+    fn setup_input((_witness_size, k_first, kappa): Self::Params) -> Self::Input {
+        setup_input(k_first, kappa)
+    }
+
+    fn param_label((_witness_size, k_first, _kappa): Self::Params) -> String {
+        format!("{}", k_first)
+    }
+
+    fn throughput((witness_size, _, _): Self::Params) -> u64 {
+        witness_size as u64
+    }
+
+    fn run_prover(com: Self::Input) -> Self::Output {
+        let params = DecompParams::compute();
+        let witness_size = 131072;
+        split(&com, witness_size, params.b, params.l)
+    }
 }
 
-/// Benchmark split with varying witness sizes and commitment parameters
+/// Prover benchmark measuring security parameter (κ) scaling.
 ///
-/// Tests performance across different parameter combinations:
-/// - Input: commitment matrices of size kappa × (k_first * d)
-/// - Output: witness_size base ring elements (padded)
-/// - Parameters: k_first ∈ [2,8], kappa ∈ [1,4], witness_size ∈ [16K,128K]
+/// Tests how performance scales with κ ∈ [1,2,3,4] while keeping
+/// witness_size=131072 and k_first=4 fixed. Higher κ values increase
+/// the number of commitment matrix rows.
+struct SplitScalingKappa;
+
+impl ProverBenchmark for SplitScalingKappa {
+    type Input = Matrix<R>;
+    type Output = Vec<<R as PolyRing>::BaseRing>;
+    type Params = (usize, usize, usize);
+
+    fn group_name() -> &'static str {
+        "Split-Scaling-Kappa"
+    }
+
+    fn setup_input((_witness_size, k_first, kappa): Self::Params) -> Self::Input {
+        setup_input(k_first, kappa)
+    }
+
+    fn param_label((_witness_size, _k_first, kappa): Self::Params) -> String {
+        format!("{}", kappa)
+    }
+
+    fn throughput((witness_size, _, _): Self::Params) -> u64 {
+        witness_size as u64
+    }
+
+    fn run_prover(com: Self::Input) -> Self::Output {
+        let params = DecompParams::compute();
+        let witness_size = 131072;
+        split(&com, witness_size, params.b, params.l)
+    }
+}
+
+// ============================================================================
+// Benchmark Entry Points
+// ============================================================================
+
+/// Benchmark entry point for split function with varying parameters.
 fn bench_split_varying_params(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Split-VaryingParams");
-    configure_benchmark_group(&mut group);
-
-    let params = DecompParams::compute();
-
-    for &(witness_size, k_first, kappa) in split_params::WITNESS_SCALING {
-        group.throughput(Throughput::Elements(witness_size as u64));
-
-        let param_label = format!("w={}_k={}_κ={}", witness_size, k_first, kappa);
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&param_label),
-            &(witness_size, k_first, kappa),
-            |bencher, &(witness_size, k_first, kappa)| {
-                bencher.iter_batched(
-                    || setup_split_input(k_first, kappa),
-                    |com| split(&com, witness_size, params.b, params.l),
-                    BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-
-    group.finish();
+    bench_prover_protocol::<SplitVaryingParams>(c, split_params::WITNESS_SCALING);
 }
 
-/// Benchmark scaling with first decomposition width
-///
-/// Measures how performance scales with input matrix width (k_first).
-/// Fixed: witness_size=131K, kappa=2. Varying: k_first ∈ [2,4,6,8].
+/// Benchmark entry point for split function with k_first scaling.
 fn bench_split_scaling_k_first(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Split-Scaling-KFirst");
-    configure_benchmark_group(&mut group);
-
-    let params = DecompParams::compute();
-
-    for &(witness_size, k_first, kappa) in split_params::K_FIRST_SCALING {
-        group.throughput(Throughput::Elements(witness_size as u64));
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(k_first),
-            &(witness_size, k_first, kappa),
-            |bencher, &(witness_size, k_first, kappa)| {
-                bencher.iter_batched(
-                    || setup_split_input(k_first, kappa),
-                    |com| split(&com, witness_size, params.b, params.l),
-                    BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-
-    group.finish();
+    bench_prover_protocol::<SplitScalingKFirst>(c, split_params::K_FIRST_SCALING);
 }
 
-/// Benchmark scaling with commitment rows
-///
-/// Measures how performance scales with the security parameter (kappa).
-/// Fixed: witness_size=131K, k_first=4. Varying: kappa ∈ [1,2,3,4].
+/// Benchmark entry point for split function with κ scaling.
 fn bench_split_scaling_kappa(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Split-Scaling-Kappa");
-    configure_benchmark_group(&mut group);
-
-    let params = DecompParams::compute();
-
-    for &(witness_size, k_first, kappa) in split_params::KAPPA_SCALING {
-        group.throughput(Throughput::Elements(witness_size as u64));
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(kappa),
-            &(witness_size, k_first, kappa),
-            |bencher, &(witness_size, k_first, kappa)| {
-                bencher.iter_batched(
-                    || setup_split_input(k_first, kappa),
-                    |com| split(&com, witness_size, params.b, params.l),
-                    BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-
-    group.finish();
+    bench_prover_protocol::<SplitScalingKappa>(c, split_params::KAPPA_SCALING);
 }
 
-criterion_group!(
+criterion::criterion_group!(
     benches,
     bench_split_varying_params,
     bench_split_scaling_k_first,
     bench_split_scaling_kappa,
 );
-criterion_main!(benches);
+criterion::criterion_main!(benches);

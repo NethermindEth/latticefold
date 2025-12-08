@@ -1,131 +1,215 @@
-//! Benchmarks for Construction 4.2: Monomial set check
+//! Benchmarks for Construction 4.2: Set check protocol.
 //!
-//! The set check protocol verifies that matrices contain monomials
-//! (exactly one non-zero entry per row/column). The protocol uses
-//! sumcheck and batching for efficient verification.
+//! The set check protocol verifies that matrices contain monomials, meaning
+//! exactly one non-zero entry per row and per column. This property is fundamental
+//! for verifying R1CS constraint matrices in the LatticeFold+ scheme.
 //!
-//! Paper reference: Section 4.2
+//! ## Protocol Overview
+//!
+//! The set check operates using sumcheck protocols to efficiently verify the
+//! monomial property:
+//! 1. **Monomial verification**: Confirms each matrix row/column has exactly
+//!    one non-zero coefficient
+//! 2. **Batching**: Multiple matrices can be checked simultaneously for improved
+//!    amortization
+//!
+//! ## Benchmarked Operations
+//!
+//! - **Prover**: Monomial set generation and sumcheck proof construction
+//! - **Verifier**: Sumcheck verification of monomial properties
+//! - **Batching efficiency**: Performance across varying batch sizes (1-16 sets)
+//!
+//! ## Paper Reference
+//! Section 4.2 of the LatticeFold+ paper
 
 #![allow(non_snake_case)]
 
-use criterion::{
-    criterion_group, criterion_main, BatchSize, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
-};
-use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-use latticefold_plus::transcript::PoseidonTranscript;
-use utils::{set_check, setup_setchk_input, setup_setchk_proof};
+use criterion::Criterion;
+use latticefold_plus::setchk::{In, MonomialSet, Out};
+use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
+use stark_rings_linalg::SparseMatrix;
 
 #[path = "utils/mod.rs"]
 mod utils;
+use utils::{
+    helpers::{
+        bench_prover_protocol, bench_verifier_protocol, create_transcript, ProverBenchmark,
+        VerifierBenchmark,
+    },
+    set_check,
+};
 
-/// Configure benchmark group with benchmark settings
-fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
-    group.sample_size(10);
-    group.measurement_time(std::time::Duration::from_secs(10));
-    group.warm_up_time(std::time::Duration::from_secs(3));
+// ============================================================================
+// Setup Functions
+// ============================================================================
+
+/// Creates set check input for prover benchmarks.
+///
+/// Generates identity matrices to guarantee monomial properties (exactly one
+/// non-zero per row/column). Uses sumcheck for efficient batch verification
+/// across multiple sets.
+fn setup_input(set_size: usize, num_batches: usize) -> In<R> {
+    let mut sets = Vec::with_capacity(num_batches);
+
+    for _ in 0..num_batches {
+        let m = SparseMatrix::<R>::identity(set_size);
+        sets.push(MonomialSet::Matrix(m));
+    }
+
+    let nvars = (set_size as f64).log2().ceil() as usize;
+
+    In { sets, nvars }
 }
 
-/// Benchmark set check prover with varying parameters
+/// Generates a valid set check proof for verifier benchmarks.
 ///
-/// Tests performance across different set sizes and batch counts:
-/// - Set sizes: powers of 2 from 256 to 1024
-/// - Batching: 1-4 sets checked simultaneously
+/// Creates input, executes the prover to generate an `Out` proof, and
+/// validates it before returning. This ensures the verifier benchmarks
+/// measure only verification time, not error handling overhead.
+fn setup_proof(set_size: usize, num_batches: usize) -> (In<R>, Out<R>) {
+    let input = setup_input(set_size, num_batches);
+    let mut ts = create_transcript();
+
+    let output = input.set_check(&[], &mut ts);
+
+    let mut verify_ts = create_transcript();
+    output
+        .verify(&mut verify_ts)
+        .expect("Generated set check proof should be valid");
+
+    (input, output)
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
+/// Prover benchmark for standard set check protocol.
+///
+/// Measures monomial verification and sumcheck proof generation time
+/// across varying set sizes (256-1024) and batch counts.
+struct SetCheckProver;
+
+impl ProverBenchmark for SetCheckProver {
+    type Input = In<R>;
+    type Output = Out<R>;
+    type Params = (usize, usize);
+
+    fn group_name() -> &'static str {
+        "SetCheck-Prover"
+    }
+
+    fn setup_input((set_size, num_batches): Self::Params) -> Self::Input {
+        setup_input(set_size, num_batches)
+    }
+
+    fn param_label((set_size, num_batches): Self::Params) -> String {
+        format!("size={}_batches={}", set_size, num_batches)
+    }
+
+    fn throughput((set_size, num_batches): Self::Params) -> u64 {
+        (set_size * num_batches) as u64
+    }
+
+    fn run_prover(input: Self::Input) -> Self::Output {
+        let mut ts = create_transcript();
+        input.set_check(&[], &mut ts)
+    }
+}
+
+/// Verifier benchmark for standard set check protocol.
+///
+/// Measures proof verification time using sumcheck protocols to verify
+/// the monomial property across batched matrix sets.
+struct SetCheckVerifier;
+
+impl VerifierBenchmark for SetCheckVerifier {
+    type Input = In<R>;
+    type Proof = Out<R>;
+    type Params = (usize, usize);
+
+    fn group_name() -> &'static str {
+        "SetCheck-Verifier"
+    }
+
+    fn setup_proof((set_size, num_batches): Self::Params) -> (Self::Input, Self::Proof) {
+        setup_proof(set_size, num_batches)
+    }
+
+    fn param_label((set_size, num_batches): Self::Params) -> String {
+        format!("size={}_batches={}", set_size, num_batches)
+    }
+
+    fn throughput((set_size, num_batches): Self::Params) -> u64 {
+        (set_size * num_batches) as u64
+    }
+
+    fn run_verifier(_input: &Self::Input, proof: &Self::Proof) {
+        let mut ts = create_transcript();
+        proof.verify(&mut ts).unwrap()
+    }
+}
+
+/// Prover benchmark measuring batching efficiency.
+///
+/// Tests how prover performance scales with increasing batch counts
+/// (1, 2, 4, 8, 16) while keeping set_size=512 fixed. Demonstrates
+/// amortization benefits of batched verification.
+struct SetCheckBatching;
+
+impl ProverBenchmark for SetCheckBatching {
+    type Input = In<R>;
+    type Output = Out<R>;
+    type Params = usize;
+
+    fn group_name() -> &'static str {
+        "SetCheck-Batching"
+    }
+
+    fn setup_input(num_batches: Self::Params) -> Self::Input {
+        const SET_SIZE: usize = 512;
+        setup_input(SET_SIZE, num_batches)
+    }
+
+    fn param_label(num_batches: Self::Params) -> String {
+        format!("{}", num_batches)
+    }
+
+    fn throughput(num_batches: Self::Params) -> u64 {
+        const SET_SIZE: usize = 512;
+        (SET_SIZE * num_batches) as u64
+    }
+
+    fn run_prover(input: Self::Input) -> Self::Output {
+        let mut ts = create_transcript();
+        input.set_check(&[], &mut ts)
+    }
+}
+
+// ============================================================================
+// Benchmark Entry Points
+// ============================================================================
+
+/// Benchmark entry point for set check prover with size and batch scaling.
 fn bench_setchk_prover(c: &mut Criterion) {
-    let mut group = c.benchmark_group("SetCheck-Prover");
-    configure_benchmark_group(&mut group);
-
-    for &(set_size, num_batches) in set_check::SET_SIZES {
-        // Throughput: number of set elements checked
-        group.throughput(Throughput::Elements((set_size * num_batches) as u64));
-
-        let param_label = format!("size={}_batches={}", set_size, num_batches);
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&param_label),
-            &(set_size, num_batches),
-            |bencher, &(set_size, num_batches)| {
-                bencher.iter_batched(
-                    || setup_setchk_input(set_size, num_batches),
-                    |input| {
-                        let mut ts = PoseidonTranscript::empty::<PC>();
-                        input.set_check(&[], &mut ts)
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-
-    group.finish();
+    bench_prover_protocol::<SetCheckProver>(c, set_check::SET_SIZES);
 }
 
-/// Benchmark set check verifier
-///
-/// Measures verification time for set check proofs.
+/// Benchmark entry point for set check verifier with size and batch scaling.
 fn bench_setchk_verifier(c: &mut Criterion) {
-    let mut group = c.benchmark_group("SetCheck-Verifier");
-    configure_benchmark_group(&mut group);
-
-    for &(set_size, num_batches) in set_check::SET_SIZES {
-        group.throughput(Throughput::Elements((set_size * num_batches) as u64));
-
-        let param_label = format!("size={}_batches={}", set_size, num_batches);
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&param_label),
-            &(set_size, num_batches),
-            |bencher, &(set_size, num_batches)| {
-                // Generate proof once outside benchmark loop
-                let (_input, output) = setup_setchk_proof(set_size, num_batches);
-
-                bencher.iter(|| {
-                    let mut ts = PoseidonTranscript::empty::<PC>();
-                    output.verify(&mut ts).unwrap()
-                });
-            },
-        );
-    }
-
-    group.finish();
+    bench_verifier_protocol::<SetCheckVerifier>(c, set_check::SET_SIZES);
 }
 
-/// Benchmark batching efficiency
-///
-/// Measures how performance scales with number of batched sets.
-/// Fixed: set_size=512. Varying: num_batches ∈ [1,2,4,8,16].
+/// Benchmark entry point for set check prover with batching efficiency test.
 fn bench_setchk_batching(c: &mut Criterion) {
-    let mut group = c.benchmark_group("SetCheck-Batching");
-    configure_benchmark_group(&mut group);
-
-    const SET_SIZE: usize = 512;
     const BATCH_COUNTS: [usize; 5] = [1, 2, 4, 8, 16];
-
-    for num_batches in BATCH_COUNTS {
-        group.throughput(Throughput::Elements((SET_SIZE * num_batches) as u64));
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(num_batches),
-            &num_batches,
-            |bencher, &num_batches| {
-                bencher.iter_batched(
-                    || setup_setchk_input(SET_SIZE, num_batches),
-                    |input| {
-                        let mut ts = PoseidonTranscript::empty::<PC>();
-                        input.set_check(&[], &mut ts)
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-
-    group.finish();
+    bench_prover_protocol::<SetCheckBatching>(c, &BATCH_COUNTS);
 }
 
-criterion_group!(
+criterion::criterion_group!(
     benches,
     bench_setchk_prover,
     bench_setchk_verifier,
     bench_setchk_batching,
 );
-criterion_main!(benches);
+criterion::criterion_main!(benches);

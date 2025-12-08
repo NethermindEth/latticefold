@@ -1,105 +1,188 @@
-//! Benchmarks for Construction 4.5: Commitment transformation
+//! Benchmarks for Construction 4.5: Commitment transformation protocol.
 //!
-//! The commitment transformation protocol converts double commitments from
-//! range check into folded commitments suitable for the main LatticeFold+
-//! protocol. Uses sumcheck protocols for verification.
+//! The commitment transformation protocol converts double commitments produced
+//! by the range check protocol into folded commitments suitable for the main
+//! LatticeFold+ multilinear folding protocol. This bridges the range check and
+//! folding components of the scheme.
 //!
-//! Paper reference: Section 4.5
+//! ## Protocol Overview
+//!
+//! The commitment transformation operates in two phases:
+//! 1. **Commitment conversion**: Transforms L double commitments from range check
+//!    into a single folded commitment structure
+//! 2. **Sumcheck verification**: Uses sumcheck protocols to verify the transformation
+//!    correctness and commitment consistency
+//!
+//! ## Benchmarked Operations
+//!
+//! - **Prover**: Commitment transformation and sumcheck proof generation
+//! - **Verifier**: Sumcheck-based verification of the transformation
+//! - **Batching efficiency**: Performance scaling across L ∈ [2,3,4,5,6,7,8] instances
+//!
+//! ## Paper Reference
+//! Section 4.5 of the LatticeFold+ paper
 
 #![allow(non_snake_case)]
 
-use criterion::{
-    criterion_group, criterion_main, BatchSize, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
+use criterion::Criterion;
+use latticefold_plus::{
+    cm::{Cm, CmProof},
+    rgchk::{Rg, RgInstance},
 };
-use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-use latticefold_plus::transcript::PoseidonTranscript;
-use stark_rings_linalg::SparseMatrix;
-use utils::{commitment_transform, setup_cm_input, setup_cm_proof};
+use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
+use stark_rings_linalg::{Matrix, SparseMatrix};
 
 #[path = "utils/mod.rs"]
 mod utils;
+use utils::{
+    commitment_transform,
+    helpers::{
+        bench_prover_protocol, bench_rng, bench_verifier_protocol, create_test_m_matrix,
+        create_transcript, get_validated_decomp_params, ProverBenchmark, VerifierBenchmark,
+        WitnessPattern,
+    },
+};
 
-/// Configure benchmark group with benchmark settings
-fn configure_benchmark_group(group: &mut BenchmarkGroup<'_, criterion::measurement::WallTime>) {
-    group.sample_size(10);
-    group.measurement_time(std::time::Duration::from_secs(10));
-    group.warm_up_time(std::time::Duration::from_secs(3));
+// ============================================================================
+// Setup Functions
+// ============================================================================
+
+/// Creates commitment transformation input for prover benchmarks.
+///
+/// Generates L range check instances with random witnesses and commitment
+/// matrices. Uses small random coefficients to ensure range check validity.
+/// Each instance is prepared for transformation into folded commitment form.
+fn setup_input(L: usize, witness_size: usize, k: usize, kappa: usize) -> Cm<R> {
+    let mut rng = bench_rng();
+    let dparams = get_validated_decomp_params(k, kappa, witness_size);
+
+    let instances: Vec<RgInstance<R>> = (0..L)
+        .map(|_| {
+            let f = WitnessPattern::SmallRandom.generate(witness_size, &mut rng);
+            let A = Matrix::<R>::rand(&mut rng, kappa, witness_size);
+            RgInstance::from_f(f, &A, &dparams)
+        })
+        .collect();
+
+    let nvars = (witness_size as f64).log2().ceil() as usize;
+    let rg = Rg {
+        nvars,
+        instances,
+        dparams,
+    };
+
+    Cm { rg }
 }
 
-/// Benchmark commitment transformation prover
+/// Generates a valid commitment transformation proof for verifier benchmarks.
 ///
-/// Tests performance across different folding arities L.
-/// Fixed: witness_size=65536, k=2, kappa=2. Varying: L ∈ [2,3,4,5,6,7,8].
+/// Creates input with L instances, executes the prover to generate a `CmProof`,
+/// and validates it before returning. This ensures the verifier benchmarks
+/// measure only verification time, not error handling overhead.
+fn setup_proof(L: usize, witness_size: usize, k: usize, kappa: usize) -> (Cm<R>, CmProof<R>) {
+    let cm = setup_input(L, witness_size, k, kappa);
+    let M = create_test_m_matrix(witness_size);
+
+    let mut ts = create_transcript();
+    let (_com, proof) = cm.prove(&M, &mut ts);
+
+    let mut verify_ts = create_transcript();
+    proof
+        .verify(&M, &mut verify_ts)
+        .expect("Generated commitment transformation proof should be valid");
+
+    (cm, proof)
+}
+
+// ============================================================================
+// Trait Implementations
+// ============================================================================
+
+/// Prover benchmark for commitment transformation protocol.
+///
+/// Measures transformation and sumcheck proof generation time across varying
+/// folding arity L ∈ [2,3,4,5,6,7,8] while keeping witness_size=65536, k=2,
+/// and κ=2 fixed. Demonstrates batching efficiency of the transformation.
+struct CommitmentTransformProver;
+
+impl ProverBenchmark for CommitmentTransformProver {
+    type Input = (Cm<R>, Vec<SparseMatrix<R>>);
+    type Output = (latticefold_plus::cm::Com<R>, CmProof<R>);
+    type Params = (usize, usize, usize, usize);
+
+    fn group_name() -> &'static str {
+        "CommitmentTransform-Prover"
+    }
+
+    fn setup_input((L, witness_size, k, kappa): Self::Params) -> Self::Input {
+        let input = setup_input(L, witness_size, k, kappa);
+        let M = create_test_m_matrix(witness_size);
+        (input, M)
+    }
+
+    fn param_label((L, witness_size, k, kappa): Self::Params) -> String {
+        format!("L={}_w={}_k={}_κ={}", L, witness_size, k, kappa)
+    }
+
+    fn throughput((L, _, _, _): Self::Params) -> u64 {
+        L as u64
+    }
+
+    fn run_prover((input, M): Self::Input) -> Self::Output {
+        let mut ts = create_transcript();
+        input.prove(&M, &mut ts)
+    }
+}
+
+/// Verifier benchmark for commitment transformation protocol.
+///
+/// Measures sumcheck verification time for commitment transformation proofs.
+/// Tests verification scaling across varying L while other parameters remain
+/// fixed, showing sublinear verification cost relative to prover work.
+struct CommitmentTransformVerifier;
+
+impl VerifierBenchmark for CommitmentTransformVerifier {
+    type Input = Cm<R>;
+    type Proof = CmProof<R>;
+    type Params = (usize, usize, usize, usize);
+
+    fn group_name() -> &'static str {
+        "CommitmentTransform-Verifier"
+    }
+
+    fn setup_proof((L, witness_size, k, kappa): Self::Params) -> (Self::Input, Self::Proof) {
+        setup_proof(L, witness_size, k, kappa)
+    }
+
+    fn param_label((L, witness_size, k, kappa): Self::Params) -> String {
+        format!("L={}_w={}_k={}_κ={}", L, witness_size, k, kappa)
+    }
+
+    fn throughput((L, _, _, _): Self::Params) -> u64 {
+        L as u64
+    }
+
+    fn run_verifier(_input: &Self::Input, proof: &Self::Proof) {
+        let witness_size = 65536;
+        let M = create_test_m_matrix(witness_size);
+        let mut ts = create_transcript();
+        proof.verify(&M, &mut ts).unwrap();
+    }
+}
+
+// ============================================================================
+// Benchmark Entry Points
+// ============================================================================
+
+/// Benchmark entry point for commitment transformation prover with L scaling.
 fn bench_cm_prover(c: &mut Criterion) {
-    let mut group = c.benchmark_group("CommitmentTransform-Prover");
-    configure_benchmark_group(&mut group);
-
-    for &(L, witness_size, k, kappa) in commitment_transform::FOLDING_ARITY {
-        group.throughput(Throughput::Elements(L as u64));
-
-        let param_label = format!("L={}_w={}_k={}_κ={}", L, witness_size, k, kappa);
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&param_label),
-            &(L, witness_size, k, kappa),
-            |bencher, &(L, witness_size, k, kappa)| {
-                bencher.iter_batched(
-                    || {
-                        let input = setup_cm_input(L, witness_size, k, kappa);
-                        // Create modified identity matrix M
-                        let mut m = SparseMatrix::identity(witness_size);
-                        m.coeffs[0][0].0 = 2u128.into();
-                        let M = vec![m];
-                        (input, M)
-                    },
-                    |(input, M)| {
-                        let mut ts = PoseidonTranscript::empty::<PC>();
-                        input.prove(&M, &mut ts)
-                    },
-                    BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-
-    group.finish();
+    bench_prover_protocol::<CommitmentTransformProver>(c, commitment_transform::FOLDING_ARITY);
 }
 
-/// Benchmark commitment transformation verifier
-///
-/// Tests verification performance across different folding arities L.
-/// Fixed: witness_size=65536, k=2, kappa=2. Varying: L ∈ [2,3,4,5,6,7,8].
+/// Benchmark entry point for commitment transformation verifier with L scaling.
 fn bench_cm_verifier(c: &mut Criterion) {
-    let mut group = c.benchmark_group("CommitmentTransform-Verifier");
-    configure_benchmark_group(&mut group);
-
-    for &(L, witness_size, k, kappa) in commitment_transform::FOLDING_ARITY {
-        group.throughput(Throughput::Elements(L as u64));
-
-        let param_label = format!("L={}_w={}_k={}_κ={}", L, witness_size, k, kappa);
-
-        group.bench_with_input(
-            BenchmarkId::from_parameter(&param_label),
-            &(L, witness_size, k, kappa),
-            |bencher, &(L, witness_size, k, kappa)| {
-                // Generate proof once outside benchmark loop
-                let (_input, proof) = setup_cm_proof(L, witness_size, k, kappa);
-
-                // Create matrix M (same pattern as prover)
-                let mut m = SparseMatrix::identity(witness_size);
-                m.coeffs[0][0].0 = 2u128.into();
-                let M = vec![m];
-
-                bencher.iter(|| {
-                    let mut ts = PoseidonTranscript::empty::<PC>();
-                    proof.verify(&M, &mut ts).unwrap()
-                });
-            },
-        );
-    }
-
-    group.finish();
+    bench_verifier_protocol::<CommitmentTransformVerifier>(c, commitment_transform::FOLDING_ARITY);
 }
 
-criterion_group!(benches, bench_cm_prover, bench_cm_verifier,);
-criterion_main!(benches);
+criterion::criterion_group!(benches, bench_cm_prover, bench_cm_verifier);
+criterion::criterion_main!(benches);
