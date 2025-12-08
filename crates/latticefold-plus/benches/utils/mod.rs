@@ -216,3 +216,87 @@ pub mod decomposition {
     pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] =
         &[(32768, 2, 2, 50), (65536, 2, 2, 50), (131072, 2, 2, 50)];
 }
+
+/// Double commitment protocol parameter sets.
+///
+/// Benchmarks the core RgInstance::from_f operation which creates range check
+/// instances from witness vectors using the double commitment structure. This
+/// operation is fundamental to the range check protocol and serves as a building
+/// block for verifying coefficient bounds.
+pub mod double_commitment {
+    /// Witness and decomposition parameter scaling benchmark.
+    ///
+    /// Measures performance across various combinations of witness size (n),
+    /// decomposition width (k), and folding arity (L). Demonstrates how the
+    /// double commitment operation scales with input size and decomposition parameters.
+    /// The bound B is calculated dynamically via estimate_bound based on L and k.
+    /// Fixed parameters: κ=2.
+    ///
+    /// Format: `(n, L, k, kappa)`
+    /// - n: Witness size (number of ring elements)
+    /// - L: Folding arity (affects bound calculation)
+    /// - k: Decomposition width (gadget decomposition parameter)
+    /// - kappa: Security parameter (commitment matrix rows)
+    pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] = &[
+        (32768, 3, 2, 2),
+        (65536, 3, 4, 2),
+        (131072, 3, 4, 2),
+    ];
+
+    /// Decomposition width scaling benchmark.
+    ///
+    /// Measures how double commitment performance scales with increasing
+    /// decomposition width k ∈ [2,4]. Higher k values create more
+    /// decomposition limbs but may reduce constraint complexity.
+    /// Note: witness size must be divisible by k.
+    /// Fixed parameters: L=3, κ=2.
+    ///
+    /// Format: `(n, L, k, kappa)`
+    pub const K_SCALING: &[(usize, usize, usize, usize)] = &[
+        (65536, 3, 2, 2),
+        (65536, 3, 4, 2),
+    ];
+}
+
+/// End-to-end LatticeFold+ protocol parameter sets.
+///
+/// Benchmarks the complete LatticeFold+ protocol from proving through verification,
+/// integrating all sub-protocols: R1CS commitment, linearization, range check,
+/// commitment transformation, and multilinear folding. These benchmarks provide
+/// realistic performance measurements for the full system in production scenarios.
+pub mod e2e {
+    /// Full protocol scaling benchmark.
+    ///
+    /// Measures complete prove and verify operations across varying witness sizes
+    /// and folding arities. Each parameter set uses progressively larger instances
+    /// with correspondingly higher folding arities to test realistic scaling behavior.
+    /// The bound B is calculated dynamically via estimate_bound.
+    /// Note: witness size must be >= 45056 (tau_unpadded constraint).
+    /// Fixed parameters: k=4, κ=2.
+    ///
+    /// Format: `(n, L, k, kappa)`
+    /// - n: Witness size (ring element count)
+    /// - L: Folding arity (number of R1CS instances to batch)
+    /// - k: Decomposition width
+    /// - kappa: Security parameter
+    pub const PROTOCOL_SCALING: &[(usize, usize, usize, usize)] = &[
+        (65536, 2, 4, 2),
+        (65536, 3, 4, 2),
+        (131072, 3, 4, 2),
+    ];
+
+    /// Folding arity scaling benchmark.
+    ///
+    /// Measures how end-to-end performance scales with increasing folding arity
+    /// L ∈ [2,3,4,5]. Demonstrates batching efficiency across the complete
+    /// protocol stack as more instances are folded together.
+    /// Fixed parameters: n=65536, k=4, κ=2.
+    ///
+    /// Format: `(n, L, k, kappa)`
+    pub const FOLDING_ARITY: &[(usize, usize, usize, usize)] = &[
+        (65536, 2, 4, 2),
+        (65536, 3, 4, 2),
+        (65536, 4, 4, 2),
+        (65536, 5, 4, 2),
+    ];
+}

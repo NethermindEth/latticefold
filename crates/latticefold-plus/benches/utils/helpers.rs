@@ -64,6 +64,9 @@ pub enum WitnessPattern {
     /// Small random coefficients in [0, 10) placed in the first coefficient position.
     /// Other coefficient positions are zero.
     SmallRandom,
+    /// Binary witness: randomly chooses between 0 and 1 for each element.
+    /// Commonly used in boolean circuits and binary constraint systems.
+    BinaryChoice,
     /// Custom generation function for specialized witness patterns.
     Custom(Box<dyn Fn(usize) -> R>),
 }
@@ -75,6 +78,9 @@ impl WitnessPattern {
     /// * `size` - Number of ring elements to generate
     /// * `rng` - Random number generator (used only for random patterns)
     pub fn generate(&self, size: usize, rng: &mut impl Rng) -> Vec<R> {
+        use rand::seq::SliceRandom;
+        use stark_rings::Ring;
+
         match self {
             WitnessPattern::AllOnes => vec![R::from(1u128); size],
             WitnessPattern::SmallRandom => (0..size)
@@ -84,6 +90,10 @@ impl WitnessPattern {
                     r
                 })
                 .collect(),
+            WitnessPattern::BinaryChoice => {
+                let choices = [R::ZERO, R::ONE];
+                (0..size).map(|_| *choices.choose(rng).unwrap()).collect()
+            }
             WitnessPattern::Custom(f) => (0..size).map(|i| f(i)).collect(),
         }
     }
