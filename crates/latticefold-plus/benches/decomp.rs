@@ -54,41 +54,19 @@ use utils::{
 /// Generates a LinB2 instance by first creating a committed R1CS, linearizing
 /// it, and then preparing the decomposition input structure. Uses witness with
 /// all ones to ensure valid R1CS satisfaction and norm bounds.
-fn setup_input(n: usize, k: usize, kappa: usize, _B: usize) -> Decomp<R> {
+fn setup_input(
+    n: usize,
+    k: usize,
+    kappa: usize,
+    B: usize,
+) -> (Decomp<R>, Vec<R>, Vec<(R, R)>, usize) {
     let mut rng = bench_rng();
-    let r1cs = R1CSBuilder::new(n, k, 2).build_basic();
-    let r1cs = r1cs_decomposed_square(r1cs, n, 2, k);
+    let r1cs = R1CSBuilder::new(n, k, B as u128).build_basic();
+    let r1cs = r1cs_decomposed_square(r1cs, n, B as u128, k);
 
     let z = WitnessPattern::AllOnes.generate(n / k, &mut rng);
     let A = create_ajtai_matrix(kappa, n, &mut rng);
-    let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
-
-    let mut ts = create_transcript();
-    let (linb, lproof) = cr1cs.linearize(&mut ts);
-
-    let mut ts = create_transcript();
-    lproof.verify(&mut ts);
-
-    Decomp {
-        f: cr1cs.f,
-        r: lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>(),
-        M: cr1cs.x.matrices(),
-    }
-}
-
-/// Generates a valid decomposition proof for verifier benchmarks.
-///
-/// Creates a LinB2 instance, executes the decomposition protocol to generate
-/// a `DecompProof`, and validates it before returning. This ensures the
-/// verifier benchmarks measure only verification time, not error handling.
-fn setup_proof(n: usize, k: usize, kappa: usize, B: usize) -> (Decomp<R>, DecompProof<R>) {
-    let mut rng = bench_rng();
-    let r1cs = R1CSBuilder::new(n, k, 2).build_basic();
-    let r1cs = r1cs_decomposed_square(r1cs, n, 2, k);
-
-    let z = WitnessPattern::AllOnes.generate(n / k, &mut rng);
-    let A = create_ajtai_matrix(kappa, n, &mut rng);
-    let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
+    let cr1cs = ComR1CS::new(r1cs, z, 1, B as u128, k, &A);
 
     let mut ts = create_transcript();
     let (linb, lproof) = cr1cs.linearize(&mut ts);
@@ -102,12 +80,46 @@ fn setup_proof(n: usize, k: usize, kappa: usize, B: usize) -> (Decomp<R>, Decomp
         M: cr1cs.x.matrices(),
     };
 
-    let A_decomp = create_ajtai_matrix(kappa, n, &mut rng);
-    let (outputs, proof) = decomp.decompose(&A_decomp, B as u128);
+    (decomp, cr1cs.x.cm_f, linb.x.v, B)
+}
 
-    proof.verify(&decomp.f, &decomp.r, B as u128);
+/// Generates a valid decomposition proof for verifier benchmarks.
+///
+/// Creates a LinB2 instance, executes the decomposition protocol to generate
+/// a `DecompProof`, and validates it before returning. This ensures the
+/// verifier benchmarks measure only verification time, not error handling.
+fn setup_proof(
+    n: usize,
+    k: usize,
+    kappa: usize,
+    B: usize,
+) -> ((Vec<R>, Vec<(R, R)>, usize), DecompProof<R>) {
+    let mut rng = bench_rng();
+    let r1cs = R1CSBuilder::new(n, k, B as u128).build_basic();
+    let r1cs = r1cs_decomposed_square(r1cs, n, B as u128, k);
 
-    (decomp, proof)
+    let z = WitnessPattern::AllOnes.generate(n / k, &mut rng);
+    let A = create_ajtai_matrix(kappa, n, &mut rng);
+    let cr1cs = ComR1CS::new(r1cs, z, 1, B as u128, k, &A);
+
+    let mut ts = create_transcript();
+    let (linb, lproof) = cr1cs.linearize(&mut ts);
+
+    let mut ts = create_transcript();
+    lproof.verify(&mut ts);
+
+    let decomp = Decomp {
+        f: cr1cs.f,
+        r: lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>(),
+        M: cr1cs.x.matrices(),
+    };
+
+    // Use the SAME matrix A for decomposition as was used for the original commitment
+    let (_outputs, proof) = decomp.decompose(&A, B as u128);
+
+    proof.verify(&cr1cs.x.cm_f, &linb.x.v, B as u128);
+
+    ((cr1cs.x.cm_f, linb.x.v, B), proof)
 }
 
 // ============================================================================
@@ -122,7 +134,7 @@ fn setup_proof(n: usize, k: usize, kappa: usize, B: usize) -> (Decomp<R>, Decomp
 struct DecompositionProver;
 
 impl ProverBenchmark for DecompositionProver {
-    type Input = (Decomp<R>, Matrix<R>);
+    type Input = (Decomp<R>, Matrix<R>, usize);
     type Output = ((LinB<R>, LinB<R>), DecompProof<R>);
     type Params = (usize, usize, usize, usize);
 
@@ -132,9 +144,9 @@ impl ProverBenchmark for DecompositionProver {
 
     fn setup_input((n, k, kappa, B): Self::Params) -> Self::Input {
         let mut rng = bench_rng();
-        let decomp = setup_input(n, k, kappa, B);
+        let (decomp, _cm_f, _v, B) = setup_input(n, k, kappa, B);
         let A = create_ajtai_matrix(kappa, n, &mut rng);
-        (decomp, A)
+        (decomp, A, B)
     }
 
     fn param_label((n, k, kappa, B): Self::Params) -> String {
@@ -145,8 +157,7 @@ impl ProverBenchmark for DecompositionProver {
         n as u64
     }
 
-    fn run_prover((decomp, A): Self::Input) -> Self::Output {
-        let B = 2;
+    fn run_prover((decomp, A, B): Self::Input) -> Self::Output {
         decomp.decompose(&A, B as u128)
     }
 }
@@ -159,7 +170,7 @@ impl ProverBenchmark for DecompositionProver {
 struct DecompositionVerifier;
 
 impl VerifierBenchmark for DecompositionVerifier {
-    type Input = Decomp<R>;
+    type Input = (Vec<R>, Vec<(R, R)>, usize);
     type Proof = DecompProof<R>;
     type Params = (usize, usize, usize, usize);
 
@@ -179,9 +190,8 @@ impl VerifierBenchmark for DecompositionVerifier {
         n as u64
     }
 
-    fn run_verifier(input: &Self::Input, proof: &Self::Proof) {
-        let B = 2;
-        proof.verify(&input.f, &input.r, B as u128)
+    fn run_verifier((cm_f, v, B): &Self::Input, proof: &Self::Proof) {
+        proof.verify(cm_f, v, *B as u128)
     }
 }
 
@@ -218,11 +228,11 @@ fn bench_decomp_roundtrip(c: &mut Criterion) {
             bencher.iter_batched(
                 || {
                     let mut rng = bench_rng();
-                    let decomp = setup_input(n, k, kappa, B);
+                    let (decomp, _cm_f, _v, B) = setup_input(n, k, kappa, B);
                     let A = create_ajtai_matrix(kappa, n, &mut rng);
-                    (decomp, A)
+                    (decomp, A, B)
                 },
-                |(decomp, A)| {
+                |(decomp, A, B)| {
                     let ((linb0, linb1), _proof) = decomp.decompose(&A, B as u128);
                     (linb0, linb1)
                 },

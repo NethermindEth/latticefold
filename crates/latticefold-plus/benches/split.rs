@@ -68,7 +68,7 @@ fn setup_input(k_first: usize, kappa: usize) -> Matrix<R> {
 struct SplitVaryingParams;
 
 impl ProverBenchmark for SplitVaryingParams {
-    type Input = Matrix<R>;
+    type Input = (Matrix<R>, usize);
     type Output = Vec<<R as PolyRing>::BaseRing>;
     type Params = (usize, usize, usize);
 
@@ -76,8 +76,8 @@ impl ProverBenchmark for SplitVaryingParams {
         "Split-VaryingParams"
     }
 
-    fn setup_input((_witness_size, k_first, kappa): Self::Params) -> Self::Input {
-        setup_input(k_first, kappa)
+    fn setup_input((witness_size, k_first, kappa): Self::Params) -> Self::Input {
+        (setup_input(k_first, kappa), witness_size)
     }
 
     fn param_label((witness_size, k_first, kappa): Self::Params) -> String {
@@ -88,9 +88,8 @@ impl ProverBenchmark for SplitVaryingParams {
         witness_size as u64
     }
 
-    fn run_prover(com: Self::Input) -> Self::Output {
+    fn run_prover((com, witness_size): Self::Input) -> Self::Output {
         let params = DecompParams::compute();
-        let witness_size = 65536;
         split(&com, witness_size, params.b, params.l)
     }
 }
@@ -103,7 +102,7 @@ impl ProverBenchmark for SplitVaryingParams {
 struct SplitScalingKFirst;
 
 impl ProverBenchmark for SplitScalingKFirst {
-    type Input = Matrix<R>;
+    type Input = (Matrix<R>, usize);
     type Output = Vec<<R as PolyRing>::BaseRing>;
     type Params = (usize, usize, usize);
 
@@ -111,8 +110,8 @@ impl ProverBenchmark for SplitScalingKFirst {
         "Split-Scaling-KFirst"
     }
 
-    fn setup_input((_witness_size, k_first, kappa): Self::Params) -> Self::Input {
-        setup_input(k_first, kappa)
+    fn setup_input((witness_size, k_first, kappa): Self::Params) -> Self::Input {
+        (setup_input(k_first, kappa), witness_size)
     }
 
     fn param_label((_witness_size, k_first, _kappa): Self::Params) -> String {
@@ -123,9 +122,8 @@ impl ProverBenchmark for SplitScalingKFirst {
         witness_size as u64
     }
 
-    fn run_prover(com: Self::Input) -> Self::Output {
+    fn run_prover((com, witness_size): Self::Input) -> Self::Output {
         let params = DecompParams::compute();
-        let witness_size = 131072;
         split(&com, witness_size, params.b, params.l)
     }
 }
@@ -138,7 +136,7 @@ impl ProverBenchmark for SplitScalingKFirst {
 struct SplitScalingKappa;
 
 impl ProverBenchmark for SplitScalingKappa {
-    type Input = Matrix<R>;
+    type Input = (Matrix<R>, usize);
     type Output = Vec<<R as PolyRing>::BaseRing>;
     type Params = (usize, usize, usize);
 
@@ -146,8 +144,8 @@ impl ProverBenchmark for SplitScalingKappa {
         "Split-Scaling-Kappa"
     }
 
-    fn setup_input((_witness_size, k_first, kappa): Self::Params) -> Self::Input {
-        setup_input(k_first, kappa)
+    fn setup_input((witness_size, k_first, kappa): Self::Params) -> Self::Input {
+        (setup_input(k_first, kappa), witness_size)
     }
 
     fn param_label((_witness_size, _k_first, kappa): Self::Params) -> String {
@@ -158,9 +156,8 @@ impl ProverBenchmark for SplitScalingKappa {
         witness_size as u64
     }
 
-    fn run_prover(com: Self::Input) -> Self::Output {
+    fn run_prover((com, witness_size): Self::Input) -> Self::Output {
         let params = DecompParams::compute();
-        let witness_size = 131072;
         split(&com, witness_size, params.b, params.l)
     }
 }
