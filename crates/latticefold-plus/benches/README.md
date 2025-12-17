@@ -87,19 +87,19 @@ Each protocol benchmark file follows a consistent structure:
 **File**: `rgchk.rs`
 **Protocol**: Verifies witness coefficients lie within range [-B, B]
 **Benchmarks**:
-- `RangeCheckProver` - Witness scaling (32K-512K)
+- `RangeCheckProver` - Witness scaling with varying sizes
 - `RangeCheckVerifier` - Verification scaling
-- `RangeCheckKScaling` - Decomposition width k ∈ [2,3,4,5]
-- `RangeCheckKappaScaling` - Security parameter κ ∈ [2,3,4,5]
+- `RangeCheckKScaling` - Decomposition width with varying k
+- `RangeCheckKappaScaling` - Security parameter with varying κ
 
 ### Set Check (Construction 4.2)
 
 **File**: `setchk.rs`
 **Protocol**: Verifies matrices contain monomials (one non-zero per row/column)
 **Benchmarks**:
-- `SetCheckProver` - Set size scaling (256, 512, 1024)
+- `SetCheckProver` - Set size scaling with varying sizes
 - `SetCheckVerifier` - Verification scaling
-- `SetCheckBatching` - Batching efficiency (1, 2, 4, 8, 16 sets)
+- `SetCheckBatching` - Batching efficiency with varying batch sizes
 
 ### Split Function (Construction 4.1)
 
@@ -107,23 +107,23 @@ Each protocol benchmark file follows a consistent structure:
 **Protocol**: Gadget decomposition on double commitments
 **Benchmarks**:
 - `SplitVaryingParams` - Combined parameter scaling
-- `SplitScalingKFirst` - First decomposition width k_first ∈ [2,4,6,8]
-- `SplitScalingKappa` - Security parameter κ ∈ [1,2,3,4]
+- `SplitScalingKFirst` - First decomposition width with varying k_first
+- `SplitScalingKappa` - Security parameter with varying κ
 
 ### Double Commitment (Section 4.1-4.3)
 
 **File**: `double_commitment.rs`
 **Protocol**: Creates RgInstance structures from witness vectors using double commitment
 **Benchmarks**:
-- `DoubleCommitmentProver` - Witness scaling (32K, 64K, 128K)
-- `DoubleCommitmentKScaling` - Decomposition width k ∈ [2,4]
+- `DoubleCommitmentProver` - Witness scaling with varying sizes
+- `DoubleCommitmentKScaling` - Decomposition width with varying k
 
 ### Commitment Transformation (Construction 4.5)
 
 **File**: `cm.rs`
 **Protocol**: Converts double commitments to folded commitments
 **Benchmarks**:
-- `CommitmentTransformProver` - Folding arity L ∈ [2,3,4,5,6,7,8]
+- `CommitmentTransformProver` - Folding arity with varying L
 - `CommitmentTransformVerifier` - Verification scaling
 
 ### Decomposition (Construction 5.3)
@@ -131,7 +131,7 @@ Each protocol benchmark file follows a consistent structure:
 **File**: `decomp.rs`
 **Protocol**: Splits LinB2 (norm B²) → 2×LinB (norm B each)
 **Benchmarks**:
-- `DecompositionProver` - Witness scaling (32K, 64K, 128K)
+- `DecompositionProver` - Witness scaling with varying sizes
 - `DecompositionVerifier` - Verification scaling
 - `bench_decomp_roundtrip` - Complete fold→decompose cycle
 
@@ -140,7 +140,7 @@ Each protocol benchmark file follows a consistent structure:
 **File**: `lin.rs`
 **Protocol**: Baseline folding (L=1): LinB → LinB2
 **Benchmarks**:
-- `SingleInstanceFoldProver` - Witness scaling (32K, 64K, 128K)
+- `SingleInstanceFoldProver` - Witness scaling with varying sizes
 - `SingleInstanceFoldVerifier` - Verification scaling
 
 ### Multilinear Folding (Construction 5.2)
@@ -148,20 +148,20 @@ Each protocol benchmark file follows a consistent structure:
 **File**: `mlin.rs`
 **Protocol**: Main folding protocol: L×LinB → LinB2
 **Benchmarks**:
-- `MultilinearFoldProver` - Folding arity L ∈ [2,3,4,5,6,7,8]
+- `MultilinearFoldProver` - Folding arity with varying L
 - `MultilinearFoldVerifier` - Verification scaling
-- `MultilinearFoldKScaling` - Decomposition width k ∈ [2,3,4]
-- `MultilinearFoldLargeWitness` - Large witnesses (128K, 256K, 512K)
-- `MultilinearFoldKappaScaling` - Security parameter κ ∈ [2,3,4,5]
+- `MultilinearFoldKScaling` - Decomposition width with varying k
+- `MultilinearFoldLargeWitness` - Large witness scaling with varying sizes
+- `MultilinearFoldKappaScaling` - Security parameter with varying κ
 
 ### End-to-End Protocol (Section 5)
 
 **File**: `e2e.rs`
 **Protocol**: Complete LatticeFold+ stack (R1CS commitment → linearization → range check → commitment transformation → multilinear folding → verification)
 **Benchmarks**:
-- `E2EProver` - Protocol scaling (64K-128K witness, L ∈ [2,3])
+- `E2EProver` - Protocol scaling with varying witness sizes and folding arity
 - `E2EVerifier` - Verification scaling
-- `E2EFoldingArity` - Folding arity L ∈ [2,3,4,5]
+- `E2EFoldingArity` - Folding arity with varying L
 
 ## Running Benchmarks
 
