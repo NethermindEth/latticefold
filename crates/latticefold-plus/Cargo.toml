@@ -79,3 +79,31 @@ harness = false
 [[bench]]
 name = "double_commitment"
 harness = false
+
+[[bench]]
+name = "split"
+harness = false
+
+[[bench]]
+name = "setchk"
+harness = false
+
+[[bench]]
+name = "rgchk"
+harness = false
+
+[[bench]]
+name = "cm"
+harness = false
+
+[[bench]]
+name = "mlin"
+harness = false
+
+[[bench]]
+name = "decomp"
+harness = false
+
+[[bench]]
+name = "lin"
+harness = false
