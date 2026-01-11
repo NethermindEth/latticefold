@@ -182,26 +182,61 @@ pub fn merge_sparse_dr1cs_share_one_with_glue<F: PrimeField>(
 
     // Merge constraints with remapped indices.
     //
-    // NOTE: this is intentionally single-pass and allocation-friendly: each row allocates only
-    // its (a,b,c) vectors once and is pushed directly into the merged list. A “parallel merge”
-    // tends to increase peak memory substantially (multiple part-local vectors), which can slow
-    // down wall time for multi-million-row gates due to allocator/memory bandwidth contention.
-    for (part_idx, (inst, _asg)) in parts.iter().enumerate() {
-        let offset = offsets[part_idx];
-        let remap_idx = |idx: usize| -> usize { if idx == 0 { 0 } else { idx + offset } };
-        for row in &inst.constraints {
-            let remap_lc = |lc: &[(F, usize)]| -> Vec<(F, usize)> {
-                let mut out = Vec::with_capacity(lc.len());
-                for (c, i) in lc {
-                    out.push((*c, remap_idx(*i)));
-                }
-                out
-            };
-            merged_constraints.push(Constraint {
-                a: remap_lc(&row.a),
-                b: remap_lc(&row.b),
-                c: remap_lc(&row.c),
-            });
+    // Default is a single-pass, allocation-friendly merge.
+    //
+    // For very large gates (multi-million constraints), this merge can become a wall-time
+    // bottleneck and appear “single-core bound” in system monitors. In that case, we allow a
+    // parallel remap that preserves constraint order and does not allocate *extra* constraints
+    // beyond the final merged list (it still must allocate the final `merged_constraints`).
+    let use_parallel_merge =
+        std::env::var("LFP_WE_MERGE_PARALLEL").ok().as_deref() == Some("1") || total_constraints >= 2_000_000;
+
+    if use_parallel_merge {
+        let remapped_parts: Vec<Vec<Constraint<F>>> = parts
+            .par_iter()
+            .enumerate()
+            .map(|(part_idx, (inst, _asg))| {
+                let offset = offsets[part_idx];
+                let remap_idx = |idx: usize| -> usize { if idx == 0 { 0 } else { idx + offset } };
+                let remap_lc = |lc: &[(F, usize)]| -> Vec<(F, usize)> {
+                    let mut out = Vec::with_capacity(lc.len());
+                    for (c, i) in lc {
+                        out.push((*c, remap_idx(*i)));
+                    }
+                    out
+                };
+                inst.constraints
+                    .par_iter()
+                    .map(|row| Constraint {
+                        a: remap_lc(&row.a),
+                        b: remap_lc(&row.b),
+                        c: remap_lc(&row.c),
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        for v in remapped_parts {
+            merged_constraints.extend(v);
+        }
+    } else {
+        for (part_idx, (inst, _asg)) in parts.iter().enumerate() {
+            let offset = offsets[part_idx];
+            let remap_idx = |idx: usize| -> usize { if idx == 0 { 0 } else { idx + offset } };
+            for row in &inst.constraints {
+                let remap_lc = |lc: &[(F, usize)]| -> Vec<(F, usize)> {
+                    let mut out = Vec::with_capacity(lc.len());
+                    for (c, i) in lc {
+                        out.push((*c, remap_idx(*i)));
+                    }
+                    out
+                };
+                merged_constraints.push(Constraint {
+                    a: remap_lc(&row.a),
+                    b: remap_lc(&row.b),
+                    c: remap_lc(&row.c),
+                });
+            }
         }
     }
 
