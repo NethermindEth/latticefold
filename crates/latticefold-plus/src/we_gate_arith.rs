@@ -3102,12 +3102,13 @@ where
     for (pv, dv) in params_vars.iter().zip(dcom_wiring.params_vars.iter()) {
         glue.push((1, *pv, 4, *dv));
     }
-    // Glue extra public inputs into the Dcom prefix gadget (empty in Plus gate).
-    if pub_input_vars.len() != dcom_wiring.public_input_vars.len() {
-        return Err("public input glue length mismatch".to_string());
-    }
-    for (pv, dv) in pub_input_vars.iter().zip(dcom_wiring.public_input_vars.iter()) {
-        glue.push((1, *pv, 4, *dv));
+    // Glue extra public inputs into the Dcom prefix gadget.
+    //
+    // In the full Plus verifier transcript, statement public inputs (e.g. SP1 digest) are absorbed
+    // *before* any Π_lin / Cm verification begins. The embedded Dcom-prefix gadget therefore
+    // must **not** re-absorb them, and we build it with `public_inputs = []`.
+    if !dcom_wiring.public_input_vars.is_empty() {
+        return Err("plus: expected no extra public inputs in dcom prefix".to_string());
     }
 
     // Compute the absorb-op count in the Cm-prefix segment (from cm_ops_offset until first SqueezeBytes).
