@@ -4,7 +4,6 @@ use stark_rings::{
     PolyRing, Zq,
 };
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
-use stark_rings_poly::mle::DenseMultilinearExtension;
 use std::time::Instant;
 use std::sync::Arc;
 
@@ -46,41 +45,6 @@ where
         let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
         let r_b = self.r.iter().map(|rr| rr.1).collect::<Vec<_>>();
 
-        // Parallel sparse mat-vec (used for Πdecomp hot path).
-        fn mul_vec<Rr: PolyRing>(m: &SparseMatrix<Rr>, v: &[Rr]) -> Vec<Rr> {
-            debug_assert_eq!(m.ncols, v.len());
-            #[cfg(feature = "parallel")]
-            {
-                m.coeffs
-                    .par_iter()
-                    .map(|row| {
-                        let mut acc = Rr::ZERO;
-                        for (coeff, col_idx) in row {
-                            if *col_idx < v.len() {
-                                acc += *coeff * v[*col_idx];
-                            }
-                        }
-                        acc
-                    })
-                    .collect()
-            }
-            #[cfg(not(feature = "parallel"))]
-            {
-                m.coeffs
-                    .iter()
-                    .map(|row| {
-                        let mut acc = Rr::ZERO;
-                        for (coeff, col_idx) in row {
-                            if *col_idx < v.len() {
-                                acc += *coeff * v[*col_idx];
-                            }
-                        }
-                        acc
-                    })
-                    .collect()
-            }
-        }
-
         #[inline]
         fn is_identity_matrix<Rr: PolyRing>(m: &SparseMatrix<Rr>) -> bool {
             if m.nrows != m.ncols {
@@ -105,28 +69,108 @@ where
             true
         }
 
+        // Build the multilinear “equality” weights for evaluating a vector of length 2^n at point r.
+        // For a multilinear extension with evaluations `f[x]` (x in {0,1}^n), we have:
+        //   f(r) = Σ_x f[x] * eq_r[x],
+        // where eq_r[x] = Π_j (x_j ? r_j : (1 - r_j)).
+        #[inline]
+        fn eq_weights<Rr: PolyRing>(r: &[Rr]) -> Vec<Rr> {
+            let mut w = vec![Rr::ONE];
+            // Match `DenseMultilinearExtension::evaluate` variable ordering: it folds evaluations
+            // by combining consecutive pairs per coordinate, which corresponds to iterating the
+            // point coordinates from last to first (LSB-first indexing in the evaluation vector).
+            for &rj in r.iter().rev() {
+                let om = Rr::ONE - rj;
+                let mut next = Vec::with_capacity(w.len() * 2);
+                for &wi in &w {
+                    next.push(wi * om);
+                    next.push(wi * rj);
+                }
+                w = next;
+            }
+            w
+        }
+
+        #[inline]
+        fn dot_with_eq<Rr: PolyRing>(f: &[Rr], eq: &[Rr]) -> Rr {
+            debug_assert_eq!(f.len(), eq.len());
+            #[cfg(feature = "parallel")]
+            {
+                f.par_iter()
+                    .zip(eq.par_iter())
+                    .map(|(&fx, &wx)| fx * wx)
+                    .reduce(|| Rr::ZERO, |a, b| a + b)
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                f.iter()
+                    .zip(eq.iter())
+                    .fold(Rr::ZERO, |acc, (&fx, &wx)| acc + fx * wx)
+            }
+        }
+
+        // Evaluate (M * f)(r_a) and (M * f)(r_b) without materializing M*f or building per-matrix MLEs:
+        //   (M*f)(r) = Σ_row eq_r[row] * (Σ_{(c,col)∈row} c * f[col]).
+        #[inline]
+        fn eval_sparse_mat_times_vec_at_two_points<Rr: PolyRing>(
+            m: &SparseMatrix<Rr>,
+            f: &[Rr],
+            eq_a: &[Rr],
+            eq_b: &[Rr],
+        ) -> (Rr, Rr) {
+            debug_assert_eq!(m.ncols, f.len());
+            debug_assert_eq!(m.nrows, eq_a.len());
+            debug_assert_eq!(m.nrows, eq_b.len());
+            #[cfg(feature = "parallel")]
+            {
+                m.coeffs
+                    .par_iter()
+                    .enumerate()
+                    .map(|(row_idx, row)| {
+                        let mut row_dot = Rr::ZERO;
+                        for (coeff, col_idx) in row {
+                            if *col_idx < f.len() {
+                                row_dot += *coeff * f[*col_idx];
+                            }
+                        }
+                        (eq_a[row_idx] * row_dot, eq_b[row_idx] * row_dot)
+                    })
+                    .reduce(|| (Rr::ZERO, Rr::ZERO), |(a0, b0), (a1, b1)| (a0 + a1, b0 + b1))
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                m.coeffs
+                    .iter()
+                    .enumerate()
+                    .fold((Rr::ZERO, Rr::ZERO), |(aa, bb), (row_idx, row)| {
+                        let mut row_dot = Rr::ZERO;
+                        for (coeff, col_idx) in row {
+                            if *col_idx < f.len() {
+                                row_dot += *coeff * f[*col_idx];
+                            }
+                        }
+                        (aa + eq_a[row_idx] * row_dot, bb + eq_b[row_idx] * row_dot)
+                    })
+            }
+        }
+
         let vi_calc = |Fi: &[R]| -> Vec<(R, R)> {
-            // Evaluate Fi at both points without recomputing MLE / mat-vec.
-            let mle_fi = DenseMultilinearExtension::from_evaluations_vec(nvars, Fi.to_vec());
-            let fv = (mle_fi.evaluate(&r_a).unwrap(), mle_fi.evaluate(&r_b).unwrap());
+            // Precompute eq-weights once per point; reuse for fv and all M_i*Fi evaluations.
+            let eq_a = eq_weights::<R>(&r_a);
+            let eq_b = eq_weights::<R>(&r_b);
+            let fv = (dot_with_eq::<R>(Fi, &eq_a), dot_with_eq::<R>(Fi, &eq_b));
             let mut vi = vec![fv];
-            self.M.iter().for_each(|M_i| {
+            for M_i in self.M {
                 let M_i = M_i.as_ref();
                 // Hot-path for the common identity/permutation test harness case: M_i == I implies M_i * Fi == Fi.
-                // This avoids materializing a 2^n vector and re-evaluating an MLE for each chunk.
                 if is_identity_matrix::<R>(M_i) {
                     vi.push(fv);
-                    return;
+                } else {
+                    vi.push(eval_sparse_mat_times_vec_at_two_points::<R>(
+                        M_i, Fi, &eq_a, &eq_b,
+                    ));
                 }
-                // Compute M_i * Fi ONCE, then evaluate at both points.
-                let mfi = mul_vec(M_i, Fi);
-                let mle_mfi = DenseMultilinearExtension::from_evaluations_vec(nvars, mfi);
-                let vj = (
-                    mle_mfi.evaluate(&r_a).unwrap(),
-                    mle_mfi.evaluate(&r_b).unwrap(),
-                );
-                vi.push(vj);
-            });
+            }
             vi
         };
 
