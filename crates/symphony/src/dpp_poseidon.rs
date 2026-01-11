@@ -176,36 +176,33 @@ pub fn merge_sparse_dr1cs_share_one_with_glue<F: PrimeField>(
         if local == 0 { 0 } else { local + offsets[part_idx] }
     };
 
-    let total_constraints: usize = parts.iter().map(|(inst, _)| inst.constraints.len()).sum::<usize>() + glue.len();
+    let total_constraints: usize =
+        parts.iter().map(|(inst, _)| inst.constraints.len()).sum::<usize>() + glue.len();
     let mut merged_constraints: Vec<Constraint<F>> = Vec::with_capacity(total_constraints);
 
     // Merge constraints with remapped indices.
     //
-    // This can dominate wall time for large gates (millions of constraints). Parallelize across parts
-    // (and within each part's rows) while preserving deterministic order.
-    let remapped_parts: Vec<Vec<Constraint<F>>> = parts
-        .par_iter()
-        .enumerate()
-        .map(|(part_idx, (inst, _asg))| {
-            let offset = offsets[part_idx];
-            let remap_idx = |idx: usize| -> usize { if idx == 0 { 0 } else { idx + offset } };
-            inst.constraints
-                .iter()
-                .map(|row| {
-                    let remap_lc = |lc: &[(F, usize)]| -> Vec<(F, usize)> {
-                        let mut out = Vec::with_capacity(lc.len());
-                        for (c, i) in lc {
-                            out.push((*c, remap_idx(*i)));
-                        }
-                        out
-                    };
-                    Constraint { a: remap_lc(&row.a), b: remap_lc(&row.b), c: remap_lc(&row.c) }
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect();
-    for v in remapped_parts {
-        merged_constraints.extend(v);
+    // NOTE: this is intentionally single-pass and allocation-friendly: each row allocates only
+    // its (a,b,c) vectors once and is pushed directly into the merged list. A “parallel merge”
+    // tends to increase peak memory substantially (multiple part-local vectors), which can slow
+    // down wall time for multi-million-row gates due to allocator/memory bandwidth contention.
+    for (part_idx, (inst, _asg)) in parts.iter().enumerate() {
+        let offset = offsets[part_idx];
+        let remap_idx = |idx: usize| -> usize { if idx == 0 { 0 } else { idx + offset } };
+        for row in &inst.constraints {
+            let remap_lc = |lc: &[(F, usize)]| -> Vec<(F, usize)> {
+                let mut out = Vec::with_capacity(lc.len());
+                for (c, i) in lc {
+                    out.push((*c, remap_idx(*i)));
+                }
+                out
+            };
+            merged_constraints.push(Constraint {
+                a: remap_lc(&row.a),
+                b: remap_lc(&row.b),
+                c: remap_lc(&row.c),
+            });
+        }
     }
 
     // Add glue constraints: (x - y) * 1 = 0.
