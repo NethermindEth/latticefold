@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
-use stark_rings::{PolyRing, Ring};
+use stark_rings::{CoeffRing, PolyRing, Ring};
 
 use latticefold_plus::streaming_sumcheck::StreamingMleEnum;
 
