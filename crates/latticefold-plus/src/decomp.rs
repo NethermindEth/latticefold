@@ -140,89 +140,121 @@ where
             }
         }
 
-        // Evaluate (M * f)(r_a) and (M * f)(r_b) without materializing M*f or building per-matrix MLEs:
-        //   (M*f)(r) = Σ_row eq_r[row] * (Σ_{(c,col)∈row} c * f[col]).
+        let detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
+
+        // Precompute eq-weights once per point; shared across both Fi branches.
+        let t_eq = Instant::now();
+        let eq_a = eq_weights::<R>(&r_a);
+        let eq_b = eq_weights::<R>(&r_b);
+        if profile && detail {
+            println!("[LF+ Decomp::decompose] eq_weights: {:?}", t_eq.elapsed());
+        }
+
         #[inline]
-        fn eval_sparse_mat_times_vec_at_two_points<Rr: PolyRing>(
+        fn eval_sparse_mat_two_vecs_at_two_points<Rr: PolyRing>(
             m: &SparseMatrix<Rr>,
-            f: &[Rr],
+            f0: &[Rr],
+            f1: &[Rr],
             eq_a: &[Rr],
             eq_b: &[Rr],
-        ) -> (Rr, Rr) {
-            debug_assert_eq!(m.ncols, f.len());
+        ) -> ((Rr, Rr), (Rr, Rr)) {
+            debug_assert_eq!(m.ncols, f0.len());
+            debug_assert_eq!(m.ncols, f1.len());
             debug_assert_eq!(m.nrows, eq_a.len());
             debug_assert_eq!(m.nrows, eq_b.len());
+
             #[cfg(feature = "parallel")]
             {
                 m.coeffs
                     .par_iter()
                     .enumerate()
                     .map(|(row_idx, row)| {
-                        let mut row_dot = Rr::ZERO;
+                        let mut row_dot0 = Rr::ZERO;
+                        let mut row_dot1 = Rr::ZERO;
                         for (coeff, col_idx) in row {
-                            if *col_idx < f.len() {
-                                row_dot += *coeff * f[*col_idx];
+                            if *col_idx < f0.len() {
+                                let c = *coeff;
+                                let j = *col_idx;
+                                row_dot0 += c * f0[j];
+                                row_dot1 += c * f1[j];
                             }
                         }
-                        (eq_a[row_idx] * row_dot, eq_b[row_idx] * row_dot)
+                        let wa = eq_a[row_idx];
+                        let wb = eq_b[row_idx];
+                        ((wa * row_dot0, wb * row_dot0), (wa * row_dot1, wb * row_dot1))
                     })
-                    .reduce(|| (Rr::ZERO, Rr::ZERO), |(a0, b0), (a1, b1)| (a0 + a1, b0 + b1))
+                    .reduce(
+                        || ((Rr::ZERO, Rr::ZERO), (Rr::ZERO, Rr::ZERO)),
+                        |((a00, b00), (a10, b10)), ((a01, b01), (a11, b11))| {
+                            ((a00 + a01, b00 + b01), (a10 + a11, b10 + b11))
+                        },
+                    )
             }
             #[cfg(not(feature = "parallel"))]
             {
                 m.coeffs
                     .iter()
                     .enumerate()
-                    .fold((Rr::ZERO, Rr::ZERO), |(aa, bb), (row_idx, row)| {
-                        let mut row_dot = Rr::ZERO;
-                        for (coeff, col_idx) in row {
-                            if *col_idx < f.len() {
-                                row_dot += *coeff * f[*col_idx];
+                    .fold(
+                        ((Rr::ZERO, Rr::ZERO), (Rr::ZERO, Rr::ZERO)),
+                        |((a00, b00), (a10, b10)), (row_idx, row)| {
+                            let mut row_dot0 = Rr::ZERO;
+                            let mut row_dot1 = Rr::ZERO;
+                            for (coeff, col_idx) in row {
+                                if *col_idx < f0.len() {
+                                    let c = *coeff;
+                                    let j = *col_idx;
+                                    row_dot0 += c * f0[j];
+                                    row_dot1 += c * f1[j];
+                                }
                             }
-                        }
-                        (aa + eq_a[row_idx] * row_dot, bb + eq_b[row_idx] * row_dot)
-                    })
+                            let wa = eq_a[row_idx];
+                            let wb = eq_b[row_idx];
+                            (
+                                (a00 + wa * row_dot0, b00 + wb * row_dot0),
+                                (a10 + wa * row_dot1, b10 + wb * row_dot1),
+                            )
+                        },
+                    )
             }
         }
 
-        let detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
-
-        let vi_calc = |Fi: &[R]| -> Vec<(R, R)> {
-            // Precompute eq-weights once per point; reuse for fv and all M_i*Fi evaluations.
-            let t_eq = Instant::now();
-            let eq_a = eq_weights::<R>(&r_a);
-            let eq_b = eq_weights::<R>(&r_b);
-            if profile && detail {
-                println!("[LF+ Decomp::decompose] eq_weights: {:?}", t_eq.elapsed());
-            }
-
+        // Variant that computes both v0 and v1 in one pass over matrices (better cache reuse).
+        let vi_calc_pair = || -> (Vec<(R, R)>, Vec<(R, R)>) {
             let t_fv = Instant::now();
-            let fv = (dot_with_eq::<R>(Fi, &eq_a), dot_with_eq::<R>(Fi, &eq_b));
+            let fv0 = (dot_with_eq::<R>(&F0, &eq_a), dot_with_eq::<R>(&F0, &eq_b));
+            let fv1 = (dot_with_eq::<R>(&F1, &eq_a), dot_with_eq::<R>(&F1, &eq_b));
             if profile && detail {
-                println!("[LF+ Decomp::decompose] fv(dot_with_eq): {:?}", t_fv.elapsed());
+                println!("[LF+ Decomp::decompose] fv(dot_with_eq) both: {:?}", t_fv.elapsed());
             }
 
-            let mut vi = vec![fv];
+            let mut v0 = Vec::with_capacity(1 + self.M.len());
+            let mut v1 = Vec::with_capacity(1 + self.M.len());
+            v0.push(fv0);
+            v1.push(fv1);
+
             let t_mats = Instant::now();
             for M_i in self.M {
                 let M_i = M_i.as_ref();
-                // Hot-path for the common identity/permutation test harness case: M_i == I implies M_i * Fi == Fi.
                 if is_identity_matrix::<R>(M_i) {
-                    vi.push(fv);
+                    v0.push(fv0);
+                    v1.push(fv1);
                 } else {
-                    vi.push(eval_sparse_mat_times_vec_at_two_points::<R>(
-                        M_i, Fi, &eq_a, &eq_b,
-                    ));
+                    let (m0, m1) = eval_sparse_mat_two_vecs_at_two_points::<R>(
+                        M_i, &F0, &F1, &eq_a, &eq_b,
+                    );
+                    v0.push(m0);
+                    v1.push(m1);
                 }
             }
             if profile && detail {
                 println!(
-                    "[LF+ Decomp::decompose] mats(eval_sparse_mat_times_vec_at_two_points): {:?} (Mlen={})",
+                    "[LF+ Decomp::decompose] mats(eval_sparse_mat_two_vecs_at_two_points): {:?} (Mlen={})",
                     t_mats.elapsed(),
                     self.M.len()
                 );
             }
-            vi
+            (v0, v1)
         };
 
         if profile {
@@ -235,8 +267,7 @@ where
         }
 
         let t = Instant::now();
-        let v0 = vi_calc(&F0);
-        let v1 = vi_calc(&F1);
+        let (v0, v1) = vi_calc_pair();
         if profile {
             println!("[LF+ Decomp::decompose] compute v0/v1: {:?}", t.elapsed());
         }
