@@ -1302,6 +1302,7 @@ impl<'a, F: PrimeField> ChallengeCursor<'a, F> {
         var
     }
 
+    #[allow(dead_code)]
     fn consumed(&self) -> usize {
         self.idx
     }
