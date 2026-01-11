@@ -21,6 +21,36 @@ use crate::{
     utils::{short_challenge, tensor, tensor_product},
 };
 
+#[inline]
+fn is_const_coeff_ring<R: PolyRing>(x: &R) -> bool {
+    let coeffs = x.coeffs();
+    // constant term can be anything; all higher coeffs must be zero
+    coeffs.iter().skip(1).all(|c| *c == <R as PolyRing>::BaseRing::ZERO)
+}
+
+#[inline]
+fn is_const_coeff_sparse_matrix<R: PolyRing>(m: &SparseMatrix<R>) -> bool {
+    for row in &m.coeffs {
+        for (c, _j) in row {
+            if !is_const_coeff_ring::<R>(c) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+fn try_as_base_scalars<R: PolyRing>(v: &[R]) -> Option<Vec<R::BaseRing>> {
+    let mut out = Vec::with_capacity(v.len());
+    for x in v {
+        if !is_const_coeff_ring::<R>(x) {
+            return None;
+        }
+        out.push(x.coeffs()[0]);
+    }
+    Some(out)
+}
+
 #[derive(Clone, Debug)]
 pub struct Cm<R: PolyRing> {
     pub rg: Rg<R>,
@@ -329,6 +359,13 @@ where
         // Share `M` matrices (clone each once into an Arc, instead of materializing M*w vectors).
         let m_arcs: Vec<Arc<SparseMatrix<R>>> = M.iter().cloned().map(Arc::new).collect();
 
+        // Symphony-style conditional fast path: if the matrix coefficients AND the relevant witness
+        // vectors are constant-coeff, use base-scalar mat-vec MLEs (cheaper eval_at_index and avoids
+        // materializing tau as a full ring vector).
+        //
+        // IMPORTANT: this must be a sound detector; if false-positives occur it breaks correctness.
+        let mats_const = M.iter().all(is_const_coeff_sparse_matrix::<R>);
+
         for (i, inst) in self.rg.instances.iter().enumerate() {
             let tau0 = StreamingMleEnum::BaseScalarOwned {
                 evals: inst.tau.clone(),
@@ -356,18 +393,59 @@ where
             mles.push(f_mle);
             mles.push(h_mle);
 
-            // Materialize tau as ring only once for sparse mat-vec evaluation.
-            // This is O(n) and can dominate wall time for large n; parallelize the conversion.
-            #[cfg(feature = "parallel")]
-            let tau_ring: Vec<R> = {
-                use rayon::prelude::*;
-                inst.tau.par_iter().copied().map(R::from).collect()
+            // If const-coeff, keep tau/m_tau/f/h as base scalars for M*vec.
+            let tau0_arc = Arc::new(inst.tau.clone());
+            let mtau0_arc = if mats_const { try_as_base_scalars::<R>(&m_tau_arc).map(Arc::new) } else { None };
+            let f0_arc = if mats_const { try_as_base_scalars::<R>(&f_arc).map(Arc::new) } else { None };
+            let h0_arc = if mats_const { try_as_base_scalars::<R>(&h_arc).map(Arc::new) } else { None };
+
+            // Otherwise fall back to the previous ring mat-vec path (requires tau as a ring vector).
+            let tau_ring: Option<Arc<Vec<R>>> = if mats_const {
+                None
+            } else {
+                // Materialize tau as ring only once for sparse mat-vec evaluation.
+                // This is O(n) and can dominate wall time for large n; parallelize the conversion.
+                #[cfg(feature = "parallel")]
+                let v: Vec<R> = {
+                    use rayon::prelude::*;
+                    inst.tau.par_iter().copied().map(R::from).collect()
+                };
+                #[cfg(not(feature = "parallel"))]
+                let v: Vec<R> = inst.tau.iter().copied().map(R::from).collect();
+                Some(Arc::new(v))
             };
-            #[cfg(not(feature = "parallel"))]
-            let tau_ring: Vec<R> = inst.tau.iter().copied().map(R::from).collect();
-            let tau_ring = Arc::new(tau_ring);
 
             for m in &m_arcs {
+                if mats_const {
+                    // Only use const-coeff matvec if we successfully extracted base scalars.
+                    if let (Some(mtau0), Some(f0), Some(h0)) = (&mtau0_arc, &f0_arc, &h0_arc) {
+                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                            matrix: m.clone(),
+                            witness0: tau0_arc.clone(),
+                            num_vars: nvars,
+                        });
+                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                            matrix: m.clone(),
+                            witness0: mtau0.clone(),
+                            num_vars: nvars,
+                        });
+                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                            matrix: m.clone(),
+                            witness0: f0.clone(),
+                            num_vars: nvars,
+                        });
+                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                            matrix: m.clone(),
+                            witness0: h0.clone(),
+                            num_vars: nvars,
+                        });
+                        continue;
+                    }
+                }
+
+                let tau_ring = tau_ring
+                    .as_ref()
+                    .expect("tau_ring must exist when mats_const is false or base-scalar extraction failed");
                 mles.push(StreamingMleEnum::SparseMatVec {
                     matrix: m.clone(),
                     witness: tau_ring.clone(),

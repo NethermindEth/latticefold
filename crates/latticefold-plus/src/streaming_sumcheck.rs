@@ -72,6 +72,18 @@ where
         witness: Arc<Vec<R>>,
         num_vars: usize,
     },
+    /// y[row] = (M * w)[row] **in the base ring**, then lifted to `R` as a constant-coeff ring element.
+    ///
+    /// This is a fast path for the case where:
+    /// - all `matrix` coefficients are constant-coeff ring elements, and
+    /// - the witness vector is also constant-coeff (represented here by its base scalar table).
+    ///
+    /// IMPORTANT: This variant is only correct under those conditions.
+    SparseMatVecConstCoeff {
+        matrix: Arc<SparseMatrix<R>>,
+        witness0: Arc<Vec<R::BaseRing>>,
+        num_vars: usize,
+    },
     /// A padded 4-way tensor-product table:
     /// t = t1 ⊗ t2 ⊗ t3 ⊗ t4, then padded with zeros up to 2^num_vars.
     ///
@@ -106,6 +118,7 @@ where
             StreamingMleEnum::DigitsMatrixColEv { num_vars, .. } => *num_vars,
             StreamingMleEnum::EqBase { r, .. } => r.len(),
             StreamingMleEnum::SparseMatVec { num_vars, .. } => *num_vars,
+            StreamingMleEnum::SparseMatVecConstCoeff { num_vars, .. } => *num_vars,
             StreamingMleEnum::Tensor4Padded { num_vars, .. } => *num_vars,
         }
     }
@@ -137,6 +150,78 @@ where
         match idx {
             None => R::BaseRing::ZERO,
             Some(i) => c * beta_pows[i],
+        }
+    }
+
+    /// Evaluate the MLE at a vertex index and return the **base-ring scalar** (constant term).
+    ///
+    /// This is primarily for Symphony-style constant-coeff fast paths.
+    #[inline]
+    pub fn eval0_at_index(&self, index: usize) -> R::BaseRing {
+        match self {
+            StreamingMleEnum::BaseScalarOwned { evals, .. } => evals.get(index).copied().unwrap_or(R::BaseRing::ZERO),
+            StreamingMleEnum::BaseScalarArc { evals, square, .. } => {
+                let v = evals.get(index).copied().unwrap_or(R::BaseRing::ZERO);
+                if *square { v * v } else { v }
+            }
+            StreamingMleEnum::DenseMatrixColEv {
+                mat,
+                col,
+                beta_pows,
+                square,
+                ..
+            } => {
+                if index >= mat.nrows {
+                    return R::BaseRing::ZERO;
+                }
+                let v0 = Self::ev_fast_from_beta_pows(&mat.vals[index][*col], beta_pows);
+                if *square { v0 * v0 } else { v0 }
+            }
+            StreamingMleEnum::DigitsMatrixColEv {
+                mat,
+                col,
+                beta_pows,
+                square,
+                ..
+            } => {
+                if index >= mat.nrows {
+                    return R::BaseRing::ZERO;
+                }
+                let x = mat.get(index, *col);
+                let v0 = Self::ev_fast_from_beta_pows(&x, beta_pows);
+                if *square { v0 * v0 } else { v0 }
+            }
+            StreamingMleEnum::EqBase {
+                scale,
+                r,
+                one_minus_r,
+            } => {
+                let mut prod = R::BaseRing::ONE;
+                for i in 0..r.len() {
+                    let bit = ((index >> i) & 1) == 1;
+                    prod *= if bit { r[i] } else { one_minus_r[i] };
+                }
+                *scale * prod
+            }
+            StreamingMleEnum::SparseMatVecConstCoeff {
+                matrix,
+                witness0,
+                ..
+            } => {
+                if index >= matrix.coeffs.len() {
+                    return R::BaseRing::ZERO;
+                }
+                let mut sum0 = R::BaseRing::ZERO;
+                for (coeff, col_idx) in &matrix.coeffs[index] {
+                    if *col_idx < witness0.len() {
+                        // Constant-coeff assumption: use only the constant term of `coeff`.
+                        sum0 += coeff.coeffs()[0] * witness0[*col_idx];
+                    }
+                }
+                sum0
+            }
+            // Fallback: compute full ring value then project constant term.
+            _ => self.eval_at_index(index).coeffs()[0],
         }
     }
 
@@ -215,6 +300,7 @@ where
                 }
                 sum
             }
+            StreamingMleEnum::SparseMatVecConstCoeff { .. } => R::from(self.eval0_at_index(index)),
             StreamingMleEnum::Tensor4Padded {
                 t1,
                 t2,
@@ -386,6 +472,33 @@ where
                 let next = self.fix_variable(r_ring);
                 *self = next;
             }
+            StreamingMleEnum::SparseMatVecConstCoeff {
+                matrix,
+                witness0,
+                num_vars,
+            } => {
+                // Materialize after the first fix into a half-sized base-scalar table.
+                //
+                // IMPORTANT: avoid calling `self.eval0_at_index` here, since `self` is mutably borrowed
+                // by this match arm (borrow checker).
+                let nv0 = *num_vars;
+                let half = 1usize << (nv0 - 1);
+                let one_minus0 = R::BaseRing::ONE - r0;
+                let m = matrix.clone();
+                let w0 = witness0.clone();
+                let mut out = vec![R::BaseRing::ZERO; half];
+                for i in 0..half {
+                    let idx0 = i << 1;
+                    let idx1 = (i << 1) | 1;
+                    let a0 = eval0_sparse_matvec_const_coeff::<R>(&m, &w0, idx0);
+                    let b0 = eval0_sparse_matvec_const_coeff::<R>(&m, &w0, idx1);
+                    out[i] = one_minus0 * a0 + r0 * b0;
+                }
+                *self = StreamingMleEnum::BaseScalarOwned {
+                    evals: out,
+                    num_vars: nv0 - 1,
+                };
+            }
             StreamingMleEnum::Tensor4Padded { .. } => {
                 let next = self.fix_variable(r_ring);
                 *self = next;
@@ -469,6 +582,21 @@ where
                     num_vars: nv - 1,
                 }
             }
+            StreamingMleEnum::SparseMatVecConstCoeff { .. } => {
+                // Keep base-scalar after fixing.
+                let r0 = r.coeffs()[0];
+                let one_minus0 = R::BaseRing::ONE - r0;
+                let mut out = vec![R::BaseRing::ZERO; half];
+                for i in 0..half {
+                    let a0 = self.eval0_at_index(i << 1);
+                    let b0 = self.eval0_at_index((i << 1) | 1);
+                    out[i] = one_minus0 * a0 + r0 * b0;
+                }
+                StreamingMleEnum::BaseScalarOwned {
+                    evals: out,
+                    num_vars: nv - 1,
+                }
+            }
             StreamingMleEnum::Tensor4Padded { .. } => {
                 let new_evals: Vec<R> = (0..half)
                     .map(|i| {
@@ -484,6 +612,27 @@ where
             }
         }
     }
+}
+
+#[inline]
+fn eval0_sparse_matvec_const_coeff<R: OverField + PolyRing>(
+    matrix: &SparseMatrix<R>,
+    witness0: &[R::BaseRing],
+    row: usize,
+) -> R::BaseRing
+where
+    R::BaseRing: Ring,
+{
+    if row >= matrix.coeffs.len() {
+        return R::BaseRing::ZERO;
+    }
+    let mut sum0 = R::BaseRing::ZERO;
+    for (coeff, col_idx) in &matrix.coeffs[row] {
+        if *col_idx < witness0.len() {
+            sum0 += coeff.coeffs()[0] * witness0[*col_idx];
+        }
+    }
+    sum0
 }
 
 pub struct StreamingSumcheckState<R: OverField + PolyRing>
@@ -673,6 +822,114 @@ impl StreamingSumcheck {
         };
 
         ProverMsg { evaluations: result }
+    }
+
+    /// Base-ring optimized variant of `prove_round` for the case where the entire computation is
+    /// constant-coeff (i.e., all MLE values and the combination function live in `R::BaseRing`).
+    ///
+    /// The returned message is still in `R`, with each evaluation lifted as `R::from(base_eval)`.
+    pub fn prove_round_base<R: OverField + PolyRing>(
+        state: &mut StreamingSumcheckState<R>,
+        v_msg: Option<R::BaseRing>,
+        comb_fn0: &(dyn Fn(&[R::BaseRing]) -> R::BaseRing + Sync + Send),
+    ) -> ProverMsg<R>
+    where
+        R::BaseRing: Ring,
+    {
+        if let Some(r) = v_msg {
+            assert!(state.round > 0);
+            state.randomness.push(r);
+            #[cfg(feature = "parallel")]
+            {
+                state
+                    .mles
+                    .par_iter_mut()
+                    .for_each(|m| m.fix_variable_in_place_base(r));
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                for m in state.mles.iter_mut() {
+                    m.fix_variable_in_place_base(r);
+                }
+            }
+        } else {
+            assert!(state.round == 0);
+        }
+
+        state.round += 1;
+        assert!(state.round <= state.num_vars);
+
+        let nv = state.mles[0].num_vars();
+        let degree = state.max_degree;
+        let domain_half = 1usize << (nv - 1);
+        let num_polys = state.mles.len();
+
+        #[cfg(feature = "parallel")]
+        let evals0 = (0..domain_half)
+            .into_par_iter()
+            .map(|b| {
+                let mut vals0 = vec![R::BaseRing::ZERO; num_polys];
+                let mut vals1 = vec![R::BaseRing::ZERO; num_polys];
+                let mut steps = vec![R::BaseRing::ZERO; num_polys];
+                let mut vals = vec![R::BaseRing::ZERO; num_polys];
+                let mut out = vec![R::BaseRing::ZERO; degree + 1];
+
+                for (i, mle) in state.mles.iter().enumerate() {
+                    vals0[i] = mle.eval0_at_index(b << 1);
+                    vals1[i] = mle.eval0_at_index((b << 1) | 1);
+                }
+                out[0] = comb_fn0(&vals0);
+                out[1] = comb_fn0(&vals1);
+                for i in 0..num_polys {
+                    steps[i] = vals1[i] - vals0[i];
+                    vals[i] = vals1[i];
+                }
+                for d in 2..=degree {
+                    for i in 0..num_polys {
+                        vals[i] += steps[i];
+                    }
+                    out[d] = comb_fn0(&vals);
+                }
+                out
+            })
+            .reduce(|| vec![R::BaseRing::ZERO; degree + 1], |mut acc, v| {
+                for (a, e) in acc.iter_mut().zip(v) {
+                    *a += e;
+                }
+                acc
+            });
+
+        #[cfg(not(feature = "parallel"))]
+        let evals0 = {
+            let mut acc = vec![R::BaseRing::ZERO; degree + 1];
+            let mut vals0 = vec![R::BaseRing::ZERO; num_polys];
+            let mut vals1 = vec![R::BaseRing::ZERO; num_polys];
+            let mut steps = vec![R::BaseRing::ZERO; num_polys];
+            let mut vals = vec![R::BaseRing::ZERO; num_polys];
+            for b in 0..domain_half {
+                for (i, mle) in state.mles.iter().enumerate() {
+                    vals0[i] = mle.eval0_at_index(b << 1);
+                    vals1[i] = mle.eval0_at_index((b << 1) | 1);
+                }
+                acc[0] += comb_fn0(&vals0);
+                acc[1] += comb_fn0(&vals1);
+                for i in 0..num_polys {
+                    steps[i] = vals1[i] - vals0[i];
+                    vals[i] = vals1[i];
+                }
+                for d in 2..=degree {
+                    for i in 0..num_polys {
+                        vals[i] += steps[i];
+                    }
+                    acc[d] += comb_fn0(&vals);
+                }
+            }
+            acc
+        };
+
+        ProverMsg {
+            evaluations: evals0.into_iter().map(R::from).collect(),
+        }
     }
 
     /// Run streaming sumcheck as a subprotocol (same transcript schedule as LF dense prover).
