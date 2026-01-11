@@ -2424,6 +2424,7 @@ where
 }
 
 #[cfg(all(test, feature = "we_gate"))]
+#[allow(non_local_definitions)]
 mod tests {
     use super::*;
     use cyclotomic_rings::rings::GoldilocksPoseidonConfig as PC;
@@ -2982,26 +2983,19 @@ mod tests {
         use dpp::dr1cs_flpcp::Dr1csInstanceSparse as DppInst;
         use dpp::sparse::SparseVec;
         use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
+        use dpp::packing::{centered_bigint_to_field, field_to_centered_bigint, sample_packing_weights, FlpcpPredicate, PackedDppQuerySparse};
+        use dpp::BoundedFlpcpSparse;
 
         use ark_ff::PrimeField;
-        use rand::{rngs::StdRng, SeedableRng};
+        use rand::{rngs::StdRng, RngCore, SeedableRng};
         #[cfg(feature = "parallel")]
         use rayon::current_num_threads;
-        #[cfg(feature = "parallel")]
-        use rayon::prelude::*;
 
         fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
             FBig::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
         }
 
-        fn lift_bit_to_big<Fs: PrimeField>(b: Fs) -> FBig {
-            if b.is_zero() {
-                FBig::from(0u64)
-            } else {
-                debug_assert_eq!(b, Fs::ONE, "non-boolean bit in proof encoding");
-                FBig::from(1u64)
-            }
-        }
+
 
         // Default to the historical large-scale setting (n=2^20), but allow smaller for scaling studies.
         let n_pow: usize = std::env::var("LFP_TRACE_NPOW")
@@ -3111,15 +3105,21 @@ mod tests {
                 z_w_small.len(),
                 out.assignment.len()
             );
-            let pi_field = flpcp.prove(&x_small, &z_w_small);
-            eprintln!("[test_large_trace] flpcp.prove: {:?}", t4.elapsed());
+            let (pi_field, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
+            eprintln!(
+                "[test_large_trace] flpcp.prove_with_codewords: {:?} (pi_field_len={})",
+                t4.elapsed(),
+                pi_field.len()
+            );
             let t5 = std::time::Instant::now();
             let boolized = dpp::BooleanProofFlpcpSparse::<FSmall, _>::new(flpcp.clone());
-            let pi_bits = boolized.encode_proof_bits(&pi_field);
+            // Keep proof bits bitpacked to avoid multi-GB allocations.
+            let pi_bits_packed = boolized.encode_proof_bits_packed(&pi_field);
             eprintln!(
-                "[test_large_trace] booleanize(pi): {:?} (pi_bits_len={})",
+                "[test_large_trace] booleanize(pi)_packed: {:?} (pi_bits_len={}, packed_bytes={})",
                 t5.elapsed(),
-                pi_bits.len()
+                boolized.m_bits(),
+                pi_bits_packed.len()
             );
 
             let t6 = std::time::Instant::now();
@@ -3131,7 +3131,7 @@ mod tests {
             eprintln!("[test_large_trace] build_rev2_dpp: {:?}", t6.elapsed());
 
             let t_xbig = std::time::Instant::now();
-            let x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
+            let _x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
             eprintln!("[test_large_trace] lift x_small->x_big: {:?}", t_xbig.elapsed());
 
             let vk_hash = [1u8; 32];
@@ -3148,21 +3148,62 @@ mod tests {
                 h.finalize().into()
             };
             let mut rng = StdRng::from_seed(coin_seed);
+            // NOTE: `dppv.sample_query()` expands to a huge packed query vector and can be
+            // O(|constraints|) for RS-FLPCP instances (k = #rows). For SP1-scale k this is not viable.
+            //
+            // sample coins (idx, λ) + packing weights,
+            // answer the 3 RS-FLPCP queries in coin form (by indexing cached codewords), then pack/decode.
             let t7 = std::time::Instant::now();
-            let q = dppv.sample_query(&mut rng, &x_big).expect("sample_query");
-            eprintln!("[test_large_trace] dpp.sample_query: {:?}", t7.elapsed());
+            let b = dppv.flpcp.bounds_b();
+            let w = sample_packing_weights::<FBig>(&mut rng, dppv.params.ell, &b).expect("sample_packing_weights");
+            let pred = FlpcpPredicate::MulEqModP {
+                p_small: num_bigint::BigInt::from_bytes_le(
+                    num_bigint::Sign::Plus,
+                    &FSmall::MODULUS.to_bytes_le(),
+                ),
+            };
+            let k_rows = cw.y_a.len();
+            let ell_rs = 2 * k_rows;
+            let idx = (rng.next_u64() as usize) % ell_rs;
+            let lambda_small = FSmall::from(rng.next_u64());
+            eprintln!(
+                "[test_large_trace] lock coins: idx={idx} (ell_rs={ell_rs}, k_rows={k_rows})"
+            );
 
-            // `pi_bits` is boolean; lifting via bytes is extremely slow. Use a fast 0/1 lift.
-            let t_pibig = std::time::Instant::now();
-            #[cfg(feature = "parallel")]
-            let pi_big = pi_bits.par_iter().copied().map(lift_bit_to_big::<FSmall>).collect::<Vec<_>>();
-            #[cfg(not(feature = "parallel"))]
-            let pi_big = pi_bits.iter().copied().map(lift_bit_to_big::<FSmall>).collect::<Vec<_>>();
-            eprintln!("[test_large_trace] lift pi_bits->pi_big: {:?}", t_pibig.elapsed());
+            let (a_small, b_small, c_small) = if idx < k_rows {
+                let a = cw.y_a[idx];
+                let b0 = cw.y_b[idx];
+                let wv = cw.w[idx];
+                let cx_minus = cw.y_c[idx] - wv;
+                let c = wv + lambda_small * cx_minus;
+                (a, b0, c)
+            } else {
+                let j = idx - k_rows;
+                let a = cw.y_a_tail[j];
+                let b0 = cw.y_b_tail[j];
+                let wv = cw.w[idx];
+                // Tail-half: the C-part is unused in q3; answer is just w(α)=a*b.
+                let c = wv;
+                (a, b0, c)
+            };
 
-            let t8 = std::time::Instant::now();
-            let ok = dppv.verify_with_query(&x_big, &pi_big, &q).expect("verify");
-            eprintln!("[test_large_trace] dpp verify_with_query: {:?} ok={ok}", t8.elapsed());
+            let ans_field: [FBig; 3] = [
+                lift_to_big::<FSmall>(a_small),
+                lift_to_big::<FSmall>(b_small),
+                lift_to_big::<FSmall>(c_small),
+            ];
+
+            // Pack into one integer a_int = Σ w_i * [ans_i]_centered, then reduce to field.
+            let mut a_int = num_bigint::BigInt::from(0);
+            for (wi, ai) in w.iter().zip(ans_field.iter()) {
+                let ai_int = field_to_centered_bigint::<FBig>(ai);
+                a_int += wi * ai_int;
+            }
+            let a = centered_bigint_to_field::<FBig>(&a_int);
+
+            let q_meta = PackedDppQuerySparse::<FBig> { q: dpp::sparse::SparseVec::default(), w, b, pred };
+            let ok = dppv.verify_packed_answer(&a, &q_meta).expect("verify_packed_answer");
+            eprintln!("[test_large_trace] dpp lock_check(coin-form): {:?} ok={ok}", t7.elapsed());
         };
 
         run_one("toy_42", digest_toy);
