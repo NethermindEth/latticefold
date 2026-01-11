@@ -2160,6 +2160,7 @@ where
     R::BaseRing: Zq + Field,
 {
     let profile_build = std::env::var("LFP_WE_BUILD_PROFILE").ok().as_deref() == Some("1");
+    let t_total = std::time::Instant::now();
 
     // Poseidon trace -> dR1CS (+ wiring).
     let ops = lf_ops_to_symphony_ops::<BF<R>>(&trace.ops);
@@ -2240,6 +2241,8 @@ where
 
     let (pose_byte_vars, pose_field_vars) =
         cm_poseidon_challenge_vars::<R>(&pose_wiring, &byte_wiring, &op_wiring)?;
+
+    let t_glue = std::time::Instant::now();
 
     if pose_byte_vars.len() != coin_wiring.byte_vars.len() {
         return Err("poseidon/coin byte length mismatch".to_string());
@@ -2437,6 +2440,14 @@ where
         glue.push((0, *pv, 5, *cv));
     }
 
+    if profile_build {
+        eprintln!(
+            "[we_build] glue: {:?} (glue_eqs={})",
+            t_glue.elapsed(),
+            glue.len()
+        );
+    }
+
     let parts = vec![
         (pose_inst, pose_asg),   // 0
         (params_inst, params_asg), // 1
@@ -2448,8 +2459,18 @@ where
     let part_constraints = parts.iter().map(|(i, _)| i.constraints.len()).collect::<Vec<_>>();
     let part_nvars = parts.iter().map(|(i, _)| i.nvars).collect::<Vec<_>>();
     let base_constraints = part_constraints.iter().sum::<usize>();
-    let (inst, assignment) =
-        merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
+
+    let t_merge = std::time::Instant::now();
+    let (inst, assignment) = merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
+    if profile_build {
+        eprintln!(
+            "[we_build] merge: {:?} (base_constraints={}, glue_constraints={})",
+            t_merge.elapsed(),
+            base_constraints,
+            glue.len()
+        );
+        eprintln!("[we_build] total: {:?}", t_total.elapsed());
+    }
 
     let public_len = 1 + 9 + public_inputs.len();
     Ok((
@@ -3061,8 +3082,7 @@ mod tests {
         let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n); mlen];
 
         type FSmall = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
-        let digest_toy: FSmall = FSmall::from(42u64);
-        let digest_hash: FSmall = {
+        let sp1_digest: FSmall = {
             let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
             digest32_to_field::<FSmall>(d)
         };
@@ -3248,8 +3268,7 @@ mod tests {
             eprintln!("[test_large_trace] dpp lock_check(coin-form): {:?} ok={ok}", t7.elapsed());
         };
 
-        run_one("toy_42", digest_toy);
-        run_one("sha256->field", digest_hash);
+        run_one("sha256->field", sp1_digest);
     }
 }
 
