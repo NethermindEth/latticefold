@@ -2982,15 +2982,9 @@ where
         return Err("poseidon field var length mismatch".to_string());
     }
 
-    // Glue constraints.
-    let mut glue: Vec<(usize, usize, usize, usize)> = Vec::new();
-
     // Glue Π_lin challenges (prefix squeeze-field) to Poseidon squeeze-field vars.
     if lin_ch_vars.len() > pose_wiring.squeeze_field_vars.len() {
         return Err("plus: poseidon wiring not enough squeeze_field vars for lin".to_string());
-    }
-    for (i, &v_lin) in lin_ch_vars.iter().enumerate() {
-        glue.push((0, pose_wiring.squeeze_field_vars[i], 2, v_lin));
     }
 
     // Glue Π_lin absorb surface to Poseidon absorb vars over the prefix region
@@ -3006,15 +3000,34 @@ where
             _ => {}
         }
     }
-    // Statement absorbs:
-    let mut pose_abs_stmt: Vec<usize> = Vec::new();
-    for i in 0..absorb_ops_before_first_sf {
-        let (start, len) = pose_wiring.absorb_ranges[i];
-        if is_reabsorb[i] {
-            continue;
+
+    // Helper: flatten Poseidon absorb vars for a range of absorb ops, skipping re-absorbs.
+    #[inline]
+    fn flatten_pose_absorb_vars(
+        pose_wiring: &PoseidonDr1csWiring,
+        is_reabsorb: &[bool],
+        start_absorb_op: usize,
+        end_absorb_op: usize,
+    ) -> Vec<usize> {
+        let mut total = 0usize;
+        for i in start_absorb_op..end_absorb_op {
+            if is_reabsorb[i] {
+                continue;
+            }
+            total += pose_wiring.absorb_ranges[i].1;
         }
-        pose_abs_stmt.extend_from_slice(&pose_wiring.absorb_vars[start..start + len]);
+        let mut out = Vec::with_capacity(total);
+        for i in start_absorb_op..end_absorb_op {
+            if is_reabsorb[i] {
+                continue;
+            }
+            let (start, len) = pose_wiring.absorb_ranges[i];
+            out.extend_from_slice(&pose_wiring.absorb_vars[start..start + len]);
+        }
+        out
     }
+
+    // Local statement absorbs are the public inputs as field-elements-as-ring, in order.
     // Local statement absorbs are the public inputs as field-elements-as-ring, in order.
     let mut b_stmt = Dr1csBuilder::<BF<R>>::new();
     b_stmt.enforce_var_eq_const(b_stmt.one(), BF::<R>::ONE);
@@ -3029,6 +3042,36 @@ where
         absorb_field_elem_as_ring::<R>(&mut b_stmt, &mut stmt_absorb_flat, v0);
     }
     let (stmt_inst, stmt_asg) = b_stmt.into_instance();
+
+    // Now that we know the big glue surface sizes, reserve aggressively to avoid repeated reallocs
+    // in the glue builder (can be noticeable for multi-million-row gates).
+    let glue_cap = lin_ch_vars.len()
+        + stmt_absorb_flat.len()
+        + stmt_pub_vars.len()
+        + lin_absorb_flat.len()
+        + pose_byte_vars.len()
+        + need_field
+        + cm_wiring.short.byte_vars.len()
+        + cm_wiring.field.c0.len()
+        + cm_wiring.field.c1.len()
+        + 2 /* rc0/rc1 */
+        + cm_wiring.field.sumcheck_r0.len()
+        + cm_wiring.field.sumcheck_r1.len()
+        + dcom_wiring.squeeze_field_vars.len()
+        + params_vars.len()
+        + dcom_wiring.absorb_flat.len()
+        + cm_wiring.absorb_flat.len();
+
+    let mut glue: Vec<(usize, usize, usize, usize)> = Vec::with_capacity(glue_cap);
+
+    // Glue Π_lin challenges (prefix squeeze-field) to Poseidon squeeze-field vars.
+    for (i, &v_lin) in lin_ch_vars.iter().enumerate() {
+        glue.push((0, pose_wiring.squeeze_field_vars[i], 2, v_lin));
+    }
+
+    // Statement absorbs (Poseidon side).
+    let pose_abs_stmt =
+        flatten_pose_absorb_vars(&pose_wiring, &is_reabsorb, 0, absorb_ops_before_first_sf);
     if pose_abs_stmt.len() != stmt_absorb_flat.len() {
         return Err(format!(
             "plus: statement absorb length mismatch: pose={} stmt={}",
@@ -3051,14 +3094,12 @@ where
     if cm_absorb_op_offset > pose_wiring.absorb_ranges.len() {
         return Err("plus: cm_absorb_op_offset out of range".to_string());
     }
-    let mut pose_abs_lin: Vec<usize> = Vec::new();
-    for i in absorb_ops_before_first_sf..cm_absorb_op_offset {
-        let (start, len) = pose_wiring.absorb_ranges[i];
-        if is_reabsorb[i] {
-            continue;
-        }
-        pose_abs_lin.extend_from_slice(&pose_wiring.absorb_vars[start..start + len]);
-    }
+    let pose_abs_lin = flatten_pose_absorb_vars(
+        &pose_wiring,
+        &is_reabsorb,
+        absorb_ops_before_first_sf,
+        cm_absorb_op_offset,
+    );
     if pose_abs_lin.len() != lin_absorb_flat.len() {
         return Err(format!(
             "plus: lin absorb length mismatch: pose={} lin={}",
@@ -3186,14 +3227,8 @@ where
     }
 
     // Glue the entire Dcom-prefix absorb surface.
-    let mut pose_abs_prefix: Vec<usize> = Vec::new();
-    for i in cm_absorb_op_offset..end_prefix {
-        let (start, len) = pose_wiring.absorb_ranges[i];
-        if is_reabsorb[i] {
-            continue;
-        }
-        pose_abs_prefix.extend_from_slice(&pose_wiring.absorb_vars[start..start + len]);
-    }
+    let pose_abs_prefix =
+        flatten_pose_absorb_vars(&pose_wiring, &is_reabsorb, cm_absorb_op_offset, end_prefix);
     if pose_abs_prefix.len() != dcom_wiring.absorb_flat.len() {
         return Err(format!(
             "plus: prefix absorb glue length mismatch: pose={} local={}",
@@ -3210,14 +3245,12 @@ where
     if cm_abs_start > pose_wiring.absorb_ranges.len() {
         return Err("plus: cm_abs_start out of range".to_string());
     }
-    let mut pose_abs_flat: Vec<usize> = Vec::new();
-    for i in cm_abs_start..pose_wiring.absorb_ranges.len() {
-        let (start, len) = pose_wiring.absorb_ranges[i];
-        if is_reabsorb[i] {
-            continue;
-        }
-        pose_abs_flat.extend_from_slice(&pose_wiring.absorb_vars[start..start + len]);
-    }
+    let pose_abs_flat = flatten_pose_absorb_vars(
+        &pose_wiring,
+        &is_reabsorb,
+        cm_abs_start,
+        pose_wiring.absorb_ranges.len(),
+    );
     if pose_abs_flat.len() != cm_wiring.absorb_flat.len() {
         return Err(format!(
             "plus: cm absorb glue length mismatch: pose={} cm={}",
