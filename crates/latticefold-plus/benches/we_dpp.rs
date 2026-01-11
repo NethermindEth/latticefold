@@ -1,10 +1,12 @@
 //! WE-gate + DPP integration bench (research).
 //!
 //! Current scope:
-//! - Build a WE sparse dR1CS for verifying one `CmProof` (commitment transform / Π_cm)
+//! - Build a WE sparse dR1CS for verifying one **full** LF+ `PlusProof`
+//!   (Π_lin + Π_cm + Π_decomp, i.e. the full LF+ verifier)
 //! - Convert it into the prototype dpp::dr1cs_flpcp pipeline and run verification
 //!
-//! This is not yet the full LF+ WE gate (DecompProof still TODO).
+//! This is intended to be the “apples-to-apples” WE/DPP benchmark surface for LF+:
+//! arithmetize the verifier trace, then run the Rev2 (Booleanize → Embed → Pack) DPP pipeline.
 
 #![allow(non_snake_case)]
 #![allow(non_local_definitions)]
@@ -13,17 +15,22 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use cyclotomic_rings::rings::GetPoseidonParams;
 
-use ark_ff::{BigInteger, Field, Fp384, MontBackend, MontConfig, PrimeField};
+use ark_ff::{BigInteger, Fp384, MontBackend, MontConfig, PrimeField};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
-use latticefold_plus::cm::Cm;
-use latticefold_plus::rgchk::{DecompParameters, Rg, RgInstance};
+use latticefold_plus::lin::LinearizedVerify;
+use latticefold_plus::lin::LinParameters;
+use latticefold_plus::plus::{PlusParameters, PlusProver};
+use latticefold_plus::r1cs::{r1cs_decomposed_square, ComR1CS};
+use latticefold_plus::rgchk::DecompParameters;
+use latticefold_plus::utils::estimate_bound;
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings::PolyRing;
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 
 use latticefold_plus::recording_transcript::TracePoseidonTranscript;
-use latticefold_plus::we_gate_arith::{build_we_dr1cs_for_cm_proof_debug, WeCmBuildDebug};
+use latticefold_plus::we_gate_arith::build_we_dr1cs_for_plus_proof_debug;
 use latticefold_plus::we_statement::{
     digest32_to_field, we_statement_hash_lf_plus, WeParams, LFP_WE_GATE_DIGEST_V1,
 };
@@ -53,12 +60,7 @@ fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
 
 fn bench_we_dpp(c: &mut Criterion) {
     // Keep defaults small-ish so local runs work; override on server by editing this file for now.
-    // Toy params, but must still satisfy decomposition constraints:
-    // - `RgInstance::from_f` uses `split(..., padding_size = ell)` to gadget-decompose commitment entries.
-    // - If `ell` is too small, `balanced_decomposition` can panic (needs enough digits to represent a typical field element).
-    // Use a conservative `ell=32` as in other benches.
-    //
-    // We also keep `f=0` so the *cf(f)* decomposition with `k=1` is safe.
+    // Toy-ish params, but must still satisfy decomposition constraints. Use a conservative `ell=32`.
     let k = 1usize;
     let kappa = 1usize;
     let ell = 32usize;
@@ -73,22 +75,38 @@ fn bench_we_dpp(c: &mut Criterion) {
     let dparams = DecompParameters { b, k, l: ell };
     let mut rng = ark_std::test_rng();
 
-    // Single-instance Cm setup.
-    let f = vec![R::from(<R as PolyRing>::BaseRing::ZERO); n];
+    // Ajtai matrix + monomial witness matrices (identity keeps `setchk` happy).
     let A = Matrix::<R>::rand(&mut rng, kappa, n);
-    let inst = RgInstance::from_f(f, &A, &dparams);
-    let rg = Rg {
-        nvars,
-        instances: vec![inst],
-        dparams: dparams.clone(),
-    };
-    let cm = Cm { rg };
-    // NOTE: `setchk` expects a witness matrix `M` whose entries are unit monomials.
-    // Use plain identity (all-ones on diagonal) to stay in the monomial set.
-    let M: Vec<SparseMatrix<R>> = vec![SparseMatrix::identity(n)];
+    let M: Vec<Arc<SparseMatrix<R>>> = vec![Arc::new(SparseMatrix::identity(n))];
 
-    // Prover-side Cm proof.
-    let mut ts = latticefold_plus::transcript::PoseidonTranscript::empty::<PC>();
+    // Minimal Π_lin component so the transcript prefix is exercised.
+    //
+    // We use the same “decomposed square” harness as `test_large_trace` in `we_gate_arith.rs`.
+    // This is a bench harness, not a tight bound.
+    let sop = R::dimension() * 128;
+    let B_bound = estimate_bound(sop, 1, R::dimension(), k) + 1;
+    let m = n / k;
+    let z: Vec<R> = (0..m)
+        .map(|_| R::from((rng.next_u64() & 1) as u128))
+        .collect();
+    let r1cs0 = r1cs_decomposed_square(
+        latticefold::arith::r1cs::R1CS::<R> {
+            l: 1,
+            A: SparseMatrix::identity(m),
+            B: SparseMatrix::identity(m),
+            C: SparseMatrix::identity(m),
+        },
+        n,
+        B_bound,
+        k,
+    );
+    let cr1cs = ComR1CS::new(r1cs0, z, 1, B_bound, k, &A);
+    let lin_params = LinParameters { kappa, decomp: dparams.clone() };
+    let pparams = PlusParameters { lin: lin_params, B: B_bound };
+
+    // Prover-side full Plus proof.
+    let transcript = latticefold_plus::transcript::PoseidonTranscript::empty::<PC>();
+    let mut prover = PlusProver::init(A.clone(), M.clone(), 1, pparams.clone(), transcript);
     // Model SP1: one public input digest (statement-defined) absorbed into the transcript *before* proving.
     // (In production this comes from SP1 public inputs.)
     type FSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
@@ -97,13 +115,28 @@ fn bench_we_dpp(c: &mut Criterion) {
         let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
         digest32_to_field::<FSmall>(d)
     };
-    ts.absorb_field_element(&sp1_public_input_digest);
-    let (_com, proof) = cm.prove(&M, &mut ts);
+    prover.transcript.absorb_field_element(&sp1_public_input_digest);
+    let proof = prover.prove(&[cr1cs]);
 
     // Record verifier transcript ops.
     let mut rec = TracePoseidonTranscript::<R>::empty::<PC>();
     rec.absorb_field_element(&sp1_public_input_digest);
-    proof.verify(&M, &mut rec).expect("cm proof verify");
+    // Mirror `PlusVerifier::verify` so we can capture the exact transcript offsets where Cm starts.
+    for lp in &proof.lproof {
+        lp.verify(&mut rec);
+    }
+    let cm_ops_offset = rec.trace().ops.len();
+    let cm_absorb_op_offset = rec
+        .trace()
+        .ops
+        .iter()
+        .filter(|op| matches!(op, latticefold_plus::recording_transcript::PoseidonTraceOp::Absorb(_)))
+        .count();
+    let cm_squeezed_field_offset = rec.trace().squeezed_field.len();
+    proof.cmproof.verify(&M, &mut rec).expect("cm proof verify");
+    proof
+        .dproof
+        .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, B_bound);
     let trace = rec.trace().clone();
 
     // Statement params prefix (placeholder values; we only bind layout in this bench).
@@ -124,40 +157,41 @@ fn bench_we_dpp(c: &mut Criterion) {
     let mut group = c.benchmark_group("we_dpp");
     group.sample_size(10);
 
-    group.bench_function(BenchmarkId::new("build_we_dr1cs_cm_proof", n), |bch| {
+    group.bench_function(BenchmarkId::new("build_we_dr1cs_plus_proof", n), |bch| {
         bch.iter(|| {
-            let (out, dbg) =
-            build_we_dr1cs_for_cm_proof_debug::<R>(
+            let out = build_we_dr1cs_for_plus_proof_debug::<R>(
                 &poseidon_cfg,
                 &trace,
                 &params,
                 &[sp1_public_input_digest],
                 &proof,
+                cm_ops_offset,
+                cm_absorb_op_offset,
+                cm_squeezed_field_offset,
                 M.len(),
+                B_bound,
             )
-                    .expect("build_we_dr1cs_for_cm_proof_debug");
-            if let Err(e) = out.inst.check(&out.assignment) {
-                let msg = explain_failed_constraint(&out, &dbg, &e);
-                panic!("dr1cs satisfied: {e}\n{msg}");
-            }
+            .expect("build_we_dr1cs_for_plus_proof_debug");
+            out.inst.check(&out.assignment).expect("dr1cs satisfied");
         })
     });
 
-    group.bench_function(BenchmarkId::new("dpp_verify_cm_proof", n), |bch| {
+    group.bench_function(BenchmarkId::new("dpp_verify_plus_proof", n), |bch| {
         // Build once outside the timed loop.
-        let (out, dbg) = build_we_dr1cs_for_cm_proof_debug::<R>(
+        let out = build_we_dr1cs_for_plus_proof_debug::<R>(
             &poseidon_cfg,
             &trace,
             &params,
             &[sp1_public_input_digest],
             &proof,
+            cm_ops_offset,
+            cm_absorb_op_offset,
+            cm_squeezed_field_offset,
             M.len(),
+            B_bound,
         )
-        .expect("build_we_dr1cs_for_cm_proof_debug");
-        if let Err(e) = out.inst.check(&out.assignment) {
-            let msg = explain_failed_constraint(&out, &dbg, &e);
-            panic!("dr1cs satisfied: {e}\n{msg}");
-        }
+        .expect("build_we_dr1cs_for_plus_proof_debug");
+        out.inst.check(&out.assignment).expect("dr1cs satisfied");
 
         // Convert sparse dR1CS -> sparse dR1CS instance for the prototype RS FLPCP.
         let inst_sparse = dpp::dr1cs_flpcp::Dr1csInstanceSparse::<FSmall> {
@@ -282,83 +316,6 @@ fn bench_we_dpp(c: &mut Criterion) {
     });
 
     group.finish();
-}
-
-fn parse_failed_constraint_idx(msg: &str) -> Option<usize> {
-    // expected "constraint {i} failed"
-    let msg = msg.trim();
-    let msg = msg.strip_prefix("constraint ")?;
-    let msg = msg.strip_suffix(" failed")?;
-    msg.parse::<usize>().ok()
-}
-
-fn explain_failed_constraint(
-    out: &latticefold_plus::we_gate_arith::WeDr1csOutput<<<R as PolyRing>::BaseRing as Field>::BasePrimeField>,
-    dbg: &WeCmBuildDebug,
-    err: &str,
-) -> String {
-    let Some(i) = parse_failed_constraint_idx(err) else {
-        return "[we_dpp] could not parse failed constraint index".to_string();
-    };
-    let mut acc = 0usize;
-    let names = [
-        "poseidon",
-        "params",
-        "setchk_verify",
-        "dcom_absorb",
-        "cm_short_bytes",
-        "cm_field_chals",
-        "cm_verify",
-    ];
-    for (part_idx, &cnt) in dbg.part_constraints.iter().enumerate() {
-        if i < acc + cnt {
-            let name = names.get(part_idx).copied().unwrap_or("unknown");
-            let mut msg = format!(
-                "[we_dpp] failed constraint {i} is in PART {part_idx} ({name}), start={acc}, len={cnt}"
-            );
-            if part_idx == 6 && !dbg.cm_phase_marks.is_empty() {
-                let local = i - acc;
-                let mut phase = "unknown";
-                for (j, &m) in dbg.cm_phase_marks.iter().enumerate() {
-                    if local < m {
-                        phase = dbg.cm_phase_names.get(j).map(|s| s.as_str()).unwrap_or("unknown");
-                        break;
-                    }
-                }
-                if phase == "unknown" {
-                    if let Some(last) = dbg.cm_phase_names.last() {
-                        phase = last;
-                    }
-                }
-                msg.push_str(&format!("\n[we_dpp] cm_verify local_idx={local}, phase≈{phase}"));
-            }
-            return msg;
-        }
-        acc += cnt;
-    }
-    // Glue constraints
-    let glue_idx = i.saturating_sub(dbg.base_constraints);
-    if glue_idx < dbg.glue.len() {
-        let (pa, xa, pb, xb) = dbg.glue[glue_idx];
-        // Compute merged-space indices to show witness mismatch.
-        let mut offsets = Vec::with_capacity(dbg.part_nvars.len());
-        let mut off = 0usize;
-        for &nv in &dbg.part_nvars {
-            offsets.push(off);
-            off += nv - 1;
-        }
-        let ga = if xa == 0 { 0 } else { xa + offsets[pa] };
-        let gb = if xb == 0 { 0 } else { xb + offsets[pb] };
-        let va = out.assignment[ga];
-        let vb = out.assignment[gb];
-        return format!(
-            "[we_dpp] failed constraint {i} is GLUE #{glue_idx}: (part {pa}, var {xa}) == (part {pb}, var {xb})\n\
-             merged idxs: {ga} vs {gb}\n\
-             values: {va:?} vs {vb:?}"
-        );
-    } else {
-        format!("[we_dpp] failed constraint {i} is after all parts+glue??")
-    }
 }
 
 criterion_group!(benches, bench_we_dpp);
