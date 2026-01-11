@@ -948,29 +948,84 @@ impl StreamingSumcheck {
     where
         R::BaseRing: Ring,
     {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
+        let t_total = std::time::Instant::now();
+
         transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
         transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
 
+        let t_init = std::time::Instant::now();
         let mut state = Self::prover_init(mles, nvars, degree);
+        if profile && profile_detail {
+            println!(
+                "[LF+ streaming_sumcheck] init: {:?} (nvars={}, degree={}, mles={})",
+                t_init.elapsed(),
+                nvars,
+                degree,
+                state.mles.len()
+            );
+        }
         let mut msgs = Vec::with_capacity(nvars);
         let mut v_msg: Option<R::BaseRing> = None;
 
-        for _ in 0..nvars {
+        let mut t_rounds = std::time::Duration::from_secs(0);
+        let mut t_absorb_msgs = std::time::Duration::from_secs(0);
+        let mut t_get_chal = std::time::Duration::from_secs(0);
+        let mut t_absorb_chal = std::time::Duration::from_secs(0);
+
+        for round in 0..nvars {
+            let t_r = std::time::Instant::now();
             let pm = Self::prove_round(&mut state, v_msg, &comb_fn);
+            t_rounds += t_r.elapsed();
+
+            let t_a = std::time::Instant::now();
             transcript.absorb_slice(&pm.evaluations);
+            t_absorb_msgs += t_a.elapsed();
             msgs.push(pm);
+
+            let t_c = std::time::Instant::now();
             let r = transcript.get_challenge();
+            t_get_chal += t_c.elapsed();
+
+            let t_ac = std::time::Instant::now();
             transcript.absorb_field_element(&r);
+            t_absorb_chal += t_ac.elapsed();
             v_msg = Some(r);
+
+            if profile && profile_detail && (round == 0 || round + 1 == nvars) {
+                println!(
+                    "[LF+ streaming_sumcheck] round {}/{} done",
+                    round + 1,
+                    nvars
+                );
+            }
         }
 
         // IMPORTANT: last sampled randomness is not yet applied inside the `nvars` rounds,
         // due to the standard sumcheck schedule (applied at the start of the next round).
         let last_r = v_msg.expect("nvars>0");
         state.randomness.push(last_r);
+        let t_fix = std::time::Instant::now();
         state.fix_last_variable(last_r);
+        let t_fix_elapsed = t_fix.elapsed();
 
+        let t_final = std::time::Instant::now();
         let final_evals = state.final_evals();
+        let t_final_elapsed = t_final.elapsed();
+
+        if profile && profile_detail {
+            println!(
+                "[LF+ streaming_sumcheck] totals: rounds={:?} absorb_msgs={:?} get_chal={:?} absorb_chal={:?} fix_last={:?} final_evals={:?} total={:?}",
+                t_rounds,
+                t_absorb_msgs,
+                t_get_chal,
+                t_absorb_chal,
+                t_fix_elapsed,
+                t_final_elapsed,
+                t_total.elapsed()
+            );
+        }
 
         (Proof::new(msgs), state.randomness, final_evals)
     }
