@@ -397,6 +397,11 @@ where
             let h0_arc: Option<Arc<Vec<R::BaseRing>>> =
                 if mats_const { try_as_base_scalars::<R>(&h[i]).map(Arc::new) } else { None };
 
+            // Decide whether we can actually take the const-coeff mat-vec fast path for this instance.
+            // Even if the matrices are const-coeff, we must also have const-coeff witnesses.
+            let use_const_coeff_matvec =
+                mats_const && mtau0_arc.is_some() && f0_arc.is_some() && h0_arc.is_some();
+
             // Direct tables (tau, m_tau, f, h):
             // If we have base-scalar witnesses, use BaseScalarArc to avoid carrying ring vectors.
             // Otherwise fall back to DenseArc as before.
@@ -406,13 +411,38 @@ where
                 square: false,
             });
 
-            let m_tau_arc_ring: Option<Arc<Vec<R>>> = if mtau0_arc.is_none() { Some(Arc::new(inst.m_tau.clone())) } else { None };
-            let f_arc_ring: Option<Arc<Vec<R>>> = if f0_arc.is_none() { Some(Arc::new(inst.f.clone())) } else { None };
-            let h_arc_ring: Option<Arc<Vec<R>>> = if h0_arc.is_none() { Some(Arc::new(h[i].clone())) } else { None };
+            // For correctness (and to keep non-SP1 tests stable), only use base-scalar direct MLEs
+            // when we also take the const-coeff mat-vec fast path. Otherwise, keep the original
+            // ring tables (DenseArc).
+            let m_tau_arc_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
+                None
+            } else {
+                Some(Arc::new(inst.m_tau.clone()))
+            };
+            let f_arc_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
+                None
+            } else {
+                Some(Arc::new(inst.f.clone()))
+            };
+            let h_arc_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
+                None
+            } else {
+                Some(Arc::new(h[i].clone()))
+            };
 
-            if let Some(mtau0) = &mtau0_arc {
+            if use_const_coeff_matvec {
                 mles.push(StreamingMleEnum::BaseScalarArc {
-                    evals: mtau0.clone(),
+                    evals: mtau0_arc.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: f0_arc.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: h0_arc.as_ref().unwrap().clone(),
                     num_vars: nvars,
                     square: false,
                 });
@@ -421,35 +451,15 @@ where
                     evals: m_tau_arc_ring.as_ref().unwrap().clone(),
                     num_vars: nvars,
                 });
-            }
-            if let Some(f0) = &f0_arc {
-                mles.push(StreamingMleEnum::BaseScalarArc {
-                    evals: f0.clone(),
-                    num_vars: nvars,
-                    square: false,
-                });
-            } else {
                 mles.push(StreamingMleEnum::DenseArc {
                     evals: f_arc_ring.as_ref().unwrap().clone(),
                     num_vars: nvars,
                 });
-            }
-            if let Some(h0) = &h0_arc {
-                mles.push(StreamingMleEnum::BaseScalarArc {
-                    evals: h0.clone(),
-                    num_vars: nvars,
-                    square: false,
-                });
-            } else {
                 mles.push(StreamingMleEnum::DenseArc {
                     evals: h_arc_ring.as_ref().unwrap().clone(),
                     num_vars: nvars,
                 });
             }
-
-            // Decide whether we can actually take the const-coeff mat-vec fast path for this instance.
-            // Even if the matrices are const-coeff, we must also have const-coeff witnesses.
-            let use_const_coeff_matvec = mats_const && mtau0_arc.is_some() && f0_arc.is_some() && h0_arc.is_some();
             if profile {
                 if mats_const && !use_const_coeff_matvec {
                     println!(
