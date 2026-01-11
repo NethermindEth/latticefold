@@ -415,19 +415,38 @@ impl<R: OverField + PolyRing> In<R> {
         //
         // NOTE: we intentionally keep `eq_r` in the base ring to avoid allocating a length-2^n
         // vector of full ring elements (important when scaling to many chunks in parallel).
-        let y_mats: Vec<Vec<R>> = M
-            .iter()
-            .map(|mi| {
-                let mut y = vec![R::ZERO; mi.ncols];
-                for (row_idx, row) in mi.coeffs.iter().enumerate() {
-                    let w = R::from(eq_at(row_idx));
-                    for (coeff, col_idx) in row {
-                        y[*col_idx] += *coeff * w;
-                    }
-                }
-                y
-            })
-            .collect();
+        let y_mats: Vec<Vec<R>> = {
+            #[cfg(feature = "parallel")]
+            {
+                M.par_iter()
+                    .map(|mi| {
+                        let mut y = vec![R::ZERO; mi.ncols];
+                        for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                            let w = R::from(eq_at(row_idx));
+                            for (coeff, col_idx) in row {
+                                y[*col_idx] += *coeff * w;
+                            }
+                        }
+                        y
+                    })
+                    .collect()
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                M.iter()
+                    .map(|mi| {
+                        let mut y = vec![R::ZERO; mi.ncols];
+                        for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                            let w = R::from(eq_at(row_idx));
+                            for (coeff, col_idx) in row {
+                                y[*col_idx] += *coeff * w;
+                            }
+                        }
+                        y
+                    })
+                    .collect()
+            }
+        };
 
         let e: Vec<Vec<Vec<R>>> = {
             let mut e = Vec::with_capacity(1 + M.len());
@@ -443,16 +462,28 @@ impl<R: OverField + PolyRing> In<R> {
             // Dense sets
             for Md in &Ms_dense {
                 #[cfg(feature = "parallel")]
-                let v = (0..ncols)
+                let v = (0..nrows)
                     .into_par_iter()
-                    .map(|col| {
-                        let mut acc = R::ZERO;
-                        for row in 0..nrows {
-                            acc += Md.vals[row][col] * R::from(eq_at(row));
-                        }
-                        acc
-                    })
-                    .collect::<Vec<_>>();
+                    .fold(
+                        || vec![R::ZERO; ncols],
+                        |mut acc, row| {
+                            let w = R::from(eq_at(row));
+                            let row_vals = &Md.vals[row];
+                            for col in 0..ncols {
+                                acc[col] += row_vals[col] * w;
+                            }
+                            acc
+                        },
+                    )
+                    .reduce(
+                        || vec![R::ZERO; ncols],
+                        |mut a, b| {
+                            for col in 0..ncols {
+                                a[col] += b[col];
+                            }
+                            a
+                        },
+                    );
                 #[cfg(not(feature = "parallel"))]
                 let v = (0..ncols)
                     .map(|col| {
@@ -468,16 +499,27 @@ impl<R: OverField + PolyRing> In<R> {
             // Digit sets
             for Md in &Ms_digits {
                 #[cfg(feature = "parallel")]
-                let v = (0..ncols)
+                let v = (0..nrows)
                     .into_par_iter()
-                    .map(|col| {
-                        let mut acc = R::ZERO;
-                        for row in 0..nrows {
-                            acc += Md.get(row, col) * R::from(eq_at(row));
-                        }
-                        acc
-                    })
-                    .collect::<Vec<_>>();
+                    .fold(
+                        || vec![R::ZERO; ncols],
+                        |mut acc, row| {
+                            let w = R::from(eq_at(row));
+                            for col in 0..ncols {
+                                acc[col] += Md.get(row, col) * w;
+                            }
+                            acc
+                        },
+                    )
+                    .reduce(
+                        || vec![R::ZERO; ncols],
+                        |mut a, b| {
+                            for col in 0..ncols {
+                                a[col] += b[col];
+                            }
+                            a
+                        },
+                    );
                 #[cfg(not(feature = "parallel"))]
                 let v = (0..ncols)
                     .map(|col| {
@@ -538,16 +580,28 @@ impl<R: OverField + PolyRing> In<R> {
                 // Dense sets: Σ_row Md[row][col] * y[row]
                 for Md in &Ms_dense {
                     #[cfg(feature = "parallel")]
-                    let v = (0..ncols)
+                    let v = (0..nrows)
                         .into_par_iter()
-                        .map(|col| {
-                            let mut acc = R::ZERO;
-                            for row in 0..nrows {
-                                acc += Md.vals[row][col] * y[row];
-                            }
-                            acc
-                        })
-                        .collect::<Vec<_>>();
+                        .fold(
+                            || vec![R::ZERO; ncols],
+                            |mut acc, row| {
+                                let row_vals = &Md.vals[row];
+                                let wy = y[row];
+                                for col in 0..ncols {
+                                    acc[col] += row_vals[col] * wy;
+                                }
+                                acc
+                            },
+                        )
+                        .reduce(
+                            || vec![R::ZERO; ncols],
+                            |mut a, b| {
+                                for col in 0..ncols {
+                                    a[col] += b[col];
+                                }
+                                a
+                            },
+                        );
                     #[cfg(not(feature = "parallel"))]
                     let v = (0..ncols)
                         .map(|col| {
@@ -563,16 +617,27 @@ impl<R: OverField + PolyRing> In<R> {
                 // Digit sets
                 for Md in &Ms_digits {
                     #[cfg(feature = "parallel")]
-                    let v = (0..ncols)
+                    let v = (0..nrows)
                         .into_par_iter()
-                        .map(|col| {
-                            let mut acc = R::ZERO;
-                            for row in 0..nrows {
-                                acc += Md.get(row, col) * y[row];
-                            }
-                            acc
-                        })
-                        .collect::<Vec<_>>();
+                        .fold(
+                            || vec![R::ZERO; ncols],
+                            |mut acc, row| {
+                                let wy = y[row];
+                                for col in 0..ncols {
+                                    acc[col] += Md.get(row, col) * wy;
+                                }
+                                acc
+                            },
+                        )
+                        .reduce(
+                            || vec![R::ZERO; ncols],
+                            |mut a, b| {
+                                for col in 0..ncols {
+                                    a[col] += b[col];
+                                }
+                                a
+                            },
+                        );
                     #[cfg(not(feature = "parallel"))]
                     let v = (0..ncols)
                         .map(|col| {
