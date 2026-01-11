@@ -14,7 +14,7 @@ use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use cyclotomic_rings::rings::GetPoseidonParams;
 
 use ark_ff::{BigInteger, Field, Fp384, MontBackend, MontConfig, PrimeField};
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use latticefold_plus::cm::Cm;
 use latticefold_plus::rgchk::{DecompParameters, Rg, RgInstance};
@@ -29,6 +29,11 @@ use latticefold_plus::we_statement::{
 };
 
 use latticefold::transcript::Transcript;
+use dpp::BoundedFlpcpSparse;
+use dpp::packing::{
+    centered_bigint_to_field, field_to_centered_bigint, sample_packing_weights, FlpcpPredicate,
+    PackedDppQuerySparse,
+};
 use sha2::{Digest, Sha256};
 
 // -----------------------------------------------------------------------------
@@ -186,14 +191,11 @@ fn bench_we_dpp(c: &mut Criterion) {
 
         let x_small = out.assignment[..l_public].to_vec();
         let z_w_small = out.assignment[l_public..].to_vec();
-        let pi_field_small = flpcp.prove(&x_small, &z_w_small);
+        let (_pi_field_small, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
 
         // Rev2 pipeline (Booleanize -> Embed -> Pack) into a large field.
         //
         // Use the same builder as Symphony to match bounds/packing behavior exactly.
-        let boolized = dpp::BooleanProofFlpcpSparse::<FSmall, _>::new(flpcp.clone());
-        let pi_bits_small = boolized.encode_proof_bits(&pi_field_small);
-
         let dppv = dpp::pipeline::build_rev2_dpp_sparse_boolean_auto::<FSmall, FBig, _>(
             flpcp,
             dpp::EmbeddingParams {
@@ -203,13 +205,6 @@ fn bench_we_dpp(c: &mut Criterion) {
             },
         )
         .expect("build_rev2_dpp_sparse_boolean_auto");
-
-        let x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
-        let pi_big = pi_bits_small
-            .iter()
-            .copied()
-            .map(lift_to_big::<FSmall>)
-            .collect::<Vec<_>>();
 
         // Proof-agnostic arming model: derive query coins from a statement digest (no per-proof artifacts).
         // (In production, `vk_hash` and `r1cs_digest` are provided by SP1, and `gate_digest` is a fixed per-gate constant.)
@@ -233,11 +228,55 @@ fn bench_we_dpp(c: &mut Criterion) {
             h.finalize().into()
         };
         let mut rng = StdRng::from_seed(coin_seed);
-        let q = dppv.sample_query(&mut rng, &x_big).expect("dpp sample_query");
+
+        // do NOT expand packed query vectors via `sample_query()` (O(k) work).
+        // Sample coins (idx, λ) + packing weights, answer the 3 RS queries in coin form by indexing
+        // the cached codewords, then pack/decode via `verify_packed_answer`.
+        let b = dppv.flpcp.bounds_b();
+        let w = sample_packing_weights::<FBig>(&mut rng, dppv.params.ell, &b)
+            .expect("sample_packing_weights");
+        let pred = FlpcpPredicate::MulEqModP {
+            p_small: num_bigint::BigInt::from_bytes_le(
+                num_bigint::Sign::Plus,
+                &FSmall::MODULUS.to_bytes_le(),
+            ),
+        };
+        let ell_rs = 2 * k_rows;
+        let idx = (rng.next_u64() as usize) % ell_rs;
+        let lambda_small = FSmall::from(rng.next_u64());
+
+        let (a_small, b_small, c_small) = if idx < k_rows {
+            let a = cw.y_a[idx];
+            let b0 = cw.y_b[idx];
+            let wv = cw.w[idx];
+            let cx_minus = cw.y_c[idx] - wv;
+            let c = wv + lambda_small * cx_minus;
+            (a, b0, c)
+        } else {
+            let j = idx - k_rows;
+            let a = cw.y_a_tail[j];
+            let b0 = cw.y_b_tail[j];
+            let wv = cw.w[idx];
+            // Tail-half: C-part unused; answer is w(α)=a*b.
+            let c = wv;
+            (a, b0, c)
+        };
+
+        let ans_field: [FBig; 3] = [
+            lift_to_big::<FSmall>(a_small),
+            lift_to_big::<FSmall>(b_small),
+            lift_to_big::<FSmall>(c_small),
+        ];
+        let mut a_int = num_bigint::BigInt::from(0);
+        for (wi, ai) in w.iter().zip(ans_field.iter()) {
+            let ai_int = field_to_centered_bigint::<FBig>(ai);
+            a_int += wi * ai_int;
+        }
+        let a = centered_bigint_to_field::<FBig>(&a_int);
+
+        let q_meta = PackedDppQuerySparse::<FBig> { q: dpp::SparseVec::default(), w, b, pred };
         bch.iter(|| {
-            let ok = dppv
-                .verify_with_query(&x_big, &pi_big, &q)
-                .expect("dpp verify_with_query");
+            let ok = dppv.verify_packed_answer(&a, &q_meta).expect("verify_packed_answer");
             assert!(ok);
         })
     });
