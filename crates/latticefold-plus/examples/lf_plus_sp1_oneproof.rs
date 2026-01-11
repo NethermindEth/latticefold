@@ -62,11 +62,24 @@ fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(256);
+    let scan_all: bool = std::env::var("SCAN_ALL")
+        .ok()
+        .as_deref()
+        .map(|s| s == "1")
+        .unwrap_or(false);
+    let alloc_witness0: bool = std::env::var("ALLOC_WITNESS0")
+        .ok()
+        .as_deref()
+        .map(|s| s == "1")
+        .unwrap_or(false);
 
     println!("=========================================================");
     println!("LF+ SP1 One-Proof (loader + const-coeff inspection)");
     println!("=========================================================");
-    println!("  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of}");
+    println!(
+        "  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of} SCAN_ALL={} ALLOC_WITNESS0={}",
+        scan_all, alloc_witness0
+    );
 
     let t0 = Instant::now();
     let cache = latticefold_plus::sp1_r1cs::open_sp1_cache::<R, BabyBear>(
@@ -77,6 +90,10 @@ fn main() {
     .expect("open_sp1_cache");
     println!("  cache open: {:?}", t0.elapsed());
     println!("  chunks={} ncols={}", cache.num_chunks, cache.ncols);
+    println!(
+        "  stats: num_vars={} num_constraints={} num_public={} total_nonzeros={}",
+        cache.stats.num_vars, cache.stats.num_constraints, cache.stats.num_public, cache.stats.total_nonzeros
+    );
 
     // Read chunk 0 and inspect const-coeff property.
     let t1 = Instant::now();
@@ -93,33 +110,55 @@ fn main() {
     let c_const = is_const_coeff_sparse_matrix(&c);
     println!("  const-coeff matrices: A={} B={} C={}", a_const, b_const, c_const);
 
-    // If A is const-coeff, show the `SparseMatVecConstCoeff` path is viable by running a tiny sumcheck.
+    if scan_all {
+        let t_scan = Instant::now();
+        let mut ok_all = true;
+        for i in 0..cache.num_chunks {
+            let [aa, bb, cc] = cache.read_chunk(i).expect("read_chunk(i)");
+            let ok = is_const_coeff_sparse_matrix(&aa)
+                && is_const_coeff_sparse_matrix(&bb)
+                && is_const_coeff_sparse_matrix(&cc);
+            if !ok {
+                println!("  scan_all: chunk {i} is NOT const-coeff");
+                ok_all = false;
+                break;
+            }
+        }
+        println!("  scan_all: all_chunks_const_coeff={} ({:?})", ok_all, t_scan.elapsed());
+    }
+
+    // Optional demo: if A is const-coeff and you allow allocating an O(ncols) witness0, evaluate a few rows
+    // using `SparseMatVecConstCoeff` exactly like Symphony’s fast path.
+    //
+    // NOTE: for SP1 shrink, ncols can be huge (e.g. 67M). This allocation can be hundreds of MB.
     if a_const {
-        let ncols = a.ncols;
-        let mut witness0 = vec![<R as PolyRing>::BaseRing::ZERO; ncols];
-        witness0[0] = <R as PolyRing>::BaseRing::ONE;
-        let witness0 = Arc::new(witness0);
+        if alloc_witness0 {
+            let a_arc = Arc::new(a);
+            let ncols = a_arc.ncols;
+            let t_w = Instant::now();
+            let mut witness0 = vec![<R as PolyRing>::BaseRing::ZERO; ncols];
+            witness0[0] = <R as PolyRing>::BaseRing::ONE;
+            let witness0 = Arc::new(witness0);
+            println!("  alloc witness0: {:?} (len={})", t_w.elapsed(), ncols);
 
-        let mle = StreamingMleEnum::<R>::SparseMatVecConstCoeff {
-            matrix: Arc::new(a),
-            witness0,
-            num_vars: (chunk_size.trailing_zeros() as usize), // chunk nrows is a power-of-two in this setup
-        };
+            let mle = StreamingMleEnum::<R>::SparseMatVecConstCoeff {
+                matrix: a_arc.clone(),
+                witness0,
+                num_vars: (chunk_size.trailing_zeros() as usize), // chunk nrows is a power-of-two in this setup
+            };
 
-        // Cheap sanity check: evaluate a couple of vertices without materializing a ring witness.
-        let v0 = mle.eval_at_index(0);
-        let v1 = mle.eval_at_index(1);
-        // Print with Debug to avoid base-ring Display quirks (e.g. printing 0 as empty).
-        println!(
-            "  demo: SparseMatVecConstCoeff evals: v[0].ct={:?} v[1].ct={:?}",
-            v0.ct(),
-            v1.ct()
-        );
-        println!(
-            "  demo: chunk0 A row nnz: row0={} row1={}",
-            mle.eval0_at_index(0), // constant term in base ring
-            mle.eval0_at_index(1),
-        );
+            let t_eval = Instant::now();
+            let v0 = mle.eval_at_index(0);
+            let v1 = mle.eval_at_index(1);
+            println!(
+                "  demo: SparseMatVecConstCoeff evals: v[0].ct={:?} v[1].ct={:?} (eval_time={:?})",
+                v0.ct(),
+                v1.ct(),
+                t_eval.elapsed()
+            );
+        } else {
+            println!("  demo: skipped witness0 allocation (set ALLOC_WITNESS0=1 to run)");
+        }
     } else {
         println!("  demo: skipped (A not const-coeff in this representation)");
     }
