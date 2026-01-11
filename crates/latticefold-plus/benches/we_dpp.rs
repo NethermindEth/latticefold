@@ -23,7 +23,9 @@ use stark_rings_linalg::{Matrix, SparseMatrix};
 
 use latticefold_plus::recording_transcript::TracePoseidonTranscript;
 use latticefold_plus::we_gate_arith::{build_we_dr1cs_for_cm_proof_debug, WeCmBuildDebug};
-use latticefold_plus::we_statement::{we_statement_hash_lf_plus, WeParams, LFP_WE_GATE_DIGEST_V1};
+use latticefold_plus::we_statement::{
+    digest32_to_field, we_statement_hash_lf_plus, WeParams, LFP_WE_GATE_DIGEST_V1,
+};
 
 use latticefold::transcript::Transcript;
 use sha2::{Digest, Sha256};
@@ -84,7 +86,11 @@ fn bench_we_dpp(c: &mut Criterion) {
     // Model SP1: one public input digest (statement-defined) absorbed into the transcript *before* proving.
     // (In production this comes from SP1 public inputs.)
     type FSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
-    let sp1_public_input_digest: FSmall = FSmall::from(42u64);
+    // Use a "random-looking" in-field digest (so we don't accidentally rely on small constants).
+    let sp1_public_input_digest: FSmall = {
+        let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
+        digest32_to_field::<FSmall>(d)
+    };
     ts.absorb_field_element(&sp1_public_input_digest);
     let (_com, proof) = cm.prove(&M, &mut ts);
 

@@ -2431,7 +2431,6 @@ mod tests {
     use latticefold::transcript::Transcript;
     use stark_rings::balanced_decomposition::GadgetDecompose;
     use stark_rings::cyclotomic_ring::models::goldilocks::RqPoly as R;
-    use stark_rings::Ring;
     use stark_rings_linalg::{Matrix, SparseMatrix};
 
     use crate::lin::Linearize;
@@ -2528,7 +2527,7 @@ mod tests {
             B: SparseMatrix::identity(n),
             C: SparseMatrix::identity(n),
         };
-        let z = vec![R::ONE; n];
+        let z = vec![<R as stark_rings::Ring>::ONE; n];
         (r1cs, z)
     }
 
@@ -2958,6 +2957,164 @@ mod tests {
         let mut bad = out.assignment.clone();
         bad[digest_global] += <BF<RR> as ark_ff::Field>::ONE;
         assert!(out.inst.check(&bad).is_err(), "digest flip should break satisfaction");
+    }
+
+    // Large-scale (n=2^20) end-to-end WE->DPP sanity + digest "before/after" metric.
+    // Run with: cargo test --release -p latticefold-plus test_large_trace --features we_gate -- --nocapture --ignored
+    #[test]
+    #[ignore]
+    fn test_large_trace() {
+        use cyclotomic_rings::rings::FrogPoseidonConfig as PCF;
+        use cyclotomic_rings::rings::GetPoseidonParams;
+        use ark_ff::Zero;
+        use sha2::{Digest, Sha256};
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use stark_rings::PolyRing;
+
+        use crate::we_statement::{digest32_to_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};
+        use dpp::dr1cs_flpcp::Dr1csInstanceSparse as DppInst;
+        use dpp::sparse::SparseVec;
+        use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
+
+        use ark_ff::{Fp384, MontBackend, MontConfig, PrimeField};
+        use rand::{rngs::StdRng, SeedableRng};
+
+        #[derive(MontConfig)]
+        #[modulus = "39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
+        #[generator = "2"]
+        pub struct Secp384r1Config;
+        type FBig = Fp384<MontBackend<Secp384r1Config, 6>>;
+
+        fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
+            FBig::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
+        }
+
+        let n = 1 << 20;
+        let k = 4usize;
+        let kappa = 2usize;
+        let ell = 32usize;
+        let d = RR::dimension();
+        let b = (d / 2) as u128;
+        let nvars = ark_std::log2(n) as usize;
+        let dparams = DecompParameters { b, k, l: ell };
+
+        // Small Mlen=3 like earlier LF+ timings.
+        let M: Vec<SparseMatrix<RR>> = vec![
+            SparseMatrix::identity(n),
+            SparseMatrix::identity(n),
+            SparseMatrix::identity(n),
+        ];
+
+        type FSmall = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+        let digest_toy: FSmall = FSmall::from(42u64);
+        let digest_hash: FSmall = {
+            let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
+            digest32_to_field::<FSmall>(d)
+        };
+
+        let run_one = |label: &str, sp1_digest: FSmall| {
+            eprintln!("\n[test_large_trace] case={label}");
+            let mut rng = ark_std::test_rng();
+            let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+            let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+            let inst = RgInstance::from_f(f, &A, &dparams);
+            let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
+            let cm = Cm { rg };
+
+            let t0 = std::time::Instant::now();
+            let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
+            ts.absorb_field_element(&sp1_digest);
+            let (_com, proof) = cm.prove(&M, &mut ts);
+            eprintln!("[test_large_trace] cm.prove: {:?}", t0.elapsed());
+
+            let t1 = std::time::Instant::now();
+            let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+            rec.absorb_field_element(&sp1_digest);
+            proof.verify(&M, &mut rec).expect("cm verify");
+            let trace = rec.trace().clone();
+            eprintln!("[test_large_trace] cm.verify(record): {:?}", t1.elapsed());
+
+            let params = WeParams {
+                nvars_setchk: nvars as u64,
+                degree_setchk: 3,
+                nvars_cm: nvars as u64,
+                degree_cm: 2,
+                kappa: kappa as u64,
+                ring_dim_d: RR::dimension() as u64,
+                k: k as u64,
+                l: ell as u64,
+                mlen: M.len() as u64,
+            };
+            let poseidon_cfg = PCF::get_poseidon_config();
+
+            let t2 = std::time::Instant::now();
+            let (out, _dbg) = build_we_dr1cs_for_cm_proof_debug::<RR>(
+                &poseidon_cfg,
+                &trace,
+                &params,
+                &[sp1_digest],
+                &proof,
+                M.len(),
+            )
+            .expect("build we dr1cs");
+            out.inst.check(&out.assignment).expect("dr1cs sat");
+            eprintln!(
+                "[test_large_trace] build_we_dr1cs: {:?} (nvars={}, constraints={})",
+                t2.elapsed(),
+                out.inst.nvars,
+                out.inst.constraints.len()
+            );
+
+            // DPP verification (single query).
+            let inst_sparse = DppInst::<FSmall> {
+                n: out.inst.nvars,
+                a: out.inst.constraints.iter().map(|r| SparseVec::new(r.a.clone())).collect(),
+                b: out.inst.constraints.iter().map(|r| SparseVec::new(r.b.clone())).collect(),
+                c: out.inst.constraints.iter().map(|r| SparseVec::new(r.c.clone())).collect(),
+            };
+            let k_rows = inst_sparse.k();
+            let ell_rs = 2 * k_rows;
+            let l_public = out.public_len;
+            let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell_rs);
+
+            let x_small = out.assignment[..l_public].to_vec();
+            let z_w_small = out.assignment[l_public..].to_vec();
+            let pi_field = flpcp.prove(&x_small, &z_w_small);
+            let boolized = dpp::BooleanProofFlpcpSparse::<FSmall, _>::new(flpcp.clone());
+            let pi_bits = boolized.encode_proof_bits(&pi_field);
+
+            let dppv = build_rev2_dpp_sparse_boolean_auto::<FSmall, FBig, _>(
+                flpcp,
+                dpp::EmbeddingParams { gamma: 2, assume_boolean_proof: true, k_prime: 0 },
+            )
+            .expect("build dpp");
+
+            let x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
+            let pi_big = pi_bits.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
+
+            let vk_hash = [1u8; 32];
+            let r1cs_digest = [2u8; 32];
+            let stmt_digest = we_statement_hash_lf_plus::<RR>(vk_hash, r1cs_digest, LFP_WE_GATE_DIGEST_V1, &[sp1_digest]);
+            const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
+            let lock_j: u64 = 0;
+            let coin_seed: [u8; 32] = {
+                let mut h = Sha256::new();
+                h.update(b"LFP_LOCK_COIN_V1");
+                h.update(&ARMER_SEED);
+                h.update(&stmt_digest);
+                h.update(&lock_j.to_le_bytes());
+                h.finalize().into()
+            };
+            let mut rng = StdRng::from_seed(coin_seed);
+            let q = dppv.sample_query(&mut rng, &x_big).expect("sample_query");
+
+            let t3 = std::time::Instant::now();
+            let ok = dppv.verify_with_query(&x_big, &pi_big, &q).expect("verify");
+            eprintln!("[test_large_trace] dpp verify_with_query: {:?} ok={ok}", t3.elapsed());
+        };
+
+        run_one("toy_42", digest_toy);
+        run_one("sha256->field", digest_hash);
     }
 }
 

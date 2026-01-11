@@ -74,6 +74,13 @@ where
     h.finalize().into()
 }
 
+/// Canonical encoding for a 32-byte digest as a field element.
+///
+/// Interpret the digest as a **little-endian** integer and reduce mod p.
+pub fn digest32_to_field<BF: PrimeField>(digest: [u8; 32]) -> BF {
+    BF::from_le_bytes_mod_order(&digest)
+}
+
 
 /// Gate digest for the LF+ WE gate relation.
 ///
