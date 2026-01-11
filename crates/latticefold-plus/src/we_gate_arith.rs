@@ -2159,39 +2159,85 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
+    let profile_build = std::env::var("LFP_WE_BUILD_PROFILE").ok().as_deref() == Some("1");
+
     // Poseidon trace -> dR1CS (+ wiring).
     let ops = lf_ops_to_symphony_ops::<BF<R>>(&trace.ops);
-    let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
-        poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
-            .map_err(|e| format!("poseidon arith failed: {e}"))?;
-    enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
-
-    // Public statement params prefix.
-    let mut b_params = Dr1csBuilder::<BF<R>>::new();
-    b_params.enforce_var_eq_const(b_params.one(), BF::<R>::ONE);
-    let mut params_vars = Vec::with_capacity(9);
-    for &x in &params.to_field_vec::<BF<R>>() {
-        params_vars.push(b_params.new_var(x));
-    }
-    // Extra statement-defined public inputs.
-    let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
-    for &x in public_inputs {
-        pub_input_vars.push(b_params.new_var(x));
-    }
-    let (params_inst, params_asg) = b_params.into_instance();
-
-    // Dcom prefix: includes `Out::verify` (setchk) + `rgchk::Dcom::verify` arithmetic checks,
-    // and exposes the exact prefix absorb surface (excluding reabsorbs) for transcript gluing.
-    let (dcom_inst, dcom_asg, dcom_wiring) =
-        dcom_verifier_math_dr1cs::<R>(&proof.dcom, trace, params, public_inputs)?;
-
-    // Cm coin surface (reconstruction gadgets) and glue to Poseidon squeeze outputs.
+    // Parameters used by multiple sub-builders.
     let k = params.k as usize;
     let log_kappa = ark_std::log2((params.kappa as usize).next_power_of_two()) as usize;
     let nvars = params.nvars_cm as usize;
 
-    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
-    let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
+    // Build independent parts in parallel (they only get glued/merged later).
+    let (
+        (pose_inst, pose_asg, pose_wiring, byte_wiring, t_pose),
+        (params_inst, params_asg, params_vars, pub_input_vars, t_params),
+        (dcom_inst, dcom_asg, dcom_wiring, t_dcom),
+        (coin_inst, coin_asg, coin_wiring, op_wiring, t_coin),
+        (cm_inst, cm_asg, cm_wiring, t_cm),
+    ) = {
+        let pose_build = || {
+            let t = std::time::Instant::now();
+            let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
+                poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
+                    .map_err(|e| format!("poseidon arith failed: {e}"))?;
+            enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
+            Ok::<_, String>((pose_inst, pose_asg, pose_wiring, byte_wiring, t.elapsed()))
+        };
+        let params_build = || {
+            let t = std::time::Instant::now();
+            let mut b_params = Dr1csBuilder::<BF<R>>::new();
+            b_params.enforce_var_eq_const(b_params.one(), BF::<R>::ONE);
+            let mut params_vars = Vec::with_capacity(9);
+            for &x in &params.to_field_vec::<BF<R>>() {
+                params_vars.push(b_params.new_var(x));
+            }
+            let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
+            for &x in public_inputs {
+                pub_input_vars.push(b_params.new_var(x));
+            }
+            let (params_inst, params_asg) = b_params.into_instance();
+            Ok::<_, String>((params_inst, params_asg, params_vars, pub_input_vars, t.elapsed()))
+        };
+        let dcom_build = || {
+            let t = std::time::Instant::now();
+            let (dcom_inst, dcom_asg, dcom_wiring) =
+                dcom_verifier_math_dr1cs::<R>(&proof.dcom, trace, params, public_inputs)?;
+            Ok::<_, String>((dcom_inst, dcom_asg, dcom_wiring, t.elapsed()))
+        };
+        let coin_build = || {
+            let t = std::time::Instant::now();
+            let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
+            let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
+            Ok::<_, String>((coin_inst, coin_asg, coin_wiring, op_wiring, t.elapsed()))
+        };
+        let cm_build = || {
+            let t = std::time::Instant::now();
+            let (cm_inst, cm_asg, cm_wiring) =
+                cm_verifier_math_dr1cs::<R>(trace, proof, k, log_kappa, nvars, mlen_mats)?;
+            Ok::<_, String>((cm_inst, cm_asg, cm_wiring, t.elapsed()))
+        };
+
+        #[cfg(feature = "parallel")]
+        {
+            let (a, b) = rayon::join(|| rayon::join(pose_build, params_build), || rayon::join(dcom_build, || rayon::join(coin_build, cm_build)));
+            let (pose_r, params_r) = a;
+            let (dcom_r, (coin_r, cm_r)) = b;
+            (pose_r?, params_r?, dcom_r?, coin_r?, cm_r?)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            (pose_build()?, params_build()?, dcom_build()?, coin_build()?, cm_build()?)
+        }
+    };
+
+    if profile_build {
+        eprintln!(
+            "[we_build] parts: poseidon={:?} params={:?} dcom={:?} coin={:?} cm={:?}",
+            t_pose, t_params, t_dcom, t_coin, t_cm
+        );
+    }
+
     let (pose_byte_vars, pose_field_vars) =
         cm_poseidon_challenge_vars::<R>(&pose_wiring, &byte_wiring, &op_wiring)?;
 
@@ -2264,10 +2310,6 @@ where
     for (pv, lv) in pose_field_vars.iter().zip(local_field_vars.iter()) {
         glue.push((0, *pv, 4, *lv));
     }
-
-    // Cm verifier arithmetic + absorb surface builder.
-    let (cm_inst, cm_asg, cm_wiring) =
-        cm_verifier_math_dr1cs::<R>(trace, proof, k, log_kappa, nvars, mlen_mats)?;
 
     // Glue cm_wiring challenges to the coin/field wiring parts (so the math uses the same coins).
     // Bytes:
