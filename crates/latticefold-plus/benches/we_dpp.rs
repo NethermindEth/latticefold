@@ -7,6 +7,7 @@
 //! This is not yet the full LF+ WE gate (DecompProof still TODO).
 
 #![allow(non_snake_case)]
+#![allow(non_local_definitions)]
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
