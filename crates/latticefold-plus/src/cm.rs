@@ -383,37 +383,69 @@ where
 
         let t_build_mles = Instant::now();
         for (i, inst) in self.rg.instances.iter().enumerate() {
-            let tau0 = StreamingMleEnum::BaseScalarOwned {
-                evals: inst.tau.clone(),
-                num_vars: nvars,
-            };
-            // NOTE: these clones existed before (dense MLE construction); streaming just avoids the *derived* tables.
-            let m_tau_arc = Arc::new(inst.m_tau.clone());
-            let f_arc = Arc::new(inst.f.clone());
-            let h_arc = Arc::new(h[i].clone());
-            let m_tau = StreamingMleEnum::DenseArc {
-                evals: m_tau_arc.clone(),
-                num_vars: nvars,
-            };
-            let f_mle = StreamingMleEnum::DenseArc {
-                evals: f_arc.clone(),
-                num_vars: nvars,
-            };
-            let h_mle = StreamingMleEnum::DenseArc {
-                evals: h_arc.clone(),
-                num_vars: nvars,
-            };
+            // Build the base-scalar tables once and share them across:
+            // - the direct MLEs for (tau, m_tau, f, h), and
+            // - the const-coeff sparse mat-vec MLEs (M * vec).
+            //
+            // This is the only path we care about for SP1 (const-coeff matrices), and it is
+            // algebraically identical to using ring tables: BaseScalarArc evaluates to `R::from(scalar)`.
+            let tau0_arc: Arc<Vec<R::BaseRing>> = Arc::new(inst.tau.clone());
+            let mtau0_arc: Option<Arc<Vec<R::BaseRing>>> =
+                if mats_const { try_as_base_scalars::<R>(&inst.m_tau).map(Arc::new) } else { None };
+            let f0_arc: Option<Arc<Vec<R::BaseRing>>> =
+                if mats_const { try_as_base_scalars::<R>(&inst.f).map(Arc::new) } else { None };
+            let h0_arc: Option<Arc<Vec<R::BaseRing>>> =
+                if mats_const { try_as_base_scalars::<R>(&h[i]).map(Arc::new) } else { None };
 
-            mles.push(tau0);
-            mles.push(m_tau);
-            mles.push(f_mle);
-            mles.push(h_mle);
+            // Direct tables (tau, m_tau, f, h):
+            // If we have base-scalar witnesses, use BaseScalarArc to avoid carrying ring vectors.
+            // Otherwise fall back to DenseArc as before.
+            mles.push(StreamingMleEnum::BaseScalarArc {
+                evals: tau0_arc.clone(),
+                num_vars: nvars,
+                square: false,
+            });
 
-            // If const-coeff, keep tau/m_tau/f/h as base scalars for M*vec.
-            let tau0_arc = Arc::new(inst.tau.clone());
-            let mtau0_arc = if mats_const { try_as_base_scalars::<R>(&m_tau_arc).map(Arc::new) } else { None };
-            let f0_arc = if mats_const { try_as_base_scalars::<R>(&f_arc).map(Arc::new) } else { None };
-            let h0_arc = if mats_const { try_as_base_scalars::<R>(&h_arc).map(Arc::new) } else { None };
+            let m_tau_arc_ring: Option<Arc<Vec<R>>> = if mtau0_arc.is_none() { Some(Arc::new(inst.m_tau.clone())) } else { None };
+            let f_arc_ring: Option<Arc<Vec<R>>> = if f0_arc.is_none() { Some(Arc::new(inst.f.clone())) } else { None };
+            let h_arc_ring: Option<Arc<Vec<R>>> = if h0_arc.is_none() { Some(Arc::new(h[i].clone())) } else { None };
+
+            if let Some(mtau0) = &mtau0_arc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: mtau0.clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                mles.push(StreamingMleEnum::DenseArc {
+                    evals: m_tau_arc_ring.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                });
+            }
+            if let Some(f0) = &f0_arc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: f0.clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                mles.push(StreamingMleEnum::DenseArc {
+                    evals: f_arc_ring.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                });
+            }
+            if let Some(h0) = &h0_arc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: h0.clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                mles.push(StreamingMleEnum::DenseArc {
+                    evals: h_arc_ring.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                });
+            }
 
             // Decide whether we can actually take the const-coeff mat-vec fast path for this instance.
             // Even if the matrices are const-coeff, we must also have const-coeff witnesses.
@@ -490,17 +522,17 @@ where
                 });
                 mles.push(StreamingMleEnum::SparseMatVec {
                     matrix: m.clone(),
-                    witness: m_tau_arc.clone(),
+                    witness: m_tau_arc_ring.as_ref().unwrap().clone(),
                     num_vars: nvars,
                 });
                 mles.push(StreamingMleEnum::SparseMatVec {
                     matrix: m.clone(),
-                    witness: f_arc.clone(),
+                    witness: f_arc_ring.as_ref().unwrap().clone(),
                     num_vars: nvars,
                 });
                 mles.push(StreamingMleEnum::SparseMatVec {
                     matrix: m.clone(),
-                    witness: h_arc.clone(),
+                    witness: h_arc_ring.as_ref().unwrap().clone(),
                     num_vars: nvars,
                 });
             }
