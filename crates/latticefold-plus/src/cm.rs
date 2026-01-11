@@ -357,6 +357,13 @@ where
             mles.push(h_mle);
 
             // Materialize tau as ring only once for sparse mat-vec evaluation.
+            // This is O(n) and can dominate wall time for large n; parallelize the conversion.
+            #[cfg(feature = "parallel")]
+            let tau_ring: Vec<R> = {
+                use rayon::prelude::*;
+                inst.tau.par_iter().copied().map(R::from).collect()
+            };
+            #[cfg(not(feature = "parallel"))]
             let tau_ring: Vec<R> = inst.tau.iter().copied().map(R::from).collect();
             let tau_ring = Arc::new(tau_ring);
 
