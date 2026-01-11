@@ -399,8 +399,12 @@ where
             let f0_arc = if mats_const { try_as_base_scalars::<R>(&f_arc).map(Arc::new) } else { None };
             let h0_arc = if mats_const { try_as_base_scalars::<R>(&h_arc).map(Arc::new) } else { None };
 
+            // Decide whether we can actually take the const-coeff mat-vec fast path for this instance.
+            // Even if the matrices are const-coeff, we must also have const-coeff witnesses.
+            let use_const_coeff_matvec = mats_const && mtau0_arc.is_some() && f0_arc.is_some() && h0_arc.is_some();
+
             // Otherwise fall back to the previous ring mat-vec path (requires tau as a ring vector).
-            let tau_ring: Option<Arc<Vec<R>>> = if mats_const {
+            let tau_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
                 None
             } else {
                 // Materialize tau as ring only once for sparse mat-vec evaluation.
@@ -416,36 +420,37 @@ where
             };
 
             for m in &m_arcs {
-                if mats_const {
-                    // Only use const-coeff matvec if we successfully extracted base scalars.
-                    if let (Some(mtau0), Some(f0), Some(h0)) = (&mtau0_arc, &f0_arc, &h0_arc) {
-                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                            matrix: m.clone(),
-                            witness0: tau0_arc.clone(),
-                            num_vars: nvars,
-                        });
-                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                            matrix: m.clone(),
-                            witness0: mtau0.clone(),
-                            num_vars: nvars,
-                        });
-                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                            matrix: m.clone(),
-                            witness0: f0.clone(),
-                            num_vars: nvars,
-                        });
-                        mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                            matrix: m.clone(),
-                            witness0: h0.clone(),
-                            num_vars: nvars,
-                        });
-                        continue;
-                    }
+                if use_const_coeff_matvec {
+                    // Safe: we checked these are all `Some`.
+                    let mtau0 = mtau0_arc.as_ref().unwrap();
+                    let f0 = f0_arc.as_ref().unwrap();
+                    let h0 = h0_arc.as_ref().unwrap();
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: m.clone(),
+                        witness0: tau0_arc.clone(),
+                        num_vars: nvars,
+                    });
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: m.clone(),
+                        witness0: mtau0.clone(),
+                        num_vars: nvars,
+                    });
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: m.clone(),
+                        witness0: f0.clone(),
+                        num_vars: nvars,
+                    });
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: m.clone(),
+                        witness0: h0.clone(),
+                        num_vars: nvars,
+                    });
+                    continue;
                 }
 
                 let tau_ring = tau_ring
                     .as_ref()
-                    .expect("tau_ring must exist when mats_const is false or base-scalar extraction failed");
+                    .expect("tau_ring must exist when const-coeff matvec is not used");
                 mles.push(StreamingMleEnum::SparseMatVec {
                     matrix: m.clone(),
                     witness: tau_ring.clone(),
