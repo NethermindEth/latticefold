@@ -2978,6 +2978,8 @@ mod tests {
 
         use ark_ff::{Fp384, MontBackend, MontConfig, PrimeField};
         use rand::{rngs::StdRng, SeedableRng};
+        #[cfg(feature = "parallel")]
+        use rayon::current_num_threads;
 
         #[derive(MontConfig)]
         #[modulus = "39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
@@ -2989,7 +2991,12 @@ mod tests {
             FBig::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
         }
 
-        let n = 1 << 20;
+        // Default to the historical large-scale setting (n=2^20), but allow smaller for scaling studies.
+        let n_pow: usize = std::env::var("LFP_TRACE_NPOW")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(20);
+        let n = 1usize << n_pow;
         let k = 4usize;
         let kappa = 2usize;
         let ell = 32usize;
@@ -2998,12 +3005,12 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
         let dparams = DecompParameters { b, k, l: ell };
 
-        // Small Mlen=3 like earlier LF+ timings.
-        let M: Vec<SparseMatrix<RR>> = vec![
-            SparseMatrix::identity(n),
-            SparseMatrix::identity(n),
-            SparseMatrix::identity(n),
-        ];
+        // Default Mlen=3 like earlier LF+ timings; allow override to inspect Mlen scaling.
+        let mlen: usize = std::env::var("LFP_TRACE_MLEN")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3);
+        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n); mlen];
 
         type FSmall = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
         let digest_toy: FSmall = FSmall::from(42u64);
@@ -3013,7 +3020,11 @@ mod tests {
         };
 
         let run_one = |label: &str, sp1_digest: FSmall| {
-            eprintln!("\n[test_large_trace] case={label}");
+            eprintln!("\n[test_large_trace] case={label} n=2^{n_pow} mlen={mlen}");
+            #[cfg(feature = "parallel")]
+            eprintln!("[test_large_trace] rayon_threads={}", current_num_threads());
+            #[cfg(not(feature = "parallel"))]
+            eprintln!("[test_large_trace] rayon_threads=DISABLED(feature=parallel)");
             let mut rng = ark_std::test_rng();
             let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
             let A = Matrix::<RR>::rand(&mut rng, kappa, n);
@@ -3066,28 +3077,36 @@ mod tests {
             );
 
             // DPP verification (single query).
+            let t3 = std::time::Instant::now();
             let inst_sparse = DppInst::<FSmall> {
                 n: out.inst.nvars,
                 a: out.inst.constraints.iter().map(|r| SparseVec::new(r.a.clone())).collect(),
                 b: out.inst.constraints.iter().map(|r| SparseVec::new(r.b.clone())).collect(),
                 c: out.inst.constraints.iter().map(|r| SparseVec::new(r.c.clone())).collect(),
             };
+            eprintln!("[test_large_trace] dr1cs->sparse: {:?}", t3.elapsed());
             let k_rows = inst_sparse.k();
             let ell_rs = 2 * k_rows;
             let l_public = out.public_len;
             let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell_rs);
 
+            let t4 = std::time::Instant::now();
             let x_small = out.assignment[..l_public].to_vec();
             let z_w_small = out.assignment[l_public..].to_vec();
             let pi_field = flpcp.prove(&x_small, &z_w_small);
+            eprintln!("[test_large_trace] flpcp.prove: {:?}", t4.elapsed());
+            let t5 = std::time::Instant::now();
             let boolized = dpp::BooleanProofFlpcpSparse::<FSmall, _>::new(flpcp.clone());
             let pi_bits = boolized.encode_proof_bits(&pi_field);
+            eprintln!("[test_large_trace] booleanize(pi): {:?}", t5.elapsed());
 
+            let t6 = std::time::Instant::now();
             let dppv = build_rev2_dpp_sparse_boolean_auto::<FSmall, FBig, _>(
                 flpcp,
                 dpp::EmbeddingParams { gamma: 2, assume_boolean_proof: true, k_prime: 0 },
             )
             .expect("build dpp");
+            eprintln!("[test_large_trace] build_rev2_dpp: {:?}", t6.elapsed());
 
             let x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
             let pi_big = pi_bits.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
@@ -3106,11 +3125,13 @@ mod tests {
                 h.finalize().into()
             };
             let mut rng = StdRng::from_seed(coin_seed);
+            let t7 = std::time::Instant::now();
             let q = dppv.sample_query(&mut rng, &x_big).expect("sample_query");
+            eprintln!("[test_large_trace] dpp.sample_query: {:?}", t7.elapsed());
 
-            let t3 = std::time::Instant::now();
+            let t8 = std::time::Instant::now();
             let ok = dppv.verify_with_query(&x_big, &pi_big, &q).expect("verify");
-            eprintln!("[test_large_trace] dpp verify_with_query: {:?} ok={ok}", t3.elapsed());
+            eprintln!("[test_large_trace] dpp verify_with_query: {:?} ok={ok}", t8.elapsed());
         };
 
         run_one("toy_42", digest_toy);
