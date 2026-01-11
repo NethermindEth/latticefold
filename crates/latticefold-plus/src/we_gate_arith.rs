@@ -655,9 +655,6 @@ struct CmMathWiring {
     /// Flattened BF variables that must equal Poseidon absorb inputs (non-reabsorb absorbs),
     /// for the CmProof segment starting at `absorb_comh`.
     absorb_flat: Vec<usize>,
-    /// Debug-only: cumulative constraint counts inside `cm_inst` after major phases.
-    phase_marks: Vec<usize>,
-    phase_names: Vec<String>,
 }
 
 #[cfg(feature = "we_gate")]
@@ -692,14 +689,6 @@ where
 
     let mut b = Dr1csBuilder::<BF<R>>::new();
     b.enforce_var_eq_const(b.one(), BF::<R>::ONE);
-
-    fn push_phase<F: PrimeField>(names: &mut Vec<String>, marks: &mut Vec<usize>, name: String, b: &Dr1csBuilder<F>) {
-        names.push(name);
-        marks.push(b.rows.len());
-    }
-
-    let mut phase_marks: Vec<usize> = Vec::new();
-    let mut phase_names: Vec<String> = Vec::new();
 
     // Extract the exact CmProof coin bytes (short_challenge) and field challenges from the trace,
     // so this part's witness assignment matches the Poseidon part (glue constraints).
@@ -840,7 +829,6 @@ where
         }
         comh_vars.push(row);
     }
-    push_phase(&mut phase_names, &mut phase_marks, "after_comh_absorb".to_string(), &b);
 
     // --- Compute u[l][*] from dcom.out.e and s_prime_flat ---
     // u[l] has length = dcom.out.e.len() (expected 1+Mlen).
@@ -875,7 +863,6 @@ where
         }
         u_vars.push(u_l);
     }
-    push_phase(&mut phase_names, &mut phase_marks, "after_u_vars".to_string(), &b);
 
     // --- tensor(c0/c1) and tcch0/tcch1 ---
     let tensor_c0 = tensor_scalar_vars::<BF<R>>(&mut b, &field_wiring.c0);
@@ -900,7 +887,6 @@ where
         tcch0.push(acc0);
         tcch1.push(acc1);
     }
-    push_phase(&mut phase_names, &mut phase_marks, "after_tcch".to_string(), &b);
 
     // --- Precompute constants for eval_t_z_optimized ---
     // dpp = [dp^i] as scalar ring elements (length ℓ = dparams.l)
@@ -960,7 +946,6 @@ where
     let sc1 = parse_sc_msgs(&mut b, &proof.sumcheck_proofs.1)?;
     let evals0 = extract_evals(&mut b, &proof.evals.0)?;
     let evals1 = extract_evals(&mut b, &proof.evals.1)?;
-    push_phase(&mut phase_names, &mut phase_marks, "after_parse_msgs_evals".to_string(), &b);
 
     // dcom evals for claimed_sum: per l, vectors of len 1+Mlen in (a,b,c)
     let mlen_chunks_usize = mlen_mats;
@@ -972,18 +957,15 @@ where
     // - subclaim_eval via sumcheck_verify_degree2
     // - eval via recombination
     // and enforce equality.
-    let do_one = |which: usize,
+    let do_one = |_which: usize,
                   b: &mut Dr1csBuilder<BF<R>>,
                   absorb_flat: &mut Vec<usize>,
-                  phase_names: &mut Vec<String>,
-                  phase_marks: &mut Vec<usize>,
                   rc: usize,
                   r_sc: &[usize],
                   msgs: &[[RingVars; 3]],
                   evals: &[Vec<[RingVars; 4]>],
                   tcch0: &[RingVars],
                   tcch1: &[RingVars]| -> Result<(), String> {
-        let tag = if which == 0 { "cm_sc0" } else { "cm_sc1" };
         // Sumcheck parameter block absorbed by the transcript.
         // NOTE: we assume base field (extension_degree=1), matching our Poseidon wiring usage.
         let v_nvars = const_var(b, BF::<R>::from(nvars as u64));
@@ -1000,7 +982,6 @@ where
             absorb_flat.extend_from_slice(&m[2].coeffs);
             absorb_field_elem_as_ring::<R>(b, absorb_flat, r_sc[round]);
         }
-        push_phase(phase_names, phase_marks, format!("{tag}:after_absorb_schedule"), b);
 
         let rc_pows = scalar_pow_table::<BF<R>>(b, rc, max_pow);
         let mut claimed_sum = scalar_to_ringvars::<R>(b, BF::<R>::ZERO);
@@ -1045,10 +1026,8 @@ where
             let t_tcch1 = ring_scale::<BF<R>>(b, &tcch1[l], rc_pows[z_idx + 1]);
             claimed_sum = ring_add::<BF<R>>(b, &claimed_sum, &t_tcch1);
         }
-        push_phase(phase_names, phase_marks, format!("{tag}:after_claimed_sum"), b);
 
         let subclaim_eval = sumcheck_verify_degree2::<BF<R>>(b, claimed_sum, msgs, r_sc)?;
-        push_phase(phase_names, phase_marks, format!("{tag}:after_sumcheck_verify"), b);
 
         // t(z) eval at ro (independent of l)
         let t0 = eval_t_z_optimized_ring::<R>(
@@ -1079,7 +1058,6 @@ where
             .collect::<Vec<_>>();
         let eq = eq_eval_vars::<BF<R>>(b, &r_pre, r_sc);
         let mut eval_acc = scalar_to_ringvars::<R>(b, BF::<R>::ZERO);
-        push_phase(phase_names, phase_marks, format!("{tag}:after_eq_eval"), b);
 
         for l in 0..l_instances {
             let l_idx = l * (4 + 4 * mlen_chunks_usize);
@@ -1123,10 +1101,8 @@ where
             let t1e_s = ring_scale::<BF<R>>(b, &t1e, rc_pows[z_idx + 1]);
             eval_acc = ring_add::<BF<R>>(b, &eval_acc, &t1e_s);
         }
-        push_phase(phase_names, phase_marks, format!("{tag}:after_recompute_eval"), b);
 
         ring_eq::<BF<R>>(b, &subclaim_eval, &eval_acc);
-        push_phase(phase_names, phase_marks, format!("{tag}:after_final_eq"), b);
 
         // After sumcheck verification, Cm verifier absorbs the per-instance eval tables.
         // (`absorb_evaluations(evals, transcript)`).
@@ -1139,7 +1115,6 @@ where
                 absorb_flat.extend_from_slice(&row[3].coeffs);
             }
         }
-        push_phase(phase_names, phase_marks, format!("{tag}:after_absorb_evals"), b);
         Ok(())
     };
 
@@ -1147,8 +1122,6 @@ where
         0,
         &mut b,
         &mut absorb_flat,
-        &mut phase_names,
-        &mut phase_marks,
         field_wiring.rc0,
         &field_wiring.sumcheck_r0,
         &sc0,
@@ -1156,13 +1129,10 @@ where
         &tcch0,
         &tcch1,
     )?;
-    push_phase(&mut phase_names, &mut phase_marks, "after_do_one_0".to_string(), &b);
     do_one(
         1,
         &mut b,
         &mut absorb_flat,
-        &mut phase_names,
-        &mut phase_marks,
         field_wiring.rc1,
         &field_wiring.sumcheck_r1,
         &sc1,
@@ -1170,7 +1140,6 @@ where
         &tcch0,
         &tcch1,
     )?;
-    push_phase(&mut phase_names, &mut phase_marks, "after_do_one_1".to_string(), &b);
 
     let (inst, asg) = b.into_instance();
     Ok((
@@ -1180,8 +1149,6 @@ where
             short: short_wiring,
             field: field_wiring,
             absorb_flat,
-            phase_marks,
-            phase_names,
         },
     ))
 }
@@ -1562,7 +1529,7 @@ where
     b.enforce_var_eq_const(params_vars[5], BF::<R>::from(R::dimension() as u64)); // ring_dim_d
     b.enforce_var_eq_const(params_vars[6], BF::<R>::from(dcom.dparams.k as u64)); // k
     b.enforce_var_eq_const(params_vars[7], BF::<R>::from(dcom.dparams.l as u64)); // l
-    // mlen is enforced against the builder-provided Mlen in `build_we_dr1cs_for_cm_proof_debug`
+    // mlen is enforced against the builder-provided Mlen in `build_we_dr1cs_for_cm_proof`
     // via the `mlen_mats` argument; here we can at least ensure it is <= u64::MAX (already).
     b.enforce_var_eq_const(params_vars[8], BF::<R>::from(params.mlen)); // mlen
 
@@ -2148,64 +2115,11 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
-    let (out, _dbg) =
-        build_we_dr1cs_for_cm_proof_debug::<R>(poseidon_cfg, trace, params, public_inputs, proof, mlen_mats)?;
-    Ok(out)
-}
+    // Hygiene: CmProof is a standalone verifier relation, so its transcript segment begins at 0.
+    let ops_offset = 0usize;
+    let absorb_op_offset = 0usize;
+    let squeezed_field_offset = 0usize;
 
-#[cfg(feature = "we_gate")]
-#[derive(Clone, Debug)]
-pub struct WeCmBuildDebug {
-    pub part_constraints: Vec<usize>,
-    pub part_nvars: Vec<usize>,
-    pub base_constraints: usize,
-    pub glue: Vec<(usize, usize, usize, usize)>,
-    pub cm_phase_marks: Vec<usize>,
-    pub cm_phase_names: Vec<String>,
-}
-
-#[cfg(feature = "we_gate")]
-pub fn build_we_dr1cs_for_cm_proof_debug<R>(
-    poseidon_cfg: &PoseidonConfig<BF<R>>,
-    trace: &PoseidonTranscriptTrace<BF<R>>,
-    params: &WeParams,
-    public_inputs: &[BF<R>],
-    proof: &crate::cm::CmProof<R>,
-    mlen_mats: usize,
-) -> Result<(WeDr1csOutput<BF<R>>, WeCmBuildDebug), String>
-where
-    R: OverField + CoeffRing + PolyRing,
-    R::BaseRing: Zq + Field,
-{
-    build_we_dr1cs_for_cm_proof_debug_with_offsets::<R>(
-        poseidon_cfg,
-        trace,
-        params,
-        public_inputs,
-        proof,
-        mlen_mats,
-        0, // ops_offset
-        0, // absorb_op_offset
-        0, // squeezed_field_offset
-    )
-}
-
-#[cfg(feature = "we_gate")]
-pub fn build_we_dr1cs_for_cm_proof_debug_with_offsets<R>(
-    poseidon_cfg: &PoseidonConfig<BF<R>>,
-    trace: &PoseidonTranscriptTrace<BF<R>>,
-    params: &WeParams,
-    public_inputs: &[BF<R>],
-    proof: &crate::cm::CmProof<R>,
-    mlen_mats: usize,
-    ops_offset: usize,
-    absorb_op_offset: usize,
-    squeezed_field_offset: usize,
-) -> Result<(WeDr1csOutput<BF<R>>, WeCmBuildDebug), String>
-where
-    R: OverField + CoeffRing + PolyRing,
-    R::BaseRing: Zq + Field,
-{
     let profile_build = std::env::var("LFP_WE_BUILD_PROFILE").ok().as_deref() == Some("1");
     let t_total = std::time::Instant::now();
 
@@ -2526,9 +2440,7 @@ where
         (field_inst, field_asg), // 4
         (cm_inst, cm_asg),       // 5
     ];
-    let part_constraints = parts.iter().map(|(i, _)| i.constraints.len()).collect::<Vec<_>>();
-    let part_nvars = parts.iter().map(|(i, _)| i.nvars).collect::<Vec<_>>();
-    let base_constraints = part_constraints.iter().sum::<usize>();
+    let base_constraints = parts.iter().map(|(i, _)| i.constraints.len()).sum::<usize>();
 
     let t_merge = std::time::Instant::now();
     let (inst, assignment) = merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
@@ -2543,17 +2455,7 @@ where
     }
 
     let public_len = 1 + 9 + public_inputs.len();
-    Ok((
-        WeDr1csOutput { inst, assignment, public_len },
-        WeCmBuildDebug {
-            part_constraints,
-            part_nvars,
-            base_constraints,
-            glue,
-            cm_phase_marks: cm_wiring.phase_marks.clone(),
-            cm_phase_names: cm_wiring.phase_names.clone(),
-        },
-    ))
+    Ok(WeDr1csOutput { inst, assignment, public_len })
 }
 
 #[cfg(feature = "we_gate")]
@@ -2772,16 +2674,12 @@ where
 }
 
 #[cfg(feature = "we_gate")]
-pub fn build_we_dr1cs_for_plus_proof_debug<R>(
+pub fn build_we_dr1cs_for_plus_proof<R>(
     poseidon_cfg: &PoseidonConfig<BF<R>>,
     trace: &PoseidonTranscriptTrace<BF<R>>,
     params: &WeParams,
     public_inputs: &[BF<R>],
     proof: &crate::plus::PlusProof<R, crate::r1cs::ComR1CSProof<R>>,
-    // Transcript prefix counts at the start of `cmproof.verify` (i.e., after all Π_lin verifications).
-    cm_ops_offset: usize,
-    cm_absorb_op_offset: usize,
-    cm_squeezed_field_offset: usize,
     mlen_mats: usize,
     B: u128,
 ) -> Result<WeDr1csOutput<BF<R>>, String>
@@ -2789,6 +2687,68 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
+    // Hygiene: compute the Cm segment offsets from the full trace + proof, so callers do not
+    // have to reproduce the “record until Cm starts” procedure (easy to mis-wire).
+    use crate::recording_transcript::PoseidonTraceOp as Op;
+    let (cm_ops_offset, cm_absorb_op_offset, cm_squeezed_field_offset) = {
+        let mut op_idx = 0usize;
+        let mut absorb_ops = 0usize;
+        let mut squeezed_field_elems = 0usize;
+
+        let expect_absorb = |op_idx: &mut usize, absorb_ops: &mut usize| -> Result<(), String> {
+            match trace.ops.get(*op_idx) {
+                Some(Op::Absorb(_)) => {
+                    *op_idx += 1;
+                    *absorb_ops += 1;
+                    Ok(())
+                }
+                other => Err(format!("offsets: expected Absorb at op {}, got {:?}", *op_idx, other)),
+            }
+        };
+        let expect_squeeze_field =
+            |op_idx: &mut usize, squeezed_field_elems: &mut usize| -> Result<(), String> {
+                match trace.ops.get(*op_idx) {
+                    Some(Op::SqueezeField(v)) => {
+                        *op_idx += 1;
+                        *squeezed_field_elems += v.len();
+                        Ok(())
+                    }
+                    other => Err(format!(
+                        "offsets: expected SqueezeField at op {}, got {:?}",
+                        *op_idx, other
+                    )),
+                }
+            };
+
+        for _ in 0..public_inputs.len() {
+            expect_absorb(&mut op_idx, &mut absorb_ops)?;
+        }
+        for lp in &proof.lproof {
+            let nvars = lp.nvars;
+            if lp.sumcheck_proof.msgs().len() != nvars {
+                return Err("offsets: ComR1CSProof sumcheck proof length mismatch".to_string());
+            }
+            for _ in 0..nvars {
+                expect_squeeze_field(&mut op_idx, &mut squeezed_field_elems)?;
+                expect_absorb(&mut op_idx, &mut absorb_ops)?;
+            }
+            expect_absorb(&mut op_idx, &mut absorb_ops)?;
+            expect_absorb(&mut op_idx, &mut absorb_ops)?;
+            for _ in 0..nvars {
+                for _ in 0..4 {
+                    expect_absorb(&mut op_idx, &mut absorb_ops)?;
+                }
+                expect_squeeze_field(&mut op_idx, &mut squeezed_field_elems)?;
+                expect_absorb(&mut op_idx, &mut absorb_ops)?;
+                expect_absorb(&mut op_idx, &mut absorb_ops)?;
+            }
+            for _ in 0..4 {
+                expect_absorb(&mut op_idx, &mut absorb_ops)?;
+            }
+        }
+        (op_idx, absorb_ops, squeezed_field_elems)
+    };
+
     // Poseidon trace -> dR1CS (+ wiring).
     let ops = lf_ops_to_symphony_ops::<BF<R>>(&trace.ops);
     let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
@@ -3206,6 +3166,8 @@ where
     })
 }
 
+
+
 #[cfg(all(test, feature = "we_gate"))]
 #[allow(non_local_definitions)]
 mod tests {
@@ -3489,15 +3451,6 @@ mod tests {
         inst.check(&asg).unwrap();
     }
 
-    fn part_offset(part: usize, part_nvars: &[usize]) -> usize {
-        // Variable 0 is shared "one" across parts. Merge offsets grow by (nvars_i - 1).
-        let mut off = 0usize;
-        for i in 0..part {
-            off += part_nvars[i].saturating_sub(1);
-        }
-        off
-    }
-
     #[test]
     fn test_we_cm_proof_param_binding_mlen_unsat() {
         // Small-ish instance.
@@ -3523,7 +3476,7 @@ mod tests {
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
-        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         // Build proof + trace.
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
@@ -3545,17 +3498,13 @@ mod tests {
         };
         let poseidon_cfg = PCF::get_poseidon_config();
 
-        let (out, dbg) =
-            build_we_dr1cs_for_cm_proof_debug::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
-                .expect("build we dr1cs");
+        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+            .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
-        // Mutate the public `mlen` parameter only: params part is part index 1, and `mlen` is the 9th param (local var = 9).
-        let params_part = 1usize;
-        let off = part_offset(params_part, &dbg.part_nvars);
-        let mlen_local_var = 9usize;
-        let mlen_global = off + mlen_local_var;
-
+        // Mutate the public `mlen` parameter only.
+        // Public layout for WE is: [ONE] || [9×WeParams] || [public_inputs...]
+        let mlen_global = 1usize + 8usize;
         let mut bad = out.assignment.clone();
         bad[mlen_global] += <BF<RR> as ark_ff::Field>::ONE;
         assert!(out.inst.check(&bad).is_err(), "mlen mutation should break satisfaction");
@@ -3587,7 +3536,7 @@ mod tests {
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
-        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
         let (_com, proof) = cm.prove(&M, &mut ts);
@@ -3608,9 +3557,8 @@ mod tests {
         };
         let poseidon_cfg = PCF::get_poseidon_config();
 
-        let (out, _dbg) =
-            build_we_dr1cs_for_cm_proof_debug::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
-                .expect("build we dr1cs");
+        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+            .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
         // Pick a var index that appears in the first constraint (and is not the shared ONE=0).
@@ -3654,7 +3602,7 @@ mod tests {
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
-        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
         let (_com, proof) = cm.prove(&M, &mut ts);
@@ -3696,7 +3644,7 @@ mod tests {
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
-        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         // Statement-defined SP1 public input digest (base field element).
         type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
@@ -3726,7 +3674,7 @@ mod tests {
         };
         let poseidon_cfg = PCF::get_poseidon_config();
 
-        let (out, dbg) = build_we_dr1cs_for_cm_proof_debug::<RR>(
+        let out = build_we_dr1cs_for_cm_proof::<RR>(
             &poseidon_cfg,
             &trace,
             &params,
@@ -3737,14 +3685,9 @@ mod tests {
         .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
-        // Flip the SP1 digest in the params/public-input part only.
-        // Part index 1 is the "params+public_inputs" part; local var index:
-        // 0 = ONE, 1..=9 = WeParams, 10 = first extra public input.
-        let params_part = 1usize;
-        let off = part_offset(params_part, &dbg.part_nvars);
-        let digest_local_var = 10usize;
-        let digest_global = off + digest_local_var;
-
+        // Flip the SP1 digest in the public inputs only.
+        // Public layout for WE is: [ONE] || [9×WeParams] || [public_inputs...]
+        let digest_global = 1usize + 9usize;
         let mut bad = out.assignment.clone();
         bad[digest_global] += <BF<RR> as ark_ff::Field>::ONE;
         assert!(out.inst.check(&bad).is_err(), "digest flip should break satisfaction");
@@ -3798,7 +3741,8 @@ mod tests {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(3);
-        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n); mlen];
+        let M_one = std::sync::Arc::new(SparseMatrix::identity(n));
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![M_one; mlen];
 
         type FSmall = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
         let sp1_digest: FSmall = {
@@ -3855,18 +3799,10 @@ mod tests {
             let t1 = std::time::Instant::now();
             let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
             rec.absorb_field_element(&sp1_digest);
-            // Mirror PlusVerifier::verify to capture the exact transcript boundary where cmproof starts.
+            // Mirror PlusVerifier::verify to record the full verifier trace.
             for lp in &proof.lproof {
                 lp.verify(&mut rec);
             }
-            let cm_ops_offset = rec.trace().ops.len();
-            let cm_absorb_op_offset = rec
-                .trace()
-                .ops
-                .iter()
-                .filter(|op| matches!(op, crate::recording_transcript::PoseidonTraceOp::Absorb(_)))
-                .count();
-            let cm_squeezed_field_offset = rec.trace().squeezed_field.len();
             proof.cmproof.verify(&M, &mut rec).expect("cm verify");
             proof
                 .dproof
@@ -3888,15 +3824,12 @@ mod tests {
             let poseidon_cfg = PCF::get_poseidon_config();
 
             let t2 = std::time::Instant::now();
-            let out = build_we_dr1cs_for_plus_proof_debug::<RR>(
+            let out = build_we_dr1cs_for_plus_proof::<RR>(
                 &poseidon_cfg,
                 &trace,
                 &params,
                 &[sp1_digest],
                 &proof,
-                cm_ops_offset,
-                cm_absorb_op_offset,
-                cm_squeezed_field_offset,
                 M.len(),
                 b_bound,
             )

@@ -30,7 +30,7 @@ use stark_rings_linalg::{Matrix, SparseMatrix};
 use std::sync::Arc;
 
 use latticefold_plus::recording_transcript::TracePoseidonTranscript;
-use latticefold_plus::we_gate_arith::build_we_dr1cs_for_plus_proof_debug;
+use latticefold_plus::we_gate_arith::build_we_dr1cs_for_plus_proof;
 use latticefold_plus::we_statement::{
     digest32_to_field, we_statement_hash_lf_plus, WeParams, LFP_WE_GATE_DIGEST_V1,
 };
@@ -121,18 +121,10 @@ fn bench_we_dpp(c: &mut Criterion) {
     // Record verifier transcript ops.
     let mut rec = TracePoseidonTranscript::<R>::empty::<PC>();
     rec.absorb_field_element(&sp1_public_input_digest);
-    // Mirror `PlusVerifier::verify` so we can capture the exact transcript offsets where Cm starts.
+    // Mirror `PlusVerifier::verify` to record the full verifier trace.
     for lp in &proof.lproof {
         lp.verify(&mut rec);
     }
-    let cm_ops_offset = rec.trace().ops.len();
-    let cm_absorb_op_offset = rec
-        .trace()
-        .ops
-        .iter()
-        .filter(|op| matches!(op, latticefold_plus::recording_transcript::PoseidonTraceOp::Absorb(_)))
-        .count();
-    let cm_squeezed_field_offset = rec.trace().squeezed_field.len();
     proof.cmproof.verify(&M, &mut rec).expect("cm proof verify");
     proof
         .dproof
@@ -159,38 +151,32 @@ fn bench_we_dpp(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("build_we_dr1cs_plus_proof", n), |bch| {
         bch.iter(|| {
-            let out = build_we_dr1cs_for_plus_proof_debug::<R>(
+            let out = build_we_dr1cs_for_plus_proof::<R>(
                 &poseidon_cfg,
                 &trace,
                 &params,
                 &[sp1_public_input_digest],
                 &proof,
-                cm_ops_offset,
-                cm_absorb_op_offset,
-                cm_squeezed_field_offset,
                 M.len(),
                 B_bound,
             )
-            .expect("build_we_dr1cs_for_plus_proof_debug");
+            .expect("build_we_dr1cs_for_plus_proof");
             out.inst.check(&out.assignment).expect("dr1cs satisfied");
         })
     });
 
     group.bench_function(BenchmarkId::new("dpp_verify_plus_proof", n), |bch| {
         // Build once outside the timed loop.
-        let out = build_we_dr1cs_for_plus_proof_debug::<R>(
+        let out = build_we_dr1cs_for_plus_proof::<R>(
             &poseidon_cfg,
             &trace,
             &params,
             &[sp1_public_input_digest],
             &proof,
-            cm_ops_offset,
-            cm_absorb_op_offset,
-            cm_squeezed_field_offset,
             M.len(),
             B_bound,
         )
-        .expect("build_we_dr1cs_for_plus_proof_debug");
+        .expect("build_we_dr1cs_for_plus_proof");
         out.inst.check(&out.assignment).expect("dr1cs satisfied");
 
         // Convert sparse dR1CS -> sparse dR1CS instance for the prototype RS FLPCP.

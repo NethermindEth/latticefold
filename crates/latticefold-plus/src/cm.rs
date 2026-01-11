@@ -93,7 +93,7 @@ where
 {
     pub fn prove(
         &self,
-        M: &[SparseMatrix<R>],
+        M: &[Arc<SparseMatrix<R>>],
         transcript: &mut impl Transcript<R>,
     ) -> (Com<R>, CmProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
@@ -281,13 +281,8 @@ where
         // Share `M` matrices across both sumchecks (avoid cloning them twice).
         let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let t_m_arcs = Instant::now();
-        #[cfg(feature = "parallel")]
-        let m_arcs: Vec<Arc<SparseMatrix<R>>> = {
-            use rayon::prelude::*;
-            M.par_iter().cloned().map(Arc::new).collect()
-        };
-        #[cfg(not(feature = "parallel"))]
-        let m_arcs: Vec<Arc<SparseMatrix<R>>> = M.iter().cloned().map(Arc::new).collect();
+        // NOTE: `M` is already Arc-wrapped by the caller, so this is cheap (Arc refcount clones only).
+        let m_arcs: Vec<Arc<SparseMatrix<R>>> = M.to_vec();
         if profile && profile_detail {
             println!(
                 "[LF+ Cm::prove] build shared m_arcs: {:?} (Mlen={})",
@@ -295,7 +290,7 @@ where
                 M.len()
             );
         }
-        let mats_const = M.iter().all(is_const_coeff_sparse_matrix::<R>);
+        let mats_const = M.iter().all(|m| is_const_coeff_sparse_matrix::<R>(m.as_ref()));
 
         let (proof_a, evals_a, ro_a) =
             self.sumchecker_streaming(&dcom, &h, &t0_mle, &t1_mle, &m_arcs, mats_const, transcript, profile);
@@ -646,7 +641,7 @@ where
 {
     pub fn verify(
         &self,
-        M: &[SparseMatrix<R>],
+        M: &[Arc<SparseMatrix<R>>],
         transcript: &mut impl Transcript<R>,
     ) -> Result<ComX<R>, SumCheckError<R>> {
         let k = self.dcom.dparams.k;
@@ -910,6 +905,7 @@ mod tests {
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
     use stark_rings_linalg::{Matrix, SparseMatrix};
+    use std::sync::Arc;
 
     use super::*;
     use crate::{
@@ -932,7 +928,7 @@ mod tests {
 
         let mut m = SparseMatrix::identity(n);
         m.coeffs[0][0].0 = 2u128.into();
-        let M = vec![m];
+        let M: Vec<Arc<SparseMatrix<R>>> = vec![Arc::new(m)];
 
         let kappa = 2;
         let b = (R::dimension() / 2) as u128;

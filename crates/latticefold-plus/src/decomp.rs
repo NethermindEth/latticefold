@@ -6,6 +6,7 @@ use stark_rings::{
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
 use stark_rings_poly::mle::DenseMultilinearExtension;
 use std::time::Instant;
+use std::sync::Arc;
 
 use crate::lin::{LinB, LinBX};
 
@@ -18,7 +19,7 @@ use rayon::prelude::*;
 pub struct Decomp<'a, R> {
     pub f: Vec<R>,
     pub r: Vec<(R, R)>,
-    pub M: &'a [SparseMatrix<R>],
+    pub M: &'a [Arc<SparseMatrix<R>>],
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +111,7 @@ where
             let fv = (mle_fi.evaluate(&r_a).unwrap(), mle_fi.evaluate(&r_b).unwrap());
             let mut vi = vec![fv];
             self.M.iter().for_each(|M_i| {
+                let M_i = M_i.as_ref();
                 // Hot-path for the common identity/permutation test harness case: M_i == I implies M_i * Fi == Fi.
                 // This avoids materializing a 2^n vector and re-evaluating an MLE for each chunk.
                 if is_identity_matrix::<R>(M_i) {
@@ -248,7 +250,7 @@ mod tests {
 
         let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
 
-        let M = cr1cs.x.matrices();
+        let M = cr1cs.x.matrices_arc();
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         let (linb, lproof) = cr1cs.linearize(&mut ts);
@@ -324,7 +326,7 @@ mod tests {
         let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
         let (linb1, lproof1) = cr1cs1.linearize(&mut ts);
 
-        let M = cr1cs0.x.matrices();
+        let M = cr1cs0.x.matrices_arc();
 
         let mlin = Mlin {
             lins: vec![linb0, linb1],

@@ -5,8 +5,8 @@ use stark_rings::{
     exp, psi, CoeffRing, OverField, PolyRing, Ring, Zq,
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
-use thiserror::Error;
 use std::sync::Arc;
+use thiserror::Error;
 
 use crate::{
     setchk::{DigitsMatrix, In, MonomialSet, Out},
@@ -84,7 +84,7 @@ where
     /// Support for `L` [`RgInstance`]s mapped to the corresponding [`DcomEvals`].
     pub fn range_check(
         &self,
-        M: &[SparseMatrix<R>],
+        M: &[Arc<SparseMatrix<R>>],
         transcript: &mut impl Transcript<R>,
     ) -> Dcom<R> {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
@@ -836,6 +836,7 @@ mod tests {
     use ark_std::{log2, Zero};
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
+    use std::sync::Arc;
 
     use super::*;
     use crate::transcript::PoseidonTranscript;
@@ -873,7 +874,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let dcom = rg.range_check(&[], &mut ts);
+        let dcom = rg.range_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         dcom.verify(&mut ts).unwrap();
@@ -916,6 +917,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
+        let M: Vec<Arc<SparseMatrix<R>>> = M.into_iter().map(Arc::new).collect();
         let dcom = rg.range_check(&M, &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();

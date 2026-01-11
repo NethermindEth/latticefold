@@ -4,6 +4,7 @@ use stark_rings::{
     CoeffRing, OverField, Zq,
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 
 use crate::{
     cm::CmProof,
@@ -50,7 +51,7 @@ where
     pub fn lin(
         &self,
         A: &Matrix<R>,
-        M: &[SparseMatrix<R>],
+        M: &[Arc<SparseMatrix<R>>],
         params: &LinParameters,
         transcript: &mut impl Transcript<R>,
     ) -> (LinB2<R>, CmProof<R>) {
@@ -115,7 +116,7 @@ mod tests {
 
         let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
 
-        let M = cr1cs.x.matrices();
+        let M = cr1cs.x.matrices_arc();
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         let (linb, lproof) = cr1cs.linearize(&mut ts);

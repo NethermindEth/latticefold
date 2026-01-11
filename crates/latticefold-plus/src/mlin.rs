@@ -5,6 +5,7 @@ use stark_rings::{
     CoeffRing, Zq,
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::{
@@ -43,7 +44,7 @@ where
     pub fn mlin(
         &self,
         A: &Matrix<R>,
-        M: &[SparseMatrix<R>],
+        M: &[Arc<SparseMatrix<R>>],
         transcript: &mut impl Transcript<R>,
     ) -> (LinB2<R>, CmProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
@@ -186,7 +187,7 @@ mod tests {
         let (linb0, lproof0) = cr1cs0.linearize(&mut ts);
         let (linb1, lproof1) = cr1cs1.linearize(&mut ts);
 
-        let M = cr1cs0.x.matrices();
+        let M = cr1cs0.x.matrices_arc();
 
         let A = Matrix::<R>::rand(&mut ark_std::test_rng(), params.kappa, n);
 

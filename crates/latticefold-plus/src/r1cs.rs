@@ -68,6 +68,10 @@ impl<R: Ring> ComR1CSX<R> {
             self.r1cs.C.clone(),
         ]
     }
+
+    pub fn matrices_arc(&self) -> Vec<Arc<SparseMatrix<R>>> {
+        self.matrices().into_iter().map(Arc::new).collect()
+    }
 }
 
 impl<R: OverField> Linearize<R> for ComR1CS<R> {

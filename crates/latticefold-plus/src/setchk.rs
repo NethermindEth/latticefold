@@ -106,7 +106,7 @@ impl<R: OverField + PolyRing> In<R> {
     /// Proves sets rings are all unit monomials.
     /// Currently requires k >= 1 monomial matrices sets. TODO support other scenarios.
     /// If k > 1, sumcheck batching is employed.
-    pub fn set_check(&self, M: &[SparseMatrix<R>], transcript: &mut impl Transcript<R>) -> Out<R> {
+    pub fn set_check(&self, M: &[Arc<SparseMatrix<R>>], transcript: &mut impl Transcript<R>) -> Out<R> {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let t_total = Instant::now();
@@ -422,6 +422,7 @@ impl<R: OverField + PolyRing> In<R> {
             {
                 M.par_iter()
                     .map(|mi| {
+                        let mi = mi.as_ref();
                         let mut y = vec![R::ZERO; mi.ncols];
                         for (row_idx, row) in mi.coeffs.iter().enumerate() {
                             let w = R::from(eq_at(row_idx));
@@ -437,6 +438,7 @@ impl<R: OverField + PolyRing> In<R> {
             {
                 M.iter()
                     .map(|mi| {
+                        let mi = mi.as_ref();
                         let mut y = vec![R::ZERO; mi.ncols];
                         for (row_idx, row) in mi.coeffs.iter().enumerate() {
                             let w = R::from(eq_at(row_idx));
@@ -996,6 +998,7 @@ mod tests {
     use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
     use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, unit_monomial};
     use stark_rings_linalg::SparseMatrix;
+    use std::sync::Arc;
 
     use super::*;
     use crate::transcript::PoseidonTranscript;
@@ -1011,7 +1014,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&[], &mut ts);
+        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
@@ -1032,7 +1035,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&[], &mut ts);
+        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
@@ -1050,7 +1053,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&[], &mut ts);
+        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
@@ -1072,7 +1075,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&[], &mut ts);
+        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
@@ -1097,7 +1100,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&[], &mut ts);
+        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
@@ -1123,7 +1126,7 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&[], &mut ts);
+        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());

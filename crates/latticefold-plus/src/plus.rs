@@ -4,6 +4,7 @@ use stark_rings::{
     CoeffRing, OverField, Zq,
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 
 use crate::{
     cm::CmProof,
@@ -17,7 +18,7 @@ pub struct PlusProver<R: OverField, TS: Transcript<R>> {
     pub acc: Mlin<R>,
     /// Ajtai matrix
     pub A: Matrix<R>,
-    pub M: Vec<SparseMatrix<R>>,
+    pub M: Vec<Arc<SparseMatrix<R>>>,
     pub transcript: TS,
     pub params: PlusParameters,
 }
@@ -26,7 +27,7 @@ pub struct PlusProver<R: OverField, TS: Transcript<R>> {
 pub struct PlusVerifier<R: OverField, TS: Transcript<R>> {
     /// Ajtai matrix
     pub A: Matrix<R>,
-    pub M: Vec<SparseMatrix<R>>,
+    pub M: Vec<Arc<SparseMatrix<R>>>,
     pub transcript: TS,
     pub params: PlusParameters,
 }
@@ -54,7 +55,7 @@ where
     /// Initialize
     pub fn init(
         A: Matrix<R>,
-        M: Vec<SparseMatrix<R>>,
+        M: Vec<Arc<SparseMatrix<R>>>,
         ncomp: usize,
         params: PlusParameters,
         transcript: TS,
@@ -117,7 +118,7 @@ where
     /// Initialize
     pub fn init(
         A: Matrix<R>,
-        M: Vec<SparseMatrix<R>>,
+        M: Vec<Arc<SparseMatrix<R>>>,
         params: PlusParameters,
         transcript: TS,
     ) -> Self {
@@ -207,7 +208,7 @@ mod tests {
         let cr1cs0 = ComR1CS::new(r1cs.clone(), z0, 1, B, k, &A);
         let cr1cs1 = ComR1CS::new(r1cs, z1, 1, B, k, &A);
 
-        let M = cr1cs0.x.matrices();
+        let M = cr1cs0.x.matrices_arc();
 
         let transcript = PoseidonTranscript::empty::<PC>();
 
@@ -292,7 +293,7 @@ mod tests {
             })
             .collect();
 
-        let M = cr1cs[0].x.matrices();
+        let M = cr1cs[0].x.matrices_arc();
 
         let transcript = PoseidonTranscript::empty::<PC>();
 
@@ -387,7 +388,7 @@ mod tests {
         }
 
         let t = Instant::now();
-        let M = cr1cs.x.matrices();
+        let M = cr1cs.x.matrices_arc();
         if profile {
             println!("[LF+ test_large_scale] extract M matrices: {:?}", t.elapsed());
         }
