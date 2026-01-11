@@ -708,6 +708,7 @@ dependencies = [
  "rand",
  "rayon",
  "serde",
+ "sha2",
  "stark-rings",
  "stark-rings-linalg",
  "stark-rings-poly",

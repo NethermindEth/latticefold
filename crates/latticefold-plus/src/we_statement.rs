@@ -1,4 +1,17 @@
-use ark_ff::PrimeField;
+//! Helpers to bind WE locks to a statement (proof-agnostic arming).
+//!
+//! Following Symphony’s model, the armer derives per-lock coins from a **statement hash** that binds:
+//! - a program/verifier id (`vk_hash`)
+//! - an instance digest (`r1cs_digest`)
+//! - a gate digest (`gate_digest`, i.e. exact WE gate relation version)
+//! - and the **public inputs**
+//!
+//! Importantly, this intentionally does **not** include prover-chosen proof artifacts (e.g. Ajtai
+//! commitments to witness), since arming must be possible without observing a specific proving run.
+
+use ark_ff::{BigInteger, Field, PrimeField};
+use sha2::{Digest, Sha256};
+use stark_rings::OverField;
 
 /// Fixed parameters that must be statement-bound for WE/DPP.
 ///
@@ -32,6 +45,43 @@ impl WeParams {
         ]
     }
 }
+
+/// SHA256 hash of the **public** statement for `R_WE` (LF+).
+///
+/// This intentionally excludes proof artifacts (e.g. witness commitments).
+pub fn we_statement_hash_lf_plus<R: OverField>(
+    vk_hash: [u8; 32],
+    r1cs_digest: [u8; 32],
+    gate_digest: [u8; 32],
+    public_inputs: &[R::BaseRing],
+) -> [u8; 32]
+where
+    R::BaseRing: Field,
+{
+    let mut h = Sha256::new();
+    h.update(b"LATTICEFOLD_PLUS_WE_STATEMENT_V1");
+    h.update(&vk_hash);
+    h.update(&r1cs_digest);
+    h.update(&gate_digest);
+
+    h.update(&(public_inputs.len() as u64).to_le_bytes());
+    for x in public_inputs {
+        for fp in x.to_base_prime_field_elements() {
+            h.update(fp.into_bigint().to_bytes_le());
+        }
+    }
+
+    h.finalize().into()
+}
+
+
+/// Gate digest for the LF+ WE gate relation.
+///
+/// In the SP1/WE arming model this should be a **precomputed constant** identifying the exact
+/// WE gate version (code + constraint system generation), not something derived per-proof.
+///
+/// TODO: fill with the production gate digest for the SP1 WE gate.
+pub const LFP_WE_GATE_DIGEST_V1: [u8; 32] = [0u8; 32];
 
 /// Deterministic statement encoding for WE/DPP.
 ///

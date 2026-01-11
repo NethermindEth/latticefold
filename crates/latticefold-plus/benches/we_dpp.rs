@@ -23,7 +23,10 @@ use stark_rings_linalg::{Matrix, SparseMatrix};
 
 use latticefold_plus::recording_transcript::TracePoseidonTranscript;
 use latticefold_plus::we_gate_arith::{build_we_dr1cs_for_cm_proof_debug, WeCmBuildDebug};
-use latticefold_plus::we_statement::WeParams;
+use latticefold_plus::we_statement::{we_statement_hash_lf_plus, WeParams, LFP_WE_GATE_DIGEST_V1};
+
+use latticefold::transcript::Transcript;
+use sha2::{Digest, Sha256};
 
 // -----------------------------------------------------------------------------
 // Big field for Rev2 embedding (p' large enough for packing).
@@ -78,10 +81,16 @@ fn bench_we_dpp(c: &mut Criterion) {
 
     // Prover-side Cm proof.
     let mut ts = latticefold_plus::transcript::PoseidonTranscript::empty::<PC>();
+    // Model SP1: one public input digest (statement-defined) absorbed into the transcript *before* proving.
+    // (In production this comes from SP1 public inputs.)
+    type FSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+    let sp1_public_input_digest: FSmall = FSmall::from(42u64);
+    ts.absorb_field_element(&sp1_public_input_digest);
     let (_com, proof) = cm.prove(&M, &mut ts);
 
     // Record verifier transcript ops.
     let mut rec = TracePoseidonTranscript::<R>::empty::<PC>();
+    rec.absorb_field_element(&sp1_public_input_digest);
     proof.verify(&M, &mut rec).expect("cm proof verify");
     let trace = rec.trace().clone();
 
@@ -106,7 +115,14 @@ fn bench_we_dpp(c: &mut Criterion) {
     group.bench_function(BenchmarkId::new("build_we_dr1cs_cm_proof", n), |bch| {
         bch.iter(|| {
             let (out, dbg) =
-                build_we_dr1cs_for_cm_proof_debug::<R>(&poseidon_cfg, &trace, &params, &proof, M.len())
+            build_we_dr1cs_for_cm_proof_debug::<R>(
+                &poseidon_cfg,
+                &trace,
+                &params,
+                &[sp1_public_input_digest],
+                &proof,
+                M.len(),
+            )
                     .expect("build_we_dr1cs_for_cm_proof_debug");
             if let Err(e) = out.inst.check(&out.assignment) {
                 let msg = explain_failed_constraint(&out, &dbg, &e);
@@ -117,15 +133,20 @@ fn bench_we_dpp(c: &mut Criterion) {
 
     group.bench_function(BenchmarkId::new("dpp_verify_cm_proof", n), |bch| {
         // Build once outside the timed loop.
-        let (out, dbg) =
-            build_we_dr1cs_for_cm_proof_debug::<R>(&poseidon_cfg, &trace, &params, &proof, M.len())
-                .expect("build_we_dr1cs_for_cm_proof_debug");
+        let (out, dbg) = build_we_dr1cs_for_cm_proof_debug::<R>(
+            &poseidon_cfg,
+            &trace,
+            &params,
+            &[sp1_public_input_digest],
+            &proof,
+            M.len(),
+        )
+        .expect("build_we_dr1cs_for_cm_proof_debug");
         if let Err(e) = out.inst.check(&out.assignment) {
             let msg = explain_failed_constraint(&out, &dbg, &e);
             panic!("dr1cs satisfied: {e}\n{msg}");
         }
 
-        type FSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
         // Convert sparse dR1CS -> sparse dR1CS instance for the prototype RS FLPCP.
         let inst_sparse = dpp::dr1cs_flpcp::Dr1csInstanceSparse::<FSmall> {
             n: out.inst.nvars,
@@ -151,14 +172,13 @@ fn bench_we_dpp(c: &mut Criterion) {
         let k_rows = inst_sparse.k();
         let ell = 2 * k_rows;
         // IMPORTANT (WE/DPP path):
-        // Use the NP-style FLPCP so the *entire* dR1CS assignment lives in the proof (π),
-        // and we can safely use the Rev2 "assume_boolean_proof=true" bound regime.
-        //
-        // This matches the Symphony bench structure (x is empty; witness is in π).
-        let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, 0, ell);
+        // Use the NP-style FLPCP (statement+ witness), but expose the WE statement prefix
+        // as public input `x` (length = out.public_len).
+        let l_public = out.public_len;
+        let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell);
 
-        let x_small: Vec<FSmall> = vec![];
-        let z_w_small = out.assignment.clone();
+        let x_small = out.assignment[..l_public].to_vec();
+        let z_w_small = out.assignment[l_public..].to_vec();
         let pi_field_small = flpcp.prove(&x_small, &z_w_small);
 
         // Rev2 pipeline (Booleanize -> Embed -> Pack) into a large field.
@@ -177,14 +197,35 @@ fn bench_we_dpp(c: &mut Criterion) {
         )
         .expect("build_rev2_dpp_sparse_boolean_auto");
 
-        let x_big: Vec<FBig> = vec![];
+        let x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
         let pi_big = pi_bits_small
             .iter()
             .copied()
             .map(lift_to_big::<FSmall>)
             .collect::<Vec<_>>();
 
-        let mut rng = StdRng::seed_from_u64(123);
+        // Proof-agnostic arming model: derive query coins from a statement digest (no per-proof artifacts).
+        // (In production, `vk_hash` and `r1cs_digest` are provided by SP1, and `gate_digest` is a fixed per-gate constant.)
+        let vk_hash = [1u8; 32];
+        let r1cs_digest = [2u8; 32];
+        // Gate digest: production model is a precomputed constant per WE gate version.
+        // (Do NOT hash over 10^8+ nonzeros at runtime.)
+        let gate_digest: [u8; 32] = LFP_WE_GATE_DIGEST_V1;
+        // In SP1, "public inputs" for statement arming are just the SP1 public I/O digest(s).
+        let public_inputs_small = vec![sp1_public_input_digest];
+        let stmt_digest = we_statement_hash_lf_plus::<R>(vk_hash, r1cs_digest, gate_digest, &public_inputs_small);
+
+        const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
+        let lock_j: u64 = 0;
+        let coin_seed: [u8; 32] = {
+            let mut h = Sha256::new();
+            h.update(b"LFP_LOCK_COIN_V1");
+            h.update(&ARMER_SEED);
+            h.update(&stmt_digest);
+            h.update(&lock_j.to_le_bytes());
+            h.finalize().into()
+        };
+        let mut rng = StdRng::from_seed(coin_seed);
         let q = dppv.sample_query(&mut rng, &x_big).expect("dpp sample_query");
         bch.iter(|| {
             let ok = dppv

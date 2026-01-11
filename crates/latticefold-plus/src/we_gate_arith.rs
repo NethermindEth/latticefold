@@ -1461,6 +1461,10 @@ fn absorb_field_elem_as_ring<R>(
 struct DcomPrefixMathWiring {
     /// Local vars for all Poseidon `SqueezeField` outputs used in the Dcom prefix, in order.
     squeeze_field_vars: Vec<usize>,
+    /// Local vars for the 9 statement-bound params (same order as `WeParams::to_field_vec`).
+    params_vars: Vec<usize>,
+    /// Local vars for the extra statement-defined public inputs (e.g. SP1 public input digest).
+    public_input_vars: Vec<usize>,
     /// Flattened absorb surface for the Dcom prefix excluding reabsorbs:
     /// - `Out::verify` absorbs (sumcheck params, prover msgs, verifier randomness absorbs, and `absorb_evaluations(e,b)`)
     /// - `rgchk::absorb_evaluations(dcom.evals)` absorbs (R::from(a_i) then c_i)
@@ -1499,6 +1503,8 @@ where
 fn dcom_verifier_math_dr1cs<R>(
     dcom: &crate::rgchk::Dcom<R>,
     trace: &PoseidonTranscriptTrace<BF<R>>,
+    params: &WeParams,
+    public_inputs: &[BF<R>],
 ) -> Result<(SparseDr1csInstance<BF<R>>, Vec<BF<R>>, DcomPrefixMathWiring), String>
 where
     R: OverField + CoeffRing + PolyRing,
@@ -1526,6 +1532,35 @@ where
 
     let mut b = Dr1csBuilder::<BF<R>>::new();
     b.enforce_var_eq_const(b.one(), BF::<R>::ONE);
+
+    // Allocate statement-bound params as local vars and enforce they match the circuit's expected constants.
+    let params_vals = params.to_field_vec::<BF<R>>();
+    if params_vals.len() != 9 {
+        return Err("we params: expected 9 field elements".to_string());
+    }
+    let mut params_vars = Vec::with_capacity(9);
+    for &v in &params_vals {
+        params_vars.push(b.new_var(v));
+    }
+    // Enforce equality to the verifier/gadget constants (so changing public_x alone => UNSAT).
+    b.enforce_var_eq_const(params_vars[0], BF::<R>::from(out.nvars as u64)); // nvars_setchk
+    b.enforce_var_eq_const(params_vars[1], BF::<R>::from(3u64)); // degree_setchk
+    b.enforce_var_eq_const(params_vars[2], BF::<R>::from(out.nvars as u64)); // nvars_cm (same nvars in this bench)
+    b.enforce_var_eq_const(params_vars[3], BF::<R>::from(2u64)); // degree_cm
+    b.enforce_var_eq_const(params_vars[4], BF::<R>::from(params.kappa)); // kappa (not otherwise used here)
+    b.enforce_var_eq_const(params_vars[5], BF::<R>::from(R::dimension() as u64)); // ring_dim_d
+    b.enforce_var_eq_const(params_vars[6], BF::<R>::from(dcom.dparams.k as u64)); // k
+    b.enforce_var_eq_const(params_vars[7], BF::<R>::from(dcom.dparams.l as u64)); // l
+    // mlen is enforced against the builder-provided Mlen in `build_we_dr1cs_for_cm_proof_debug`
+    // via the `mlen_mats` argument; here we can at least ensure it is <= u64::MAX (already).
+    b.enforce_var_eq_const(params_vars[8], BF::<R>::from(params.mlen)); // mlen
+
+    // Allocate extra statement-defined public inputs as vars (not fixed), and absorb them
+    // as field-elements-as-ring at the start of the transcript (proof-agnostic binding).
+    let mut public_input_vars = Vec::with_capacity(public_inputs.len());
+    for &x in public_inputs {
+        public_input_vars.push(b.new_var(x));
+    }
 
     // Allocate local squeeze vars with trace values.
     let mut squeeze_field_vars: Vec<usize> = Vec::with_capacity(expected_squeezes);
@@ -1563,11 +1598,14 @@ where
     }
 
     let mut absorb_flat: Vec<usize> = Vec::new();
+    // Public inputs absorbed before verification begins.
+    for &v in &public_input_vars {
+        absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v);
+    }
     // Sumcheck parameter block absorbs.
-    let v_nvars = const_var(&mut b, BF::<R>::from(nvars as u64));
-    let v_deg = const_var(&mut b, BF::<R>::from(3u64));
-    absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v_nvars);
-    absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v_deg);
+    // Use statement-bound params instead of hardcoded constants.
+    absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, params_vars[0]); // nvars_setchk
+    absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, params_vars[1]); // degree_setchk
 
     let mut msg_vars: Vec<[RingVars; 4]> = Vec::with_capacity(nvars);
     for (round, m) in msgs.msgs().iter().enumerate() {
@@ -1770,6 +1808,8 @@ where
         asg,
         DcomPrefixMathWiring {
             squeeze_field_vars,
+            params_vars,
+            public_input_vars,
             absorb_flat,
         },
     ))
@@ -2081,6 +2121,7 @@ pub fn build_we_dr1cs_for_cm_proof<R>(
     poseidon_cfg: &PoseidonConfig<BF<R>>,
     trace: &PoseidonTranscriptTrace<BF<R>>,
     params: &WeParams,
+    public_inputs: &[BF<R>],
     proof: &crate::cm::CmProof<R>,
     mlen_mats: usize,
 ) -> Result<WeDr1csOutput<BF<R>>, String>
@@ -2089,7 +2130,7 @@ where
     R::BaseRing: Zq + Field,
 {
     let (out, _dbg) =
-        build_we_dr1cs_for_cm_proof_debug::<R>(poseidon_cfg, trace, params, proof, mlen_mats)?;
+        build_we_dr1cs_for_cm_proof_debug::<R>(poseidon_cfg, trace, params, public_inputs, proof, mlen_mats)?;
     Ok(out)
 }
 
@@ -2109,6 +2150,7 @@ pub fn build_we_dr1cs_for_cm_proof_debug<R>(
     poseidon_cfg: &PoseidonConfig<BF<R>>,
     trace: &PoseidonTranscriptTrace<BF<R>>,
     params: &WeParams,
+    public_inputs: &[BF<R>],
     proof: &crate::cm::CmProof<R>,
     mlen_mats: usize,
 ) -> Result<(WeDr1csOutput<BF<R>>, WeCmBuildDebug), String>
@@ -2126,14 +2168,21 @@ where
     // Public statement params prefix.
     let mut b_params = Dr1csBuilder::<BF<R>>::new();
     b_params.enforce_var_eq_const(b_params.one(), BF::<R>::ONE);
+    let mut params_vars = Vec::with_capacity(9);
     for &x in &params.to_field_vec::<BF<R>>() {
-        let _ = b_params.new_var(x);
+        params_vars.push(b_params.new_var(x));
+    }
+    // Extra statement-defined public inputs.
+    let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
+    for &x in public_inputs {
+        pub_input_vars.push(b_params.new_var(x));
     }
     let (params_inst, params_asg) = b_params.into_instance();
 
     // Dcom prefix: includes `Out::verify` (setchk) + `rgchk::Dcom::verify` arithmetic checks,
     // and exposes the exact prefix absorb surface (excluding reabsorbs) for transcript gluing.
-    let (dcom_inst, dcom_asg, dcom_wiring) = dcom_verifier_math_dr1cs::<R>(&proof.dcom, trace)?;
+    let (dcom_inst, dcom_asg, dcom_wiring) =
+        dcom_verifier_math_dr1cs::<R>(&proof.dcom, trace, params, public_inputs)?;
 
     // Cm coin surface (reconstruction gadgets) and glue to Poseidon squeeze outputs.
     let k = params.k as usize;
@@ -2285,6 +2334,20 @@ where
     for (i, &sv) in dcom_wiring.squeeze_field_vars.iter().enumerate() {
         glue.push((0, pose_wiring.squeeze_field_vars[i], 2, sv));
     }
+    // Glue statement params (public inputs) into the Dcom prefix gadget.
+    if params_vars.len() != dcom_wiring.params_vars.len() {
+        return Err("params glue length mismatch".to_string());
+    }
+    for (pv, dv) in params_vars.iter().zip(dcom_wiring.params_vars.iter()) {
+        glue.push((1, *pv, 2, *dv));
+    }
+    // Glue extra public inputs into the Dcom prefix gadget.
+    if pub_input_vars.len() != dcom_wiring.public_input_vars.len() {
+        return Err("public input glue length mismatch".to_string());
+    }
+    for (pv, dv) in pub_input_vars.iter().zip(dcom_wiring.public_input_vars.iter()) {
+        glue.push((1, *pv, 2, *dv));
+    }
 
     // Flatten Poseidon absorb vars for non-reabsorb absorbs *before* the Cm segment.
     let mut pose_abs_prefix: Vec<usize> = Vec::new();
@@ -2345,7 +2408,7 @@ where
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
 
-    let public_len = 1 + 9;
+    let public_len = 1 + 9 + public_inputs.len();
     Ok((
         WeDr1csOutput { inst, assignment, public_len },
         WeCmBuildDebug {
@@ -2364,6 +2427,7 @@ mod tests {
     use super::*;
     use cyclotomic_rings::rings::GoldilocksPoseidonConfig as PC;
     use latticefold::arith::r1cs::R1CS;
+    use latticefold::transcript::Transcript;
     use stark_rings::balanced_decomposition::GadgetDecompose;
     use stark_rings::cyclotomic_ring::models::goldilocks::RqPoly as R;
     use stark_rings::Ring;
@@ -2373,6 +2437,88 @@ mod tests {
     use crate::lin::LinearizedVerify;
     use crate::r1cs::ComR1CS;
     use crate::recording_transcript::TracePoseidonTranscript;
+    use crate::rgchk::{DecompParameters, Rg, RgInstance};
+    use crate::cm::Cm;
+
+    #[derive(Clone)]
+    struct ReplayPoseidonTranscript<RR: OverField> {
+        idx: usize,
+        trace: crate::recording_transcript::PoseidonTranscriptTrace<<RR::BaseRing as Field>::BasePrimeField>,
+        scratch: Vec<<RR::BaseRing as Field>::BasePrimeField>,
+    }
+
+    impl<RR: OverField> ReplayPoseidonTranscript<RR> {
+        fn new(trace: &crate::recording_transcript::PoseidonTranscriptTrace<<RR::BaseRing as Field>::BasePrimeField>) -> Self {
+            Self { idx: 0, trace: trace.clone(), scratch: Vec::with_capacity(64) }
+        }
+        fn advance(&mut self) {
+            self.idx += 1;
+        }
+    }
+
+    impl<RR: OverField> Transcript<RR> for ReplayPoseidonTranscript<RR> {
+        type TranscriptConfig = ark_crypto_primitives::sponge::poseidon::PoseidonConfig<<RR::BaseRing as Field>::BasePrimeField>;
+        fn new(_config: &Self::TranscriptConfig) -> Self {
+            unreachable!("ReplayPoseidonTranscript::new(trace) should be used in tests")
+        }
+
+        fn absorb(&mut self, v: &RR) {
+            self.scratch.clear();
+            for c in v.coeffs() {
+                self.scratch.extend(c.to_base_prime_field_elements());
+            }
+            let op = self.trace.ops.get(self.idx).expect("replay: op index oob").clone();
+            match op {
+                crate::recording_transcript::PoseidonTraceOp::Absorb(elems) => {
+                    assert_eq!(
+                        elems.as_slice(),
+                        self.scratch.as_slice(),
+                        "replay absorb mismatch at op {}",
+                        self.idx
+                    );
+                }
+                other => panic!("replay expected Absorb op, got {other:?} at idx {}", self.idx),
+            };
+            self.advance();
+        }
+
+        fn get_challenge(&mut self) -> RR::BaseRing {
+            let ext = RR::BaseRing::extension_degree() as usize;
+            let op0 = self.trace.ops.get(self.idx).expect("replay: op index oob").clone();
+            let c = match op0 {
+                crate::recording_transcript::PoseidonTraceOp::SqueezeField(v) => v,
+                other => panic!("replay expected SqueezeField op, got {other:?} at idx {}", self.idx),
+            };
+            assert_eq!(c.len(), ext, "replay squeeze_field length mismatch");
+            self.advance();
+
+            // get_challenge reabsorbs the squeezed field elements; the trace records that as Absorb(c).
+            let op1 = self.trace.ops.get(self.idx).expect("replay: op index oob").clone();
+            match op1 {
+                crate::recording_transcript::PoseidonTraceOp::Absorb(v) => {
+                    assert_eq!(v.as_slice(), c.as_slice(), "replay reabsorb mismatch");
+                }
+                other => panic!("replay expected reabsorb Absorb op after SqueezeField, got {other:?}"),
+            };
+            self.advance();
+
+            <RR::BaseRing as Field>::from_base_prime_field_elems(&c)
+                .expect("replay: wrong extension_degree")
+        }
+
+        fn squeeze_bytes(&mut self, n: usize) -> Vec<u8> {
+            let op = self.trace.ops.get(self.idx).expect("replay: op index oob").clone();
+            let out = match op {
+                crate::recording_transcript::PoseidonTraceOp::SqueezeBytes { n: nn, out } => {
+                    assert_eq!(nn, n, "replay squeeze_bytes n mismatch");
+                    out
+                }
+                other => panic!("replay expected SqueezeBytes op, got {other:?} at idx {}", self.idx),
+            };
+            self.advance();
+            out
+        }
+    }
 
     fn identity_cs(n: usize) -> (R1CS<R>, Vec<R>) {
         let r1cs = R1CS::<R> {
@@ -2550,6 +2696,267 @@ mod tests {
 
         let (inst, asg) = b.into_instance();
         inst.check(&asg).unwrap();
+    }
+
+    fn part_offset(part: usize, part_nvars: &[usize]) -> usize {
+        // Variable 0 is shared "one" across parts. Merge offsets grow by (nvars_i - 1).
+        let mut off = 0usize;
+        for i in 0..part {
+            off += part_nvars[i].saturating_sub(1);
+        }
+        off
+    }
+
+    #[test]
+    fn test_we_cm_proof_param_binding_mlen_unsat() {
+        // Small-ish instance.
+        type PCF = cyclotomic_rings::rings::FrogPoseidonConfig;
+        use cyclotomic_rings::rings::GetPoseidonParams;
+        use ark_ff::Zero;
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use stark_rings::PolyRing;
+
+        let k = 1usize;
+        let kappa = 1usize;
+        let ell = 32usize;
+        let b = 2u128;
+        let d = RR::dimension();
+        let tau_unpadded_len = kappa * (k * d) * ell * d;
+        let n = tau_unpadded_len.next_power_of_two();
+        let nvars = ark_std::log2(n) as usize;
+
+        let dparams = DecompParameters { b, k, l: ell };
+        let mut rng = ark_std::test_rng();
+        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let inst = RgInstance::from_f(f, &A, &dparams);
+        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
+        let cm = Cm { rg };
+        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+
+        // Build proof + trace.
+        let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
+        let (_com, proof) = cm.prove(&M, &mut ts);
+        let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        proof.verify(&M, &mut rec).expect("cm verify");
+        let trace = rec.trace().clone();
+
+        let params = WeParams {
+            nvars_setchk: nvars as u64,
+            degree_setchk: 3,
+            nvars_cm: nvars as u64,
+            degree_cm: 2,
+            kappa: kappa as u64,
+            ring_dim_d: RR::dimension() as u64,
+            k: k as u64,
+            l: ell as u64,
+            mlen: M.len() as u64,
+        };
+        let poseidon_cfg = PCF::get_poseidon_config();
+
+        let (out, dbg) =
+            build_we_dr1cs_for_cm_proof_debug::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+                .expect("build we dr1cs");
+        out.inst.check(&out.assignment).expect("should satisfy");
+
+        // Mutate the public `mlen` parameter only: params part is part index 1, and `mlen` is the 9th param (local var = 9).
+        let params_part = 1usize;
+        let off = part_offset(params_part, &dbg.part_nvars);
+        let mlen_local_var = 9usize;
+        let mlen_global = off + mlen_local_var;
+
+        let mut bad = out.assignment.clone();
+        bad[mlen_global] += <BF<RR> as ark_ff::Field>::ONE;
+        assert!(out.inst.check(&bad).is_err(), "mlen mutation should break satisfaction");
+    }
+
+    #[test]
+    fn test_we_cm_proof_unsat_on_constraint_var_flip() {
+        // Reuse the same construction as the param-binding test, but flip a variable that is
+        // guaranteed to appear in some constraint.
+        type PCF = cyclotomic_rings::rings::FrogPoseidonConfig;
+        use cyclotomic_rings::rings::GetPoseidonParams;
+        use ark_ff::Zero;
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use stark_rings::PolyRing;
+
+        let k = 1usize;
+        let kappa = 1usize;
+        let ell = 32usize;
+        let b = 2u128;
+        let d = RR::dimension();
+        let tau_unpadded_len = kappa * (k * d) * ell * d;
+        let n = tau_unpadded_len.next_power_of_two();
+        let nvars = ark_std::log2(n) as usize;
+
+        let dparams = DecompParameters { b, k, l: ell };
+        let mut rng = ark_std::test_rng();
+        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let inst = RgInstance::from_f(f, &A, &dparams);
+        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
+        let cm = Cm { rg };
+        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+
+        let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
+        let (_com, proof) = cm.prove(&M, &mut ts);
+        let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        proof.verify(&M, &mut rec).expect("cm verify");
+        let trace = rec.trace().clone();
+
+        let params = WeParams {
+            nvars_setchk: nvars as u64,
+            degree_setchk: 3,
+            nvars_cm: nvars as u64,
+            degree_cm: 2,
+            kappa: kappa as u64,
+            ring_dim_d: RR::dimension() as u64,
+            k: k as u64,
+            l: ell as u64,
+            mlen: M.len() as u64,
+        };
+        let poseidon_cfg = PCF::get_poseidon_config();
+
+        let (out, _dbg) =
+            build_we_dr1cs_for_cm_proof_debug::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+                .expect("build we dr1cs");
+        out.inst.check(&out.assignment).expect("should satisfy");
+
+        // Pick a var index that appears in the first constraint (and is not the shared ONE=0).
+        let c0 = &out.inst.constraints[0];
+        let pick = |terms: &Vec<(BF<RR>, usize)>| -> Option<usize> {
+            terms.iter().map(|(_, v)| *v).find(|&v| v != 0)
+        };
+        let v = pick(&c0.a)
+            .or_else(|| pick(&c0.b))
+            .or_else(|| pick(&c0.c))
+            .expect("constraint should mention some non-one variable");
+
+        let mut bad = out.assignment.clone();
+        bad[v] += <BF<RR> as ark_ff::Field>::ONE;
+        assert!(out.inst.check(&bad).is_err(), "flipping constrained var should break satisfaction");
+    }
+
+    #[test]
+    fn test_transcript_roundtrip_cm_verify() {
+        // Record a trace from a real verifier run, then replay that exact trace and ensure:
+        // - all absorbs/squeezes line up
+        // - verifier returns Ok
+        type PCF = cyclotomic_rings::rings::FrogPoseidonConfig;
+        use ark_ff::Zero;
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use stark_rings::PolyRing;
+
+        let k = 1usize;
+        let kappa = 1usize;
+        let ell = 32usize;
+        let b = 2u128;
+        let d = RR::dimension();
+        let tau_unpadded_len = kappa * (k * d) * ell * d;
+        let n = tau_unpadded_len.next_power_of_two();
+        let nvars = ark_std::log2(n) as usize;
+
+        let dparams = DecompParameters { b, k, l: ell };
+        let mut rng = ark_std::test_rng();
+        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let inst = RgInstance::from_f(f, &A, &dparams);
+        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
+        let cm = Cm { rg };
+        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+
+        let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
+        let (_com, proof) = cm.prove(&M, &mut ts);
+
+        // Record.
+        let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        proof.verify(&M, &mut rec).expect("cm verify (record)");
+        let trace = rec.trace().clone();
+
+        // Replay.
+        let mut replay = ReplayPoseidonTranscript::<RR>::new(&trace);
+        proof.verify(&M, &mut replay).expect("cm verify (replay)");
+        assert_eq!(replay.idx, replay.trace.ops.len(), "replay should consume full trace");
+    }
+
+    #[test]
+    fn test_we_cm_proof_public_input_digest_unsat_on_flip() {
+        // SP1-style: include exactly one public input digest, absorb it before proving/verifying,
+        // and ensure flipping it in `public_x` breaks dR1CS satisfaction.
+        type PCF = cyclotomic_rings::rings::FrogPoseidonConfig;
+        use ark_ff::Zero;
+        use cyclotomic_rings::rings::GetPoseidonParams;
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use stark_rings::PolyRing;
+
+        let k = 1usize;
+        let kappa = 1usize;
+        let ell = 32usize;
+        let b = 2u128;
+        let d = RR::dimension();
+        let tau_unpadded_len = kappa * (k * d) * ell * d;
+        let n = tau_unpadded_len.next_power_of_two();
+        let nvars = ark_std::log2(n) as usize;
+
+        let dparams = DecompParameters { b, k, l: ell };
+        let mut rng = ark_std::test_rng();
+        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let inst = RgInstance::from_f(f, &A, &dparams);
+        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
+        let cm = Cm { rg };
+        let M: Vec<SparseMatrix<RR>> = vec![SparseMatrix::identity(n)];
+
+        // Statement-defined SP1 public input digest (base field element).
+        type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+        let sp1_digest: BF0 = BF0::from(123u64);
+
+        // Prove with digest absorbed before proving.
+        let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
+        ts.absorb_field_element(&sp1_digest);
+        let (_com, proof) = cm.prove(&M, &mut ts);
+
+        // Record verifier trace with the same digest absorbed before verify.
+        let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        rec.absorb_field_element(&sp1_digest);
+        proof.verify(&M, &mut rec).expect("cm verify");
+        let trace = rec.trace().clone();
+
+        let params = WeParams {
+            nvars_setchk: nvars as u64,
+            degree_setchk: 3,
+            nvars_cm: nvars as u64,
+            degree_cm: 2,
+            kappa: kappa as u64,
+            ring_dim_d: RR::dimension() as u64,
+            k: k as u64,
+            l: ell as u64,
+            mlen: M.len() as u64,
+        };
+        let poseidon_cfg = PCF::get_poseidon_config();
+
+        let (out, dbg) = build_we_dr1cs_for_cm_proof_debug::<RR>(
+            &poseidon_cfg,
+            &trace,
+            &params,
+            &[sp1_digest],
+            &proof,
+            M.len(),
+        )
+        .expect("build we dr1cs");
+        out.inst.check(&out.assignment).expect("should satisfy");
+
+        // Flip the SP1 digest in the params/public-input part only.
+        // Part index 1 is the "params+public_inputs" part; local var index:
+        // 0 = ONE, 1..=9 = WeParams, 10 = first extra public input.
+        let params_part = 1usize;
+        let off = part_offset(params_part, &dbg.part_nvars);
+        let digest_local_var = 10usize;
+        let digest_global = off + digest_local_var;
+
+        let mut bad = out.assignment.clone();
+        bad[digest_global] += <BF<RR> as ark_ff::Field>::ONE;
+        assert!(out.inst.check(&bad).is_err(), "digest flip should break satisfaction");
     }
 }
 
