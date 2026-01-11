@@ -2735,7 +2735,11 @@ where
             absorb_flat.extend_from_slice(&e2.coeffs);
             absorb_flat.extend_from_slice(&e3.coeffs);
             msg_vars.push([e0, e1, e2, e3]);
-            r_sc.push(ch.next(&mut b));
+            let ri = ch.next(&mut b);
+            // MLSumcheck verifier explicitly absorbs each sampled challenge as a scalar.
+            // (In addition to the sponge's internal re-absorb done by `get_challenge`.)
+            absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, ri);
+            r_sc.push(ri);
         }
 
         // Verify sumcheck with claimed sum = 0.

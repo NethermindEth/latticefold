@@ -80,12 +80,42 @@ where
             }
         }
 
+        #[inline]
+        fn is_identity_matrix<Rr: PolyRing>(m: &SparseMatrix<Rr>) -> bool {
+            if m.nrows != m.ncols {
+                return false;
+            }
+            // Fast reject: identity must have exactly one entry per row.
+            if m.coeffs.len() != m.nrows {
+                return false;
+            }
+            for (i, row) in m.coeffs.iter().enumerate() {
+                if row.len() != 1 {
+                    return false;
+                }
+                let (c, j) = row[0];
+                if j != i {
+                    return false;
+                }
+                if c != Rr::ONE {
+                    return false;
+                }
+            }
+            true
+        }
+
         let vi_calc = |Fi: &[R]| -> Vec<(R, R)> {
             // Evaluate Fi at both points without recomputing MLE / mat-vec.
             let mle_fi = DenseMultilinearExtension::from_evaluations_vec(nvars, Fi.to_vec());
             let fv = (mle_fi.evaluate(&r_a).unwrap(), mle_fi.evaluate(&r_b).unwrap());
             let mut vi = vec![fv];
             self.M.iter().for_each(|M_i| {
+                // Hot-path for the common identity/permutation test harness case: M_i == I implies M_i * Fi == Fi.
+                // This avoids materializing a 2^n vector and re-evaluating an MLE for each chunk.
+                if is_identity_matrix::<R>(M_i) {
+                    vi.push(fv);
+                    return;
+                }
                 // Compute M_i * Fi ONCE, then evaluate at both points.
                 let mfi = mul_vec(M_i, Fi);
                 let mle_mfi = DenseMultilinearExtension::from_evaluations_vec(nvars, mfi);
