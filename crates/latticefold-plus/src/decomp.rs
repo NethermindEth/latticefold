@@ -80,36 +80,46 @@ where
             // point coordinates from last to first (LSB-first indexing in the evaluation vector).
             let nvars = r.len();
             let n = 1usize << nvars;
-            let mut w = vec![Rr::ZERO; n];
-            w[0] = Rr::ONE;
+
+            // Double-buffer to preserve the *interleaved* layout:
+            // after each variable, weights are [w0*(1-r), w0*r, w1*(1-r), w1*r, ...],
+            // matching the evaluation indexing used by DenseMultilinearExtension.
+            let mut cur = vec![Rr::ZERO; n];
+            let mut next = vec![Rr::ZERO; n];
+            cur[0] = Rr::ONE;
+
             let mut len = 1usize;
+            let mut cur_is_cur = true;
             for &rj in r.iter().rev() {
                 let om = Rr::ONE - rj;
-                // Split `[0..2*len)` into low/high halves and update in-place:
-                //   high[i] = old_low[i] * rj
-                //   low[i]  = old_low[i] * (1-rj)
-                let (low, high) = w[..(2 * len)].split_at_mut(len);
+                let (src, dst) = if cur_is_cur {
+                    (&cur[..len], &mut next[..(2 * len)])
+                } else {
+                    (&next[..len], &mut cur[..(2 * len)])
+                };
+
                 #[cfg(feature = "parallel")]
                 {
-                    low.par_iter_mut()
-                        .zip(high.par_iter_mut())
-                        .for_each(|(lo, hi)| {
-                            let old = *lo;
-                            *hi = old * rj;
-                            *lo = old * om;
+                    dst.par_chunks_mut(2)
+                        .zip(src.par_iter())
+                        .for_each(|(pair, &wi)| {
+                            pair[0] = wi * om;
+                            pair[1] = wi * rj;
                         });
                 }
                 #[cfg(not(feature = "parallel"))]
                 {
-                    for i in 0..len {
-                        let old = low[i];
-                        high[i] = old * rj;
-                        low[i] = old * om;
+                    for (i, &wi) in src.iter().enumerate() {
+                        dst[2 * i] = wi * om;
+                        dst[2 * i + 1] = wi * rj;
                     }
                 }
+
                 len <<= 1;
+                cur_is_cur = !cur_is_cur;
             }
-            w
+
+            if cur_is_cur { cur } else { next }
         }
 
         #[inline]
