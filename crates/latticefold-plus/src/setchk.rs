@@ -108,6 +108,7 @@ impl<R: OverField + PolyRing> In<R> {
     /// If k > 1, sumcheck batching is employed.
     pub fn set_check(&self, M: &[SparseMatrix<R>], transcript: &mut impl Transcript<R>) -> Out<R> {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let t_total = Instant::now();
 
         let Ms_sparse: Vec<&SparseMatrix<R>> = self
@@ -400,6 +401,7 @@ impl<R: OverField + PolyRing> In<R> {
 
         // Step 3
         let t_step3 = Instant::now();
+        let t_y_mats = Instant::now();
         // Avoid materializing full length-2^n eq table: use (low-table + high-scale).
         let one_minus_r = r.iter().copied().map(|x| R::BaseRing::ONE - x).collect::<Vec<_>>();
         let t_low = choose_t_low(self.nvars);
@@ -447,7 +449,11 @@ impl<R: OverField + PolyRing> In<R> {
                     .collect()
             }
         };
+        if profile && profile_detail {
+            println!("[LF+ setchk] step3(y_mats): {:?}", t_y_mats.elapsed());
+        }
 
+        let t_e = Instant::now();
         let e: Vec<Vec<Vec<R>>> = {
             let mut e = Vec::with_capacity(1 + M.len());
 
@@ -695,7 +701,11 @@ impl<R: OverField + PolyRing> In<R> {
             }
             e
         };
+        if profile && profile_detail {
+            println!("[LF+ setchk] step3(e): {:?}", t_e.elapsed());
+        }
 
+        let t_b = Instant::now();
         #[cfg(feature = "parallel")]
         let b: Vec<R> = ms
             .par_iter()
@@ -718,9 +728,17 @@ impl<R: OverField + PolyRing> In<R> {
                 acc
             })
             .collect();
+        if profile && profile_detail {
+            println!("[LF+ setchk] step3(b): {:?}", t_b.elapsed());
+        }
 
+        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
+        let t_absorb = std::time::Instant::now();
         // Prover to Verifier messages
         absorb_evaluations(&e, &b, transcript);
+        if profile && profile_detail {
+            println!("[LF+ setchk] step3(absorb): {:?}", t_absorb.elapsed());
+        }
 
         if profile {
             println!(
