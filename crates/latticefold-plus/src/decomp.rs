@@ -273,8 +273,16 @@ where
         }
 
         let t = Instant::now();
-        let C0 = A.try_mul_vec(&F0).unwrap();
-        let C1 = A.try_mul_vec(&F1).unwrap();
+        let (C0, C1) = {
+            #[cfg(feature = "parallel")]
+            {
+                rayon::join(|| A.try_mul_vec(&F0).unwrap(), || A.try_mul_vec(&F1).unwrap())
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                (A.try_mul_vec(&F0).unwrap(), A.try_mul_vec(&F1).unwrap())
+            }
+        };
         if profile {
             println!("[LF+ Decomp::decompose] commitments C0/C1: {:?}", t.elapsed());
             println!("[LF+ Decomp::decompose] total: {:?}", t_total.elapsed());

@@ -3964,26 +3964,32 @@ mod tests {
 
             // DPP verification (single query).
             let t3 = std::time::Instant::now();
-            let inst_sparse = DppInst::<FSmall> {
-                n: out.inst.nvars,
-                a: out.inst.constraints.iter().map(|r| SparseVec::new(r.a.clone())).collect(),
-                b: out.inst.constraints.iter().map(|r| SparseVec::new(r.b.clone())).collect(),
-                c: out.inst.constraints.iter().map(|r| SparseVec::new(r.c.clone())).collect(),
-            };
+            // Avoid cloning multi-million sparse rows: consume the constraints and move (a,b,c) out.
+            let (inst, assignment, public_len) = (out.inst, out.assignment, out.public_len);
+            let n = inst.nvars;
+            let mut a = Vec::with_capacity(inst.constraints.len());
+            let mut b = Vec::with_capacity(inst.constraints.len());
+            let mut c = Vec::with_capacity(inst.constraints.len());
+            for mut row in inst.constraints {
+                a.push(SparseVec::new(std::mem::take(&mut row.a)));
+                b.push(SparseVec::new(std::mem::take(&mut row.b)));
+                c.push(SparseVec::new(std::mem::take(&mut row.c)));
+            }
+            let inst_sparse = DppInst::<FSmall> { n, a, b, c };
             eprintln!("[test_large_trace] dr1cs->sparse: {:?}", t3.elapsed());
             let k_rows = inst_sparse.k();
             let ell_rs = 2 * k_rows;
-            let l_public = out.public_len;
+            let l_public = public_len;
             let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell_rs);
 
             let t4 = std::time::Instant::now();
-            let x_small = out.assignment[..l_public].to_vec();
-            let z_w_small = out.assignment[l_public..].to_vec();
+            let x_small = assignment[..l_public].to_vec();
+            let z_w_small = assignment[l_public..].to_vec();
             eprintln!(
                 "[test_large_trace] sizes: l_public={} witness_len={} assignment_len={}",
                 l_public,
                 z_w_small.len(),
-                out.assignment.len()
+                assignment.len()
             );
             let (pi_field, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
             eprintln!(
