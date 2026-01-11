@@ -1590,8 +1590,8 @@ where
     // Public inputs absorbed before verification begins (optional when the overall verifier
     // has already absorbed them earlier in the transcript).
     if include_public_inputs_in_absorb {
-        for &v in &public_input_vars {
-            absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v);
+    for &v in &public_input_vars {
+        absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v);
         }
     }
     // Sumcheck parameter block absorbs.
@@ -2146,32 +2146,32 @@ where
     ) = {
         let pose_build = || {
             let t = std::time::Instant::now();
-            let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
-                poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
-                    .map_err(|e| format!("poseidon arith failed: {e}"))?;
-            enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
+    let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
+        poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
+            .map_err(|e| format!("poseidon arith failed: {e}"))?;
+    enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
             Ok::<_, String>((pose_inst, pose_asg, pose_wiring, byte_wiring, t.elapsed()))
         };
         let params_build = || {
             let t = std::time::Instant::now();
-            let mut b_params = Dr1csBuilder::<BF<R>>::new();
-            b_params.enforce_var_eq_const(b_params.one(), BF::<R>::ONE);
-            let mut params_vars = Vec::with_capacity(9);
-            for &x in &params.to_field_vec::<BF<R>>() {
-                params_vars.push(b_params.new_var(x));
-            }
-            let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
-            for &x in public_inputs {
+    let mut b_params = Dr1csBuilder::<BF<R>>::new();
+    b_params.enforce_var_eq_const(b_params.one(), BF::<R>::ONE);
+    let mut params_vars = Vec::with_capacity(9);
+    for &x in &params.to_field_vec::<BF<R>>() {
+        params_vars.push(b_params.new_var(x));
+    }
+    let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
+    for &x in public_inputs {
             let v = b_params.new_var(x);
             enforce_bool(&mut b_params, v);
             pub_input_vars.push(v);
-            }
-            let (params_inst, params_asg) = b_params.into_instance();
+    }
+    let (params_inst, params_asg) = b_params.into_instance();
             Ok::<_, String>((params_inst, params_asg, params_vars, pub_input_vars, t.elapsed()))
         };
         let dcom_build = || {
             let t = std::time::Instant::now();
-            let (dcom_inst, dcom_asg, dcom_wiring) =
+    let (dcom_inst, dcom_asg, dcom_wiring) =
                 dcom_verifier_math_dr1cs::<R>(
                     &proof.dcom,
                     trace,
@@ -2185,8 +2185,8 @@ where
         };
         let coin_build = || {
             let t = std::time::Instant::now();
-            let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
-            let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
+    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
+    let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
             Ok::<_, String>((coin_inst, coin_asg, coin_wiring, op_wiring, t.elapsed()))
         };
         let cm_build = || {
@@ -3320,6 +3320,29 @@ mod tests {
             self.advance();
         }
 
+        fn absorb_field_element(&mut self, v: &RR::BaseRing) {
+            // Match `latticefold-plus` transcript encoding: scalar absorbs are absorbed directly
+            // as base-prime-field elements (NOT expanded into a constant-coeff ring element).
+            self.scratch.clear();
+            self.scratch.extend(v.to_base_prime_field_elements());
+            let op = self.trace.ops.get(self.idx).expect("replay: op index oob").clone();
+            match op {
+                crate::recording_transcript::PoseidonTraceOp::Absorb(elems) => {
+                    assert_eq!(
+                        elems.as_slice(),
+                        self.scratch.as_slice(),
+                        "replay absorb_field_element mismatch at op {}",
+                        self.idx
+                    );
+                }
+                other => panic!(
+                    "replay expected Absorb op for absorb_field_element, got {other:?} at idx {}",
+                    self.idx
+                ),
+            };
+            self.advance();
+        }
+
         fn get_challenge(&mut self) -> RR::BaseRing {
             let ext = RR::BaseRing::extension_degree() as usize;
             let op0 = self.trace.ops.get(self.idx).expect("replay: op index oob").clone();
@@ -3584,7 +3607,7 @@ mod tests {
         let poseidon_cfg = PCF::get_poseidon_config();
 
         let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
-            .expect("build we dr1cs");
+                .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
         // Mutate the public `mlen` parameter only.
@@ -3643,7 +3666,7 @@ mod tests {
         let poseidon_cfg = PCF::get_poseidon_config();
 
         let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
-            .expect("build we dr1cs");
+                .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
         // Pick a var index that appears in the first constraint (and is not the shared ONE=0).
@@ -3712,6 +3735,7 @@ mod tests {
         use cyclotomic_rings::rings::GetPoseidonParams;
         use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
         use stark_rings::PolyRing;
+        use sha2::{Digest, Sha256};
 
         let k = 1usize;
         let kappa = 1usize;
@@ -3731,18 +3755,25 @@ mod tests {
         let cm = Cm { rg };
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
-        // Statement-defined SP1 public input digest (base field element).
+        // Statement-defined SP1 public input digest as 256 boolean bits (collision-robust and DPP-friendly).
         type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
-        let sp1_digest: BF0 = BF0::from(123u64);
+        let sp1_digest_bits: Vec<BF0> = {
+            let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
+            crate::we_statement::digest32_to_bits_field::<BF0>(d)
+        };
 
         // Prove with digest absorbed before proving.
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        ts.absorb_field_element(&sp1_digest);
+        for b in &sp1_digest_bits {
+            ts.absorb_field_element(b);
+        }
         let (_com, proof) = cm.prove(&M, &mut ts);
 
         // Record verifier trace with the same digest absorbed before verify.
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
-        rec.absorb_field_element(&sp1_digest);
+        for b in &sp1_digest_bits {
+            rec.absorb_field_element(b);
+        }
         proof.verify(&M, &mut rec).expect("cm verify");
         let trace = rec.trace().clone();
 
@@ -3763,7 +3794,7 @@ mod tests {
             &poseidon_cfg,
             &trace,
             &params,
-            &[sp1_digest],
+            &sp1_digest_bits,
             &proof,
             M.len(),
         )
@@ -3772,7 +3803,7 @@ mod tests {
 
         // Flip the SP1 digest in the public inputs only.
         // Public layout for WE is: [ONE] || [9×WeParams] || [public_inputs...]
-        let digest_global = 1usize + 9usize;
+        let digest_global = 1usize + 9usize; // first digest bit
         let mut bad = out.assignment.clone();
         bad[digest_global] += <BF<RR> as ark_ff::Field>::ONE;
         assert!(out.inst.check(&bad).is_err(), "digest flip should break satisfaction");
