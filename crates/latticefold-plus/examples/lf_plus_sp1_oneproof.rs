@@ -109,7 +109,17 @@ fn main() {
         // Cheap sanity check: evaluate a couple of vertices without materializing a ring witness.
         let v0 = mle.eval_at_index(0);
         let v1 = mle.eval_at_index(1);
-        println!("  demo: SparseMatVecConstCoeff evals: v[0].ct={} v[1].ct={}", v0.ct(), v1.ct());
+        // Print with Debug to avoid base-ring Display quirks (e.g. printing 0 as empty).
+        println!(
+            "  demo: SparseMatVecConstCoeff evals: v[0].ct={:?} v[1].ct={:?}",
+            v0.ct(),
+            v1.ct()
+        );
+        println!(
+            "  demo: chunk0 A row nnz: row0={} row1={}",
+            mle.eval0_at_index(0), // constant term in base ring
+            mle.eval0_at_index(1),
+        );
     } else {
         println!("  demo: skipped (A not const-coeff in this representation)");
     }
