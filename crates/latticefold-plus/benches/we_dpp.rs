@@ -184,37 +184,30 @@ fn bench_we_dpp(c: &mut Criterion) {
         out.inst.check(&out.assignment).expect("dr1cs satisfied");
 
         // Convert sparse dR1CS -> sparse dR1CS instance for the prototype RS FLPCP.
-        let inst_sparse = dpp::dr1cs_flpcp::Dr1csInstanceSparse::<FSmall> {
-            n: out.inst.nvars,
-            a: out
-                .inst
-                .constraints
-                .iter()
-                .map(|row| dpp::SparseVec::new(row.a.clone()))
-                .collect(),
-            b: out
-                .inst
-                .constraints
-                .iter()
-                .map(|row| dpp::SparseVec::new(row.b.clone()))
-                .collect(),
-            c: out
-                .inst
-                .constraints
-                .iter()
-                .map(|row| dpp::SparseVec::new(row.c.clone()))
-                .collect(),
-        };
+        //
+        // IMPORTANT: avoid cloning multi-million sparse rows. Consume `out.inst.constraints` and
+        // move `(a,b,c)` out of each row.
+        let (inst, assignment, public_len) = (out.inst, out.assignment, out.public_len);
+        let n = inst.nvars;
+        let mut a = Vec::with_capacity(inst.constraints.len());
+        let mut b = Vec::with_capacity(inst.constraints.len());
+        let mut c = Vec::with_capacity(inst.constraints.len());
+        for mut row in inst.constraints {
+            a.push(dpp::SparseVec::new(std::mem::take(&mut row.a)));
+            b.push(dpp::SparseVec::new(std::mem::take(&mut row.b)));
+            c.push(dpp::SparseVec::new(std::mem::take(&mut row.c)));
+        }
+        let inst_sparse = dpp::dr1cs_flpcp::Dr1csInstanceSparse::<FSmall> { n, a, b, c };
         let k_rows = inst_sparse.k();
         let ell = 2 * k_rows;
         // IMPORTANT (WE/DPP path):
         // Use the NP-style FLPCP (statement+ witness), but expose the WE statement prefix
         // as public input `x` (length = out.public_len).
-        let l_public = out.public_len;
+        let l_public = public_len;
         let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell);
 
-        let x_small = out.assignment[..l_public].to_vec();
-        let z_w_small = out.assignment[l_public..].to_vec();
+        let x_small = assignment[..l_public].to_vec();
+        let z_w_small = assignment[l_public..].to_vec();
         let (_pi_field_small, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
 
         // Rev2 pipeline (Booleanize -> Embed -> Pack) into a large field.
