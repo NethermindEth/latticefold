@@ -85,6 +85,13 @@ impl<R: OverField> Transcript<R> for TracePoseidonTranscript<R> {
         self.absorb_base_prime_field_elems_vec(elems);
     }
 
+    fn absorb_field_element(&mut self, v: &R::BaseRing) {
+        // IMPORTANT (encoding):
+        // Absorb base-ring field elements directly (as base-prime-field elems), instead of
+        // converting to a constant-coeff ring element and absorbing `d` coefficients.
+        self.absorb_base_prime_field_elems_vec(v.to_base_prime_field_elements().collect());
+    }
+
     fn get_challenge(&mut self) -> R::BaseRing {
         let extension_degree = R::BaseRing::extension_degree();
         let c = self

@@ -1418,10 +1418,13 @@ fn absorb_field_elem_as_ring<R>(
     R: PolyRing,
     R::BaseRing: Field,
 {
-    // Matches latticefold `Transcript::absorb_field_element` default:
-    //   absorb(&From::from(*v)) i.e. absorb a constant-coeff ring element.
-    let rv = scalar_var_to_ringvars::<R>(b, x0);
-    absorb_flat.extend_from_slice(&rv.coeffs);
+    // Matches `latticefold-plus` PoseidonTranscript's `absorb_field_element` override:
+    // absorb the scalar directly as one base-prime-field element (for our rings, extdeg=1).
+    //
+    // NOTE: This is intentionally *not* the same as absorbing `R::from(x0)` (which would expand
+    // to `R::dimension()` coefficients and blow up Poseidon IO in the WE gate).
+    let _ = b; // keep signature uniform with other helpers
+    absorb_flat.push(x0);
 }
 
 #[cfg(feature = "we_gate")]
@@ -1537,7 +1540,10 @@ where
     // as field-elements-as-ring at the start of the transcript (proof-agnostic binding).
     let mut public_input_vars = Vec::with_capacity(public_inputs.len());
     for &x in public_inputs {
-        public_input_vars.push(b.new_var(x));
+        let v = b.new_var(x);
+        // Public statement digest bits are expected to be boolean for the DPP/WE model.
+        enforce_bool(&mut b, v);
+        public_input_vars.push(v);
     }
 
     // Allocate local squeeze vars with trace values.
@@ -2156,7 +2162,9 @@ where
             }
             let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
             for &x in public_inputs {
-                pub_input_vars.push(b_params.new_var(x));
+            let v = b_params.new_var(x);
+            enforce_bool(&mut b_params, v);
+            pub_input_vars.push(v);
             }
             let (params_inst, params_asg) = b_params.into_instance();
             Ok::<_, String>((params_inst, params_asg, params_vars, pub_input_vars, t.elapsed()))
@@ -2749,49 +2757,212 @@ where
         (op_idx, absorb_ops, squeezed_field_elems)
     };
 
-    // Poseidon trace -> dR1CS (+ wiring).
+    // Convert trace ops once; many sub-builders share it (Poseidon part + glue scans).
     let ops = lf_ops_to_symphony_ops::<BF<R>>(&trace.ops);
-    let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
-        poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
-            .map_err(|e| format!("poseidon arith failed: {e}"))?;
-    enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
 
-    // Global reabsorb flags for absorb-op indexing.
-    let mut is_reabsorb = vec![false; pose_wiring.absorb_ranges.len()];
-    let mut expect_reabsorb = false;
-    let mut absorb_idx = 0usize;
-    for op in &ops {
-        match op {
-            symphony::transcript::PoseidonTraceOp::SqueezeField(_) => expect_reabsorb = true,
-            symphony::transcript::PoseidonTraceOp::SqueezeBytes { .. } => {}
-            symphony::transcript::PoseidonTraceOp::Absorb(_) => {
-                if expect_reabsorb {
-                    if absorb_idx < is_reabsorb.len() {
-                        is_reabsorb[absorb_idx] = true;
+    // Parameters used by multiple sub-builders.
+    let k = params.k as usize;
+    let log_kappa = ark_std::log2((params.kappa as usize).next_power_of_two()) as usize;
+    let nvars = params.nvars_cm as usize;
+
+    // Build independent parts in parallel (they only get glued/merged later).
+    let (
+        (pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb),
+        (params_inst, params_asg, params_vars, pub_input_vars),
+        (lin_inst, lin_asg, lin_ch_vars, lin_absorb_flat),
+        (dcom_inst, dcom_asg, dcom_wiring),
+        (coin_inst, coin_asg, coin_wiring, op_wiring),
+        (field_inst, field_asg, field_wiring_local),
+        (cm_inst, cm_asg, cm_wiring),
+        (decomp_inst, decomp_asg),
+    ) = {
+        let pose_build = || {
+            let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
+                poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
+                    .map_err(|e| format!("poseidon arith failed: {e}"))?;
+            enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
+
+            // Global reabsorb flags for absorb-op indexing.
+            let mut is_reabsorb = vec![false; pose_wiring.absorb_ranges.len()];
+            let mut expect_reabsorb = false;
+            let mut absorb_idx = 0usize;
+            for op in &ops {
+                match op {
+                    symphony::transcript::PoseidonTraceOp::SqueezeField(_) => expect_reabsorb = true,
+                    symphony::transcript::PoseidonTraceOp::SqueezeBytes { .. } => {}
+                    symphony::transcript::PoseidonTraceOp::Absorb(_) => {
+                        if expect_reabsorb {
+                            if absorb_idx < is_reabsorb.len() {
+                                is_reabsorb[absorb_idx] = true;
+                            }
+                            expect_reabsorb = false;
+                        }
+                        absorb_idx += 1;
                     }
-                    expect_reabsorb = false;
                 }
-                absorb_idx += 1;
             }
-        }
-    }
+            Ok::<_, String>((pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb))
+        };
 
-    // Params + extra public inputs (statement-bound).
-    let mut b_params = Dr1csBuilder::<BF<R>>::new();
-    b_params.enforce_var_eq_const(b_params.one(), BF::<R>::ONE);
-    let mut params_vars = Vec::with_capacity(9);
-    for &x in &params.to_field_vec::<BF<R>>() {
-        params_vars.push(b_params.new_var(x));
-    }
-    let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
-    for &x in public_inputs {
-        pub_input_vars.push(b_params.new_var(x));
-    }
-    let (params_inst, params_asg) = b_params.into_instance();
+        let params_build = || {
+            // Params + extra public inputs (statement-bound).
+            let mut b_params = Dr1csBuilder::<BF<R>>::new();
+            b_params.enforce_var_eq_const(b_params.one(), BF::<R>::ONE);
+            let mut params_vars = Vec::with_capacity(9);
+            for &x in &params.to_field_vec::<BF<R>>() {
+                params_vars.push(b_params.new_var(x));
+            }
+            let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
+            for &x in public_inputs {
+                let v = b_params.new_var(x);
+                enforce_bool(&mut b_params, v);
+                pub_input_vars.push(v);
+            }
+            let (params_inst, params_asg) = b_params.into_instance();
+            Ok::<_, String>((params_inst, params_asg, params_vars, pub_input_vars))
+        };
+
+        let lin_build = || plus_lin_verifier_math_dr1cs::<R>(&proof.lproof, trace, params);
+
+        let dcom_build = || {
+            dcom_verifier_math_dr1cs::<R>(
+                &proof.cmproof.dcom,
+                trace,
+                params,
+                &[], // public inputs absorbed before the overall verifier begins
+                cm_ops_offset,
+                cm_squeezed_field_offset,
+                false, // include_public_inputs_in_absorb
+            )
+        };
+
+        let coin_build = || {
+            let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
+            let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
+            Ok::<_, String>((coin_inst, coin_asg, coin_wiring, op_wiring))
+        };
+
+        let field_build = || {
+            // Extract the matching field values from the trace by scanning SqueezeField ops after short challenges.
+            let need_field = 2 * log_kappa + 2 + 2 * nvars;
+            let mut squeezed_field_vals = Vec::with_capacity(need_field);
+            let mut seen_first_bytes = false;
+            let mut bytes_seen = 0usize;
+            for op in &trace.ops {
+                match op {
+                    crate::recording_transcript::PoseidonTraceOp::SqueezeBytes { .. } => {
+                        if !seen_first_bytes {
+                            seen_first_bytes = true;
+                        }
+                        if seen_first_bytes && bytes_seen < (3 + k * R::dimension()) {
+                            bytes_seen += 1;
+                        }
+                    }
+                    crate::recording_transcript::PoseidonTraceOp::SqueezeField(v) => {
+                        if seen_first_bytes
+                            && bytes_seen == (3 + k * R::dimension())
+                            && squeezed_field_vals.len() < need_field
+                        {
+                            if v.len() != 1 {
+                                return Err("expected base-field squeeze len=1".to_string());
+                            }
+                            squeezed_field_vals.push(v[0]);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if squeezed_field_vals.len() != need_field {
+                return Err("could not extract enough squeeze_field values for cm".to_string());
+            }
+
+            let mut b_fields = Dr1csBuilder::<BF<R>>::new();
+            b_fields.enforce_var_eq_const(b_fields.one(), BF::<R>::ONE);
+            let mut cur = 0usize;
+            let take = |cur: &mut usize,
+                        n: usize,
+                        vs: &[BF<R>],
+                        b: &mut Dr1csBuilder<BF<R>>| -> Vec<usize> {
+                let out = vs[*cur..*cur + n]
+                    .iter()
+                    .copied()
+                    .map(|x| b.new_var(x))
+                    .collect::<Vec<_>>();
+                *cur += n;
+                out
+            };
+            let c0 = take(&mut cur, log_kappa, &squeezed_field_vals, &mut b_fields);
+            let c1 = take(&mut cur, log_kappa, &squeezed_field_vals, &mut b_fields);
+            let rc0 = take(&mut cur, 1, &squeezed_field_vals, &mut b_fields)[0];
+            let sumcheck_r0 = take(&mut cur, nvars, &squeezed_field_vals, &mut b_fields);
+            let rc1 = take(&mut cur, 1, &squeezed_field_vals, &mut b_fields)[0];
+            let sumcheck_r1 = take(&mut cur, nvars, &squeezed_field_vals, &mut b_fields);
+            let (field_inst, field_asg) = b_fields.into_instance();
+            let field_wiring_local = CmFieldChallengeWiring {
+                c0,
+                c1,
+                rc0,
+                rc1,
+                sumcheck_r0,
+                sumcheck_r1,
+            };
+            Ok::<_, String>((field_inst, field_asg, field_wiring_local))
+        };
+
+        let cm_build =
+            || cm_verifier_math_dr1cs::<R>(trace, &proof.cmproof, k, log_kappa, nvars, mlen_mats);
+
+        let decomp_build = || {
+            decomp_verifier_math_dr1cs::<R>(
+                &proof.dproof,
+                &proof.linb2x.cm_g,
+                &proof.linb2x.vo,
+                B,
+            )
+        };
+
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::join;
+            let (pose_r, rest) = join(pose_build, || {
+                join(params_build, || {
+                    join(lin_build, || {
+                        join(dcom_build, || {
+                            join(coin_build, || {
+                                join(field_build, || join(cm_build, decomp_build))
+                            })
+                        })
+                    })
+                })
+            });
+            let (params_r, (lin_r, (dcom_r, (coin_r, (field_r, (cm_r, decomp_r)))))) = rest;
+            (
+                pose_r?,
+                params_r?,
+                lin_r?,
+                dcom_r?,
+                coin_r?,
+                field_r?,
+                cm_r?,
+                decomp_r?,
+            )
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            (
+                pose_build()?,
+                params_build()?,
+                lin_build()?,
+                dcom_build()?,
+                coin_build()?,
+                field_build()?,
+                cm_build()?,
+                decomp_build()?,
+            )
+        }
+    };
 
     // Π_lin verifier arithmetic + transcript binding (absorb surface + squeeze-field vars).
-    let (lin_inst, lin_asg, lin_ch_vars, lin_absorb_flat) =
-        plus_lin_verifier_math_dr1cs::<R>(&proof.lproof, trace, params)?;
 
     if lin_ch_vars.len() != cm_squeezed_field_offset {
         return Err(format!(
@@ -2801,23 +2972,6 @@ where
         ));
     }
 
-    // Cm verifier parts (WITHOUT Poseidon/params): we glue them into the shared transcript.
-    let k = params.k as usize;
-    let log_kappa = ark_std::log2((params.kappa as usize).next_power_of_two()) as usize;
-    let nvars = params.nvars_cm as usize;
-
-    let (dcom_inst, dcom_asg, dcom_wiring) = dcom_verifier_math_dr1cs::<R>(
-        &proof.cmproof.dcom,
-        trace,
-        params,
-        &[], // public inputs absorbed before the overall verifier begins
-        cm_ops_offset,
-        cm_squeezed_field_offset,
-        false, // include_public_inputs_in_absorb
-    )?;
-
-    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
-    let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
     let (pose_byte_vars, pose_field_vars) =
         cm_poseidon_challenge_vars::<R>(&pose_wiring, &byte_wiring, &op_wiring)?;
 
@@ -2827,77 +2981,6 @@ where
     if pose_field_vars.len() != need_field {
         return Err("poseidon field var length mismatch".to_string());
     }
-    // Extract the matching field values from the trace by scanning SqueezeField ops after short challenges.
-    let mut squeezed_field_vals = Vec::with_capacity(need_field);
-    let mut seen_first_bytes = false;
-    let mut bytes_seen = 0usize;
-    for op in &trace.ops {
-        match op {
-            crate::recording_transcript::PoseidonTraceOp::SqueezeBytes { .. } => {
-                if !seen_first_bytes {
-                    seen_first_bytes = true;
-                }
-                if seen_first_bytes && bytes_seen < (3 + k * R::dimension()) {
-                    bytes_seen += 1;
-                }
-            }
-            crate::recording_transcript::PoseidonTraceOp::SqueezeField(v) => {
-                if seen_first_bytes
-                    && bytes_seen == (3 + k * R::dimension())
-                    && squeezed_field_vals.len() < need_field
-                {
-                    if v.len() != 1 {
-                        return Err("expected base-field squeeze len=1".to_string());
-                    }
-                    squeezed_field_vals.push(v[0]);
-                }
-            }
-            _ => {}
-        }
-    }
-    if squeezed_field_vals.len() != need_field {
-        return Err("could not extract enough squeeze_field values for cm".to_string());
-    }
-
-    let mut b_fields = Dr1csBuilder::<BF<R>>::new();
-    b_fields.enforce_var_eq_const(b_fields.one(), BF::<R>::ONE);
-    let mut cur = 0usize;
-    let take =
-        |cur: &mut usize, n: usize, vs: &[BF<R>], b: &mut Dr1csBuilder<BF<R>>| -> Vec<usize> {
-            let out = vs[*cur..*cur + n]
-                .iter()
-                .copied()
-                .map(|x| b.new_var(x))
-                .collect::<Vec<_>>();
-            *cur += n;
-            out
-        };
-    let c0 = take(&mut cur, log_kappa, &squeezed_field_vals, &mut b_fields);
-    let c1 = take(&mut cur, log_kappa, &squeezed_field_vals, &mut b_fields);
-    let rc0 = take(&mut cur, 1, &squeezed_field_vals, &mut b_fields)[0];
-    let sumcheck_r0 = take(&mut cur, nvars, &squeezed_field_vals, &mut b_fields);
-    let rc1 = take(&mut cur, 1, &squeezed_field_vals, &mut b_fields)[0];
-    let sumcheck_r1 = take(&mut cur, nvars, &squeezed_field_vals, &mut b_fields);
-    let (field_inst, field_asg) = b_fields.into_instance();
-    let field_wiring_local = CmFieldChallengeWiring {
-        c0,
-        c1,
-        rc0,
-        rc1,
-        sumcheck_r0,
-        sumcheck_r1,
-    };
-
-    let (cm_inst, cm_asg, cm_wiring) =
-        cm_verifier_math_dr1cs::<R>(trace, &proof.cmproof, k, log_kappa, nvars, mlen_mats)?;
-
-    // Decomp verifier (pure constraints).
-    let (decomp_inst, decomp_asg) = decomp_verifier_math_dr1cs::<R>(
-        &proof.dproof,
-        &proof.linb2x.cm_g,
-        &proof.linb2x.vo,
-        B,
-    )?;
 
     // Glue constraints.
     let mut glue: Vec<(usize, usize, usize, usize)> = Vec::new();
@@ -2937,7 +3020,9 @@ where
     b_stmt.enforce_var_eq_const(b_stmt.one(), BF::<R>::ONE);
     let mut stmt_pub_vars = Vec::with_capacity(public_inputs.len());
     for &x in public_inputs {
-        stmt_pub_vars.push(b_stmt.new_var(x));
+        let v = b_stmt.new_var(x);
+        enforce_bool(&mut b_stmt, v);
+        stmt_pub_vars.push(v);
     }
     let mut stmt_absorb_flat: Vec<usize> = Vec::new();
     for &v0 in &stmt_pub_vars {
@@ -3704,7 +3789,7 @@ mod tests {
         use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
         use stark_rings::PolyRing;
 
-        use crate::we_statement::{digest32_to_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};
+        use crate::we_statement::{digest32_to_bits_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};
         use dpp::dr1cs_flpcp::Dr1csInstanceSparse as DppInst;
         use dpp::sparse::SparseVec;
         use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
@@ -3745,12 +3830,12 @@ mod tests {
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![M_one; mlen];
 
         type FSmall = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
-        let sp1_digest: FSmall = {
+        let sp1_digest_bits: Vec<FSmall> = {
             let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
-            digest32_to_field::<FSmall>(d)
+            digest32_to_bits_field::<FSmall>(d)
         };
 
-        let run_one = |label: &str, sp1_digest: FSmall| {
+        let run_one = |label: &str, sp1_digest_bits: &[FSmall]| {
             eprintln!("\n[test_large_trace] case={label} n=2^{n_pow} mlen={mlen}");
             #[cfg(feature = "parallel")]
             eprintln!("[test_large_trace] rayon_threads={}", current_num_threads());
@@ -3792,13 +3877,17 @@ mod tests {
             let t0 = std::time::Instant::now();
             let transcript = crate::transcript::PoseidonTranscript::empty::<PCF>();
             let mut prover = PlusProver::init(A.clone(), M.clone(), 1, pparams.clone(), transcript);
-            prover.transcript.absorb_field_element(&sp1_digest);
+            for b in sp1_digest_bits {
+                prover.transcript.absorb_field_element(b);
+            }
             let proof = prover.prove(&[cr1cs]);
             eprintln!("[test_large_trace] plus.prove: {:?}", t0.elapsed());
 
             let t1 = std::time::Instant::now();
             let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
-            rec.absorb_field_element(&sp1_digest);
+            for b in sp1_digest_bits {
+                rec.absorb_field_element(b);
+            }
             // Mirror PlusVerifier::verify to record the full verifier trace.
             for lp in &proof.lproof {
                 lp.verify(&mut rec);
@@ -3828,7 +3917,7 @@ mod tests {
                 &poseidon_cfg,
                 &trace,
                 &params,
-                &[sp1_digest],
+                sp1_digest_bits,
                 &proof,
                 M.len(),
                 b_bound,
@@ -3896,7 +3985,7 @@ mod tests {
 
             let vk_hash = [1u8; 32];
             let r1cs_digest = [2u8; 32];
-            let stmt_digest = we_statement_hash_lf_plus::<RR>(vk_hash, r1cs_digest, LFP_WE_GATE_DIGEST_V1, &[sp1_digest]);
+            let stmt_digest = we_statement_hash_lf_plus::<RR>(vk_hash, r1cs_digest, LFP_WE_GATE_DIGEST_V1, sp1_digest_bits);
             const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
             let lock_j: u64 = 0;
             let coin_seed: [u8; 32] = {
@@ -3966,7 +4055,7 @@ mod tests {
             eprintln!("[test_large_trace] dpp lock_check(coin-form): {:?} ok={ok}", t7.elapsed());
         };
 
-        run_one("sha256->field", sp1_digest);
+        run_one("sha256->bits", &sp1_digest_bits);
     }
 }
 

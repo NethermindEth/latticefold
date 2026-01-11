@@ -32,7 +32,7 @@ use std::sync::Arc;
 use latticefold_plus::recording_transcript::TracePoseidonTranscript;
 use latticefold_plus::we_gate_arith::build_we_dr1cs_for_plus_proof;
 use latticefold_plus::we_statement::{
-    digest32_to_field, we_statement_hash_lf_plus, WeParams, LFP_WE_GATE_DIGEST_V1,
+    digest32_to_bits_field, we_statement_hash_lf_plus, WeParams, LFP_WE_GATE_DIGEST_V1,
 };
 
 use latticefold::transcript::Transcript;
@@ -111,16 +111,20 @@ fn bench_we_dpp(c: &mut Criterion) {
     // (In production this comes from SP1 public inputs.)
     type FSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
     // Use a "random-looking" in-field digest (so we don't accidentally rely on small constants).
-    let sp1_public_input_digest: FSmall = {
+    let sp1_public_input_digest_bits: Vec<FSmall> = {
         let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
-        digest32_to_field::<FSmall>(d)
+        digest32_to_bits_field::<FSmall>(d)
     };
-    prover.transcript.absorb_field_element(&sp1_public_input_digest);
+    for b in &sp1_public_input_digest_bits {
+        prover.transcript.absorb_field_element(b);
+    }
     let proof = prover.prove(&[cr1cs]);
 
     // Record verifier transcript ops.
     let mut rec = TracePoseidonTranscript::<R>::empty::<PC>();
-    rec.absorb_field_element(&sp1_public_input_digest);
+    for b in &sp1_public_input_digest_bits {
+        rec.absorb_field_element(b);
+    }
     // Mirror `PlusVerifier::verify` to record the full verifier trace.
     for lp in &proof.lproof {
         lp.verify(&mut rec);
@@ -155,7 +159,7 @@ fn bench_we_dpp(c: &mut Criterion) {
                 &poseidon_cfg,
                 &trace,
                 &params,
-                &[sp1_public_input_digest],
+                &sp1_public_input_digest_bits,
                 &proof,
                 M.len(),
                 B_bound,
@@ -171,7 +175,7 @@ fn bench_we_dpp(c: &mut Criterion) {
             &poseidon_cfg,
             &trace,
             &params,
-            &[sp1_public_input_digest],
+            &sp1_public_input_digest_bits,
             &proof,
             M.len(),
             B_bound,
@@ -234,8 +238,8 @@ fn bench_we_dpp(c: &mut Criterion) {
         // (Do NOT hash over 10^8+ nonzeros at runtime.)
         let gate_digest: [u8; 32] = LFP_WE_GATE_DIGEST_V1;
         // In SP1, "public inputs" for statement arming are just the SP1 public I/O digest(s).
-        let public_inputs_small = vec![sp1_public_input_digest];
-        let stmt_digest = we_statement_hash_lf_plus::<R>(vk_hash, r1cs_digest, gate_digest, &public_inputs_small);
+        let stmt_digest =
+            we_statement_hash_lf_plus::<R>(vk_hash, r1cs_digest, gate_digest, &sp1_public_input_digest_bits);
 
         const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
         let lock_j: u64 = 0;

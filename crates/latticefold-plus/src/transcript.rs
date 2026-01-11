@@ -100,6 +100,18 @@ impl<R: OverField> Transcript<R> for PoseidonTranscript<R> {
         self.sponge.absorb(&elems);
     }
 
+    fn absorb_field_element(&mut self, v: &R::BaseRing) {
+        // IMPORTANT (encoding):
+        // Absorb base-ring field elements directly into the sponge (as base-prime-field elems),
+        // instead of converting to a constant-coeff ring element and absorbing `d` coefficients.
+        //
+        // This reduces transcript IO (and thus WE-gate Poseidon constraints) by ~`R::dimension()`
+        // for scalar absorbs, while keeping ring-element absorbs unchanged.
+        let elems: Vec<_> = v.to_base_prime_field_elements().collect();
+        self.metrics.absorbed_elems += elems.len() as u64;
+        self.sponge.absorb(&elems);
+    }
+
     fn get_challenge(&mut self) -> R::BaseRing {
         let extension_degree = R::BaseRing::extension_degree();
         let c = self

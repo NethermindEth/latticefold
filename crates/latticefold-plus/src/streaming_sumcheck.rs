@@ -1031,3 +1031,56 @@ impl StreamingSumcheck {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::RngCore;
+    use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
+    use stark_rings::PolyRing;
+    use stark_rings_linalg::SparseMatrix;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_sparse_matvec_const_coeff_matches_ring_matvec() {
+        // Small deterministic instance: n = 2^3.
+        let n = 8usize;
+        let num_vars = 3usize;
+        let mut rng = ark_std::test_rng();
+
+        // Random base-scalar witness0.
+        let witness0: Vec<<R as PolyRing>::BaseRing> = (0..n)
+            .map(|_| <R as PolyRing>::BaseRing::from(rng.next_u64()))
+            .collect();
+        let witness_ring: Vec<R> = witness0.iter().copied().map(R::from).collect();
+
+        // Random sparse const-coeff matrix (entries are embedded base scalars).
+        let mut m = SparseMatrix::<R>::identity(n);
+        for row in 0..n {
+            m.coeffs[row].clear();
+            // ~2 nonzeros per row
+            for _ in 0..2 {
+                let col = (rng.next_u64() as usize) % n;
+                let c0 = <R as PolyRing>::BaseRing::from(rng.next_u64());
+                m.coeffs[row].push((R::from(c0), col));
+            }
+        }
+        let matrix = Arc::new(m);
+
+        let mle_ring = StreamingMleEnum::SparseMatVec {
+            matrix: matrix.clone(),
+            witness: Arc::new(witness_ring),
+            num_vars,
+        };
+        let mle_cc = StreamingMleEnum::SparseMatVecConstCoeff {
+            matrix,
+            witness0: Arc::new(witness0),
+            num_vars,
+        };
+
+        for idx in 0..n {
+            let a = mle_ring.eval_at_index(idx);
+            let b = mle_cc.eval_at_index(idx);
+            assert_eq!(a, b, "mismatch at idx={idx}");
+        }
+    }
+}

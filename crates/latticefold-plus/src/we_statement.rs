@@ -81,6 +81,26 @@ pub fn digest32_to_field<BF: PrimeField>(digest: [u8; 32]) -> BF {
     BF::from_le_bytes_mod_order(&digest)
 }
 
+/// Collision-robust encoding of a 32-byte digest as **256 boolean field elements** (bits).
+///
+/// - Output length is exactly 256.
+/// - Bit order is little-endian within each byte (LSB-first), matching typical `from_le_bytes` conventions.
+///
+/// This is intended for WE/DPP public inputs when we want:
+/// - statement binding without relying on `mod p` reduction uniqueness, and
+/// - DPP parameters that assume small / boolean public inputs.
+pub fn digest32_to_bits_field<BF: PrimeField>(digest: [u8; 32]) -> Vec<BF> {
+    let mut out = Vec::with_capacity(256);
+    for &b in &digest {
+        for i in 0..8 {
+            let bit = (b >> i) & 1;
+            out.push(BF::from(bit as u64));
+        }
+    }
+    debug_assert_eq!(out.len(), 256);
+    out
+}
+
 
 /// Gate digest for the LF+ WE gate relation.
 ///
