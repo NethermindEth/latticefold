@@ -23,6 +23,9 @@ dhat-heap = []
 # WE/DPP arithmetization helpers (bench/research only).
 we_gate = ["dep:dpp", "dep:symphony"]
 
+# SP1 R1CS loader + one-proof benchmark harness (research only).
+sp1_import = ["dep:symphony"]
+
 [dependencies]
 ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
@@ -108,3 +111,7 @@ harness = false
 [[bench]]
 name = "we_dpp"
 harness = false
+
+[[example]]
+name = "lf_plus_sp1_oneproof"
+required-features = ["sp1_import"]

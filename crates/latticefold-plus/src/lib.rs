@@ -22,3 +22,7 @@ pub mod recording_transcript;
 pub mod we_statement;
 #[cfg(feature = "we_gate")]
 pub mod we_gate_arith;
+
+// SP1 shrink verifier R1CS loader helpers (feature-gated; research only).
+#[cfg(feature = "sp1_import")]
+pub mod sp1_r1cs;
