@@ -67,6 +67,11 @@ fn main() {
         .as_deref()
         .map(|s| s == "1")
         .unwrap_or(false);
+    let load_all: bool = std::env::var("LOAD_ALL")
+        .ok()
+        .as_deref()
+        .map(|s| s == "1")
+        .unwrap_or(false);
     let alloc_witness0: bool = std::env::var("ALLOC_WITNESS0")
         .ok()
         .as_deref()
@@ -77,8 +82,8 @@ fn main() {
     println!("LF+ SP1 One-Proof (loader + const-coeff inspection)");
     println!("=========================================================");
     println!(
-        "  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of} SCAN_ALL={} ALLOC_WITNESS0={}",
-        scan_all, alloc_witness0
+        "  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of} SCAN_ALL={} LOAD_ALL={} ALLOC_WITNESS0={}",
+        scan_all, load_all, alloc_witness0
     );
 
     let t0 = Instant::now();
@@ -125,6 +130,25 @@ fn main() {
             }
         }
         println!("  scan_all: all_chunks_const_coeff={} ({:?})", ok_all, t_scan.elapsed());
+    }
+
+    // Optional: mimic Symphony’s one-proof harness behavior by loading *all* chunk matrices into RAM.
+    // WARNING: this can use a lot of memory depending on nnz and allocator overhead.
+    if load_all {
+        let t_load = Instant::now();
+        let mut all_mats: Vec<[Arc<stark_rings_linalg::SparseMatrix<R>>; 3]> =
+            Vec::with_capacity(cache.num_chunks);
+        for i in 0..cache.num_chunks {
+            let [aa, bb, cc] = cache.read_chunk(i).expect("read_chunk(i)");
+            all_mats.push([Arc::new(aa), Arc::new(bb), Arc::new(cc)]);
+        }
+        println!(
+            "  load_all: loaded {} chunks into RAM in {:?}",
+            all_mats.len(),
+            t_load.elapsed()
+        );
+        // Keep `all_mats` alive until end of program (useful for external profilers).
+        std::mem::forget(all_mats);
     }
 
     // Optional demo: if A is const-coeff and you allow allocating an O(ncols) witness0, evaluate a few rows
