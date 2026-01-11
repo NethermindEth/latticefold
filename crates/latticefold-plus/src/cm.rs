@@ -278,8 +278,29 @@ where
             );
         }
 
-        let (proof_a, evals_a, ro_a) = self.sumchecker_streaming(&dcom, &h, &t0_mle, &t1_mle, M, transcript, profile);
-        let (proof_b, evals_b, ro_b) = self.sumchecker_streaming(&dcom, &h, &t0_mle, &t1_mle, M, transcript, profile);
+        // Share `M` matrices across both sumchecks (avoid cloning them twice).
+        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
+        let t_m_arcs = Instant::now();
+        #[cfg(feature = "parallel")]
+        let m_arcs: Vec<Arc<SparseMatrix<R>>> = {
+            use rayon::prelude::*;
+            M.par_iter().cloned().map(Arc::new).collect()
+        };
+        #[cfg(not(feature = "parallel"))]
+        let m_arcs: Vec<Arc<SparseMatrix<R>>> = M.iter().cloned().map(Arc::new).collect();
+        if profile && profile_detail {
+            println!(
+                "[LF+ Cm::prove] build shared m_arcs: {:?} (Mlen={})",
+                t_m_arcs.elapsed(),
+                M.len()
+            );
+        }
+        let mats_const = M.iter().all(is_const_coeff_sparse_matrix::<R>);
+
+        let (proof_a, evals_a, ro_a) =
+            self.sumchecker_streaming(&dcom, &h, &t0_mle, &t1_mle, &m_arcs, mats_const, transcript, profile);
+        let (proof_b, evals_b, ro_b) =
+            self.sumchecker_streaming(&dcom, &h, &t0_mle, &t1_mle, &m_arcs, mats_const, transcript, profile);
 
         // Step 7
         // TODO needs more folding challenges `s` for the L instances
@@ -327,11 +348,13 @@ where
         h: &[Vec<R>],
         t0_mle: &StreamingMleEnum<R>,
         t1_mle: &StreamingMleEnum<R>,
-        M: &[SparseMatrix<R>],
+        m_arcs: &[Arc<SparseMatrix<R>>],
+        mats_const: bool,
         transcript: &mut impl Transcript<R>,
         profile: bool,
     ) -> (Proof<R>, Vec<InstanceEvals<R>>, Vec<R>) {
         let t_sumcheck = Instant::now();
+        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let nvars = self.rg.nvars;
 
         let rc = transcript.get_challenge();
@@ -342,7 +365,7 @@ where
             1 // eq
             + L * (
                 4  // [tau, m_tau, f, h]
-                + 4 * M.len() // M * [tau, ...]
+                + 4 * m_arcs.len() // M * [tau, ...]
             )
             + 2, // t(z)
         );
@@ -356,16 +379,14 @@ where
             one_minus_r: one_minus_r0,
         });
 
-        // Share `M` matrices (clone each once into an Arc, instead of materializing M*w vectors).
-        let m_arcs: Vec<Arc<SparseMatrix<R>>> = M.iter().cloned().map(Arc::new).collect();
-
         // Symphony-style conditional fast path: if the matrix coefficients AND the relevant witness
         // vectors are constant-coeff, use base-scalar mat-vec MLEs (cheaper eval_at_index and avoids
         // materializing tau as a full ring vector).
         //
         // IMPORTANT: this must be a sound detector; if false-positives occur it breaks correctness.
-        let mats_const = M.iter().all(is_const_coeff_sparse_matrix::<R>);
+        // `mats_const` is computed once in `prove` and threaded through to cover both sumchecks.
 
+        let t_build_mles = Instant::now();
         for (i, inst) in self.rg.instances.iter().enumerate() {
             let tau0 = StreamingMleEnum::BaseScalarOwned {
                 evals: inst.tau.clone(),
@@ -435,7 +456,7 @@ where
                 Some(Arc::new(v))
             };
 
-            for m in &m_arcs {
+            for m in m_arcs {
                 if use_const_coeff_matvec {
                     // Safe: we checked these are all `Some`.
                     let mtau0 = mtau0_arc.as_ref().unwrap();
@@ -489,13 +510,21 @@ where
                 });
             }
         }
+        if profile && profile_detail {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build mles: {:?} (mles={})",
+                t_build_mles.elapsed(),
+                mles.len()
+            );
+        }
 
         mles.push(t0_mle.clone());
         mles.push(t1_mle.clone());
 
-        let Mlen = M.len();
+        let Mlen = m_arcs.len();
 
         // Pre-compute random-combinator powers
+        let t_rcps = Instant::now();
         let mut rcps = vec![];
         let mut rcp = R::BaseRing::ONE;
         for _ in 0..L {
@@ -515,6 +544,13 @@ where
         rcps.push(rcp); // t(0)
         rcp *= rc;
         rcps.push(rcp); // t(1)
+        if profile && profile_detail {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build rc powers: {:?} (len={})",
+                t_rcps.elapsed(),
+                rcps.len()
+            );
+        }
 
         let comb_fn = |vals: &[R]| -> R {
             (0..L)
@@ -539,11 +575,19 @@ where
                 .sum::<R>()
         };
 
+        let t_sc = Instant::now();
         let (sumcheck_proof, randomness, final_vals) =
             StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 2, comb_fn);
+        if profile && profile_detail {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] streaming sumcheck: {:?}",
+                t_sc.elapsed()
+            );
+        }
 
         let ro = randomness.into_iter().map(|x| x.into()).collect::<Vec<R>>();
 
+        let t_evals = Instant::now();
         let evals = (0..L)
             .map(|l| {
                 let mut e = Vec::with_capacity(1 + Mlen);
@@ -566,8 +610,21 @@ where
                 InstanceEvals(e)
             })
             .collect::<Vec<_>>();
+        if profile && profile_detail {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build evals structs: {:?}",
+                t_evals.elapsed()
+            );
+        }
 
+        let t_absorb = Instant::now();
         absorb_evaluations(&evals, transcript);
+        if profile && profile_detail {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] absorb evals: {:?}",
+                t_absorb.elapsed()
+            );
+        }
 
         if profile {
             println!(
