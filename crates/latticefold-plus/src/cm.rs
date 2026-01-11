@@ -402,6 +402,22 @@ where
             // Decide whether we can actually take the const-coeff mat-vec fast path for this instance.
             // Even if the matrices are const-coeff, we must also have const-coeff witnesses.
             let use_const_coeff_matvec = mats_const && mtau0_arc.is_some() && f0_arc.is_some() && h0_arc.is_some();
+            if profile {
+                if mats_const && !use_const_coeff_matvec {
+                    println!(
+                        "[LF+ Cm::sumchecker_streaming] const-coeff mat-vec disabled (L_idx={}): m_tau0_ok={} f0_ok={} h0_ok={}",
+                        i,
+                        mtau0_arc.is_some(),
+                        f0_arc.is_some(),
+                        h0_arc.is_some(),
+                    );
+                } else {
+                    println!(
+                        "[LF+ Cm::sumchecker_streaming] const-coeff mat-vec: enabled={} (L_idx={}, mats_const={})",
+                        use_const_coeff_matvec, i, mats_const
+                    );
+                }
+            }
 
             // Otherwise fall back to the previous ring mat-vec path (requires tau as a ring vector).
             let tau_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
