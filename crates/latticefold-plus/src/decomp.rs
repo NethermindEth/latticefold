@@ -75,18 +75,39 @@ where
         // where eq_r[x] = Π_j (x_j ? r_j : (1 - r_j)).
         #[inline]
         fn eq_weights<Rr: PolyRing>(r: &[Rr]) -> Vec<Rr> {
-            let mut w = vec![Rr::ONE];
             // Match `DenseMultilinearExtension::evaluate` variable ordering: it folds evaluations
             // by combining consecutive pairs per coordinate, which corresponds to iterating the
             // point coordinates from last to first (LSB-first indexing in the evaluation vector).
+            let nvars = r.len();
+            let n = 1usize << nvars;
+            let mut w = vec![Rr::ZERO; n];
+            w[0] = Rr::ONE;
+            let mut len = 1usize;
             for &rj in r.iter().rev() {
                 let om = Rr::ONE - rj;
-                let mut next = Vec::with_capacity(w.len() * 2);
-                for &wi in &w {
-                    next.push(wi * om);
-                    next.push(wi * rj);
+                // Split `[0..2*len)` into low/high halves and update in-place:
+                //   high[i] = old_low[i] * rj
+                //   low[i]  = old_low[i] * (1-rj)
+                let (low, high) = w[..(2 * len)].split_at_mut(len);
+                #[cfg(feature = "parallel")]
+                {
+                    low.par_iter_mut()
+                        .zip(high.par_iter_mut())
+                        .for_each(|(lo, hi)| {
+                            let old = *lo;
+                            *hi = old * rj;
+                            *lo = old * om;
+                        });
                 }
-                w = next;
+                #[cfg(not(feature = "parallel"))]
+                {
+                    for i in 0..len {
+                        let old = low[i];
+                        high[i] = old * rj;
+                        low[i] = old * om;
+                    }
+                }
+                len <<= 1;
             }
             w
         }
@@ -154,12 +175,25 @@ where
             }
         }
 
+        let detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
+
         let vi_calc = |Fi: &[R]| -> Vec<(R, R)> {
             // Precompute eq-weights once per point; reuse for fv and all M_i*Fi evaluations.
+            let t_eq = Instant::now();
             let eq_a = eq_weights::<R>(&r_a);
             let eq_b = eq_weights::<R>(&r_b);
+            if profile && detail {
+                println!("[LF+ Decomp::decompose] eq_weights: {:?}", t_eq.elapsed());
+            }
+
+            let t_fv = Instant::now();
             let fv = (dot_with_eq::<R>(Fi, &eq_a), dot_with_eq::<R>(Fi, &eq_b));
+            if profile && detail {
+                println!("[LF+ Decomp::decompose] fv(dot_with_eq): {:?}", t_fv.elapsed());
+            }
+
             let mut vi = vec![fv];
+            let t_mats = Instant::now();
             for M_i in self.M {
                 let M_i = M_i.as_ref();
                 // Hot-path for the common identity/permutation test harness case: M_i == I implies M_i * Fi == Fi.
@@ -170,6 +204,13 @@ where
                         M_i, Fi, &eq_a, &eq_b,
                     ));
                 }
+            }
+            if profile && detail {
+                println!(
+                    "[LF+ Decomp::decompose] mats(eval_sparse_mat_times_vec_at_two_points): {:?} (Mlen={})",
+                    t_mats.elapsed(),
+                    self.M.len()
+                );
             }
             vi
         };
