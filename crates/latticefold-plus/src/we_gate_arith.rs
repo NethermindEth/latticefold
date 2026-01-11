@@ -2429,6 +2429,7 @@ mod tests {
     use cyclotomic_rings::rings::GoldilocksPoseidonConfig as PC;
     use latticefold::arith::r1cs::R1CS;
     use latticefold::transcript::Transcript;
+    use ark_ff::{Fp384, MontBackend, MontConfig};
     use stark_rings::balanced_decomposition::GadgetDecompose;
     use stark_rings::cyclotomic_ring::models::goldilocks::RqPoly as R;
     use stark_rings_linalg::{Matrix, SparseMatrix};
@@ -2439,6 +2440,12 @@ mod tests {
     use crate::recording_transcript::TracePoseidonTranscript;
     use crate::rgchk::{DecompParameters, Rg, RgInstance};
     use crate::cm::Cm;
+
+    #[derive(MontConfig)]
+    #[modulus = "39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
+    #[generator = "2"]
+    pub struct Secp384r1Config;
+    type FBig = Fp384<MontBackend<Secp384r1Config, 6>>;
 
     #[derive(Clone)]
     struct ReplayPoseidonTranscript<RR: OverField> {
@@ -2976,19 +2983,24 @@ mod tests {
         use dpp::sparse::SparseVec;
         use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
 
-        use ark_ff::{Fp384, MontBackend, MontConfig, PrimeField};
+        use ark_ff::PrimeField;
         use rand::{rngs::StdRng, SeedableRng};
         #[cfg(feature = "parallel")]
         use rayon::current_num_threads;
-
-        #[derive(MontConfig)]
-        #[modulus = "39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
-        #[generator = "2"]
-        pub struct Secp384r1Config;
-        type FBig = Fp384<MontBackend<Secp384r1Config, 6>>;
+        #[cfg(feature = "parallel")]
+        use rayon::prelude::*;
 
         fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
             FBig::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
+        }
+
+        fn lift_bit_to_big<Fs: PrimeField>(b: Fs) -> FBig {
+            if b.is_zero() {
+                FBig::from(0u64)
+            } else {
+                debug_assert_eq!(b, Fs::ONE, "non-boolean bit in proof encoding");
+                FBig::from(1u64)
+            }
         }
 
         // Default to the historical large-scale setting (n=2^20), but allow smaller for scaling studies.
@@ -3093,12 +3105,22 @@ mod tests {
             let t4 = std::time::Instant::now();
             let x_small = out.assignment[..l_public].to_vec();
             let z_w_small = out.assignment[l_public..].to_vec();
+            eprintln!(
+                "[test_large_trace] sizes: l_public={} witness_len={} assignment_len={}",
+                l_public,
+                z_w_small.len(),
+                out.assignment.len()
+            );
             let pi_field = flpcp.prove(&x_small, &z_w_small);
             eprintln!("[test_large_trace] flpcp.prove: {:?}", t4.elapsed());
             let t5 = std::time::Instant::now();
             let boolized = dpp::BooleanProofFlpcpSparse::<FSmall, _>::new(flpcp.clone());
             let pi_bits = boolized.encode_proof_bits(&pi_field);
-            eprintln!("[test_large_trace] booleanize(pi): {:?}", t5.elapsed());
+            eprintln!(
+                "[test_large_trace] booleanize(pi): {:?} (pi_bits_len={})",
+                t5.elapsed(),
+                pi_bits.len()
+            );
 
             let t6 = std::time::Instant::now();
             let dppv = build_rev2_dpp_sparse_boolean_auto::<FSmall, FBig, _>(
@@ -3108,8 +3130,9 @@ mod tests {
             .expect("build dpp");
             eprintln!("[test_large_trace] build_rev2_dpp: {:?}", t6.elapsed());
 
+            let t_xbig = std::time::Instant::now();
             let x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
-            let pi_big = pi_bits.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
+            eprintln!("[test_large_trace] lift x_small->x_big: {:?}", t_xbig.elapsed());
 
             let vk_hash = [1u8; 32];
             let r1cs_digest = [2u8; 32];
@@ -3128,6 +3151,14 @@ mod tests {
             let t7 = std::time::Instant::now();
             let q = dppv.sample_query(&mut rng, &x_big).expect("sample_query");
             eprintln!("[test_large_trace] dpp.sample_query: {:?}", t7.elapsed());
+
+            // `pi_bits` is boolean; lifting via bytes is extremely slow. Use a fast 0/1 lift.
+            let t_pibig = std::time::Instant::now();
+            #[cfg(feature = "parallel")]
+            let pi_big = pi_bits.par_iter().copied().map(lift_bit_to_big::<FSmall>).collect::<Vec<_>>();
+            #[cfg(not(feature = "parallel"))]
+            let pi_big = pi_bits.iter().copied().map(lift_bit_to_big::<FSmall>).collect::<Vec<_>>();
+            eprintln!("[test_large_trace] lift pi_bits->pi_big: {:?}", t_pibig.elapsed());
 
             let t8 = std::time::Instant::now();
             let ok = dppv.verify_with_query(&x_big, &pi_big, &q).expect("verify");
