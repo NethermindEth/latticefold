@@ -355,12 +355,17 @@ fn main() {
         {
             use rayon::prelude::*;
             if fail_fast {
-                let bad = (0..nrows).into_par_iter().find_any(|&i| {
+                // Deterministic fail-fast: pick the *smallest* failing row index.
+                // (Rayon's `find_any` is intentionally nondeterministic.)
+                let bad = (0..nrows)
+                    .into_par_iter()
+                    .filter(|&i| {
                     let av = row_dot_base(&a.coeffs[i], &w_host);
                     let bv = row_dot_base(&b.coeffs[i], &w_host);
                     let cv = row_dot_base(&c.coeffs[i], &w_host);
                     av * bv != cv
-                });
+                    })
+                    .reduce_with(|x, y| x.min(y));
                 if let Some(i) = bad {
                     let global = (chunk_idx as u64) * (chunk_size as u64) + (i as u64);
                     let av = row_dot_base(&a.coeffs[i], &w_host);
