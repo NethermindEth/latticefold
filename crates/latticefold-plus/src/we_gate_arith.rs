@@ -4143,11 +4143,8 @@ mod tests {
         run_one("sha256->bits", &sp1_digest_bits);
     }
 
-    // Large-scale harness over the built-in BabyBear ring.
-    //
-    // NOTE: the current BabyBear cyclotomic ring model is degree-72 (see `cyclotomic-rings/src/rings/babybear.rs`).
-    // This is *not* the "d=256" security target, but it's useful to get a first-order cost comparison
-    // and to validate that the end-to-end LF+->WE->DPP pipeline runs over a BabyBear-based ring type.
+    // Large-scale harness over a BabyBear-based cyclotomic ring with d=256 (X^256+1),
+    // used to sanity-check end-to-end LF+->WE->DPP behavior under a higher-degree ring.
     //
     // Run with (example):
     //   LFP_TRACE_NPOW=16 cargo test --release -p latticefold-plus test_large_trace_babybear --features we_gate -- --nocapture --ignored
@@ -4157,17 +4154,21 @@ mod tests {
         use cyclotomic_rings::rings::BabyBearPoseidonConfig as PCF;
         use cyclotomic_rings::rings::GetPoseidonParams;
         use sha2::{Digest, Sha256};
-        use stark_rings::cyclotomic_ring::models::babybear::RqPoly as RR;
+        use stark_rings::cyclotomic_ring::models::babybear_256::RqPoly as RR;
         use stark_rings::PolyRing;
 
         use crate::we_statement::{digest32_to_bits_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};
         use dpp::dr1cs_flpcp::Dr1csInstanceSparse as DppInst;
         use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
+        use dpp::packing::{
+            centered_bigint_to_field, field_to_centered_bigint, sample_packing_weights,
+            FlpcpPredicate, PackedDppQuerySparse,
+        };
         use dpp::sparse::SparseVec;
-        use dpp::{BoundedFlpcpSparse, PackedDppQuerySparse};
+        use dpp::BoundedFlpcpSparse;
 
         use ark_ff::PrimeField;
-        use rand::RngCore;
+        use rand::{rngs::StdRng, RngCore, SeedableRng};
         #[cfg(feature = "parallel")]
         use rayon::current_num_threads;
 
@@ -4326,26 +4327,115 @@ mod tests {
         let l_public = public_len;
         let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell_rs);
 
+        let t4 = std::time::Instant::now();
         let x_small = assignment[..l_public].to_vec();
         let z_w_small = assignment[l_public..].to_vec();
-        let (pi_field, _cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
-
+        eprintln!(
+            "[test_large_trace_babybear] sizes: l_public={} witness_len={} assignment_len={}",
+            l_public,
+            z_w_small.len(),
+            assignment.len()
+        );
+        let (pi_field, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
+        eprintln!(
+            "[test_large_trace_babybear] flpcp.prove_with_codewords: {:?} (pi_field_len={})",
+            t4.elapsed(),
+            pi_field.len()
+        );
+        let t5 = std::time::Instant::now();
         let boolized = dpp::BooleanProofFlpcpSparse::<FSmall, _>::new(flpcp.clone());
+        // Keep proof bits bitpacked to avoid multi-GB allocations.
         let pi_bits_packed = boolized.encode_proof_bits_packed(&pi_field);
+        eprintln!(
+            "[test_large_trace_babybear] booleanize(pi)_packed: {:?} (pi_bits_len={}, packed_bytes={})",
+            t5.elapsed(),
+            boolized.m_bits(),
+            pi_bits_packed.len()
+        );
 
         let t6 = std::time::Instant::now();
-        let (dpp_inst, dpp_wit) =
-            build_rev2_dpp_sparse_boolean_auto::<FSmall, _>(&x_small, &pi_bits_packed);
+        let dppv = build_rev2_dpp_sparse_boolean_auto::<FSmall, FBig, _>(
+            flpcp,
+            dpp::EmbeddingParams { gamma: 2, assume_boolean_proof: true, k_prime: 0 },
+        )
+        .expect("build dpp");
         eprintln!("[test_large_trace_babybear] build_rev2_dpp: {:?}", t6.elapsed());
 
-        // Bind statement to the same "WE statement hash" as the Frog harness.
-        let stmt_digest = we_statement_hash_lf_plus::<FSmall>(&params, LFP_WE_GATE_DIGEST_V1, &sp1_digest_bits);
-        let x_big = stmt_digest.into_iter().map(lift_to_big).collect::<Vec<_>>();
-        let query: PackedDppQuerySparse<FSmall> = dpp_inst.pack_query(&x_small, &x_big);
+        let t_xbig = std::time::Instant::now();
+        let _x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
+        eprintln!("[test_large_trace_babybear] lift x_small->x_big: {:?}", t_xbig.elapsed());
+
+        let vk_hash = [1u8; 32];
+        let r1cs_digest = [2u8; 32];
+        let stmt_digest = we_statement_hash_lf_plus::<RR>(
+            vk_hash,
+            r1cs_digest,
+            LFP_WE_GATE_DIGEST_V1,
+            &sp1_digest_bits,
+        );
+        const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
+        let lock_j: u64 = 0;
+        let coin_seed: [u8; 32] = {
+            let mut h = Sha256::new();
+            h.update(b"LFP_LOCK_COIN_V1");
+            h.update(&ARMER_SEED);
+            h.update(&stmt_digest);
+            h.update(&lock_j.to_le_bytes());
+            h.finalize().into()
+        };
+        let mut rng = StdRng::from_seed(coin_seed);
 
         let t7 = std::time::Instant::now();
-        let ok = dpp_inst.lock_check_packed(&query, &dpp_wit).expect("lock_check");
-        eprintln!("[test_large_trace_babybear] dpp lock_check: {:?} ok={ok}", t7.elapsed());
+        let b = dppv.flpcp.bounds_b();
+        let w =
+            sample_packing_weights::<FBig>(&mut rng, dppv.params.ell, &b).expect("sample_packing_weights");
+        let pred = FlpcpPredicate::MulEqModP {
+            p_small: num_bigint::BigInt::from_bytes_le(
+                num_bigint::Sign::Plus,
+                &FSmall::MODULUS.to_bytes_le(),
+            ),
+        };
+        let k_rows = cw.y_a.len();
+        let ell_rs = 2 * k_rows;
+        let idx = (rng.next_u64() as usize) % ell_rs;
+        let lambda_small = FSmall::from(rng.next_u64());
+        eprintln!(
+            "[test_large_trace_babybear] lock coins: idx={idx} (ell_rs={ell_rs}, k_rows={k_rows})"
+        );
+
+        let (a_small, b_small, c_small) = if idx < k_rows {
+            let a = cw.y_a[idx];
+            let b0 = cw.y_b[idx];
+            let wv = cw.w[idx];
+            let cx_minus = cw.y_c[idx] - wv;
+            let c = wv + lambda_small * cx_minus;
+            (a, b0, c)
+        } else {
+            let j = idx - k_rows;
+            let a = cw.y_a_tail[j];
+            let b0 = cw.y_b_tail[j];
+            let wv = cw.w[idx];
+            let c = wv;
+            (a, b0, c)
+        };
+
+        let ans_field: [FBig; 3] = [
+            lift_to_big::<FSmall>(a_small),
+            lift_to_big::<FSmall>(b_small),
+            lift_to_big::<FSmall>(c_small),
+        ];
+
+        // Pack into one integer a_int = Σ w_i * [ans_i]_centered, then reduce to field.
+        let mut a_int = num_bigint::BigInt::from(0);
+        for (wi, ai) in w.iter().zip(ans_field.iter()) {
+            let ai_int = field_to_centered_bigint::<FBig>(ai);
+            a_int += wi * ai_int;
+        }
+        let a = centered_bigint_to_field::<FBig>(&a_int);
+
+        let q_meta = PackedDppQuerySparse::<FBig> { q: dpp::sparse::SparseVec::default(), w, b, pred };
+        let ok = dppv.verify_packed_answer(&a, &q_meta).expect("verify_packed_answer");
+        eprintln!("[test_large_trace_babybear] dpp lock_check(coin-form): {:?} ok={ok}", t7.elapsed());
         assert!(ok);
     }
 }
