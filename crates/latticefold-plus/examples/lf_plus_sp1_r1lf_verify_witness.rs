@@ -20,7 +20,7 @@
 
 #![cfg(feature = "we_gate")]
 
-use ark_ff::{BigInteger, PrimeField};
+use ark_ff::{BigInteger, Field, PrimeField};
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings::PolyRing;
 
