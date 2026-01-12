@@ -74,13 +74,13 @@ fn main() {
         we_params.l, we_params.ring_dim_d, we_params.kappa, we_params.mlen
     );
 
-    // Optional: load witness (+ required .aux file) if provided.
+    // Optional: load witness if provided (preferred: single full witness file of length `num_vars`).
     if let Some(wpath) = witness_path.as_deref() {
         let (w_full, base_len, aux_len) = latticefold_plus::sp1_witness_io::load_sp1_witness_any(
             wpath,
             cache.stats.num_vars,
         )
-        .expect("load witness + witness.aux");
+        .expect("load witness");
         println!(
             "  loaded witness: base={} aux={} full={}",
             base_len,

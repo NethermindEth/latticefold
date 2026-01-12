@@ -49,15 +49,6 @@ fn babybear_u64_to_centered_host(x: u64, p_bb: u64) -> F {
 }
 
 #[inline]
-fn babybear_u64_to_canonical_host(x: u64, p_bb: u64) -> F {
-    // SP1 stores all witness words as u64 residues mod p_bb.
-    // Aux vars are written as (num/p) mod p, so they are in [0,p_bb).
-    debug_assert!(p_bb > 1);
-    debug_assert!(x < p_bb);
-    F::from(x)
-}
-
-#[inline]
 fn bb_centered_i128(x: u64, p_bb: u64) -> i128 {
     let x = x as i128;
     let p = p_bb as i128;
@@ -387,6 +378,26 @@ fn main() {
                         read_row_terms_from_chunk_cache(&cache_path, chunk_idx, i, 2).expect("read C row i64");
                     eprintln!("  [debug] chunk_nrows={nrows0} row_in_chunk={i} global_row={global}");
                     eprintln!("  [debug] A terms={} B terms={} C terms={}", a_i64.len(), b_i64.len(), c_i64.len());
+                    for (col, coeff) in &a_i64 {
+                        let wu = w_u64[*col as usize];
+                        eprintln!(
+                            "  [debug] A term: coeff={} col={} w_u64={} w_centered={}",
+                            coeff,
+                            col,
+                            wu,
+                            bb_centered_i128(wu, p_bb)
+                        );
+                    }
+                    for (col, coeff) in &b_i64 {
+                        let wu = w_u64[*col as usize];
+                        eprintln!(
+                            "  [debug] B term: coeff={} col={} w_u64={} w_centered={}",
+                            coeff,
+                            col,
+                            wu,
+                            bb_centered_i128(wu, p_bb)
+                        );
+                    }
                     // Print any ±p_bb term in C.
                     for (col, coeff) in &c_i64 {
                         if *coeff == p_bb as i64 || *coeff == -(p_bb as i64) {
