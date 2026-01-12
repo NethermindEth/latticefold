@@ -58,6 +58,14 @@ fn babybear_u64_to_canonical_host(x: u64, p_bb: u64) -> F {
 }
 
 #[inline]
+fn bb_centered_i128(x: u64, p_bb: u64) -> i128 {
+    let x = x as i128;
+    let p = p_bb as i128;
+    let half = p / 2;
+    if x > half { x - p } else { x }
+}
+
+#[inline]
 fn row_dot_base(row: &[(R, usize)], w: &[F]) -> F {
     let mut acc = F::ZERO;
     for (c, j) in row {
@@ -65,6 +73,103 @@ fn row_dot_base(row: &[(R, usize)], w: &[F]) -> F {
         acc += coeff0(c) * wj;
     }
     acc
+}
+
+fn read_row_terms_from_chunk_cache(
+    cache_path: &str,
+    chunk_idx: usize,
+    row_idx: usize,
+    which_matrix: usize, // 0=A,1=B,2=C
+) -> Result<(usize, Vec<(u32, i64)>), String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let mut f = std::fs::File::open(cache_path).map_err(|e| format!("open {cache_path}: {e}"))?;
+    let mut buf4 = [0u8; 4];
+    let mut buf8 = [0u8; 8];
+
+    // Header: magic(4) version(4) digest(32) + 8 u64 fields (p_bb, num_vars, num_constraints, num_public,
+    // nnz, chunk_size, ncols, num_chunks) => 104 bytes total.
+    let mut hdr = [0u8; 4];
+    f.read_exact(&mut hdr).map_err(|e| format!("read magic: {e}"))?;
+    if &hdr != b"LFC1" {
+        return Err("bad chunk cache magic (expected LFC1)".to_string());
+    }
+    f.read_exact(&mut buf4).map_err(|e| format!("read version: {e}"))?;
+    let version = u32::from_le_bytes(buf4);
+    if version != 1 {
+        return Err(format!("bad chunk cache version {version} (expected 1)"));
+    }
+    let mut digest = [0u8; 32];
+    f.read_exact(&mut digest).map_err(|e| format!("read digest: {e}"))?;
+    // Skip p_bb..ncols (7 u64s)
+    for _ in 0..7 {
+        f.read_exact(&mut buf8).map_err(|e| format!("read hdr u64: {e}"))?;
+    }
+    // num_chunks
+    f.read_exact(&mut buf8).map_err(|e| format!("read num_chunks: {e}"))?;
+    let num_chunks = u64::from_le_bytes(buf8) as usize;
+    if chunk_idx >= num_chunks {
+        return Err(format!("chunk_idx out of range: {chunk_idx} >= {num_chunks}"));
+    }
+
+    let offsets_start = 104u64;
+    f.seek(SeekFrom::Start(offsets_start + (chunk_idx as u64) * 8))
+        .map_err(|e| format!("seek offsets: {e}"))?;
+    f.read_exact(&mut buf8).map_err(|e| format!("read chunk offset: {e}"))?;
+    let chunk_off = u64::from_le_bytes(buf8);
+    f.seek(SeekFrom::Start(chunk_off))
+        .map_err(|e| format!("seek chunk: {e}"))?;
+    f.read_exact(&mut buf8).map_err(|e| format!("read nrows: {e}"))?;
+    let nrows = u64::from_le_bytes(buf8) as usize;
+    if row_idx >= nrows {
+        return Err(format!("row_idx out of range: {row_idx} >= {nrows}"));
+    }
+
+    fn skip_row(
+        f: &mut std::fs::File,
+        buf4: &mut [u8; 4],
+    ) -> Result<(), String> {
+        use std::io::{Read, Seek, SeekFrom};
+        f.read_exact(buf4).map_err(|e| format!("read num_terms: {e}"))?;
+        let nt = u32::from_le_bytes(*buf4) as u64;
+        // each term: col(u32)+coeff(i64) = 12 bytes
+        f.seek(SeekFrom::Current((nt * 12) as i64))
+            .map_err(|e| format!("skip terms: {e}"))?;
+        Ok(())
+    }
+
+    fn read_row(
+        f: &mut std::fs::File,
+        buf4: &mut [u8; 4],
+        buf8: &mut [u8; 8],
+    ) -> Result<Vec<(u32, i64)>, String> {
+        use std::io::Read;
+        f.read_exact(buf4).map_err(|e| format!("read num_terms: {e}"))?;
+        let nt = u32::from_le_bytes(*buf4) as usize;
+        let mut out = Vec::with_capacity(nt);
+        for _ in 0..nt {
+            f.read_exact(buf4).map_err(|e| format!("read col: {e}"))?;
+            let col = u32::from_le_bytes(*buf4);
+            f.read_exact(buf8).map_err(|e| format!("read coeff: {e}"))?;
+            let coeff = i64::from_le_bytes(*buf8);
+            if coeff != 0 {
+                out.push((col, coeff));
+            }
+        }
+        Ok(out)
+    }
+
+    for m in 0..3 {
+        for r in 0..nrows {
+            if m == which_matrix && r == row_idx {
+                let row = read_row(&mut f, &mut buf4, &mut buf8)?;
+                return Ok((nrows, row));
+            } else {
+                skip_row(&mut f, &mut buf4)?;
+            }
+        }
+    }
+    Err("unreachable: failed to locate row".to_string())
 }
 
 fn modulus_u128<P: PrimeField>() -> u128 {
@@ -179,8 +284,9 @@ fn main() {
     // - original vars: centered embedding mod p_bb
     // - aux vars: canonical (non-centered) residue mod p_bb
     let t_w = std::time::Instant::now();
-    let w: Vec<F> = w_u64
-        .into_iter()
+    let w_host: Vec<F> = w_u64
+        .iter()
+        .copied()
         .enumerate()
         .map(|(i, x)| {
             if x >= p_bb {
@@ -202,7 +308,7 @@ fn main() {
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
-            let bad = w
+            let bad = w_host
                 .par_iter()
                 .enumerate()
                 .find_any(|(_i, fx)| {
@@ -221,7 +327,7 @@ fn main() {
         }
         #[cfg(not(feature = "parallel"))]
         {
-            for (i, fx) in w.iter().enumerate() {
+            for (i, fx) in w_host.iter().enumerate() {
                 let bi = fx.into_bigint();
                 let x = bi.as_ref()[0];
                 let centered = centered_i128_from_canonical_u64(x, q);
@@ -256,25 +362,68 @@ fn main() {
             use rayon::prelude::*;
             if fail_fast {
                 let bad = (0..nrows).into_par_iter().find_any(|&i| {
-                    let av = row_dot_base(&a.coeffs[i], &w);
-                    let bv = row_dot_base(&b.coeffs[i], &w);
-                    let cv = row_dot_base(&c.coeffs[i], &w);
+                    let av = row_dot_base(&a.coeffs[i], &w_host);
+                    let bv = row_dot_base(&b.coeffs[i], &w_host);
+                    let cv = row_dot_base(&c.coeffs[i], &w_host);
                     av * bv != cv
                 });
                 if let Some(i) = bad {
                     let global = (chunk_idx as u64) * (chunk_size as u64) + (i as u64);
-                    let av = row_dot_base(&a.coeffs[i], &w);
-                    let bv = row_dot_base(&b.coeffs[i], &w);
-                    let cv = row_dot_base(&c.coeffs[i], &w);
+                    let av = row_dot_base(&a.coeffs[i], &w_host);
+                    let bv = row_dot_base(&b.coeffs[i], &w_host);
+                    let cv = row_dot_base(&c.coeffs[i], &w_host);
+
+                    // Deep debug: re-read raw i64 coefficients from the `{path}.chunks` cache and
+                    // evaluate in SP1 integer semantics (centered mod p_bb).
+                    let cache_path = format!("{path}.chunks");
+                    let (nrows0, a_i64) =
+                        read_row_terms_from_chunk_cache(&cache_path, chunk_idx, i, 0).expect("read A row i64");
+                    let (_nrows1, b_i64) =
+                        read_row_terms_from_chunk_cache(&cache_path, chunk_idx, i, 1).expect("read B row i64");
+                    let (_nrows2, c_i64) =
+                        read_row_terms_from_chunk_cache(&cache_path, chunk_idx, i, 2).expect("read C row i64");
+                    eprintln!("  [debug] chunk_nrows={nrows0} row_in_chunk={i} global_row={global}");
+                    eprintln!("  [debug] A terms={} B terms={} C terms={}", a_i64.len(), b_i64.len(), c_i64.len());
+                    // Print any ±p_bb term in C.
+                    for (col, coeff) in &c_i64 {
+                        if *coeff == p_bb as i64 || *coeff == -(p_bb as i64) {
+                            let wu = w_u64[*col as usize];
+                            eprintln!(
+                                "  [debug] C has p term: coeff={} col={} w_u64={} w_centered={}",
+                                coeff,
+                                col,
+                                wu,
+                                bb_centered_i128(wu, p_bb)
+                            );
+                        }
+                    }
+                    let eval_int = |terms: &[(u32, i64)]| -> i128 {
+                        terms
+                            .iter()
+                            .map(|(col, coeff)| (*coeff as i128) * bb_centered_i128(w_u64[*col as usize], p_bb))
+                            .sum()
+                    };
+                    let a_int = eval_int(&a_i64);
+                    let b_int = eval_int(&b_i64);
+                    let c_int = eval_int(&c_i64);
+                    let diff = a_int * b_int - c_int;
+                    eprintln!("  [debug] int: a={} b={} c={} a*b-c={}", a_int, b_int, c_int, diff);
+                    eprintln!("  [debug] int mod p_bb: {}", diff.rem_euclid(p_bb as i128));
+                    // Also show host-field lhs/rhs limbs (u64 canonical) for quick inspection.
+                    let av_u = av.into_bigint().as_ref()[0];
+                    let bv_u = bv.into_bigint().as_ref()[0];
+                    let cv_u = cv.into_bigint().as_ref()[0];
+                    eprintln!("  [debug] host(F): av={} bv={} cv={}", av_u, bv_u, cv_u);
+
                     panic!("R1CS check failed at global_row={global} (chunk={chunk_idx} row={i}): (A·w)*(B·w) != (C·w)");
                 }
             } else {
                 let fails = (0..nrows)
                     .into_par_iter()
                     .map(|i| {
-                        let av = row_dot_base(&a.coeffs[i], &w);
-                        let bv = row_dot_base(&b.coeffs[i], &w);
-                        let cv = row_dot_base(&c.coeffs[i], &w);
+                        let av = row_dot_base(&a.coeffs[i], &w_host);
+                        let bv = row_dot_base(&b.coeffs[i], &w_host);
+                        let cv = row_dot_base(&c.coeffs[i], &w_host);
                         if av * bv != cv { 1u64 } else { 0u64 }
                     })
                     .sum::<u64>();
@@ -288,9 +437,9 @@ fn main() {
         #[cfg(not(feature = "parallel"))]
         {
             for i in 0..nrows {
-                let av = row_dot_base(&a.coeffs[i], &w);
-                let bv = row_dot_base(&b.coeffs[i], &w);
-                let cv = row_dot_base(&c.coeffs[i], &w);
+                let av = row_dot_base(&a.coeffs[i], &w_host);
+                let bv = row_dot_base(&b.coeffs[i], &w_host);
+                let cv = row_dot_base(&c.coeffs[i], &w_host);
                 if av * bv != cv {
                     let global = (chunk_idx as u64) * (chunk_size as u64) + (i as u64);
                     if fail_fast {
