@@ -49,6 +49,15 @@ fn babybear_u64_to_centered_host(x: u64, p_bb: u64) -> F {
 }
 
 #[inline]
+fn babybear_u64_to_canonical_host(x: u64, p_bb: u64) -> F {
+    // SP1 stores all witness words as u64 residues mod p_bb.
+    // Aux vars are written as (num/p) mod p, so they are in [0,p_bb).
+    debug_assert!(p_bb > 1);
+    debug_assert!(x < p_bb);
+    F::from(x)
+}
+
+#[inline]
 fn row_dot_base(row: &[(R, usize)], w: &[F]) -> F {
     let mut acc = F::ZERO;
     for (c, j) in row {
@@ -144,12 +153,45 @@ fn main() {
     println!("  loaded witness: base={} aux={} full={}", base_len, aux_len, w_u64.len());
     assert!(!w_u64.is_empty() && w_u64[0] == 1, "witness must have w[0]=1");
 
-    // Map u64 witness -> Frog base field scalars once.
-    let t_w = std::time::Instant::now();
+    // Infer `base_vars` from the first (smallest) column index that appears with coeff ±p_bb in C.
+    // SP1 appends aux vars at indices [base_vars .. base_vars+added_vars).
     let p_bb = cache.stats.p_bb;
+    let p_bb_f = F::from(p_bb);
+    let t_inf = std::time::Instant::now();
+    let mut base_vars = cache.stats.num_vars; // fallback if no aux terms exist
+    'outer: for chunk_idx in 0..cache.num_chunks {
+        let [_a, _b, c] = cache.read_chunk(chunk_idx).expect("read_chunk for infer_base_vars");
+        for row in &c.coeffs {
+            for (coeff, col_idx) in row {
+                let c0 = coeff0(coeff);
+                if c0 == p_bb_f || c0 == -p_bb_f {
+                    base_vars = base_vars.min(*col_idx);
+                }
+            }
+        }
+        if base_vars != cache.stats.num_vars {
+            break 'outer;
+        }
+    }
+    println!("  inferred base_vars={} (infer {:?})", base_vars, t_inf.elapsed());
+
+    // Map u64 witness -> Frog base field scalars once, matching SP1 lift semantics:
+    // - original vars: centered embedding mod p_bb
+    // - aux vars: canonical (non-centered) residue mod p_bb
+    let t_w = std::time::Instant::now();
     let w: Vec<F> = w_u64
         .into_iter()
-        .map(|x| babybear_u64_to_centered_host(x, p_bb))
+        .enumerate()
+        .map(|(i, x)| {
+            if x >= p_bb {
+                panic!("witness word out of [0,p_bb) range at idx={i}: x={x} p_bb={p_bb}");
+            }
+            if i < base_vars {
+                babybear_u64_to_centered_host(x, p_bb)
+            } else {
+                babybear_u64_to_canonical_host(x, p_bb)
+            }
+        })
         .collect();
     println!("  map witness u64->F: {:?}", t_w.elapsed());
 
