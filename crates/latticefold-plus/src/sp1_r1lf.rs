@@ -21,6 +21,9 @@ use stark_rings::{OverField, PolyRing, Zq};
 
 use crate::we_statement::WeParams;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 /// Round up to next power of 2.
 fn next_power_of_two(n: usize) -> usize {
     if n == 0 {
@@ -184,6 +187,18 @@ where
     R: OverField + PolyRing + Clone + Send + Sync,
     R::BaseRing: Zq + PrimeField + From<u64> + Send + Sync,
 {
+    #[derive(Clone, Copy, Debug)]
+    struct ChunkMeta {
+        a0: u64,
+        a1: u64,
+        b0: u64,
+        b1: u64,
+        c0: u64,
+        c1: u64,
+        actual_rows: usize,
+        padded_rows: usize,
+    }
+
     if pad_cols_to_multiple_of == 0 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
@@ -216,59 +231,169 @@ where
     let num_chunks = direct.num_chunks();
     let ncols = expected_ncols;
 
-    let file = std::fs::File::create(&cache_path)?;
-    let mut w = std::io::BufWriter::with_capacity(256 * 1024 * 1024, file);
-
-    // Header (fixed)
-    w.write_all(R1LF_CHUNK_MAGIC)?;
-    w.write_all(&R1LF_CHUNK_VERSION.to_le_bytes())?;
-    w.write_all(&stats.digest)?;
-    w.write_all(&stats.p_bb.to_le_bytes())?;
-    w.write_all(&(stats.num_vars as u64).to_le_bytes())?;
-    w.write_all(&(stats.num_constraints as u64).to_le_bytes())?;
-    w.write_all(&(stats.num_public as u64).to_le_bytes())?;
-    w.write_all(&stats.total_nonzeros.to_le_bytes())?;
-    w.write_all(&(chunk_size as u64).to_le_bytes())?;
-    w.write_all(&(ncols as u64).to_le_bytes())?;
-    w.write_all(&(num_chunks as u64).to_le_bytes())?;
-
-    // Offset table: backfilled after writing chunks.
-    let offsets_pos = w.stream_position()?;
-    for _ in 0..num_chunks {
-        w.write_all(&0u64.to_le_bytes())?;
-    }
-    w.flush()?;
-
-    let mut offsets = vec![0u64; num_chunks];
-    // Use a large buffered reader for the source `.r1lf` to avoid tiny read syscalls
-    // (`read_exact` of 4/12 bytes) dominating CPU time during cache build.
-    let src_file = std::fs::File::open(path)?;
-    let mut src = std::io::BufReader::with_capacity(256 * 1024 * 1024, src_file);
+    // Precompute source offsets per chunk (sequential; cheap) so parallel workers don't need to share `direct`.
+    let mut metas: Vec<ChunkMeta> = Vec::with_capacity(num_chunks);
+    let (_a_start, b_start, c_start) = direct
+        .chunk_offsets(0)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let file_len = std::fs::metadata(path)?.len();
     for i in 0..num_chunks {
-        offsets[i] = w.stream_position()?;
         let start = i * chunk_size;
         let end = ((i + 1) * chunk_size).min(stats.num_constraints);
         let actual_rows = end - start;
         let padded_rows = next_power_of_two(actual_rows);
-
-        // Chunk encoding: nrows (u64), then 3 matrices (A,B,C).
-        w.write_all(&(padded_rows as u64).to_le_bytes())?;
-
-        let (a0, b0, c0) = direct.chunk_offsets(i).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?;
-        write_matrix_chunk_from_r1lf(&mut src, &mut w, a0, actual_rows, padded_rows)?;
-        write_matrix_chunk_from_r1lf(&mut src, &mut w, b0, actual_rows, padded_rows)?;
-        write_matrix_chunk_from_r1lf(&mut src, &mut w, c0, actual_rows, padded_rows)?;
+        let (a0, b0, c0) = direct
+            .chunk_offsets(i)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let (a1, b1, c1) = if i + 1 < num_chunks {
+            direct
+                .chunk_offsets(i + 1)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+        } else {
+            (b_start, c_start, file_len)
+        };
+        metas.push(ChunkMeta {
+            a0,
+            a1,
+            b0,
+            b1,
+            c0,
+            c1,
+            actual_rows,
+            padded_rows,
+        });
     }
-    w.flush()?;
 
-    // Backfill offsets.
-    w.seek(SeekFrom::Start(offsets_pos))?;
-    for off in offsets {
-        w.write_all(&off.to_le_bytes())?;
+    // Parallel cache build (feature = "parallel"): build per-chunk blobs in parallel, then concatenate.
+    #[cfg(feature = "parallel")]
+    {
+        use std::io::BufWriter;
+
+        let tmp_dir = format!("{cache_path}.tmpd");
+        let _ = std::fs::remove_dir_all(&tmp_dir);
+        std::fs::create_dir_all(&tmp_dir)?;
+
+        let src_path = path.to_string();
+
+        metas
+            .par_iter()
+            .enumerate()
+            .try_for_each(|(i, meta)| -> std::io::Result<()> {
+                // Keep per-thread buffers small to avoid blowing RAM with many Rayon threads.
+                const SRC_BUF: usize = 8 * 1024 * 1024;
+                const DST_BUF: usize = 8 * 1024 * 1024;
+
+                let src_file = std::fs::File::open(&src_path)?;
+                let mut src = std::io::BufReader::with_capacity(SRC_BUF, src_file);
+
+                let chunk_path = format!("{tmp_dir}/{i}.chunk");
+                let dst_file = std::fs::File::create(&chunk_path)?;
+                let mut dst = BufWriter::with_capacity(DST_BUF, dst_file);
+
+                // Chunk encoding: nrows (u64), then 3 matrices (A,B,C).
+                dst.write_all(&(meta.padded_rows as u64).to_le_bytes())?;
+                write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.a0, meta.a1, meta.actual_rows, meta.padded_rows)?;
+                write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.b0, meta.b1, meta.actual_rows, meta.padded_rows)?;
+                write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.c0, meta.c1, meta.actual_rows, meta.padded_rows)?;
+                dst.flush()?;
+                Ok(())
+            })?;
+
+        // Concatenate deterministically into the final cache file.
+        let file = std::fs::File::create(&cache_path)?;
+        let mut w = std::io::BufWriter::with_capacity(256 * 1024 * 1024, file);
+
+        // Header (fixed)
+        w.write_all(R1LF_CHUNK_MAGIC)?;
+        w.write_all(&R1LF_CHUNK_VERSION.to_le_bytes())?;
+        w.write_all(&stats.digest)?;
+        w.write_all(&stats.p_bb.to_le_bytes())?;
+        w.write_all(&(stats.num_vars as u64).to_le_bytes())?;
+        w.write_all(&(stats.num_constraints as u64).to_le_bytes())?;
+        w.write_all(&(stats.num_public as u64).to_le_bytes())?;
+        w.write_all(&stats.total_nonzeros.to_le_bytes())?;
+        w.write_all(&(chunk_size as u64).to_le_bytes())?;
+        w.write_all(&(ncols as u64).to_le_bytes())?;
+        w.write_all(&(num_chunks as u64).to_le_bytes())?;
+
+        // Offset table: backfilled after writing chunks.
+        let offsets_pos = w.stream_position()?;
+        for _ in 0..num_chunks {
+            w.write_all(&0u64.to_le_bytes())?;
+        }
+        w.flush()?;
+
+        let mut offsets = vec![0u64; num_chunks];
+        for i in 0..num_chunks {
+            offsets[i] = w.stream_position()?;
+            let chunk_path = format!("{tmp_dir}/{i}.chunk");
+            let mut r = std::io::BufReader::with_capacity(
+                64 * 1024 * 1024,
+                std::fs::File::open(&chunk_path)?,
+            );
+            std::io::copy(&mut r, &mut w)?;
+        }
+        w.flush()?;
+
+        // Backfill offsets.
+        w.seek(SeekFrom::Start(offsets_pos))?;
+        for off in offsets {
+            w.write_all(&off.to_le_bytes())?;
+        }
+        w.flush()?;
+
+        // Best-effort cleanup of temp chunks.
+        let _ = std::fs::remove_dir_all(&tmp_dir);
     }
-    w.flush()?;
+
+    // Single-threaded cache build (no `parallel` feature).
+    #[cfg(not(feature = "parallel"))]
+    {
+        let file = std::fs::File::create(&cache_path)?;
+        let mut w = std::io::BufWriter::with_capacity(256 * 1024 * 1024, file);
+
+        // Header (fixed)
+        w.write_all(R1LF_CHUNK_MAGIC)?;
+        w.write_all(&R1LF_CHUNK_VERSION.to_le_bytes())?;
+        w.write_all(&stats.digest)?;
+        w.write_all(&stats.p_bb.to_le_bytes())?;
+        w.write_all(&(stats.num_vars as u64).to_le_bytes())?;
+        w.write_all(&(stats.num_constraints as u64).to_le_bytes())?;
+        w.write_all(&(stats.num_public as u64).to_le_bytes())?;
+        w.write_all(&stats.total_nonzeros.to_le_bytes())?;
+        w.write_all(&(chunk_size as u64).to_le_bytes())?;
+        w.write_all(&(ncols as u64).to_le_bytes())?;
+        w.write_all(&(num_chunks as u64).to_le_bytes())?;
+
+        // Offset table: backfilled after writing chunks.
+        let offsets_pos = w.stream_position()?;
+        for _ in 0..num_chunks {
+            w.write_all(&0u64.to_le_bytes())?;
+        }
+        w.flush()?;
+
+        let mut offsets = vec![0u64; num_chunks];
+        // Use a large buffered reader for the source `.r1lf` to avoid tiny read syscalls
+        // (`read_exact` of 4/12 bytes) dominating CPU time during cache build.
+        let src_file = std::fs::File::open(path)?;
+        let mut src = std::io::BufReader::with_capacity(256 * 1024 * 1024, src_file);
+        for (i, meta) in metas.iter().enumerate() {
+            offsets[i] = w.stream_position()?;
+            // Chunk encoding: nrows (u64), then 3 matrices (A,B,C).
+            w.write_all(&(meta.padded_rows as u64).to_le_bytes())?;
+            write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.a0, meta.a1, meta.actual_rows, meta.padded_rows)?;
+            write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.b0, meta.b1, meta.actual_rows, meta.padded_rows)?;
+            write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.c0, meta.c1, meta.actual_rows, meta.padded_rows)?;
+        }
+        w.flush()?;
+
+        // Backfill offsets.
+        w.seek(SeekFrom::Start(offsets_pos))?;
+        for off in offsets {
+            w.write_all(&off.to_le_bytes())?;
+        }
+        w.flush()?;
+    }
 
     open_chunk_cache::<R>(&cache_path, &stats.digest)
 }
@@ -523,27 +648,83 @@ fn write_matrix_chunk_from_r1lf(
     src: &mut std::io::BufReader<std::fs::File>,
     dst: &mut std::io::BufWriter<std::fs::File>,
     start_offset: u64,
+    end_offset: u64,
     actual_rows: usize,
     padded_rows: usize,
 ) -> std::io::Result<()> {
-    src.seek(SeekFrom::Start(start_offset))?;
-    let mut buf4 = [0u8; 4];
-    let mut buf12 = [0u8; 12];
-
-    for _ in 0..actual_rows {
-        src.read_exact(&mut buf4)?;
-        let num_terms = u32::from_le_bytes(buf4) as usize;
-        dst.write_all(&(num_terms as u32).to_le_bytes())?;
-        for _ in 0..num_terms {
-            src.read_exact(&mut buf12)?;
-            // term is (u32 idx, i64 coeff)
-            dst.write_all(&buf12)?;
-        }
+    // Fast path: copy the raw row encoding bytes for this chunk directly from the `.r1lf`.
+    //
+    // The `.r1lf` matrix body encoding is identical to the chunk-cache matrix encoding
+    // (per row: u32 num_terms, then `num_terms` terms of 12 bytes), so we can bulk-copy
+    // without per-term parsing. This significantly reduces CPU overhead when building
+    // the cache for the first time.
+    if end_offset < start_offset {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "end_offset < start_offset",
+        ));
     }
+    let len = end_offset - start_offset;
+    src.seek(SeekFrom::Start(start_offset))?;
+    let mut limited = src.take(len);
+    std::io::copy(&mut limited, dst)?;
+
     for _ in actual_rows..padded_rows {
         dst.write_all(&0u32.to_le_bytes())?;
     }
     Ok(())
+}
+
+fn scan_matrix_offsets(
+    file: &mut File,
+    start_offset: u64,
+    num_constraints: usize,
+    chunk_size: usize,
+) -> Result<(Vec<u64>, u64), String> {
+    // Fast scanner for chunk start offsets.
+    use std::io::{BufReader, Read, Seek, SeekFrom};
+    const IO_BUFFER_SIZE: usize = 256 * 1024 * 1024;
+    const DISCARD_BUF_SIZE: usize = 4 * 1024 * 1024;
+
+    let mut f = file.try_clone().map_err(|e| format!("{e}"))?;
+    f.seek(SeekFrom::Start(start_offset))
+        .map_err(|e| format!("{e}"))?;
+    let mut r = BufReader::with_capacity(IO_BUFFER_SIZE, f);
+
+    let mut offsets = Vec::with_capacity((num_constraints + chunk_size - 1) / chunk_size);
+    let mut pos = start_offset;
+    let mut buf4 = [0u8; 4];
+    let mut discard = vec![0u8; DISCARD_BUF_SIZE];
+
+    #[inline]
+    fn read_and_discard(
+        r: &mut BufReader<std::fs::File>,
+        mut n: usize,
+        scratch: &mut [u8],
+    ) -> Result<(), String> {
+        use std::io::Read;
+        while n > 0 {
+            let take = n.min(scratch.len());
+            r.read_exact(&mut scratch[..take])
+                .map_err(|e| format!("{e}"))?;
+            n -= take;
+        }
+        Ok(())
+    }
+
+    for row_idx in 0..num_constraints {
+        if row_idx % chunk_size == 0 {
+            offsets.push(pos);
+        }
+        r.read_exact(&mut buf4).map_err(|e| format!("{e}"))?;
+        pos += 4;
+        let num_terms = u32::from_le_bytes(buf4) as usize;
+        let skip = num_terms * 12;
+        read_and_discard(&mut r, skip, &mut discard)?;
+        pos += skip as u64;
+    }
+
+    Ok((offsets, pos))
 }
 
 fn try_load_idx(
@@ -615,38 +796,6 @@ fn write_idx(
     Ok(())
 }
 
-fn scan_matrix_offsets(
-    file: &mut File,
-    start_offset: u64,
-    num_constraints: usize,
-    chunk_size: usize,
-) -> Result<(Vec<u64>, u64), String> {
-    file.seek(SeekFrom::Start(start_offset))
-        .map_err(|e| format!("{e}"))?;
-
-    let mut offsets = Vec::with_capacity((num_constraints + chunk_size - 1) / chunk_size);
-    let mut pos = start_offset;
-
-    for row_idx in 0..num_constraints {
-        if row_idx % chunk_size == 0 {
-            offsets.push(pos);
-        }
-        // num_terms: u32
-        let mut buf4 = [0u8; 4];
-        file.read_exact(&mut buf4).map_err(|e| format!("{e}"))?;
-        pos += 4;
-        let num_terms = u32::from_le_bytes(buf4) as usize;
-
-        // skip terms: (u32 idx + i64 coeff) = 12 bytes each
-        let skip = (num_terms as u64) * 12;
-        file.seek(SeekFrom::Current(skip as i64))
-            .map_err(|e| format!("{e}"))?;
-        pos += skip;
-    }
-
-    Ok((offsets, pos))
-}
-
 fn read_matrix_chunk<R>(
     file: &mut File,
     start_offset: u64,
@@ -688,4 +837,3 @@ where
 
     Ok(stark_rings_linalg::SparseMatrix { nrows, ncols, coeffs })
 }
-
