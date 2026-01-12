@@ -116,3 +116,7 @@ required-features = ["we_gate"]
 [[example]]
 name = "lf_plus_sp1_r1lf_oneproof"
 required-features = ["we_gate"]
+
+[[example]]
+name = "lf_plus_sp1_r1lf_verify_witness"
+required-features = ["we_gate"]
