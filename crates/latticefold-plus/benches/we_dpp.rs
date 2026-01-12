@@ -143,8 +143,8 @@ fn bench_we_dpp(c: &mut Criterion) {
         degree_cm: 2,
         kappa: kappa as u64,
         ring_dim_d: R::dimension() as u64,
-        // Digit decomposition base used by LF+ range-check (SP1/BabyBear-in-Frog uses 2^16).
-        decomp_b: (1u64 << 16),
+        // Must match the decomposition parameters actually used by the LF+ proof in this bench.
+        decomp_b: b as u64,
         k: k as u64,
         l: ell as u64,
         mlen: M.len() as u64,
