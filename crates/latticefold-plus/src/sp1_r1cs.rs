@@ -3,9 +3,9 @@
 //! This module intentionally reuses Symphony’s chunk-cache loader so we can do apples-to-apples
 //! experiments without duplicating the file format parsing logic.
 //!
-//! Enable with `--features sp1_import`.
+//! Enable with `--features we_gate`.
 
-#![cfg(feature = "sp1_import")]
+#![cfg(feature = "we_gate")]
 
 use symphony::sp1_r1cs_loader::FieldFromU64;
 use symphony::symphony_sp1_r1cs::open_sp1_r1cs_chunk_cache;

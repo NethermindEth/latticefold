@@ -24,5 +24,10 @@ pub mod we_statement;
 pub mod we_gate_arith;
 
 // SP1 shrink verifier R1CS loader helpers (feature-gated; research only).
-#[cfg(feature = "sp1_import")]
+// We gate these under `we_gate` so the WE/DPP benches can reuse them.
+#[cfg(feature = "we_gate")]
 pub mod sp1_r1cs;
+#[cfg(feature = "we_gate")]
+pub mod sp1_r1lf;
+#[cfg(feature = "we_gate")]
+pub mod sp1_lift_witness;
