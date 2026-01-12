@@ -259,13 +259,16 @@ fn main() {
     assert!(!w_u64.is_empty() && w_u64[0] == 1, "witness must have w[0]=1");
 
     // Infer `base_vars` from the first (smallest) column index that appears with coeff ±p_bb in C.
-    // SP1 appends aux vars at indices [base_vars .. base_vars+added_vars).
+    // This is useful for sanity/telemetry, but **SP1 evaluates all witness slots using centered
+    // BabyBear integers**, including aux vars (see `eval_row_i128` in `sp1/.../r1cs/lf.rs`).
     let p_bb = cache.stats.p_bb;
     let p_bb_f = F::from(p_bb);
     let t_inf = std::time::Instant::now();
     let mut base_vars = cache.stats.num_vars; // fallback if no aux terms exist
     'outer: for chunk_idx in 0..cache.num_chunks {
-        let [_a, _b, c] = cache.read_chunk(chunk_idx).expect("read_chunk for infer_base_vars");
+        let [_a, _b, c] = cache
+            .read_chunk(chunk_idx)
+            .expect("read_chunk for infer_base_vars");
         for row in &c.coeffs {
             for (coeff, col_idx) in row {
                 let c0 = coeff0(coeff);
@@ -278,11 +281,14 @@ fn main() {
             break 'outer;
         }
     }
-    println!("  inferred base_vars={} (infer {:?})", base_vars, t_inf.elapsed());
+    println!(
+        "  inferred base_vars={} (infer {:?})",
+        base_vars,
+        t_inf.elapsed()
+    );
 
     // Map u64 witness -> Frog base field scalars once, matching SP1 lift semantics:
-    // - original vars: centered embedding mod p_bb
-    // - aux vars: canonical (non-centered) residue mod p_bb
+    // - **all vars (including aux)**: centered embedding mod p_bb
     let t_w = std::time::Instant::now();
     let w_host: Vec<F> = w_u64
         .iter()
@@ -292,11 +298,8 @@ fn main() {
             if x >= p_bb {
                 panic!("witness word out of [0,p_bb) range at idx={i}: x={x} p_bb={p_bb}");
             }
-            if i < base_vars {
-                babybear_u64_to_centered_host(x, p_bb)
-            } else {
-                babybear_u64_to_canonical_host(x, p_bb)
-            }
+            let _ = i; // keep index for error context above
+            babybear_u64_to_centered_host(x, p_bb)
         })
         .collect();
     println!("  map witness u64->F: {:?}", t_w.elapsed());
