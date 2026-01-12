@@ -3877,12 +3877,27 @@ mod tests {
             .and_then(|s| s.parse().ok())
             .unwrap_or(20);
         let n = 1usize << n_pow;
-        let k = 4usize;
         let kappa = 2usize;
-        let ell = 32usize;
         let d = RR::dimension();
-        let b = (d / 2) as u128;
         let nvars = ark_std::log2(n) as usize;
+
+        // Gadget decomposition params (range-check decomposition for ring coefficients).
+        //
+        // Defaults keep historical behavior, but allow overrides to experiment with
+        // wider bases like b=256 (to support embedding ~32-bit residues as constant coefficients)
+        // without forcing per-bit constraints.
+        let k: usize = std::env::var("LFP_DECOMP_K")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(4);
+        let ell: usize = std::env::var("LFP_DECOMP_L")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(32);
+        let b: u128 = std::env::var("LFP_DECOMP_B")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or((d / 2) as u128);
         let dparams = DecompParameters { b, k, l: ell };
 
         // Default Mlen=3 like earlier LF+ timings; allow override to inspect Mlen scaling.
@@ -4126,6 +4141,212 @@ mod tests {
         };
 
         run_one("sha256->bits", &sp1_digest_bits);
+    }
+
+    // Large-scale harness over the built-in BabyBear ring.
+    //
+    // NOTE: the current BabyBear cyclotomic ring model is degree-72 (see `cyclotomic-rings/src/rings/babybear.rs`).
+    // This is *not* the "d=256" security target, but it's useful to get a first-order cost comparison
+    // and to validate that the end-to-end LF+->WE->DPP pipeline runs over a BabyBear-based ring type.
+    //
+    // Run with (example):
+    //   LFP_TRACE_NPOW=16 cargo test --release -p latticefold-plus test_large_trace_babybear --features we_gate -- --nocapture --ignored
+    #[test]
+    #[ignore]
+    fn test_large_trace_babybear() {
+        use cyclotomic_rings::rings::BabyBearPoseidonConfig as PCF;
+        use cyclotomic_rings::rings::GetPoseidonParams;
+        use sha2::{Digest, Sha256};
+        use stark_rings::cyclotomic_ring::models::babybear::RqPoly as RR;
+        use stark_rings::PolyRing;
+
+        use crate::we_statement::{digest32_to_bits_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};
+        use dpp::dr1cs_flpcp::Dr1csInstanceSparse as DppInst;
+        use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
+        use dpp::sparse::SparseVec;
+        use dpp::{BoundedFlpcpSparse, PackedDppQuerySparse};
+
+        use ark_ff::PrimeField;
+        use rand::RngCore;
+        #[cfg(feature = "parallel")]
+        use rayon::current_num_threads;
+
+        fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
+            FBig::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
+        }
+
+        let n_pow: usize = std::env::var("LFP_TRACE_NPOW")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(16); // default smaller than Frog harness (BabyBear ring is larger/slow)
+        let n = 1usize << n_pow;
+        let kappa = 2usize;
+        let d = RR::dimension();
+        let nvars = ark_std::log2(n) as usize;
+
+        let k: usize = std::env::var("LFP_DECOMP_K")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(4);
+        let ell: usize = std::env::var("LFP_DECOMP_L")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(32);
+        let b: u128 = std::env::var("LFP_DECOMP_B")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or((d / 2) as u128);
+        let dparams = DecompParameters { b, k, l: ell };
+
+        // Default Mlen=3; allow override.
+        let mlen: usize = std::env::var("LFP_TRACE_MLEN")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(3);
+        let M_one = std::sync::Arc::new(SparseMatrix::identity(n));
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![M_one; mlen];
+
+        type FSmall = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+        let sp1_digest_bits: Vec<FSmall> = {
+            let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
+            digest32_to_bits_field::<FSmall>(d)
+        };
+
+        eprintln!("\n[test_large_trace_babybear] n=2^{n_pow} mlen={mlen} ring_d={d} decomp_b={b} decomp_k={k} decomp_l={ell}");
+        #[cfg(feature = "parallel")]
+        eprintln!("[test_large_trace_babybear] rayon_threads={}", current_num_threads());
+        #[cfg(not(feature = "parallel"))]
+        eprintln!("[test_large_trace_babybear] rayon_threads=DISABLED(feature=parallel)");
+
+        let mut rng = ark_std::test_rng();
+        use crate::lin::LinParameters;
+        use crate::plus::{PlusParameters, PlusProver};
+        use crate::r1cs::{r1cs_decomposed_square, ComR1CS};
+        use crate::utils::estimate_bound;
+        use latticefold::arith::r1cs::R1CS;
+
+        // Conservative bound: harness only.
+        let sop = RR::dimension() * 128;
+        let b_bound = estimate_bound(sop, 1, d, k) + 1;
+        let m = n / k;
+        let z: Vec<RR> = (0..m).map(|_| RR::from((rng.next_u64() & 1) as u128)).collect();
+        let r1cs0 = r1cs_decomposed_square(
+            R1CS::<RR> {
+                l: 1,
+                A: SparseMatrix::identity(m),
+                B: SparseMatrix::identity(m),
+                C: SparseMatrix::identity(m),
+            },
+            n,
+            b_bound,
+            k,
+        );
+
+        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let cr1cs = ComR1CS::new(r1cs0, z, 1, b_bound, k, &A);
+        let lin_params = LinParameters {
+            kappa,
+            decomp: dparams.clone(),
+        };
+        let pparams = PlusParameters { lin: lin_params, B: b_bound };
+
+        let t0 = std::time::Instant::now();
+        let transcript = crate::transcript::PoseidonTranscript::empty::<PCF>();
+        let mut prover = PlusProver::init(A.clone(), M.clone(), 1, pparams.clone(), transcript);
+        for b in &sp1_digest_bits {
+            prover.transcript.absorb_field_element(b);
+        }
+        let proof = prover.prove(&[cr1cs]);
+        eprintln!("[test_large_trace_babybear] plus.prove: {:?}", t0.elapsed());
+
+        let t1 = std::time::Instant::now();
+        let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        for b in &sp1_digest_bits {
+            rec.absorb_field_element(b);
+        }
+        for lp in &proof.lproof {
+            lp.verify(&mut rec);
+        }
+        proof.cmproof.verify(&M, &mut rec).expect("cm verify");
+        proof
+            .dproof
+            .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, b_bound);
+        let trace = rec.trace().clone();
+        eprintln!("[test_large_trace_babybear] plus.verify(record): {:?}", t1.elapsed());
+
+        let params = WeParams {
+            nvars_setchk: nvars as u64,
+            degree_setchk: 3,
+            nvars_cm: nvars as u64,
+            degree_cm: 2,
+            kappa: kappa as u64,
+            ring_dim_d: RR::dimension() as u64,
+            k: k as u64,
+            l: ell as u64,
+            mlen: M.len() as u64,
+        };
+        let poseidon_cfg = PCF::get_poseidon_config();
+
+        let t2 = std::time::Instant::now();
+        let out = build_we_dr1cs_for_plus_proof::<RR>(
+            &poseidon_cfg,
+            &trace,
+            &params,
+            &sp1_digest_bits,
+            &proof,
+            M.len(),
+            b_bound,
+        )
+        .expect("build we dr1cs");
+        out.inst.check(&out.assignment).expect("dr1cs sat");
+        eprintln!(
+            "[test_large_trace_babybear] build_we_dr1cs: {:?} (nvars={}, constraints={})",
+            t2.elapsed(),
+            out.inst.nvars,
+            out.inst.constraints.len()
+        );
+
+        // DPP verification (single query).
+        let t3 = std::time::Instant::now();
+        let (inst, assignment, public_len) = (out.inst, out.assignment, out.public_len);
+        let n = inst.nvars;
+        let mut a = Vec::with_capacity(inst.constraints.len());
+        let mut b = Vec::with_capacity(inst.constraints.len());
+        let mut c = Vec::with_capacity(inst.constraints.len());
+        for mut row in inst.constraints {
+            a.push(SparseVec::new(std::mem::take(&mut row.a)));
+            b.push(SparseVec::new(std::mem::take(&mut row.b)));
+            c.push(SparseVec::new(std::mem::take(&mut row.c)));
+        }
+        let inst_sparse = DppInst::<FSmall> { n, a, b, c };
+        eprintln!("[test_large_trace_babybear] dr1cs->sparse: {:?}", t3.elapsed());
+
+        let k_rows = inst_sparse.k();
+        let ell_rs = 2 * k_rows;
+        let l_public = public_len;
+        let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell_rs);
+
+        let x_small = assignment[..l_public].to_vec();
+        let z_w_small = assignment[l_public..].to_vec();
+        let (pi_field, _cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
+
+        let boolized = dpp::BooleanProofFlpcpSparse::<FSmall, _>::new(flpcp.clone());
+        let pi_bits_packed = boolized.encode_proof_bits_packed(&pi_field);
+
+        let t6 = std::time::Instant::now();
+        let (dpp_inst, dpp_wit) =
+            build_rev2_dpp_sparse_boolean_auto::<FSmall, _>(&x_small, &pi_bits_packed);
+        eprintln!("[test_large_trace_babybear] build_rev2_dpp: {:?}", t6.elapsed());
+
+        // Bind statement to the same "WE statement hash" as the Frog harness.
+        let stmt_digest = we_statement_hash_lf_plus::<FSmall>(&params, LFP_WE_GATE_DIGEST_V1, &sp1_digest_bits);
+        let x_big = stmt_digest.into_iter().map(lift_to_big).collect::<Vec<_>>();
+        let query: PackedDppQuerySparse<FSmall> = dpp_inst.pack_query(&x_small, &x_big);
+
+        let t7 = std::time::Instant::now();
+        let ok = dpp_inst.lock_check_packed(&query, &dpp_wit).expect("lock_check");
+        eprintln!("[test_large_trace_babybear] dpp lock_check: {:?} ok={ok}", t7.elapsed());
+        assert!(ok);
     }
 }
 
