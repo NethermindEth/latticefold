@@ -271,51 +271,113 @@ where
         let d = R::dimension();
         let k = decomp.k;
         let t = std::time::Instant::now();
-        // Digit alphabet: include small signed representatives in [-b, b] to
-        // match possible outputs of balanced decomposition in Zq.
-        //
-        // This keeps the digit index space tiny (<= 2b+1), enabling a fast exp lookup table
-        // and compact u16 storage per entry.
-        let b_i128: i128 = decomp.b as i128;
-        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
-            .map(|x| {
-                if x >= 0 {
-                    R::BaseRing::from(x as u128)
-                } else {
-                    -R::BaseRing::from((-x) as u128)
-                }
-            })
-            .collect();
-        assert!(
-            digit_elems.len() <= (u16::MAX as usize),
-            "digit alphabet too large for u16 indices (len={})",
-            digit_elems.len()
-        );
-        let digit_elems = Arc::new(digit_elems);
-        let exp_table: Arc<Vec<R>> = Arc::new(
-            digit_elems
-                .iter()
-                .map(|&x| exp::<R>(x).unwrap())
-                .collect::<Vec<_>>(),
-        );
+        // Digit encoding:
+        // - For small bases we keep the existing "small alphabet" path.
+        // - For SP1/WE we want balanced base 2^16 with k=2, which requires a fixed 65536 table
+        //   and O(1) digit->index mapping (no linear scans).
+        let use_sp1_b16 = decomp.b == (1u128 << 16) && decomp.k == 2;
+        let (exp_table, map_digit_to_idx): (Arc<Vec<R>>, Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync>) = if use_sp1_b16 {
+            // Balanced digits are in [-2^15, 2^15) represented in the base field.
+            // Map signed digit `d` to idx = (d + 2^15) in [0, 2^16).
+            let half: i64 = 1i64 << 15; // 32768
+
+            let exp_table: Arc<Vec<R>> = Arc::new(
+                (-half..half)
+                    .map(|x| {
+                        let base = if x >= 0 {
+                            R::BaseRing::from(x as u128)
+                        } else {
+                            -R::BaseRing::from((-x) as u128)
+                        };
+                        exp::<R>(base).unwrap()
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            debug_assert_eq!(exp_table.len(), 1usize << 16);
+
+            let map = Box::new(move |dig: R::BaseRing| -> u16 {
+                // Use `Zq` helpers to recover a small signed integer:
+                // - `center()` gives abs value (as field element)
+                // - `sign()` tells whether it was above or below modulus/2
+                let mag = dig
+                    .center()
+                    .to_u64()
+                    .expect("digit magnitude should fit in u64") as i64;
+                let neg = dig.sign() == -R::BaseRing::ONE;
+                let v = if neg { -mag } else { mag };
+                debug_assert!(
+                    v >= -half && v < half,
+                    "digit out of balanced base2^16 range: v={v}"
+                );
+                (v + half) as u16
+            });
+            (exp_table, map)
+        } else {
+            // Small alphabet: include signed reps in [-b, b] (keeps table tiny).
+            let b_i128: i128 = decomp.b as i128;
+            let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+                .map(|x| {
+                    if x >= 0 {
+                        R::BaseRing::from(x as u128)
+                    } else {
+                        -R::BaseRing::from((-x) as u128)
+                    }
+                })
+                .collect();
+            assert!(
+                digit_elems.len() <= (u16::MAX as usize),
+                "digit alphabet too large for u16 indices (len={})",
+                digit_elems.len()
+            );
+            let exp_table: Arc<Vec<R>> = Arc::new(
+                digit_elems
+                    .iter()
+                    .map(|&x| exp::<R>(x).unwrap())
+                    .collect::<Vec<_>>(),
+            );
+            let digit_elems = Arc::new(digit_elems);
+            let map = Box::new(move |dig: R::BaseRing| -> u16 {
+                digit_elems
+                    .iter()
+                    .position(|&x| x == dig)
+                    .expect("digit not in [-b,b] alphabet") as u16
+            });
+            (exp_table, map)
+        };
 
         // Allocate digit tables (row-major): nrows=n, ncols=d, repeated for k digits.
         let mut digits_tables: Vec<Vec<u16>> = (0..k).map(|_| vec![0u16; n * d]).collect();
-        let mut tmp = vec![R::BaseRing::ZERO; k];
-        for (row_idx, fi) in f.iter().enumerate() {
-            let coeffs = fi.coeffs();
-            debug_assert_eq!(coeffs.len(), d);
-            for (col_idx, &c) in coeffs.iter().enumerate() {
-                // Writes into tmp[0..k] in-place.
-                c.decompose_to(decomp.b, &mut tmp);
-                for k_i in 0..k {
-                    let dig = tmp[k_i];
-                    // Small alphabet: linear scan is fine (<= 2b+1 <= d+1 in our use cases).
-                    let idx = digit_elems
-                        .iter()
-                        .position(|&x| x == dig)
-                        .expect("digit not in [-b,b] alphabet") as u16;
-                    digits_tables[k_i][row_idx * d + col_idx] = idx;
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            digits_tables
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(k_i, table)| {
+                    // Each thread gets its own scratch to avoid races.
+                    let mut tmp_local = vec![R::BaseRing::ZERO; k];
+                    for (row_idx, fi) in f.iter().enumerate() {
+                        let coeffs = fi.coeffs();
+                        debug_assert_eq!(coeffs.len(), d);
+                        for (col_idx, &c) in coeffs.iter().enumerate() {
+                            c.decompose_to(decomp.b, &mut tmp_local);
+                            table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                        }
+                    }
+                });
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut tmp = vec![R::BaseRing::ZERO; k];
+            for (row_idx, fi) in f.iter().enumerate() {
+                let coeffs = fi.coeffs();
+                debug_assert_eq!(coeffs.len(), d);
+                for (col_idx, &c) in coeffs.iter().enumerate() {
+                    // Writes into tmp[0..k] in-place.
+                    c.decompose_to(decomp.b, &mut tmp);
+                    for k_i in 0..k {
+                        digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
+                    }
                 }
             }
         }
@@ -403,7 +465,6 @@ where
                     nrows: n,
                     ncols: d,
                     digits: Arc::new(digits),
-                    digit_elems: digit_elems.clone(),
                     exp_table: exp_table.clone(),
                 })
             })

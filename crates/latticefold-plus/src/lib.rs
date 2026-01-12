@@ -15,6 +15,12 @@ pub mod tensor_eval;
 pub mod transcript;
 pub mod utils;
 
+// SP1 lift vacuity/soundness regression tests (WE-gate only).
+#[cfg(all(test, feature = "we_gate"))]
+mod sp1_lift_cheat_tests;
+#[cfg(all(test, feature = "we_gate"))]
+mod sp1_r1lf_witness_extend_tests;
+
 // WE/DPP arithmetization frontends (feature-gated; not needed in production proving path).
 #[cfg(feature = "we_gate")]
 pub mod recording_transcript;
@@ -30,4 +36,6 @@ pub mod sp1_r1cs;
 #[cfg(feature = "we_gate")]
 pub mod sp1_r1lf;
 #[cfg(feature = "we_gate")]
-pub mod sp1_lift_witness;
+pub mod sp1_r1lf_witness_extend;
+#[cfg(feature = "we_gate")]
+pub mod sp1_witness_io;

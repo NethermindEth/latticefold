@@ -1516,10 +1516,10 @@ where
 
     // Allocate statement-bound params as local vars and enforce they match the circuit's expected constants.
     let params_vals = params.to_field_vec::<BF<R>>();
-    if params_vals.len() != 9 {
-        return Err("we params: expected 9 field elements".to_string());
+    if params_vals.len() != 10 {
+        return Err("we params: expected 10 field elements".to_string());
     }
-    let mut params_vars = Vec::with_capacity(9);
+    let mut params_vars = Vec::with_capacity(10);
     for &v in &params_vals {
         params_vars.push(b.new_var(v));
     }
@@ -1530,11 +1530,12 @@ where
     b.enforce_var_eq_const(params_vars[3], BF::<R>::from(2u64)); // degree_cm
     b.enforce_var_eq_const(params_vars[4], BF::<R>::from(params.kappa)); // kappa (not otherwise used here)
     b.enforce_var_eq_const(params_vars[5], BF::<R>::from(R::dimension() as u64)); // ring_dim_d
-    b.enforce_var_eq_const(params_vars[6], BF::<R>::from(dcom.dparams.k as u64)); // k
-    b.enforce_var_eq_const(params_vars[7], BF::<R>::from(dcom.dparams.l as u64)); // l
+    b.enforce_var_eq_const(params_vars[6], BF::<R>::from(dcom.dparams.b as u64)); // decomp_b
+    b.enforce_var_eq_const(params_vars[7], BF::<R>::from(dcom.dparams.k as u64)); // k
+    b.enforce_var_eq_const(params_vars[8], BF::<R>::from(dcom.dparams.l as u64)); // l
     // mlen is enforced against the builder-provided Mlen in `build_we_dr1cs_for_cm_proof`
     // via the `mlen_mats` argument; here we can at least ensure it is <= u64::MAX (already).
-    b.enforce_var_eq_const(params_vars[8], BF::<R>::from(params.mlen)); // mlen
+    b.enforce_var_eq_const(params_vars[9], BF::<R>::from(params.mlen)); // mlen
 
     // Allocate extra statement-defined public inputs as vars (not fixed), and absorb them
     // as field-elements-as-ring at the start of the transcript (proof-agnostic binding).
@@ -1912,7 +1913,7 @@ where
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
 
     // Public prefix: [1] + params (fixed 9 scalars)
-    let public_len = 1 + 9;
+    let public_len = 1 + 10;
     Ok(WeDr1csOutput {
         inst,
         assignment,
@@ -1970,7 +1971,7 @@ where
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
 
-    let public_len = 1 + 9;
+    let public_len = 1 + 10;
     Ok((WeDr1csOutput { inst, assignment, public_len }, coin_wiring))
 }
 
@@ -2096,7 +2097,7 @@ where
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
 
-    let public_len = 1 + 9;
+    let public_len = 1 + 10;
     Ok((
         WeDr1csOutput {
             inst,
@@ -2462,7 +2463,7 @@ where
         eprintln!("[we_build] total: {:?}", t_total.elapsed());
     }
 
-    let public_len = 1 + 9 + public_inputs.len();
+    let public_len = 1 + 10 + public_inputs.len();
     Ok(WeDr1csOutput { inst, assignment, public_len })
 }
 
@@ -2596,10 +2597,10 @@ where
 
     // Statement-bound params (we reuse setchk slots: nvars_setchk + degree_setchk == (nvars,3) here).
     let params_vals = params.to_field_vec::<BF<R>>();
-    if params_vals.len() != 9 {
-        return Err("we params: expected 9 field elements".to_string());
+    if params_vals.len() != 10 {
+        return Err("we params: expected 10 field elements".to_string());
     }
-    let mut params_vars = Vec::with_capacity(9);
+    let mut params_vars = Vec::with_capacity(10);
     for &v in &params_vals {
         params_vars.push(b.new_var(v));
     }
@@ -3276,7 +3277,7 @@ where
     ];
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
-    let public_len = 1 + 9 + public_inputs.len();
+    let public_len = 1 + 10 + public_inputs.len();
     Ok(WeDr1csOutput {
         inst,
         assignment,
@@ -3633,6 +3634,7 @@ mod tests {
             degree_cm: 2,
             kappa: kappa as u64,
             ring_dim_d: RR::dimension() as u64,
+            decomp_b: b as u64,
             k: k as u64,
             l: ell as u64,
             mlen: M.len() as u64,
@@ -3644,8 +3646,8 @@ mod tests {
         out.inst.check(&out.assignment).expect("should satisfy");
 
         // Mutate the public `mlen` parameter only.
-        // Public layout for WE is: [ONE] || [9×WeParams] || [public_inputs...]
-        let mlen_global = 1usize + 8usize;
+        // Public layout for WE is: [ONE] || [10×WeParams] || [public_inputs...]
+        let mlen_global = 1usize + 9usize;
         let mut bad = out.assignment.clone();
         bad[mlen_global] += <BF<RR> as ark_ff::Field>::ONE;
         assert!(out.inst.check(&bad).is_err(), "mlen mutation should break satisfaction");
@@ -3692,6 +3694,7 @@ mod tests {
             degree_cm: 2,
             kappa: kappa as u64,
             ring_dim_d: RR::dimension() as u64,
+            decomp_b: b as u64,
             k: k as u64,
             l: ell as u64,
             mlen: M.len() as u64,
@@ -3817,6 +3820,7 @@ mod tests {
             degree_cm: 2,
             kappa: kappa as u64,
             ring_dim_d: RR::dimension() as u64,
+            decomp_b: b as u64,
             k: k as u64,
             l: ell as u64,
             mlen: M.len() as u64,
@@ -3835,8 +3839,8 @@ mod tests {
         out.inst.check(&out.assignment).expect("should satisfy");
 
         // Flip the SP1 digest in the public inputs only.
-        // Public layout for WE is: [ONE] || [9×WeParams] || [public_inputs...]
-        let digest_global = 1usize + 9usize; // first digest bit
+        // Public layout for WE is: [ONE] || [10×WeParams] || [public_inputs...]
+        let digest_global = 1usize + 10usize; // first digest bit
         let mut bad = out.assignment.clone();
         bad[digest_global] += <BF<RR> as ark_ff::Field>::ONE;
         assert!(out.inst.check(&bad).is_err(), "digest flip should break satisfaction");
@@ -3970,6 +3974,7 @@ mod tests {
                 degree_cm: 2,
                 kappa: kappa as u64,
                 ring_dim_d: RR::dimension() as u64,
+                decomp_b: b as u64,
                 k: k as u64,
                 l: ell as u64,
                 mlen: M.len() as u64,

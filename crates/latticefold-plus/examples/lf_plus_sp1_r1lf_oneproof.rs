@@ -30,6 +30,7 @@ fn is_const_coeff_sparse_matrix(m: &stark_rings_linalg::SparseMatrix<R>) -> bool
 
 fn main() {
     let path = std::env::var("SP1_R1LF").expect("Set SP1_R1LF=/path/to/file.r1lf");
+    let witness_path = std::env::var("SP1_WITNESS").ok();
     let chunk_size: usize = std::env::var("CHUNK_SIZE")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -38,16 +39,11 @@ fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(256);
-    let scan_aux: bool = std::env::var("SCAN_AUX")
-        .ok()
-        .as_deref()
-        .map(|s| s == "1")
-        .unwrap_or(false);
 
     println!("=========================================================");
     println!("LF+ SP1 R1LF One-Proof (loader + const-coeff inspection)");
     println!("=========================================================");
-    println!("  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of} SCAN_AUX={scan_aux}");
+    println!("  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of}");
 
     let t0 = std::time::Instant::now();
     let cache =
@@ -67,18 +63,29 @@ fn main() {
         .expect("cache.ncols should be pow2");
     println!("  derived: nvars_cm=nvars_setchk={} (from ncols=2^{})", nvars, nvars);
     println!("  digest={:02x?}...", &cache.stats.digest[..8]);
+    let we_params = latticefold_plus::sp1_r1lf::sp1_default_we_params_for_r1lf_cache::<R>(
+        &cache,
+        1, // kappa (Ajtai rows) - choose your production value
+        3, // mlen (A,B,C) at this loader layer
+    )
+    .expect("sp1_default_we_params_for_r1lf_cache");
+    println!(
+        "  WE params (SP1 default): decomp_b=2^16 k=2 l={} ring_d={} kappa={} mlen={}",
+        we_params.l, we_params.ring_dim_d, we_params.kappa, we_params.mlen
+    );
 
-    if scan_aux {
-        let t = std::time::Instant::now();
-        let (_kinds, summary) =
-            latticefold_plus::sp1_lift_witness::scan_aux_vars_from_r1lf_chunks(&cache)
-                .expect("scan_aux_vars_from_r1lf_chunks");
+    // Optional: load witness (+ required .aux file) if provided.
+    if let Some(wpath) = witness_path.as_deref() {
+        let (w_full, base_len, aux_len) = latticefold_plus::sp1_witness_io::load_sp1_witness_any(
+            wpath,
+            cache.stats.num_vars,
+        )
+        .expect("load witness + witness.aux");
         println!(
-            "  aux vars: total={} carry={} quotient={}  (scan {:?})",
-            summary.num_aux_vars,
-            summary.num_carry,
-            summary.num_quotient,
-            t.elapsed()
+            "  loaded witness: base={} aux={} full={}",
+            base_len,
+            aux_len,
+            w_full.len()
         );
     }
 

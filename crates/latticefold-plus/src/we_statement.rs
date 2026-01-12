@@ -25,6 +25,10 @@ pub struct WeParams {
     pub degree_cm: u64,
     pub kappa: u64,
     pub ring_dim_d: u64,
+    /// Balanced decomposition base `b` used in LF+ range-check (`RgChk`) digit decomposition.
+    ///
+    /// For SP1 BabyBear-in-Frog boundedness, this should be `2^16`.
+    pub decomp_b: u64,
     pub k: u64,
     pub l: u64,
     pub mlen: u64,
@@ -39,6 +43,7 @@ impl WeParams {
             BF::from(self.degree_cm),
             BF::from(self.kappa),
             BF::from(self.ring_dim_d),
+            BF::from(self.decomp_b),
             BF::from(self.k),
             BF::from(self.l),
             BF::from(self.mlen),
@@ -120,7 +125,7 @@ pub const LFP_WE_GATE_DIGEST_V1: [u8; 32] = [0u8; 32];
 /// NOTE: The exact set of extra statement elements is decided by the WE arithmetizer; this module
 /// just provides a stable prefix layout for params.
 pub fn encode_public_x<BF: PrimeField>(params: &WeParams, extra: &[BF]) -> Vec<BF> {
-    let mut out = Vec::with_capacity(1 + 9 + extra.len());
+    let mut out = Vec::with_capacity(1 + 10 + extra.len());
     out.push(BF::ONE);
     out.extend(params.to_field_vec::<BF>());
     out.extend_from_slice(extra);

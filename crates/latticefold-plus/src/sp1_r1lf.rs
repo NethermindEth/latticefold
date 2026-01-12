@@ -19,6 +19,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use ark_ff::PrimeField;
 use stark_rings::{OverField, PolyRing, Zq};
 
+use crate::we_statement::WeParams;
+
 /// Round up to next power of 2.
 fn next_power_of_two(n: usize) -> usize {
     if n == 0 {
@@ -47,6 +49,40 @@ pub fn nvars_from_ncols_pow2(ncols: usize) -> Result<usize, String> {
         return Err(format!("ncols must be a power of two (got {ncols})"));
     }
     Ok(usize::BITS as usize - 1 - ncols.leading_zeros() as usize)
+}
+
+/// Default WE-gate parameters for SP1 BabyBear-in-Frog integration over an R1LF cache.
+///
+/// This is the **canonical** parameterization we want statement-bound in the WE arithmetization:
+/// - boundedness digit base: `b = 2^16`
+/// - digits per value: `k = 2`
+///
+/// `mlen` is the number of matrices being committed in the surrounding protocol layer.
+pub fn sp1_default_we_params_for_r1lf_cache<R: PolyRing>(
+    cache: &R1LfChunkCache<R>,
+    kappa: u64,
+    mlen: u64,
+) -> Result<WeParams, String>
+where
+    R::BaseRing: PrimeField,
+{
+    let nvars = nvars_from_ncols_pow2(cache.ncols)?;
+    // log_{d'}(q) where d' = d/2
+    let lnq = (R::BaseRing::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
+    let l = (lnq / ((R::dimension() / 2) as f64).ln()).ceil() as u64;
+
+    Ok(WeParams {
+        nvars_setchk: nvars as u64,
+        degree_setchk: 3,
+        nvars_cm: nvars as u64,
+        degree_cm: 2,
+        kappa,
+        ring_dim_d: R::dimension() as u64,
+        decomp_b: 1u64 << 16,
+        k: 2,
+        l,
+        mlen,
+    })
 }
 
 /// Metadata parsed from the R1LF header.
@@ -199,7 +235,10 @@ where
     w.flush()?;
 
     let mut offsets = vec![0u64; num_chunks];
-    let mut src = std::fs::File::open(path)?;
+    // Use a large buffered reader for the source `.r1lf` to avoid tiny read syscalls
+    // (`read_exact` of 4/12 bytes) dominating CPU time during cache build.
+    let src_file = std::fs::File::open(path)?;
+    let mut src = std::io::BufReader::with_capacity(256 * 1024 * 1024, src_file);
     for i in 0..num_chunks {
         offsets[i] = w.stream_position()?;
         let start = i * chunk_size;
@@ -433,7 +472,7 @@ pub fn read_r1lf_stats(path: &str) -> std::io::Result<R1LfHeader> {
 }
 
 fn write_matrix_chunk_from_r1lf(
-    src: &mut std::fs::File,
+    src: &mut std::io::BufReader<std::fs::File>,
     dst: &mut std::io::BufWriter<std::fs::File>,
     start_offset: u64,
     actual_rows: usize,

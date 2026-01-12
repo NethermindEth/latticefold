@@ -37,15 +37,16 @@ pub enum MonomialSet<R: PolyRing> {
 
 /// Compact monomial matrix backed by a digit table.
 ///
-/// - `digits` stores indices into `digit_elems` / `exp_table` (row-major).
-/// - `digit_elems[i]` is the base-ring digit value (e.g. small signed reps).
-/// - `exp_table[i] = exp::<R>(digit_elems[i])` is the ring monomial element.
+/// - `digits` stores indices into `exp_table` (row-major).
+/// - `exp_table[idx]` is the ring monomial element corresponding to that digit.
+///
+/// NOTE: For large digit bases (e.g. balanced base \(2^{16}\)), `exp_table` may be a fixed-size
+/// lookup table (e.g. 65536 entries) and `digits` are pre-mapped into `[0..exp_table.len())`.
 #[derive(Clone, Debug)]
 pub struct DigitsMatrix<R: PolyRing> {
     pub nrows: usize,
     pub ncols: usize,
     pub digits: Arc<Vec<u16>>,
-    pub digit_elems: Arc<Vec<R::BaseRing>>,
     pub exp_table: Arc<Vec<R>>,
 }
 
