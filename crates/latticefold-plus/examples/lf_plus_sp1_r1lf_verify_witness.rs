@@ -31,6 +31,23 @@ fn coeff0(c: &R) -> F {
     c.coeffs()[0]
 }
 
+/// SP1 lift semantics: interpret a BabyBear residue `x in [0,p_bb)` as a centered integer in
+/// (-(p_bb-1)/2 .. (p_bb-1)/2], then embed into the host field `F`.
+///
+/// IMPORTANT: this is **not** the same as `F::from(x)` because the host modulus is not `p_bb`.
+#[inline]
+fn babybear_u64_to_centered_host(x: u64, p_bb: u64) -> F {
+    debug_assert!(p_bb > 1);
+    let half = p_bb / 2;
+    if x > half {
+        // centered negative: x - p_bb
+        let neg = p_bb - x;
+        -F::from(neg)
+    } else {
+        F::from(x)
+    }
+}
+
 #[inline]
 fn row_dot_base(row: &[(R, usize)], w: &[F]) -> F {
     let mut acc = F::ZERO;
@@ -129,7 +146,11 @@ fn main() {
 
     // Map u64 witness -> Frog base field scalars once.
     let t_w = std::time::Instant::now();
-    let w: Vec<F> = w_u64.into_iter().map(F::from).collect();
+    let p_bb = cache.stats.p_bb;
+    let w: Vec<F> = w_u64
+        .into_iter()
+        .map(|x| babybear_u64_to_centered_host(x, p_bb))
+        .collect();
     println!("  map witness u64->F: {:?}", t_w.elapsed());
 
     if check_bounds {
