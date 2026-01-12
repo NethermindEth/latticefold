@@ -200,7 +200,12 @@ where
 
     if let Ok(cache) = open_chunk_cache::<R>(&cache_path, &stats.digest) {
         if cache.chunk_size == chunk_size && cache.ncols == expected_ncols {
-            return Ok(cache);
+            // Cache exists; sanity-check that it isn't truncated/corrupt.
+            if cache_file_seems_complete(&cache)? {
+                return Ok(cache);
+            }
+            // Otherwise rebuild.
+            let _ = std::fs::remove_file(&cache_path);
         }
     }
 
@@ -266,6 +271,49 @@ where
     w.flush()?;
 
     open_chunk_cache::<R>(&cache_path, &stats.digest)
+}
+
+fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bool> {
+    // Quick structural checks that catch the common failure mode: cache file exists and has a valid
+    // header/digest, but the chunk payload is truncated (e.g. killed mid-build).
+    use std::io::{Read, Seek, SeekFrom};
+
+    let meta = std::fs::metadata(&cache.cache_path)?;
+    let file_len = meta.len();
+    if file_len < 4 + 4 + 32 + 8 * 6 + 8 * 3 {
+        return Ok(false);
+    }
+    if cache.chunk_offsets.is_empty() {
+        return Ok(false);
+    }
+
+    // Offsets should be monotone and within file.
+    let mut prev = 0u64;
+    for &off in &cache.chunk_offsets {
+        if off < prev || off >= file_len {
+            return Ok(false);
+        }
+        prev = off;
+    }
+
+    // For each chunk, ensure at least the minimal bytes exist:
+    //   chunk header nrows (8) +
+    //   for each of 3 matrices: per-row num_terms (4 bytes) for nrows rows.
+    // This doesn't guarantee the full payload exists, but reliably detects truncation.
+    let mut f = std::fs::File::open(&cache.cache_path)?;
+    let mut buf8 = [0u8; 8];
+    for &off in &cache.chunk_offsets {
+        f.seek(SeekFrom::Start(off))?;
+        if f.read_exact(&mut buf8).is_err() {
+            return Ok(false);
+        }
+        let nrows = u64::from_le_bytes(buf8);
+        let min_bytes = 8u64 + 3u64 * nrows.saturating_mul(4);
+        if off.saturating_add(min_bytes) > file_len {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn open_chunk_cache<R>(path: &str, expected_digest: &[u8; 32]) -> std::io::Result<R1LfChunkCache<R>>
