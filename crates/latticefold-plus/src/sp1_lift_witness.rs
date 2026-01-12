@@ -15,6 +15,9 @@
 
 use crate::sp1_r1lf::R1LfChunkCache;
 
+#[cfg(feature = "parallel")]
+use rayon::prelude::*;
+
 /// Classification of an aux var introduced by the lift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuxVarKind {
@@ -37,24 +40,6 @@ pub struct AuxVarSummary {
     pub num_quotient: usize,
 }
 
-/// Lightweight "raw" sparse matrix row term used for scanning.
-///
-/// (coeff_i64, col_idx)
-type RowTermsI64 = Vec<(i64, usize)>;
-
-#[inline]
-fn row_is_one(row: &RowTermsI64) -> bool {
-    row.len() == 1 && row[0].0 == 1 && row[0].1 == 0
-}
-
-#[inline]
-fn find_p_bb_term(row: &RowTermsI64, p_bb: i64) -> Option<usize> {
-    // The lift adds (+p_bb)*v to C, and coefficients are centered for all original terms,
-    // so encountering ±p_bb is an unambiguous marker for the aux var.
-    row.iter()
-        .find_map(|(coeff, col)| (*coeff == p_bb || *coeff == -p_bb).then_some(*col))
-}
-
 /// Scan a `.chunks` cache and extract which witness columns are aux vars, classified by kind.
 ///
 /// Returns:
@@ -67,87 +52,218 @@ fn find_p_bb_term(row: &RowTermsI64, p_bb: i64) -> Option<usize> {
 pub fn scan_aux_vars_from_r1lf_chunks<R>(
     cache: &R1LfChunkCache<R>,
 ) -> std::io::Result<(Vec<Option<AuxVarKind>>, AuxVarSummary)> {
+    let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
     let p_bb_i64: i64 = cache.stats.p_bb as i64;
-    let mut kinds: Vec<Option<AuxVarKind>> = vec![None; cache.stats.num_vars];
-    let mut summary = AuxVarSummary {
-        num_constraints: cache.stats.num_constraints,
-        ..Default::default()
-    };
+
+    // Pull the minimal scan inputs out of `cache` so parallel code doesn't capture `R`.
+    let cache_path = cache.cache_path.clone();
+    let chunk_offsets = cache.chunk_offsets.clone();
+    let num_chunks = cache.num_chunks;
 
     // We need raw i64 coefficients; use the chunk-cache file directly.
     //
     // Cache file format (per chunk):
     //   nrows(u64), then 3 matrices, each is nrows rows of (num_terms(u32), [col(u32), coeff(i64)]...).
     //
-    // We only need to scan rows, so we parse per-row without building ring elements.
+    // Performance note:
+    // - DO NOT allocate per-row vectors; for SP1 scale (nrows~1<<20) this causes huge allocator overhead.
+    // - We only need to know if A-row or B-row is exactly `1` (i.e., [(col=0, coeff=1)]).
+    // - So we store `a_is_one[row]` and `b_is_one[row]` as booleans, then scan C for the ±p_bb term.
     use std::io::{BufReader, Read, Seek, SeekFrom};
     const IO_BUFFER_SIZE: usize = 256 * 1024 * 1024;
 
-    let file = std::fs::File::open(&cache.cache_path)?;
-    let mut r = BufReader::with_capacity(IO_BUFFER_SIZE, file);
+    #[inline]
+    fn scan_one_chunk(
+        cache_path: &str,
+        chunk_offset: u64,
+        p_bb_i64: i64,
+    ) -> std::io::Result<Vec<(usize, AuxVarKind)>> {
+        let file = std::fs::File::open(cache_path)?;
+        let mut r = BufReader::with_capacity(IO_BUFFER_SIZE, file);
+        r.seek(SeekFrom::Start(chunk_offset))?;
 
-    // Jump to offset table end for chunk parsing: we already have offsets, so just seek per chunk.
-    let mut buf4 = [0u8; 4];
-    let mut buf8 = [0u8; 8];
+        let mut buf4 = [0u8; 4];
+        let mut buf8 = [0u8; 8];
 
-    for chunk_idx in 0..cache.num_chunks {
-        r.seek(SeekFrom::Start(cache.chunk_offsets[chunk_idx]))?;
         r.read_exact(&mut buf8)?;
         let nrows = u64::from_le_bytes(buf8) as usize;
 
-        // Scan A,B,C row-by-row for this chunk.
-        let mut a_rows: Vec<RowTermsI64> = Vec::with_capacity(nrows);
-        let mut b_rows: Vec<RowTermsI64> = Vec::with_capacity(nrows);
+        let mut a_is_one = vec![false; nrows];
+        let mut b_is_one = vec![false; nrows];
 
-        for rows_out in [&mut a_rows, &mut b_rows] {
-            for _ in 0..nrows {
-                r.read_exact(&mut buf4)?;
-                let num_terms = u32::from_le_bytes(buf4) as usize;
-                let mut row: RowTermsI64 = Vec::with_capacity(num_terms);
-                for _ in 0..num_terms {
-                    r.read_exact(&mut buf4)?;
-                    let col_idx = u32::from_le_bytes(buf4) as usize;
-                    r.read_exact(&mut buf8)?;
-                    let coeff = i64::from_le_bytes(buf8);
-                    if coeff != 0 {
-                        row.push((coeff, col_idx));
-                    }
-                }
-                rows_out.push(row);
-            }
-        }
-
-        // Now C rows: identify the aux var per row.
+        // A rows
         for row_idx in 0..nrows {
             r.read_exact(&mut buf4)?;
             let num_terms = u32::from_le_bytes(buf4) as usize;
-            let mut crow: RowTermsI64 = Vec::with_capacity(num_terms);
+            let mut is_one = num_terms == 1;
             for _ in 0..num_terms {
                 r.read_exact(&mut buf4)?;
                 let col_idx = u32::from_le_bytes(buf4) as usize;
                 r.read_exact(&mut buf8)?;
                 let coeff = i64::from_le_bytes(buf8);
-                if coeff != 0 {
-                    crow.push((coeff, col_idx));
+                if is_one {
+                    is_one = col_idx == 0 && coeff == 1;
+                }
+            }
+            a_is_one[row_idx] = is_one;
+        }
+
+        // B rows
+        for row_idx in 0..nrows {
+            r.read_exact(&mut buf4)?;
+            let num_terms = u32::from_le_bytes(buf4) as usize;
+            let mut is_one = num_terms == 1;
+            for _ in 0..num_terms {
+                r.read_exact(&mut buf4)?;
+                let col_idx = u32::from_le_bytes(buf4) as usize;
+                r.read_exact(&mut buf8)?;
+                let coeff = i64::from_le_bytes(buf8);
+                if is_one {
+                    is_one = col_idx == 0 && coeff == 1;
+                }
+            }
+            b_is_one[row_idx] = is_one;
+        }
+
+        let mut out: Vec<(usize, AuxVarKind)> = Vec::new();
+        // Now C rows: identify the aux var per row.
+        for row_idx in 0..nrows {
+            r.read_exact(&mut buf4)?;
+            let num_terms = u32::from_le_bytes(buf4) as usize;
+            let mut aux_col: Option<usize> = None;
+            for _ in 0..num_terms {
+                r.read_exact(&mut buf4)?;
+                let col_idx = u32::from_le_bytes(buf4) as usize;
+                r.read_exact(&mut buf8)?;
+                let coeff = i64::from_le_bytes(buf8);
+                if coeff == p_bb_i64 || coeff == -p_bb_i64 {
+                    aux_col = Some(col_idx);
                 }
             }
 
-            if let Some(v) = find_p_bb_term(&crow, p_bb_i64) {
-                let is_linear = row_is_one(&a_rows[row_idx]) || row_is_one(&b_rows[row_idx]);
+            if let Some(v) = aux_col {
+                let is_linear = a_is_one[row_idx] || b_is_one[row_idx];
                 let kind = if is_linear { AuxVarKind::Carry } else { AuxVarKind::Quotient };
-                if v < kinds.len() {
-                    if kinds[v].is_none() {
-                        summary.num_aux_vars += 1;
-                        match kind {
-                            AuxVarKind::Carry => summary.num_carry += 1,
-                            AuxVarKind::Quotient => summary.num_quotient += 1,
-                        }
+                out.push((v, kind));
+            }
+        }
+
+        Ok(out)
+    }
+
+    // 0=unset, 1=carry, 2=quotient
+    let kinds_atomic: Vec<std::sync::atomic::AtomicU8> =
+        (0..cache.stats.num_vars).map(|_| std::sync::atomic::AtomicU8::new(0)).collect();
+
+    let (num_aux_vars, num_carry, num_quotient) = {
+        #[cfg(feature = "parallel")]
+        {
+            if profile {
+                eprintln!(
+                    "[LF+ scan_aux] parallel scan (rayon_threads={})",
+                    rayon::current_num_threads()
+                );
+            }
+            let per_chunk = (0..num_chunks)
+                .into_par_iter()
+                .map(|chunk_idx| scan_one_chunk(&cache_path, chunk_offsets[chunk_idx], p_bb_i64))
+                .collect::<Result<Vec<_>, _>>()?;
+            for entries in per_chunk {
+                for (v, kind) in entries {
+                    if v >= kinds_atomic.len() {
+                        continue;
                     }
-                    kinds[v] = Some(kind);
+                    let new = match kind {
+                        AuxVarKind::Carry => 1u8,
+                        AuxVarKind::Quotient => 2u8,
+                    };
+                    // Each aux var is unique per constraint in the lift, so this should be a one-time set.
+                    // If it repeats, it should be consistent; we accept "already set".
+                    let prev = kinds_atomic[v].load(std::sync::atomic::Ordering::Relaxed);
+                    if prev == 0 {
+                        let _ = kinds_atomic[v].compare_exchange(
+                            0,
+                            new,
+                            std::sync::atomic::Ordering::Relaxed,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                    }
                 }
             }
         }
-    }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            // Sequential scan when rayon is disabled.
+            if profile {
+                eprintln!("[LF+ scan_aux] sequential scan (feature=parallel is disabled)");
+            }
+            for chunk_idx in 0..num_chunks {
+                if profile {
+                    eprintln!(
+                        "[LF+ scan_aux] chunk {}/{} ({:.1}%)",
+                        chunk_idx + 1,
+                        num_chunks,
+                        100.0 * (chunk_idx as f64 + 1.0) / (num_chunks as f64)
+                    );
+                }
+                let entries = scan_one_chunk(&cache_path, chunk_offsets[chunk_idx], p_bb_i64)?;
+                for (v, kind) in entries {
+                    if v >= kinds_atomic.len() {
+                        continue;
+                    }
+                    let new = match kind {
+                        AuxVarKind::Carry => 1u8,
+                        AuxVarKind::Quotient => 2u8,
+                    };
+                    let prev = kinds_atomic[v].load(std::sync::atomic::Ordering::Relaxed);
+                    if prev == 0 {
+                        let _ = kinds_atomic[v].compare_exchange(
+                            0,
+                            new,
+                            std::sync::atomic::Ordering::Relaxed,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                    }
+                }
+            }
+        }
+
+        // Reduce atomics into counts.
+        let mut num_aux = 0usize;
+        let mut ncarry = 0usize;
+        let mut nquot = 0usize;
+        for a in &kinds_atomic {
+            match a.load(std::sync::atomic::Ordering::Relaxed) {
+                1 => {
+                    num_aux += 1;
+                    ncarry += 1;
+                }
+                2 => {
+                    num_aux += 1;
+                    nquot += 1;
+                }
+                _ => {}
+            }
+        }
+        (num_aux, ncarry, nquot)
+    };
+
+    let kinds: Vec<Option<AuxVarKind>> = kinds_atomic
+        .into_iter()
+        .map(|a| match a.load(std::sync::atomic::Ordering::Relaxed) {
+            1 => Some(AuxVarKind::Carry),
+            2 => Some(AuxVarKind::Quotient),
+            _ => None,
+        })
+        .collect();
+
+    let summary = AuxVarSummary {
+        num_constraints: cache.stats.num_constraints,
+        num_aux_vars,
+        num_carry,
+        num_quotient,
+    };
 
     Ok((kinds, summary))
 }
