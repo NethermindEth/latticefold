@@ -3919,7 +3919,12 @@ mod tests {
             // A minimal Π_lin component so the transcript prefix is exercised.
             // Use a conservative bound for gadget decomposition; this is a *bench harness*, not a tight bound.
             let sop = RR::dimension() * 128;
-            let b_bound = estimate_bound(sop, 1, d, k) + 1;
+            // IMPORTANT: balanced decomposition requires an even base.
+            // `estimate_bound(..)+1` can be odd, so force it to be even.
+            let mut b_bound = estimate_bound(sop, 1, d, k) + 1;
+            if b_bound % 2 == 1 {
+                b_bound += 1;
+            }
             let m = n / k;
             let z: Vec<RR> = (0..m).map(|_| RR::from((rng.next_u64() & 1) as u128)).collect();
             let r1cs0 = r1cs_decomposed_square(
