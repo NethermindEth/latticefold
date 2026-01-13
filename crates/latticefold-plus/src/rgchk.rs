@@ -206,7 +206,7 @@ where
             }
 
             let d = R::dimension();
-            let d_prime = d / 2;
+            let base = self.dparams.b;
             for (ni, _) in self.out.e.iter().enumerate() {
                 let u_comb = self.out.e[ni]
                     .iter()
@@ -214,7 +214,7 @@ where
                     .take(self.dparams.k)
                     .enumerate()
                     .fold(vec![R::zero(); d], |mut acc, (i, u_i)| {
-                        let d_ppow = R::BaseRing::from(d_prime as u128).pow([i as u64]);
+                        let d_ppow = R::BaseRing::from(base).pow([i as u64]);
                         u_i.iter()
                             .zip(acc.iter_mut())
                             .for_each(|(u_ij, a_j)| *a_j += *u_ij * d_ppow);
@@ -272,82 +272,41 @@ where
         let d = R::dimension();
         let k = decomp.k;
         let t = std::time::Instant::now();
-        // Digit encoding:
-        // - For small bases we keep the existing "small alphabet" path.
-        // - For SP1/WE we want balanced base 2^16 with k=2, which requires a fixed 65536 table
-        //   and O(1) digit->index mapping (no linear scans).
-        let use_sp1_b16 = decomp.b == (1u128 << 16) && decomp.k == 2;
-        let (exp_table, map_digit_to_idx): (Arc<Vec<R>>, Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync>) = if use_sp1_b16 {
-            // Balanced digits are in [-2^15, 2^15) represented in the base field.
-            // Map signed digit `d` to idx = (d + 2^15) in [0, 2^16).
-            let half: i64 = 1i64 << 15; // 32768
-            let base: i64 = 1i64 << 16; // 65536
-
-            let exp_table: Arc<Vec<R>> = Arc::new(
-                (-half..half)
-                    .map(|x| {
-                        let base = if x >= 0 {
-                            R::BaseRing::from(x as u128)
-                        } else {
-                            -R::BaseRing::from((-x) as u128)
-                        };
-                        exp::<R>(base).unwrap()
-                    })
-                    .collect::<Vec<_>>(),
-            );
-            debug_assert_eq!(exp_table.len(), 1usize << 16);
-
-            let map = Box::new(move |dig: R::BaseRing| -> u16 {
-                // `decompose_to(b=2^16,k=2)` emits digits in the canonical range [0, 2^16).
-                // Interpret them as **balanced** digits in [-2^15, 2^15) by:
-                //   if dig >= 2^15 then dig := dig - 2^16.
-                //
-                // This matches the SP1 boundedness condition (base 2^16, k=2) and avoids
-                // relying on `sign()/center()` semantics of the ambient base field.
-                let u = dig
-                    .to_u64()
-                    .expect("digit should fit in u64") as i64;
-                debug_assert!(u >= 0 && u < base, "digit out of [0,2^16): u={u}");
-                let v = if u >= half { u - base } else { u };
-                debug_assert!(
-                    v >= -half && v < half,
-                    "digit out of balanced base2^16 range: v={v}"
-                );
-                (v + half) as u16
-            });
-            (exp_table, map)
-        } else {
-            // Small alphabet: include signed reps in [-b, b] (keeps table tiny).
-            let b_i128: i128 = decomp.b as i128;
-            let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
-                .map(|x| {
-                    if x >= 0 {
-                        R::BaseRing::from(x as u128)
-                    } else {
-                        -R::BaseRing::from((-x) as u128)
-                    }
-                })
-                .collect();
-            assert!(
-                digit_elems.len() <= (u16::MAX as usize),
-                "digit alphabet too large for u16 indices (len={})",
-                digit_elems.len()
-            );
-            let exp_table: Arc<Vec<R>> = Arc::new(
-                digit_elems
-                    .iter()
-                    .map(|&x| exp::<R>(x).unwrap())
-                    .collect::<Vec<_>>(),
-            );
-            let digit_elems = Arc::new(digit_elems);
-            let map = Box::new(move |dig: R::BaseRing| -> u16 {
+        // Digit encoding (monomial path):
+        // We represent digits via `exp::<R>(digit)` and use the existing rgchk/setchk machinery.
+        //
+        // This requires the digit magnitude to be O(d). Concretely, for Frog(d=16 or d=64),
+        // we use `decomp.b = d/2` so digits lie in [-d/2, d/2], which `exp` can represent
+        // without panicking, and the resulting global bound is sufficient for SP1 lift soundness.
+        let b_i128: i128 = decomp.b as i128;
+        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+            .map(|x| {
+                if x >= 0 {
+                    R::BaseRing::from(x as u128)
+                } else {
+                    -R::BaseRing::from((-x) as u128)
+                }
+            })
+            .collect();
+        assert!(
+            digit_elems.len() <= (u16::MAX as usize),
+            "digit alphabet too large for u16 indices (len={})",
+            digit_elems.len()
+        );
+        let exp_table: Arc<Vec<R>> = Arc::new(
+            digit_elems
+                .iter()
+                .map(|&x| exp::<R>(x).unwrap())
+                .collect::<Vec<_>>(),
+        );
+        let digit_elems = Arc::new(digit_elems);
+        let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
+            Box::new(move |dig: R::BaseRing| -> u16 {
                 digit_elems
                     .iter()
                     .position(|&x| x == dig)
                     .expect("digit not in [-b,b] alphabet") as u16
             });
-            (exp_table, map)
-        };
 
         // If `f` is constant-coefficient (only col=0 can be nonzero), we can store only the
         // `col=0` digit table and treat all other coeff columns as digit=0.
@@ -575,55 +534,30 @@ where
 
         // Reuse the same digit-table logic as `from_f`, including the const-coeff optimization.
         // (This keeps transcript behavior and setchk wiring identical.)
-        let use_sp1_b16 = decomp.b == (1u128 << 16) && decomp.k == 2;
-        let (exp_table, map_digit_to_idx): (Arc<Vec<R>>, Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync>) = if use_sp1_b16 {
-            let half: i64 = 1i64 << 15;
-            let base: i64 = 1i64 << 16;
-            let exp_table: Arc<Vec<R>> = Arc::new(
-                (-half..half)
-                    .map(|x| {
-                        let base = if x >= 0 {
-                            R::BaseRing::from(x as u128)
-                        } else {
-                            -R::BaseRing::from((-x) as u128)
-                        };
-                        exp::<R>(base).unwrap()
-                    })
-                    .collect::<Vec<_>>(),
-            );
-            let map = Box::new(move |dig: R::BaseRing| -> u16 {
-                let u = dig.to_u64().expect("digit should fit in u64") as i64;
-                debug_assert!(u >= 0 && u < base, "digit out of [0,2^16): u={u}");
-                let v = if u >= half { u - base } else { u };
-                (v + half) as u16
-            });
-            (exp_table, map)
-        } else {
-            let b_i128: i128 = decomp.b as i128;
-            let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
-                .map(|x| {
-                    if x >= 0 {
-                        R::BaseRing::from(x as u128)
-                    } else {
-                        -R::BaseRing::from((-x) as u128)
-                    }
-                })
-                .collect();
-            let exp_table: Arc<Vec<R>> = Arc::new(
-                digit_elems
-                    .iter()
-                    .map(|&x| exp::<R>(x).unwrap())
-                    .collect::<Vec<_>>(),
-            );
-            let digit_elems = Arc::new(digit_elems);
-            let map = Box::new(move |dig: R::BaseRing| -> u16 {
+        let b_i128: i128 = decomp.b as i128;
+        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+            .map(|x| {
+                if x >= 0 {
+                    R::BaseRing::from(x as u128)
+                } else {
+                    -R::BaseRing::from((-x) as u128)
+                }
+            })
+            .collect();
+        let exp_table: Arc<Vec<R>> = Arc::new(
+            digit_elems
+                .iter()
+                .map(|&x| exp::<R>(x).unwrap())
+                .collect::<Vec<_>>(),
+        );
+        let digit_elems = Arc::new(digit_elems);
+        let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
+            Box::new(move |dig: R::BaseRing| -> u16 {
                 digit_elems
                     .iter()
                     .position(|&x| x == dig)
                     .expect("digit not in [-b,b] alphabet") as u16
             });
-            (exp_table, map)
-        };
 
         let is_const_coeff = f.iter().all(|fi| fi.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);

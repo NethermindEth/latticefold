@@ -1706,12 +1706,12 @@ where
     let L = dcom.evals.len();
     let k = dcom.dparams.k;
     let d = R::dimension();
-    let d_prime = d / 2;
+    let decomp_b = dcom.dparams.b;
 
     // (d')^i constants (BF vars) for u-comb.
     let mut dppow_vars: Vec<usize> = Vec::with_capacity(k);
     for i in 0..k {
-        let base = R::BaseRing::from(d_prime as u128);
+        let base = R::BaseRing::from(decomp_b);
         let p_br = ark_ff::Field::pow(&base, [i as u64]);
         dppow_vars.push(const_var(&mut b, bf_from_base_ring::<R>(p_br)));
     }
@@ -3854,7 +3854,7 @@ mod tests {
         use cyclotomic_rings::rings::FrogPoseidonConfig as PCF;
         use cyclotomic_rings::rings::GetPoseidonParams;
         use sha2::{Digest, Sha256};
-        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use cyclotomic_rings::rings::FrogRing64 as RR;
         use stark_rings::PolyRing;
 
         use crate::we_statement::{digest32_to_bits_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};

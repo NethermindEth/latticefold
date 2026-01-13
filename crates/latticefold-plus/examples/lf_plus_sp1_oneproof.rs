@@ -22,7 +22,7 @@ use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
 use latticefold_plus::utils::estimate_bound;
-use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
+use cyclotomic_rings::rings::FrogRing64 as R;
 use stark_rings::PolyRing;
 use stark_rings::Ring;
 use stark_rings_linalg::SparseMatrix;

@@ -73,6 +73,31 @@ where
     // log_{d'}(q) where d' = d/2
     let lnq = (R::BaseRing::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
     let l = (lnq / ((R::dimension() / 2) as f64).ln()).ceil() as u64;
+    let d = R::dimension() as u64;
+    let d_prime = (R::dimension() / 2) as u64;
+
+    // Production boundedness strategy:
+    // Use the existing monomial-based rgchk/setchk pipeline, so we must choose a digit base
+    // compatible with `exp(digit)`. We set `decomp_b = d/2` and choose `k` based on `d` so that
+    // the implied bound on lifted values stays well below Frog modulus and avoids wraparound.
+    //
+    // Target regimes:
+    // - d=16  => d'=8   => k=10  (bound ~< 2^31)
+    // - d=64  => d'=32  => k=6   (bound ~< 2^31)
+    // - d=256 => d'=128 => k=4   (bound ~< 2^31)
+    //
+    // This intentionally does NOT attempt `b=2^16,k=2` under monomial encoding.
+    let k: u64 = match d {
+        16 => 10,
+        64 => 6,
+        256 => 4,
+        _ => {
+            return Err(format!(
+                "unsupported ring dimension d={} for SP1 boundedness defaults; expected d in {{16,64,256}}",
+                d
+            ))
+        }
+    };
 
     Ok(WeParams {
         nvars_setchk: nvars as u64,
@@ -81,8 +106,8 @@ where
         degree_cm: 2,
         kappa,
         ring_dim_d: R::dimension() as u64,
-        decomp_b: 1u64 << 16,
-        k: 2,
+        decomp_b: d_prime,
+        k,
         l,
         mlen,
     })
