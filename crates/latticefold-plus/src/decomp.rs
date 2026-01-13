@@ -1,4 +1,5 @@
 use ark_std::log2;
+use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
     balanced_decomposition::{recompose, Decompose, DecomposeToVec},
     PolyRing, Zq,
@@ -311,6 +312,227 @@ where
 
         ((linb0, linb1), proof)
     }
+
+    /// Same as [`Decomp::decompose`], but commits using a seeded implicit Ajtai matrix.
+    ///
+    /// This avoids materializing a `kappa × n` dense matrix. The verifier-side checks are unchanged.
+    pub fn decompose_seeded(
+        &self,
+        scheme: &AjtaiCommitmentScheme<R>,
+        B: u128,
+    ) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = Instant::now();
+
+        let nvars = log2(scheme.width()) as usize;
+        let mut F = self.f.decompose_to_vec(B, 2).transpose().into_iter();
+        let F0 = F.next().unwrap();
+        let F1 = F.next().unwrap();
+
+        let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
+        let r_b = self.r.iter().map(|rr| rr.1).collect::<Vec<_>>();
+
+        #[inline]
+        fn is_identity_matrix<Rr: PolyRing>(m: &SparseMatrix<Rr>) -> bool {
+            if m.nrows != m.ncols {
+                return false;
+            }
+            if m.coeffs.len() != m.nrows {
+                return false;
+            }
+            for (i, row) in m.coeffs.iter().enumerate() {
+                if row.len() != 1 {
+                    return false;
+                }
+                let (c, j) = row[0];
+                if j != i {
+                    return false;
+                }
+                if c != Rr::ONE {
+                    return false;
+                }
+            }
+            true
+        }
+
+        #[inline]
+        fn eq_weights<Rr: PolyRing>(r: &[Rr]) -> Vec<Rr> {
+            let nvars = r.len();
+            let n = 1usize << nvars;
+            let mut cur = vec![Rr::ZERO; n];
+            let mut next = vec![Rr::ZERO; n];
+            cur[0] = Rr::ONE;
+
+            let mut len = 1usize;
+            let mut cur_is_cur = true;
+            for &rj in r.iter().rev() {
+                let om = Rr::ONE - rj;
+                let (src, dst) = if cur_is_cur {
+                    (&cur[..len], &mut next[..(2 * len)])
+                } else {
+                    (&next[..len], &mut cur[..(2 * len)])
+                };
+
+                #[cfg(feature = "parallel")]
+                {
+                    dst.par_chunks_mut(2)
+                        .zip(src.par_iter())
+                        .for_each(|(pair, &wi)| {
+                            pair[0] = wi * om;
+                            pair[1] = wi * rj;
+                        });
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    for (i, &wi) in src.iter().enumerate() {
+                        dst[2 * i] = wi * om;
+                        dst[2 * i + 1] = wi * rj;
+                    }
+                }
+
+                len <<= 1;
+                cur_is_cur = !cur_is_cur;
+            }
+            if cur_is_cur { cur } else { next }
+        }
+
+        #[inline]
+        fn eval_sparse_mat_two_vecs_at_two_points<Rr: PolyRing>(
+            m: &SparseMatrix<Rr>,
+            f0: &[Rr],
+            f1: &[Rr],
+            eq_a: &[Rr],
+            eq_b: &[Rr],
+        ) -> (RxR<Rr>, RxR<Rr>) {
+            debug_assert_eq!(m.ncols, f0.len());
+            debug_assert_eq!(m.ncols, f1.len());
+            debug_assert_eq!(m.nrows, eq_a.len());
+            debug_assert_eq!(m.nrows, eq_b.len());
+
+            let mut out0 = (Rr::ZERO, Rr::ZERO);
+            let mut out1 = (Rr::ZERO, Rr::ZERO);
+            for (row, terms) in m.coeffs.iter().enumerate() {
+                let wa = eq_a[row];
+                let wb = eq_b[row];
+                if wa == Rr::ZERO && wb == Rr::ZERO {
+                    continue;
+                }
+                let mut s0 = Rr::ZERO;
+                let mut s1 = Rr::ZERO;
+                for (c, j) in terms {
+                    s0 += *c * f0[*j];
+                    s1 += *c * f1[*j];
+                }
+                out0.0 += wa * s0;
+                out0.1 += wb * s0;
+                out1.0 += wa * s1;
+                out1.1 += wb * s1;
+            }
+            (out0, out1)
+        }
+
+        let vi_calc_pair = || {
+            let detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
+
+            let t_eq = Instant::now();
+            let eq_a = eq_weights::<R>(&r_a);
+            let eq_b = eq_weights::<R>(&r_b);
+            if profile && detail {
+                println!(
+                    "[LF+ Decomp::decompose_seeded] eq_weights: {:?} (nvars={})",
+                    t_eq.elapsed(),
+                    nvars
+                );
+            }
+
+            let t_fv = Instant::now();
+            let fv0 = F0.iter().zip(eq_a.iter()).map(|(f, e)| *f * *e).sum::<R>();
+            let fv1 = F1.iter().zip(eq_b.iter()).map(|(f, e)| *f * *e).sum::<R>();
+            if profile && detail {
+                println!("[LF+ Decomp::decompose_seeded] f evals: {:?}", t_fv.elapsed());
+            }
+
+            let t_mats = Instant::now();
+            let mut v0 = Vec::with_capacity(self.M.len());
+            let mut v1 = Vec::with_capacity(self.M.len());
+            for M_i in self.M.iter().map(|m| m.as_ref()) {
+                if is_identity_matrix::<R>(M_i) {
+                    v0.push((fv0, fv0));
+                    v1.push((fv1, fv1));
+                } else {
+                    let (m0, m1) = eval_sparse_mat_two_vecs_at_two_points::<R>(M_i, &F0, &F1, &eq_a, &eq_b);
+                    v0.push(m0);
+                    v1.push(m1);
+                }
+            }
+            if profile && detail {
+                println!(
+                    "[LF+ Decomp::decompose_seeded] mats(eval_sparse_mat_two_vecs_at_two_points): {:?} (Mlen={})",
+                    t_mats.elapsed(),
+                    self.M.len()
+                );
+            }
+            (v0, v1)
+        };
+
+        if profile {
+            println!(
+                "[LF+ Decomp::decompose_seeded] setup+split: {:?} (nvars={}, Mlen={})",
+                t_total.elapsed(),
+                nvars,
+                self.M.len()
+            );
+        }
+
+        let t = Instant::now();
+        let (v0, v1) = vi_calc_pair();
+        if profile {
+            println!("[LF+ Decomp::decompose_seeded] compute v0/v1: {:?}", t.elapsed());
+        }
+
+        let t = Instant::now();
+        let (C0, C1) = {
+            #[cfg(feature = "parallel")]
+            {
+                rayon::join(
+                    || scheme.commit(&F0).unwrap().as_ref().to_vec(),
+                    || scheme.commit(&F1).unwrap().as_ref().to_vec(),
+                )
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                (
+                    scheme.commit(&F0).unwrap().as_ref().to_vec(),
+                    scheme.commit(&F1).unwrap().as_ref().to_vec(),
+                )
+            }
+        };
+        if profile {
+            println!("[LF+ Decomp::decompose_seeded] commitments C0/C1: {:?}", t.elapsed());
+            println!("[LF+ Decomp::decompose_seeded] total: {:?}", t_total.elapsed());
+        }
+
+        let linb0 = LinB {
+            x: LinBX {
+                cm_f: C0.clone(),
+                r: self.r.clone(),
+                v: v0.clone(),
+            },
+            f: F0,
+        };
+        let linb1 = LinB {
+            x: LinBX {
+                cm_f: C1.clone(),
+                r: self.r.clone(),
+                v: v1.clone(),
+            },
+            f: F1,
+        };
+        let proof = DecompProof { C: (C0, C1), v: (v0, v1) };
+
+        ((linb0, linb1), proof)
+    }
+
 }
 
 impl<R: PolyRing> DecompProof<R> {

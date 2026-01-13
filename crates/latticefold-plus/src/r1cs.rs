@@ -7,6 +7,7 @@ use latticefold::{
         MLSumcheck, Proof,
     },
 };
+use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
     balanced_decomposition::{Decompose, GadgetDecompose},
     OverField, Ring,
@@ -68,6 +69,27 @@ impl<R: Decompose + Ring> ComR1CS<R> {
     /// NOTE: `z` is left empty in this constructor (it is not used by the verifier-side relation).
     pub fn from_f(r1cs: R1CS<R>, f: Vec<R>, l_in: usize, A: &Matrix<R>) -> Self {
         let cm_f = A.try_mul_vec(&f).unwrap();
+        let x = ComR1CSX {
+            r1cs,
+            z: Vec::new(),
+            cm_f,
+            l_in,
+        };
+        Self { x, f }
+    }
+
+    /// Construct a committed R1CS instance from `f`, using a seeded implicit Ajtai matrix.
+    pub fn from_f_seeded(r1cs: R1CS<R>, f: Vec<R>, l_in: usize, scheme: &AjtaiCommitmentScheme<R>) -> Self
+    where
+        R: stark_rings::PolyRing,
+        R::BaseRing: stark_rings::Ring,
+        R: core::ops::Mul<R::BaseRing, Output = R>,
+    {
+        let cm_f = scheme
+            .commit_const_coeff_fast(&f)
+            .expect("commit_const_coeff_fast")
+            .as_ref()
+            .to_vec();
         let x = ComR1CSX {
             r1cs,
             z: Vec::new(),

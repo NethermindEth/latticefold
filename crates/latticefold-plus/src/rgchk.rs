@@ -1,5 +1,6 @@
 use ark_std::iter::once;
 use latticefold::transcript::Transcript;
+use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
     balanced_decomposition::Decompose,
     exp, psi, CoeffRing, OverField, PolyRing, Ring, Zq,
@@ -280,6 +281,7 @@ where
             // Balanced digits are in [-2^15, 2^15) represented in the base field.
             // Map signed digit `d` to idx = (d + 2^15) in [0, 2^16).
             let half: i64 = 1i64 << 15; // 32768
+            let base: i64 = 1i64 << 16; // 65536
 
             let exp_table: Arc<Vec<R>> = Arc::new(
                 (-half..half)
@@ -296,15 +298,17 @@ where
             debug_assert_eq!(exp_table.len(), 1usize << 16);
 
             let map = Box::new(move |dig: R::BaseRing| -> u16 {
-                // Use `Zq` helpers to recover a small signed integer:
-                // - `center()` gives abs value (as field element)
-                // - `sign()` tells whether it was above or below modulus/2
-                let mag = dig
-                    .center()
+                // `decompose_to(b=2^16,k=2)` emits digits in the canonical range [0, 2^16).
+                // Interpret them as **balanced** digits in [-2^15, 2^15) by:
+                //   if dig >= 2^15 then dig := dig - 2^16.
+                //
+                // This matches the SP1 boundedness condition (base 2^16, k=2) and avoids
+                // relying on `sign()/center()` semantics of the ambient base field.
+                let u = dig
                     .to_u64()
-                    .expect("digit magnitude should fit in u64") as i64;
-                let neg = dig.sign() == -R::BaseRing::ONE;
-                let v = if neg { -mag } else { mag };
+                    .expect("digit should fit in u64") as i64;
+                debug_assert!(u >= 0 && u < base, "digit out of [0,2^16): u={u}");
+                let v = if u >= half { u - base } else { u };
                 debug_assert!(
                     v >= -half && v < half,
                     "digit out of balanced base2^16 range: v={v}"
@@ -345,8 +349,19 @@ where
             (exp_table, map)
         };
 
-        // Allocate digit tables (row-major): nrows=n, ncols=d, repeated for k digits.
-        let mut digits_tables: Vec<Vec<u16>> = (0..k).map(|_| vec![0u16; n * d]).collect();
+        // If `f` is constant-coefficient (only col=0 can be nonzero), we can store only the
+        // `col=0` digit table and treat all other coeff columns as digit=0.
+        let is_const_coeff = f.iter().all(|fi| fi.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
+        let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
+
+        // Allocate digit tables:
+        // - const-coeff: `k × n` (only col0)
+        // - general:     `k × (n*d)` (row-major full)
+        let mut digits_tables: Vec<Vec<u16>> = if is_const_coeff {
+            (0..k).map(|_| vec![zero_idx; n]).collect()
+        } else {
+            (0..k).map(|_| vec![0u16; n * d]).collect()
+        };
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
@@ -359,9 +374,15 @@ where
                     for (row_idx, fi) in f.iter().enumerate() {
                         let coeffs = fi.coeffs();
                         debug_assert_eq!(coeffs.len(), d);
-                        for (col_idx, &c) in coeffs.iter().enumerate() {
-                            c.decompose_to(decomp.b, &mut tmp_local);
-                            table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                        if is_const_coeff {
+                            // Only constant coefficient matters; other columns are fixed to digit=0.
+                            coeffs[0].decompose_to(decomp.b, &mut tmp_local);
+                            table[row_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                        } else {
+                            for (col_idx, &c) in coeffs.iter().enumerate() {
+                                c.decompose_to(decomp.b, &mut tmp_local);
+                                table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                            }
                         }
                     }
                 });
@@ -372,11 +393,18 @@ where
             for (row_idx, fi) in f.iter().enumerate() {
                 let coeffs = fi.coeffs();
                 debug_assert_eq!(coeffs.len(), d);
-                for (col_idx, &c) in coeffs.iter().enumerate() {
-                    // Writes into tmp[0..k] in-place.
-                    c.decompose_to(decomp.b, &mut tmp);
+                if is_const_coeff {
+                    coeffs[0].decompose_to(decomp.b, &mut tmp);
                     for k_i in 0..k {
-                        digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
+                        digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
+                    }
+                } else {
+                    for (col_idx, &c) in coeffs.iter().enumerate() {
+                        // Writes into tmp[0..k] in-place.
+                        c.decompose_to(decomp.b, &mut tmp);
+                        for k_i in 0..k {
+                            digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
+                        }
                     }
                 }
             }
@@ -464,7 +492,14 @@ where
                 Arc::new(DigitsMatrix {
                     nrows: n,
                     ncols: d,
-                    digits: Arc::new(digits),
+                    digits: if is_const_coeff {
+                        crate::setchk::DigitsBacking::ConstCol0 {
+                            col0: Arc::new(digits),
+                            zero_idx,
+                        }
+                    } else {
+                        crate::setchk::DigitsBacking::Full(Arc::new(digits))
+                    },
                     exp_table: exp_table.clone(),
                 })
             })
@@ -514,6 +549,215 @@ where
             C_Mf,
             cm_mtau,
         };
+
+        Self {
+            M_f,
+            tau,
+            m_tau,
+            f,
+            comM_f,
+            fcoms,
+        }
+    }
+
+    /// Construct an [`RgInstance`] from witness `f`, using a **seeded implicit Ajtai matrix**.
+    ///
+    /// This avoids materializing a `kappa × n` dense matrix in memory. Outputs are identical
+    /// in distribution (up to the Ajtai matrix generation procedure), and verifier behavior is unchanged.
+    pub fn from_f_seeded(f: Vec<R>, scheme: &AjtaiCommitmentScheme<R>, decomp: &DecompParameters) -> Self {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = std::time::Instant::now();
+
+        let n = f.len();
+        let kappa = scheme.kappa();
+        let d = R::dimension();
+        let k = decomp.k;
+
+        // Reuse the same digit-table logic as `from_f`, including the const-coeff optimization.
+        // (This keeps transcript behavior and setchk wiring identical.)
+        let use_sp1_b16 = decomp.b == (1u128 << 16) && decomp.k == 2;
+        let (exp_table, map_digit_to_idx): (Arc<Vec<R>>, Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync>) = if use_sp1_b16 {
+            let half: i64 = 1i64 << 15;
+            let base: i64 = 1i64 << 16;
+            let exp_table: Arc<Vec<R>> = Arc::new(
+                (-half..half)
+                    .map(|x| {
+                        let base = if x >= 0 {
+                            R::BaseRing::from(x as u128)
+                        } else {
+                            -R::BaseRing::from((-x) as u128)
+                        };
+                        exp::<R>(base).unwrap()
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            let map = Box::new(move |dig: R::BaseRing| -> u16 {
+                let u = dig.to_u64().expect("digit should fit in u64") as i64;
+                debug_assert!(u >= 0 && u < base, "digit out of [0,2^16): u={u}");
+                let v = if u >= half { u - base } else { u };
+                (v + half) as u16
+            });
+            (exp_table, map)
+        } else {
+            let b_i128: i128 = decomp.b as i128;
+            let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+                .map(|x| {
+                    if x >= 0 {
+                        R::BaseRing::from(x as u128)
+                    } else {
+                        -R::BaseRing::from((-x) as u128)
+                    }
+                })
+                .collect();
+            let exp_table: Arc<Vec<R>> = Arc::new(
+                digit_elems
+                    .iter()
+                    .map(|&x| exp::<R>(x).unwrap())
+                    .collect::<Vec<_>>(),
+            );
+            let digit_elems = Arc::new(digit_elems);
+            let map = Box::new(move |dig: R::BaseRing| -> u16 {
+                digit_elems
+                    .iter()
+                    .position(|&x| x == dig)
+                    .expect("digit not in [-b,b] alphabet") as u16
+            });
+            (exp_table, map)
+        };
+
+        let is_const_coeff = f.iter().all(|fi| fi.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
+        let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
+        let mut digits_tables: Vec<Vec<u16>> = if is_const_coeff {
+            (0..k).map(|_| vec![zero_idx; n]).collect()
+        } else {
+            (0..k).map(|_| vec![0u16; n * d]).collect()
+        };
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            digits_tables
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(k_i, table)| {
+                    let mut tmp_local = vec![R::BaseRing::ZERO; k];
+                    for (row_idx, fi) in f.iter().enumerate() {
+                        let coeffs = fi.coeffs();
+                        debug_assert_eq!(coeffs.len(), d);
+                        if is_const_coeff {
+                            coeffs[0].decompose_to(decomp.b, &mut tmp_local);
+                            table[row_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                        } else {
+                            for (col_idx, &c) in coeffs.iter().enumerate() {
+                                c.decompose_to(decomp.b, &mut tmp_local);
+                                table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                            }
+                        }
+                    }
+                });
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut tmp = vec![R::BaseRing::ZERO; k];
+            for (row_idx, fi) in f.iter().enumerate() {
+                let coeffs = fi.coeffs();
+                debug_assert_eq!(coeffs.len(), d);
+                if is_const_coeff {
+                    coeffs[0].decompose_to(decomp.b, &mut tmp);
+                    for k_i in 0..k {
+                        digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
+                    }
+                } else {
+                    for (col_idx, &c) in coeffs.iter().enumerate() {
+                        c.decompose_to(decomp.b, &mut tmp);
+                        for k_i in 0..k {
+                            digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
+                        }
+                    }
+                }
+            }
+        }
+
+        let M_f: Vec<Arc<DigitsMatrix<R>>> = digits_tables
+            .into_iter()
+            .map(|digits| {
+                Arc::new(DigitsMatrix {
+                    nrows: n,
+                    ncols: d,
+                    digits: if is_const_coeff {
+                        crate::setchk::DigitsBacking::ConstCol0 {
+                            col0: Arc::new(digits),
+                            zero_idx,
+                        }
+                    } else {
+                        crate::setchk::DigitsBacking::Full(Arc::new(digits))
+                    },
+                    exp_table: exp_table.clone(),
+                })
+            })
+            .collect();
+
+        // Commit monomial matrices: comM_f[k_i] is kappa×d, column-wise Ajtai commitments under the same scheme.
+        let t = std::time::Instant::now();
+        let comM_f = M_f
+            .iter()
+            .enumerate()
+            .map(|(_ki, dm)| {
+                // Commit d vectors (one per column) at once.
+                let cs = scheme
+                    .commit_many_with(n, d, |row, out| {
+                        // out has length d: out[col] = M_f[row,col]
+                        for col in 0..d {
+                            out[col] = dm.get(row, col);
+                        }
+                    })
+                    .expect("commit_many_with M_f");
+                let mut mat = Matrix::zero(kappa, d);
+                for col in 0..d {
+                    let ccol = cs[col].as_ref();
+                    for r in 0..kappa {
+                        mat.vals[r][col] = ccol[r];
+                    }
+                }
+                mat
+            })
+            .collect::<Vec<_>>();
+        if profile {
+            println!(
+                "[LF+ RgInstance::from_f_seeded] commit monomial mats (Ajtai seeded): {:?} (kappa×(k*d) = {}×{})",
+                t.elapsed(),
+                kappa,
+                decomp.k * d
+            );
+        }
+
+        let com = Matrix::hconcat(&comM_f).unwrap();
+
+        let t = std::time::Instant::now();
+        let tau = split(&com, n, (R::dimension() / 2) as u128, decomp.l);
+        if profile {
+            println!("[LF+ RgInstance::from_f_seeded] split tau: {:?}", t.elapsed());
+        }
+
+        let t = std::time::Instant::now();
+        let m_tau = tau.iter().map(|c| exp::<R>(*c).unwrap()).collect::<Vec<_>>();
+        if profile {
+            println!("[LF+ RgInstance::from_f_seeded] build m_tau via exp: {:?}", t.elapsed());
+        }
+
+        let t = std::time::Instant::now();
+        let cm_f = scheme
+            .commit_const_coeff_fast(&f)
+            .expect("commit_const_coeff_fast f")
+            .as_ref()
+            .to_vec();
+        let tau_ring = tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>();
+        let C_Mf = scheme.commit(&tau_ring).expect("commit tau").as_ref().to_vec();
+        let cm_mtau = scheme.commit(&m_tau).expect("commit m_tau").as_ref().to_vec();
+        if profile {
+            println!("[LF+ RgInstance::from_f_seeded] commit f/tau/m_tau: {:?}", t.elapsed());
+            println!("[LF+ RgInstance::from_f_seeded] total: {:?}", t_total.elapsed());
+        }
+        let fcoms = FComs { cm_f, C_Mf, cm_mtau };
 
         Self {
             M_f,

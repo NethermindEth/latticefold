@@ -46,8 +46,24 @@ pub enum MonomialSet<R: PolyRing> {
 pub struct DigitsMatrix<R: PolyRing> {
     pub nrows: usize,
     pub ncols: usize,
-    pub digits: Arc<Vec<u16>>,
+    pub digits: DigitsBacking,
     pub exp_table: Arc<Vec<R>>,
+}
+
+/// Backing storage for [`DigitsMatrix`].
+///
+/// For large instances where the underlying witness is known to be **constant-coefficient**
+/// (i.e. only `col=0` can be non-trivial), we can store only the digits for `col=0` and
+/// treat all `col>0` entries as the digit for zero.
+#[derive(Clone, Debug)]
+pub enum DigitsBacking {
+    /// Full row-major `nrows × ncols` table.
+    Full(Arc<Vec<u16>>),
+    /// Only `col=0` digits are stored (length `nrows`).
+    ConstCol0 {
+        col0: Arc<Vec<u16>>,
+        zero_idx: u16,
+    },
 }
 
 impl<R: PolyRing> DigitsMatrix<R> {
@@ -55,7 +71,16 @@ impl<R: PolyRing> DigitsMatrix<R> {
     pub fn digit_idx(&self, row: usize, col: usize) -> usize {
         debug_assert!(row < self.nrows);
         debug_assert!(col < self.ncols);
-        (self.digits[row * self.ncols + col]) as usize
+        match &self.digits {
+            DigitsBacking::Full(d) => (d[row * self.ncols + col]) as usize,
+            DigitsBacking::ConstCol0 { col0, zero_idx } => {
+                if col == 0 {
+                    col0[row] as usize
+                } else {
+                    (*zero_idx) as usize
+                }
+            }
+        }
     }
 
     #[inline]

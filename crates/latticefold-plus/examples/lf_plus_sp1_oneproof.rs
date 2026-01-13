@@ -18,14 +18,14 @@
 
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use cyclotomic_rings::rings::GetPoseidonParams;
+use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
 use latticefold_plus::utils::estimate_bound;
-use rand::SeedableRng;
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings::PolyRing;
 use stark_rings::Ring;
-use stark_rings_linalg::{Matrix, SparseMatrix};
+use stark_rings_linalg::SparseMatrix;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -146,12 +146,12 @@ fn main() {
     let t_setup = Instant::now();
     let r1cs = latticefold::arith::r1cs::R1CS::<R> { l: 0, A: m_a, B: m_b, C: m_c };
 
-    // Deterministic Ajtai commitment matrix (system parameter). Keep kappa=1 for now.
+    // Deterministic Ajtai commitment scheme (system parameter). Keep kappa=1 for now.
     let kappa: usize = 1;
-    let mut rng = rand::rngs::StdRng::from_seed(*b"LFP_SP1_AJTAI_SEED_V1_0000000000");
-    let ajtai_a = Matrix::<R>::rand(&mut rng, kappa, cache.ncols);
+    const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
+    let ajtai = AjtaiCommitmentScheme::<R>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, cache.ncols);
 
-    let cr1cs = latticefold_plus::r1cs::ComR1CS::from_f(r1cs, f, 0, &ajtai_a);
+    let cr1cs = latticefold_plus::r1cs::ComR1CS::from_f_seeded(r1cs, f, 0, &ajtai);
     let m = cr1cs.x.matrices_arc();
 
     // LF+ parameters: boundedness base b=2^16,k=2, and a conservative decomp base B for Π_decomp.
@@ -177,8 +177,8 @@ fn main() {
         latticefold_plus::we_statement::digest32_to_bits_field::<BFSmall>(d)
     };
 
-    let mut prover = latticefold_plus::plus::PlusProver::init(
-        ajtai_a.clone(),
+    let mut prover = latticefold_plus::plus::PlusProverSparse::init_seeded(
+        ajtai.clone(),
         m.clone(),
         1,
         pparams.clone(),
@@ -190,8 +190,8 @@ fn main() {
     println!("  setup full LF+: {:?}", t_setup.elapsed());
 
     let t_prove = Instant::now();
-    let proof = prover.prove(std::slice::from_ref(&cr1cs));
-    println!("  PlusProver::prove: {:?}", t_prove.elapsed());
+    let proof = prover.prove_sparse(std::slice::from_ref(&cr1cs));
+    println!("  PlusProverSparse::prove_sparse: {:?}", t_prove.elapsed());
 
     // Record verifier trace and ensure the existing WE gate arithmetization is satisfied.
     let poseidon_cfg = PC::get_poseidon_config();

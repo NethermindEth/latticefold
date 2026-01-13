@@ -1,4 +1,5 @@
 use ark_std::log2;
+use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use stark_rings::{
     balanced_decomposition::{convertible_ring::ConvertibleRing, Decompose},
@@ -123,6 +124,93 @@ where
             println!("[LF+ Mlin::mlin] total: {:?}", t_total.elapsed());
         }
 
+        (linb2, proof)
+    }
+
+    /// Πmlin protocol, but using an **implicitly-defined** Ajtai matrix (seeded) instead of an explicit dense `Matrix<R>`.
+    ///
+    /// This is intended for very large `n` where materializing a `kappa × n` Ajtai matrix is not viable.
+    /// The verifier-side protocol and proof objects are unchanged; only prover-side commitment computation differs.
+    pub fn mlin_seeded(
+        &self,
+        scheme: &AjtaiCommitmentScheme<R>,
+        M: &[Arc<SparseMatrix<R>>],
+        transcript: &mut impl Transcript<R>,
+    ) -> (LinB2<R>, CmProof<R>) {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = Instant::now();
+        let n = self.lins[0].f.len();
+
+        let t = Instant::now();
+        let instances = self
+            .lins
+            .iter()
+            .map(|lin| RgInstance::from_f_seeded(lin.f.clone(), scheme, &self.params.decomp))
+            .collect::<Vec<_>>();
+        if profile {
+            println!(
+                "[LF+ Mlin::mlin_seeded] build instances: {:?} (L={}, n={}, kappa={})",
+                t.elapsed(),
+                self.lins.len(),
+                n,
+                self.params.kappa
+            );
+        }
+
+        let rg = Rg {
+            nvars: log2(n) as usize,
+            instances,
+            dparams: self.params.decomp.clone(),
+        };
+        let cm = Cm { rg };
+
+        let t = Instant::now();
+        let (com, proof) = cm.prove(M, transcript);
+        if profile {
+            println!("[LF+ Mlin::mlin_seeded] Cm::prove: {:?}", t.elapsed());
+        }
+
+        let cm_g = com
+            .x
+            .cm_g
+            .iter()
+            .fold(vec![R::zero(); self.params.kappa], |mut acc, cm| {
+                acc.iter_mut().zip(cm.iter()).for_each(|(acc_r, cm_r)| {
+                    *acc_r += cm_r;
+                });
+                acc
+            });
+
+        let nlin = com.x.vo[0].len();
+        let vo = com
+            .x
+            .vo
+            .iter()
+            .fold(vec![(R::zero(), R::zero()); nlin], |mut acc, v| {
+                v.iter().enumerate().for_each(|(i, v)| {
+                    acc[i].0 += v.0;
+                    acc[i].1 += v.1;
+                });
+                acc
+            });
+
+        let x = LinB2X {
+            cm_g,
+            ro: com.x.ro,
+            vo,
+        };
+
+        let g = com.g.iter().fold(vec![R::zero(); n], |mut acc, gi| {
+            acc.iter_mut().zip(gi.iter()).for_each(|(acc_r, gi_r)| {
+                *acc_r += gi_r;
+            });
+            acc
+        });
+        let linb2 = LinB2 { g, x };
+
+        if profile {
+            println!("[LF+ Mlin::mlin_seeded] total: {:?}", t_total.elapsed());
+        }
         (linb2, proof)
     }
 }

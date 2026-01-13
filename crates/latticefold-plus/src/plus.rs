@@ -1,4 +1,5 @@
 use latticefold::transcript::Transcript;
+use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
     balanced_decomposition::{convertible_ring::ConvertibleRing, Decompose},
     CoeffRing, OverField, Zq,
@@ -18,6 +19,18 @@ pub struct PlusProver<R: OverField, TS: Transcript<R>> {
     pub acc: Mlin<R>,
     /// Ajtai matrix
     pub A: Matrix<R>,
+    pub M: Vec<Arc<SparseMatrix<R>>>,
+    pub transcript: TS,
+    pub params: PlusParameters,
+}
+
+/// Prover variant that uses an implicitly-defined (seeded) Ajtai matrix.
+///
+/// This avoids materializing a `kappa × n` dense matrix in memory and is intended for large `n`.
+#[derive(Clone, Debug)]
+pub struct PlusProverSparse<R: OverField, TS: Transcript<R>> {
+    pub acc: Mlin<R>,
+    pub scheme: AjtaiCommitmentScheme<R>,
     pub M: Vec<Arc<SparseMatrix<R>>>,
     pub transcript: TS,
     pub params: PlusParameters,
@@ -105,6 +118,68 @@ where
         self.acc.lins.push(linb.0);
         self.acc.lins.push(linb.1);
 
+        proof
+    }
+}
+
+impl<R, TS> PlusProverSparse<R, TS>
+where
+    R::BaseRing: ConvertibleRing + Decompose + Zq,
+    R: CoeffRing + Decompose,
+    TS: Transcript<R>,
+{
+    /// Initialize with a seeded implicit Ajtai matrix.
+    pub fn init_seeded(
+        scheme: AjtaiCommitmentScheme<R>,
+        M: Vec<Arc<SparseMatrix<R>>>,
+        ncomp: usize,
+        params: PlusParameters,
+        transcript: TS,
+    ) -> Self {
+        let mlin = Mlin {
+            lins: Vec::with_capacity(2 + ncomp),
+            params: params.lin.clone(),
+        };
+        PlusProverSparse {
+            acc: mlin,
+            scheme,
+            M,
+            transcript,
+            params,
+        }
+    }
+
+    /// Prove (seeded Ajtai path).
+    pub fn prove_sparse<L>(&mut self, comp: &[L]) -> PlusProof<R, L::Proof>
+    where
+        L: Linearize<R>,
+    {
+        let mut lproof = Vec::with_capacity(comp.len());
+        comp.iter().for_each(|compi| {
+            let (linb, lp) = compi.linearize(&mut self.transcript);
+            lproof.push(lp);
+            self.acc.lins.push(linb);
+        });
+
+        let (linb2, cmproof) = self.acc.mlin_seeded(&self.scheme, &self.M, &mut self.transcript);
+        let decomp = Decomp {
+            f: linb2.g,
+            r: linb2.x.ro.clone(),
+            M: &self.M,
+        };
+        let (linb, dproof) = decomp.decompose_seeded(&self.scheme, self.params.B);
+
+        let proof = PlusProof {
+            linb2x: linb2.x,
+            lproof,
+            cmproof,
+            dproof,
+        };
+
+        // Keep only accumulated instance
+        self.acc.lins.clear();
+        self.acc.lins.push(linb.0);
+        self.acc.lins.push(linb.1);
         proof
     }
 }
