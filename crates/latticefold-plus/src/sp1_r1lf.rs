@@ -106,6 +106,21 @@ pub struct R1LfHeader {
 const R1LF_CHUNK_MAGIC: &[u8; 4] = b"LFC1"; // LF Chunk v1
 const R1LF_CHUNK_VERSION: u32 = 1;
 const R1LF_CHUNK_ZSTD_MAGIC: u32 = u32::from_le_bytes(*b"ZST1");
+// Footer for O(1) cache integrity checks (seek-to-end).
+// Old caches without this footer will be treated as incomplete and rebuilt.
+const R1LF_CHUNK_FOOTER_MAGIC: u32 = u32::from_le_bytes(*b"LFF1");
+const R1LF_CHUNK_FOOTER_LEN: u64 = 4 + 32 + 8; // magic + digest + file_len
+
+fn write_chunk_cache_footer(
+    w: &mut dyn std::io::Write,
+    digest: &[u8; 32],
+    file_len: u64,
+) -> std::io::Result<()> {
+    w.write_all(&R1LF_CHUNK_FOOTER_MAGIC.to_le_bytes())?;
+    w.write_all(digest)?;
+    w.write_all(&file_len.to_le_bytes())?;
+    Ok(())
+}
 
 /// Random-access reader for a `{path}.chunks` cache file (loads one chunk at a time).
 pub struct R1LfChunkCache<R> {
@@ -387,6 +402,11 @@ where
         }
         w.flush()?;
 
+        // Append footer: O(1) integrity check on open (seek-to-end).
+        let end_pos = w.seek(SeekFrom::End(0))?;
+        write_chunk_cache_footer(&mut w, &stats.digest, end_pos + R1LF_CHUNK_FOOTER_LEN)?;
+        w.flush()?;
+
         // Best-effort cleanup of temp chunks.
         let _ = std::fs::remove_dir_all(&tmp_dir);
     }
@@ -444,6 +464,11 @@ where
             w.write_all(&off.to_le_bytes())?;
         }
         w.flush()?;
+
+        // Append footer: O(1) integrity check on open (seek-to-end).
+        let end_pos = w.seek(SeekFrom::End(0))?;
+        write_chunk_cache_footer(&mut w, &stats.digest, end_pos + R1LF_CHUNK_FOOTER_LEN)?;
+        w.flush()?;
     }
 
     open_chunk_cache::<R>(&cache_path, &stats.digest)
@@ -456,7 +481,8 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
 
     let meta = std::fs::metadata(&cache.cache_path)?;
     let file_len = meta.len();
-    if file_len < 4 + 4 + 32 + 8 * 6 + 8 * 3 {
+    // Must have at least header + footer.
+    if file_len < (4 + 4 + 32 + 8 * 6 + 8 * 3) as u64 + R1LF_CHUNK_FOOTER_LEN {
         return Ok(false);
     }
     if cache.chunk_offsets.is_empty() {
@@ -472,69 +498,24 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
         prev = off;
     }
 
-    // Ensure:
-    // - chunk header exists and magic matches
-    // - the 3 compressed payload lengths exist
-    // - payload fully fits within the file
-    //
-    // Doing this for *every* chunk adds noticeable latency (lots of random seeks). For our main
-    // failure mode (truncation mid-build), it is sufficient to sample a few chunks (including
-    // the last chunk), since truncation manifests at the tail.
+    // O(1) integrity check: verify a fixed-size footer at end-of-file.
     let mut f = std::fs::File::open(&cache.cache_path)?;
-    let mut buf8 = [0u8; 8];
+    f.seek(SeekFrom::End(-(R1LF_CHUNK_FOOTER_LEN as i64)))?;
     let mut buf4 = [0u8; 4];
-
-    let mut check_one =
-        |f: &mut std::fs::File, off: u64, file_len: u64| -> std::io::Result<bool> {
-        f.seek(SeekFrom::Start(off))?;
-        if f.read_exact(&mut buf8).is_err() {
-            return Ok(false);
-        }
-        if f.read_exact(&mut buf4).is_err() {
-            return Ok(false);
-        }
-        let magic = u32::from_le_bytes(buf4);
-        if magic != R1LF_CHUNK_ZSTD_MAGIC {
-            return Ok(false);
-        }
-        // Read 3*(clen:u64), then verify the compressed payloads fit in-file.
-        let mut clen = [0u64; 3];
-        for k in 0..3 {
-            if f.read_exact(&mut buf8).is_err() {
-                return Ok(false);
-            }
-            clen[k] = u64::from_le_bytes(buf8);
-        }
-        let header_bytes = 8u64 + 4u64 + 3u64 * 8u64;
-        let payload_bytes = clen[0]
-            .saturating_add(clen[1])
-            .saturating_add(clen[2]);
-        let end = off
-            .saturating_add(header_bytes)
-            .saturating_add(payload_bytes);
-        Ok(end <= file_len)
-    };
-
-    // Always check first + last. If the cache is small, check all; otherwise, sample one middle.
-    let n = cache.chunk_offsets.len();
-    let first = cache.chunk_offsets[0];
-    let last = cache.chunk_offsets[n - 1];
-    if !check_one(&mut f, first, file_len)? {
+    let mut buf8 = [0u8; 8];
+    let mut digest = [0u8; 32];
+    f.read_exact(&mut buf4)?;
+    let magic = u32::from_le_bytes(buf4);
+    if magic != R1LF_CHUNK_FOOTER_MAGIC {
         return Ok(false);
     }
-    if n <= 8 {
-        for &off in &cache.chunk_offsets[1..] {
-            if !check_one(&mut f, off, file_len)? {
-                return Ok(false);
-            }
-        }
-        return Ok(true);
-    }
-    let mid = cache.chunk_offsets[n / 2];
-    if !check_one(&mut f, mid, file_len)? {
+    f.read_exact(&mut digest)?;
+    if digest != cache.stats.digest {
         return Ok(false);
     }
-    if !check_one(&mut f, last, file_len)? {
+    f.read_exact(&mut buf8)?;
+    let claimed_len = u64::from_le_bytes(buf8);
+    if claimed_len != file_len {
         return Ok(false);
     }
     Ok(true)
