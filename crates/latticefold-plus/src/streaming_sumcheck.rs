@@ -84,6 +84,15 @@ where
         witness0: Arc<Vec<R::BaseRing>>,
         num_vars: usize,
     },
+    /// y[row] = (M * w)[row] **in the base ring**, where `M` is stored directly as base-ring scalars.
+    ///
+    /// This is the natural representation for SP1 R1LF chunks (const-coeff by construction) and
+    /// avoids materializing full ring elements per nonzero.
+    SparseMatVecConstCoeffBase {
+        matrix: Arc<SparseMatrix<R::BaseRing>>,
+        witness0: Arc<Vec<R::BaseRing>>,
+        num_vars: usize,
+    },
     /// A padded 4-way tensor-product table:
     /// t = t1 ⊗ t2 ⊗ t3 ⊗ t4, then padded with zeros up to 2^num_vars.
     ///
@@ -119,6 +128,7 @@ where
             StreamingMleEnum::EqBase { r, .. } => r.len(),
             StreamingMleEnum::SparseMatVec { num_vars, .. } => *num_vars,
             StreamingMleEnum::SparseMatVecConstCoeff { num_vars, .. } => *num_vars,
+            StreamingMleEnum::SparseMatVecConstCoeffBase { num_vars, .. } => *num_vars,
             StreamingMleEnum::Tensor4Padded { num_vars, .. } => *num_vars,
         }
     }
@@ -220,6 +230,11 @@ where
                 }
                 sum0
             }
+            StreamingMleEnum::SparseMatVecConstCoeffBase {
+                matrix,
+                witness0,
+                ..
+            } => eval0_sparse_matvec_const_coeff_base::<R>(matrix, witness0, index),
             // Fallback: compute full ring value then project constant term.
             _ => self.eval_at_index(index).coeffs()[0],
         }
@@ -301,6 +316,7 @@ where
                 sum
             }
             StreamingMleEnum::SparseMatVecConstCoeff { .. } => R::from(self.eval0_at_index(index)),
+            StreamingMleEnum::SparseMatVecConstCoeffBase { .. } => R::from(self.eval0_at_index(index)),
             StreamingMleEnum::Tensor4Padded {
                 t1,
                 t2,
@@ -499,6 +515,30 @@ where
                     num_vars: nv0 - 1,
                 };
             }
+            StreamingMleEnum::SparseMatVecConstCoeffBase {
+                matrix,
+                witness0,
+                num_vars,
+            } => {
+                // Materialize after the first fix into a half-sized base-scalar table.
+                let nv0 = *num_vars;
+                let half = 1usize << (nv0 - 1);
+                let one_minus0 = R::BaseRing::ONE - r0;
+                let m = matrix.clone();
+                let w0 = witness0.clone();
+                let mut out = vec![R::BaseRing::ZERO; half];
+                for i in 0..half {
+                    let idx0 = i << 1;
+                    let idx1 = (i << 1) | 1;
+                    let a0 = eval0_sparse_matvec_const_coeff_base::<R>(&m, &w0, idx0);
+                    let b0 = eval0_sparse_matvec_const_coeff_base::<R>(&m, &w0, idx1);
+                    out[i] = one_minus0 * a0 + r0 * b0;
+                }
+                *self = StreamingMleEnum::BaseScalarOwned {
+                    evals: out,
+                    num_vars: nv0 - 1,
+                };
+            }
             StreamingMleEnum::Tensor4Padded { .. } => {
                 let next = self.fix_variable(r_ring);
                 *self = next;
@@ -597,6 +637,21 @@ where
                     num_vars: nv - 1,
                 }
             }
+            StreamingMleEnum::SparseMatVecConstCoeffBase { .. } => {
+                // Keep base-scalar after fixing.
+                let r0 = r.coeffs()[0];
+                let one_minus0 = R::BaseRing::ONE - r0;
+                let mut out = vec![R::BaseRing::ZERO; half];
+                for i in 0..half {
+                    let a0 = self.eval0_at_index(i << 1);
+                    let b0 = self.eval0_at_index((i << 1) | 1);
+                    out[i] = one_minus0 * a0 + r0 * b0;
+                }
+                StreamingMleEnum::BaseScalarOwned {
+                    evals: out,
+                    num_vars: nv - 1,
+                }
+            }
             StreamingMleEnum::Tensor4Padded { .. } => {
                 let new_evals: Vec<R> = (0..half)
                     .map(|i| {
@@ -630,6 +685,27 @@ where
     for (coeff, col_idx) in &matrix.coeffs[row] {
         if *col_idx < witness0.len() {
             sum0 += coeff.coeffs()[0] * witness0[*col_idx];
+        }
+    }
+    sum0
+}
+
+#[inline]
+fn eval0_sparse_matvec_const_coeff_base<R: OverField + PolyRing>(
+    matrix: &SparseMatrix<R::BaseRing>,
+    witness0: &[R::BaseRing],
+    row: usize,
+) -> R::BaseRing
+where
+    R::BaseRing: Ring,
+{
+    if row >= matrix.coeffs.len() {
+        return R::BaseRing::ZERO;
+    }
+    let mut sum0 = R::BaseRing::ZERO;
+    for (coeff, col_idx) in &matrix.coeffs[row] {
+        if *col_idx < witness0.len() {
+            sum0 += *coeff * witness0[*col_idx];
         }
     }
     sum0
