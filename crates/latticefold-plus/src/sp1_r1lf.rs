@@ -484,7 +484,8 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
     let mut buf8 = [0u8; 8];
     let mut buf4 = [0u8; 4];
 
-    let check_one = |f: &mut std::fs::File, off: u64, file_len: u64| -> std::io::Result<bool> {
+    let mut check_one =
+        |f: &mut std::fs::File, off: u64, file_len: u64| -> std::io::Result<bool> {
         f.seek(SeekFrom::Start(off))?;
         if f.read_exact(&mut buf8).is_err() {
             return Ok(false);
