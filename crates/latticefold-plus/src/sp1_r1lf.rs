@@ -333,6 +333,8 @@ where
                 //   - for each of 3 matrices: (clen:u64, zstd(bytes))
                 dst.write_all(&(meta.padded_rows as u64).to_le_bytes())?;
                 dst.write_all(&R1LF_CHUNK_ZSTD_MAGIC.to_le_bytes())?;
+                // Must flush before any `write_matrix_chunk_from_r1lf` backfills lengths via `seek`.
+                dst.flush()?;
                 write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.a0, meta.a1, meta.actual_rows, meta.padded_rows)?;
                 write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.b0, meta.b1, meta.actual_rows, meta.padded_rows)?;
                 write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.c0, meta.c1, meta.actual_rows, meta.padded_rows)?;
@@ -426,6 +428,8 @@ where
             //   - for each of 3 matrices: (clen:u64, zstd(bytes))
             w.write_all(&(meta.padded_rows as u64).to_le_bytes())?;
             w.write_all(&R1LF_CHUNK_ZSTD_MAGIC.to_le_bytes())?;
+            // Must flush before any `write_matrix_chunk_from_r1lf` backfills lengths via `seek`.
+            w.flush()?;
             write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.a0, meta.a1, meta.actual_rows, meta.padded_rows)?;
             write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.b0, meta.b1, meta.actual_rows, meta.padded_rows)?;
             write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.c0, meta.c1, meta.actual_rows, meta.padded_rows)?;
@@ -466,10 +470,10 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
         prev = off;
     }
 
-    // For each chunk, ensure at least the minimal bytes exist and the chunk payload magic matches:
-    //   nrows (8) + magic (4) + 3*(clen u64) (24) = 36 bytes.
-    // This doesn't guarantee the full payload exists, but reliably detects truncation/corruption
-    // and differentiates old/uncompressed caches.
+    // For each chunk, ensure:
+    // - the chunk header exists and magic matches
+    // - the 3 compressed payload lengths exist
+    // - each payload fully fits within the file (common truncation/corruption detection)
     let mut f = std::fs::File::open(&cache.cache_path)?;
     let mut buf8 = [0u8; 8];
     let mut buf4 = [0u8; 4];
@@ -485,8 +489,22 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
         if magic != R1LF_CHUNK_ZSTD_MAGIC {
             return Ok(false);
         }
-        let min_bytes = 8u64 + 4u64 + 3u64 * 8u64;
-        if off.saturating_add(min_bytes) > file_len {
+        // Read 3*(clen:u64), then verify the compressed payloads fit in-file.
+        let mut clen = [0u64; 3];
+        for k in 0..3 {
+            if f.read_exact(&mut buf8).is_err() {
+                return Ok(false);
+            }
+            clen[k] = u64::from_le_bytes(buf8);
+        }
+        let header_bytes = 8u64 + 4u64 + 3u64 * 8u64;
+        let payload_bytes = clen[0]
+            .saturating_add(clen[1])
+            .saturating_add(clen[2]);
+        let end = off
+            .saturating_add(header_bytes)
+            .saturating_add(payload_bytes);
+        if end > file_len {
             return Ok(false);
         }
     }
@@ -714,6 +732,7 @@ fn write_matrix_chunk_from_r1lf(
             "end_offset < start_offset",
         ));
     }
+    dst.flush()?;
     let len = end_offset - start_offset;
     src.seek(SeekFrom::Start(start_offset))?;
     let mut limited = src.by_ref().take(len);
