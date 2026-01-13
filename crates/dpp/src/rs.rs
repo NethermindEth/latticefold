@@ -467,8 +467,11 @@ fn ntt_moduli_for_size(size: usize, target_count: usize) -> (Vec<u32>, Vec<u32>)
     let mut roots = Vec::<u32>::new();
 
     // Search primes of the form p = m*size + 1.
-    // We only consider odd multipliers so p is odd (size is power-of-two).
-    let mut m: u64 = 3;
+    //
+    // NOTE: `size` is a power-of-two (thus even for all relevant sizes >= 2), so **every** `m`
+    // yields an odd candidate `p` (even * m + 1). Restricting to odd `m` unnecessarily discards
+    // half the valid candidates and can make large sizes (e.g. 2^27) fail to find enough primes.
+    let mut m: u64 = 1;
     while mods.len() < target_count {
         let p_u64 = m.saturating_mul(size as u64).saturating_add(1);
         if p_u64 >= (u32::MAX as u64) {
@@ -481,7 +484,7 @@ fn ntt_moduli_for_size(size: usize, target_count: usize) -> (Vec<u32>, Vec<u32>)
             mods.push(p);
             roots.push(g);
         }
-        m += 2;
+        m += 1;
     }
     assert!(
         !mods.is_empty(),
