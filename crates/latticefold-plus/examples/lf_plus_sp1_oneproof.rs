@@ -111,6 +111,23 @@ fn main() {
     );
     println!("  digest={:02x?}...", &cache.stats.digest[..8]);
 
+    // Load all matrices into RAM up-front (Symphony-style).
+    //
+    // This removes per-chunk I/O + decompression overhead and lets the sumcheck inner loops
+    // fully utilize Rayon for compute.
+    let t_load_mats = Instant::now();
+    let mut all_mats: Vec<[Arc<stark_rings_linalg::SparseMatrix<F>>; 3]> =
+        Vec::with_capacity(cache.num_chunks);
+    for chunk_idx in 0..cache.num_chunks {
+        let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
+        all_mats.push([Arc::new(a), Arc::new(b), Arc::new(c)]);
+    }
+    println!(
+        "  load all mats: {:?} (chunks={})",
+        t_load_mats.elapsed(),
+        all_mats.len()
+    );
+
     let (w_u64, base_len, aux_len) =
         latticefold_plus::sp1_witness_io::load_sp1_witness_any(&witness_path, cache.stats.num_vars)
             .expect("load witness");
@@ -169,19 +186,14 @@ fn main() {
 
     // Prove+verify per chunk: sumcheck over rows proving eq(row,r0)*(Aw*Bw - Cw) sums to 0.
     //
-    // This is memory-friendly (one chunk in RAM at a time), and cryptographically binds the claim
-    // via the Fiat–Shamir transcript.
+    // This cryptographically binds the claim via the Fiat–Shamir transcript.
     let t_pv = Instant::now();
-    for chunk_idx in 0..cache.num_chunks {
+    for (chunk_idx, mats) in all_mats.iter().enumerate() {
         let t_chunk = Instant::now();
-        let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
+        let [a, b, c] = mats;
         let nrows = a.nrows;
         assert!(nrows.is_power_of_two(), "chunk nrows must be power-of-two");
         let nvars = ark_std::log2(nrows) as usize;
-
-        let a = Arc::new(a);
-        let b = Arc::new(b);
-        let c = Arc::new(c);
 
         // Prover transcript.
         let mut ts = latticefold_plus::transcript::PoseidonTranscript::<R>::empty::<PC>();
@@ -254,11 +266,11 @@ fn main() {
         let eq = eq_eval(&r0_v, &ro).expect("eq_eval");
         assert_eq!(eq * (va * vb - vc), s, "chunk {chunk_idx} failed");
 
-        if chunk_idx == 0 || chunk_idx + 1 == cache.num_chunks {
+        if chunk_idx == 0 || chunk_idx + 1 == all_mats.len() {
             println!(
                 "  chunk {}/{} OK: {:?} (nrows={}, nvars={})",
                 chunk_idx + 1,
-                cache.num_chunks,
+                all_mats.len(),
                 t_chunk.elapsed(),
                 nrows,
                 nvars
