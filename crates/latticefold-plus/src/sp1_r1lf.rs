@@ -472,14 +472,19 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
         prev = off;
     }
 
-    // For each chunk, ensure:
-    // - the chunk header exists and magic matches
+    // Ensure:
+    // - chunk header exists and magic matches
     // - the 3 compressed payload lengths exist
-    // - each payload fully fits within the file (common truncation/corruption detection)
+    // - payload fully fits within the file
+    //
+    // Doing this for *every* chunk adds noticeable latency (lots of random seeks). For our main
+    // failure mode (truncation mid-build), it is sufficient to sample a few chunks (including
+    // the last chunk), since truncation manifests at the tail.
     let mut f = std::fs::File::open(&cache.cache_path)?;
     let mut buf8 = [0u8; 8];
     let mut buf4 = [0u8; 4];
-    for &off in &cache.chunk_offsets {
+
+    let check_one = |f: &mut std::fs::File, off: u64, file_len: u64| -> std::io::Result<bool> {
         f.seek(SeekFrom::Start(off))?;
         if f.read_exact(&mut buf8).is_err() {
             return Ok(false);
@@ -506,9 +511,30 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
         let end = off
             .saturating_add(header_bytes)
             .saturating_add(payload_bytes);
-        if end > file_len {
-            return Ok(false);
+        Ok(end <= file_len)
+    };
+
+    // Always check first + last. If the cache is small, check all; otherwise, sample one middle.
+    let n = cache.chunk_offsets.len();
+    let first = cache.chunk_offsets[0];
+    let last = cache.chunk_offsets[n - 1];
+    if !check_one(&mut f, first, file_len)? {
+        return Ok(false);
+    }
+    if n <= 8 {
+        for &off in &cache.chunk_offsets[1..] {
+            if !check_one(&mut f, off, file_len)? {
+                return Ok(false);
+            }
         }
+        return Ok(true);
+    }
+    let mid = cache.chunk_offsets[n / 2];
+    if !check_one(&mut f, mid, file_len)? {
+        return Ok(false);
+    }
+    if !check_one(&mut f, last, file_len)? {
+        return Ok(false);
     }
     Ok(true)
 }
