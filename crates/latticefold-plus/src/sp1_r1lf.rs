@@ -105,6 +105,7 @@ pub struct R1LfHeader {
 
 const R1LF_CHUNK_MAGIC: &[u8; 4] = b"LFC1"; // LF Chunk v1
 const R1LF_CHUNK_VERSION: u32 = 1;
+const R1LF_CHUNK_ZSTD_MAGIC: u32 = u32::from_le_bytes(*b"ZST1");
 
 /// Random-access reader for a `{path}.chunks` cache file (loads one chunk at a time).
 pub struct R1LfChunkCache<R> {
@@ -148,6 +149,19 @@ where
         let mut buf8 = [0u8; 8];
         r.read_exact(&mut buf8)?;
         let nrows = u64::from_le_bytes(buf8) as usize;
+        r.read_exact(&mut buf4)?;
+        let magic = u32::from_le_bytes(buf4);
+        if magic != R1LF_CHUNK_ZSTD_MAGIC {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "R1LF chunk cache: unsupported chunk payload (expected ZST1)",
+            ));
+        }
+
+        // Actual rows for this chunk (last chunk may be partial).
+        let start = chunk_idx * self.chunk_size;
+        let end = ((chunk_idx + 1) * self.chunk_size).min(self.stats.num_constraints);
+        let actual_rows = end.saturating_sub(start);
 
         let mut chunk_matrices: [stark_rings_linalg::SparseMatrix<<R as PolyRing>::BaseRing>; 3] =
             std::array::from_fn(|_| {
@@ -159,14 +173,21 @@ where
         });
 
         for matrix in &mut chunk_matrices {
-            for _ in 0..nrows {
-                r.read_exact(&mut buf4)?;
+            r.read_exact(&mut buf8)?;
+            let clen = u64::from_le_bytes(buf8) as u64;
+            let mut limited = r.by_ref().take(clen);
+            let dec = zstd::stream::Decoder::new(&mut limited)?;
+            let mut dec = std::io::BufReader::with_capacity(64 * 1024 * 1024, dec);
+
+            // Decode only the actual rows, then pad with empty rows to `nrows`.
+            for _ in 0..actual_rows {
+                dec.read_exact(&mut buf4)?;
                 let num_terms = u32::from_le_bytes(buf4) as usize;
                 let mut row = Vec::with_capacity(num_terms);
                 for _ in 0..num_terms {
-                    r.read_exact(&mut buf4)?;
+                    dec.read_exact(&mut buf4)?;
                     let col_idx = u32::from_le_bytes(buf4) as usize;
-                    r.read_exact(&mut buf8)?;
+                    dec.read_exact(&mut buf8)?;
                     let coeff = i64::from_le_bytes(buf8);
                     if coeff == 0 {
                         continue;
@@ -180,6 +201,14 @@ where
                 }
                 matrix.coeffs.push(row);
             }
+            for _ in actual_rows..nrows {
+                matrix.coeffs.push(Vec::new());
+            }
+
+            // Ensure we consume the full compressed payload so the underlying reader advances.
+            std::io::copy(&mut dec, &mut std::io::sink())?;
+            // Drain any remaining compressed bytes from `limited` (should be empty).
+            std::io::copy(&mut limited, &mut std::io::sink())?;
         }
         Ok(chunk_matrices)
     }
@@ -298,8 +327,12 @@ where
                 let dst_file = std::fs::File::create(&chunk_path)?;
                 let mut dst = BufWriter::with_capacity(DST_BUF, dst_file);
 
-                // Chunk encoding: nrows (u64), then 3 matrices (A,B,C).
+                // Chunk encoding:
+                //   - nrows (u64) = padded_rows
+                //   - magic (u32) = ZST1
+                //   - for each of 3 matrices: (clen:u64, zstd(bytes))
                 dst.write_all(&(meta.padded_rows as u64).to_le_bytes())?;
+                dst.write_all(&R1LF_CHUNK_ZSTD_MAGIC.to_le_bytes())?;
                 write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.a0, meta.a1, meta.actual_rows, meta.padded_rows)?;
                 write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.b0, meta.b1, meta.actual_rows, meta.padded_rows)?;
                 write_matrix_chunk_from_r1lf(&mut src, &mut dst, meta.c0, meta.c1, meta.actual_rows, meta.padded_rows)?;
@@ -387,8 +420,12 @@ where
         let mut src = std::io::BufReader::with_capacity(256 * 1024 * 1024, src_file);
         for (i, meta) in metas.iter().enumerate() {
             offsets[i] = w.stream_position()?;
-            // Chunk encoding: nrows (u64), then 3 matrices (A,B,C).
+            // Chunk encoding:
+            //   - nrows (u64) = padded_rows
+            //   - magic (u32) = ZST1
+            //   - for each of 3 matrices: (clen:u64, zstd(bytes))
             w.write_all(&(meta.padded_rows as u64).to_le_bytes())?;
+            w.write_all(&R1LF_CHUNK_ZSTD_MAGIC.to_le_bytes())?;
             write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.a0, meta.a1, meta.actual_rows, meta.padded_rows)?;
             write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.b0, meta.b1, meta.actual_rows, meta.padded_rows)?;
             write_matrix_chunk_from_r1lf(&mut src, &mut w, meta.c0, meta.c1, meta.actual_rows, meta.padded_rows)?;
@@ -429,19 +466,26 @@ fn cache_file_seems_complete<R>(cache: &R1LfChunkCache<R>) -> std::io::Result<bo
         prev = off;
     }
 
-    // For each chunk, ensure at least the minimal bytes exist:
-    //   chunk header nrows (8) +
-    //   for each of 3 matrices: per-row num_terms (4 bytes) for nrows rows.
-    // This doesn't guarantee the full payload exists, but reliably detects truncation.
+    // For each chunk, ensure at least the minimal bytes exist and the chunk payload magic matches:
+    //   nrows (8) + magic (4) + 3*(clen u64) (24) = 36 bytes.
+    // This doesn't guarantee the full payload exists, but reliably detects truncation/corruption
+    // and differentiates old/uncompressed caches.
     let mut f = std::fs::File::open(&cache.cache_path)?;
     let mut buf8 = [0u8; 8];
+    let mut buf4 = [0u8; 4];
     for &off in &cache.chunk_offsets {
         f.seek(SeekFrom::Start(off))?;
         if f.read_exact(&mut buf8).is_err() {
             return Ok(false);
         }
-        let nrows = u64::from_le_bytes(buf8);
-        let min_bytes = 8u64 + 3u64 * nrows.saturating_mul(4);
+        if f.read_exact(&mut buf4).is_err() {
+            return Ok(false);
+        }
+        let magic = u32::from_le_bytes(buf4);
+        if magic != R1LF_CHUNK_ZSTD_MAGIC {
+            return Ok(false);
+        }
+        let min_bytes = 8u64 + 4u64 + 3u64 * 8u64;
         if off.saturating_add(min_bytes) > file_len {
             return Ok(false);
         }
@@ -660,12 +704,10 @@ fn write_matrix_chunk_from_r1lf(
     actual_rows: usize,
     padded_rows: usize,
 ) -> std::io::Result<()> {
-    // Fast path: copy the raw row encoding bytes for this chunk directly from the `.r1lf`.
+    // Compress the raw row encoding bytes for this chunk directly from the `.r1lf`.
     //
-    // The `.r1lf` matrix body encoding is identical to the chunk-cache matrix encoding
-    // (per row: u32 num_terms, then `num_terms` terms of 12 bytes), so we can bulk-copy
-    // without per-term parsing. This significantly reduces CPU overhead when building
-    // the cache for the first time.
+    // We keep the on-disk term encoding identical (per row: u32 num_terms, then `num_terms` terms
+    // of 12 bytes), but store it compressed (zstd) to reduce disk footprint and I/O.
     if end_offset < start_offset {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -674,12 +716,34 @@ fn write_matrix_chunk_from_r1lf(
     }
     let len = end_offset - start_offset;
     src.seek(SeekFrom::Start(start_offset))?;
-    let mut limited = src.take(len);
-    std::io::copy(&mut limited, dst)?;
+    let mut limited = src.by_ref().take(len);
 
-    for _ in actual_rows..padded_rows {
-        dst.write_all(&0u32.to_le_bytes())?;
+    // Placeholder for compressed length.
+    let len_pos = dst.get_mut().stream_position()?;
+    dst.write_all(&0u64.to_le_bytes())?;
+    dst.flush()?;
+
+    // Compress into `dst` and compute compressed length by file positions.
+    let data_pos = dst.get_mut().stream_position()?;
+    {
+        // level=3: good speed/ratio tradeoff (default).
+        let mut enc = zstd::stream::Encoder::new(dst.by_ref(), 3)?;
+        std::io::copy(&mut limited, &mut enc)?;
+        enc.finish()?;
     }
+    dst.flush()?;
+    let end_pos = dst.get_mut().stream_position()?;
+    let clen = end_pos - data_pos;
+
+    // Backfill compressed length.
+    dst.flush()?;
+    dst.get_mut().seek(SeekFrom::Start(len_pos))?;
+    dst.get_mut().write_all(&(clen as u64).to_le_bytes())?;
+    dst.get_mut().seek(SeekFrom::Start(end_pos))?;
+
+    // We do NOT write padded rows into the compressed payload. Readers add empty rows up to
+    // `padded_rows` (which is stored as the chunk nrows).
+    let _ = (actual_rows, padded_rows);
     Ok(())
 }
 

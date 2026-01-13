@@ -24,6 +24,7 @@ dhat-heap = []
 we_gate = ["dep:dpp", "dep:symphony"]
 
 [dependencies]
+zstd = "0.13"
 ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
