@@ -73,7 +73,6 @@ where
     // log_{d'}(q) where d' = d/2
     let lnq = (R::BaseRing::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
     let l = (lnq / ((R::dimension() / 2) as f64).ln()).ceil() as u64;
-    let d = R::dimension() as u64;
     let d_prime = (R::dimension() / 2) as u64;
 
     // Production boundedness strategy:
@@ -81,23 +80,40 @@ where
     // compatible with `exp(digit)`. We set `decomp_b = d/2` and choose `k` based on `d` so that
     // the implied bound on lifted values stays well below Frog modulus and avoids wraparound.
     //
-    // Target regimes:
-    // - d=16  => d'=8   => k=10  (bound ~< 2^31)
-    // - d=64  => d'=32  => k=6   (bound ~< 2^31)
-    // - d=256 => d'=128 => k=4   (bound ~< 2^31)
+    // IMPORTANT:
+    // `balanced_decomposition::decompose_to(b, out[k])` requires `out.len()` to be large enough to
+    // represent the value. If `k` is too small, it will write past the end (panic).
     //
-    // This intentionally does NOT attempt `b=2^16,k=2` under monomial encoding.
-    let k: u64 = match d {
-        16 => 10,
-        64 => 6,
-        256 => 4,
-        _ => {
-            return Err(format!(
-                "unsupported ring dimension d={} for SP1 boundedness defaults; expected d in {{16,64,256}}",
-                d
-            ))
+    // Here we pick `k` to cover SP1's centered BabyBear values, which are bounded by p_bb/2.
+    // For balanced digits with base B (even), digits satisfy |d_i| <= floor(B/2), so the max
+    // representable magnitude with k digits is:
+    //   max(k) = floor(B/2) * (B^k - 1) / (B - 1).
+    //
+    // We choose the smallest k such that max(k) >= bound, where bound := p_bb/2.
+    fn min_k_for_bound(base: u64, bound: u64) -> u64 {
+        debug_assert!(base >= 2 && base % 2 == 0);
+        if bound == 0 {
+            return 1;
         }
-    };
+        let b = base as u128;
+        let half = (base / 2) as u128;
+        let target = bound as u128;
+        let mut k: u64 = 1;
+        let mut pow: u128 = b; // b^1
+        loop {
+            // max = half * (b^k - 1)/(b - 1)
+            let max = half.saturating_mul(pow.saturating_sub(1) / (b - 1));
+            if max >= target {
+                return k;
+            }
+            k += 1;
+            pow = pow.saturating_mul(b);
+        }
+    }
+
+    let p_bb = cache.stats.p_bb;
+    let bound = p_bb / 2;
+    let k: u64 = min_k_for_bound(d_prime, bound);
 
     Ok(WeParams {
         nvars_setchk: nvars as u64,
