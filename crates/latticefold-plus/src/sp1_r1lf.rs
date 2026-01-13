@@ -133,7 +133,9 @@ where
         chunk_idx: usize,
     ) -> std::io::Result<[stark_rings_linalg::SparseMatrix<<R as PolyRing>::BaseRing>; 3]> {
         use std::io::{BufReader, Seek, SeekFrom};
-        const IO_BUFFER_SIZE: usize = 256 * 1024 * 1024;
+        // This reader sits on top of a file slice for a *single* matrix payload; keep it modest.
+        // (Huge buffers here can dominate runtime via page-zeroing.)
+        const IO_BUFFER_SIZE: usize = 8 * 1024 * 1024;
 
         if chunk_idx >= self.num_chunks {
             return Err(std::io::Error::new(
@@ -517,7 +519,8 @@ where
     R::BaseRing: Zq + From<u64>,
 {
     use std::io::{BufReader, Read};
-    const IO_BUFFER_SIZE: usize = 256 * 1024 * 1024;
+    // We only read a small fixed header + an offsets table here; large buffers just add latency.
+    const IO_BUFFER_SIZE: usize = 256 * 1024;
 
     let file = std::fs::File::open(path)?;
     let mut r = BufReader::with_capacity(IO_BUFFER_SIZE, file);
