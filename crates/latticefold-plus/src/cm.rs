@@ -397,50 +397,54 @@ where
             let h0_arc: Option<Arc<Vec<R::BaseRing>>> =
                 if mats_const { try_as_base_scalars::<R>(&h[i]).map(Arc::new) } else { None };
 
-            // Decide whether we can actually take the const-coeff mat-vec fast path for this instance.
-            // Even if the matrices are const-coeff, we must also have const-coeff witnesses.
-            let use_const_coeff_matvec =
-                mats_const && mtau0_arc.is_some() && f0_arc.is_some() && h0_arc.is_some();
+            // We apply the const-coeff optimization **per vector**, not all-or-nothing.
+            //
+            // - `tau` is always base-scalars by construction.
+            // - `f` is const-coeff for SP1 (witness embedded as constant-coeff ring elements).
+            // - `m_tau` and `h` are typically **not** const-coeff (monomials / mixed ring challenges),
+            //   so insisting on them would disable the optimization in the real production regime.
+            let tau_cc = mats_const; // matrix must be const-coeff to use SparseMatVecConstCoeff
+            let mtau_cc = mats_const && mtau0_arc.is_some();
+            let f_cc = mats_const && f0_arc.is_some();
+            let h_cc = mats_const && h0_arc.is_some();
 
             // Direct tables (tau, m_tau, f, h):
-            // If we have base-scalar witnesses, use BaseScalarArc to avoid carrying ring vectors.
-            // Otherwise fall back to DenseArc as before.
+            // Use BaseScalarArc whenever available; otherwise use DenseArc.
             mles.push(StreamingMleEnum::BaseScalarArc {
                 evals: tau0_arc.clone(),
                 num_vars: nvars,
                 square: false,
             });
 
-            // For correctness (and to keep non-SP1 tests stable), only use base-scalar direct MLEs
-            // when we also take the const-coeff mat-vec fast path. Otherwise, keep the original
-            // ring tables (DenseArc).
-            let m_tau_arc_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
-                None
-            } else {
-                Some(Arc::new(inst.m_tau.clone()))
-            };
-            let f_arc_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
-                None
-            } else {
-                Some(Arc::new(inst.f.clone()))
-            };
-            let h_arc_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
-                None
-            } else {
-                Some(Arc::new(h[i].clone()))
-            };
+            let m_tau_arc_ring: Arc<Vec<R>> = Arc::new(inst.m_tau.clone());
+            let f_arc_ring: Arc<Vec<R>> = Arc::new(inst.f.clone());
+            let h_arc_ring: Arc<Vec<R>> = Arc::new(h[i].clone());
 
-            if use_const_coeff_matvec {
+            if mtau_cc {
                 mles.push(StreamingMleEnum::BaseScalarArc {
                     evals: mtau0_arc.as_ref().unwrap().clone(),
                     num_vars: nvars,
                     square: false,
                 });
+            } else {
+                mles.push(StreamingMleEnum::DenseArc {
+                    evals: m_tau_arc_ring.clone(),
+                    num_vars: nvars,
+                });
+            }
+            if f_cc {
                 mles.push(StreamingMleEnum::BaseScalarArc {
                     evals: f0_arc.as_ref().unwrap().clone(),
                     num_vars: nvars,
                     square: false,
                 });
+            } else {
+                mles.push(StreamingMleEnum::DenseArc {
+                    evals: f_arc_ring.clone(),
+                    num_vars: nvars,
+                });
+            }
+            if h_cc {
                 mles.push(StreamingMleEnum::BaseScalarArc {
                     evals: h0_arc.as_ref().unwrap().clone(),
                     num_vars: nvars,
@@ -448,37 +452,20 @@ where
                 });
             } else {
                 mles.push(StreamingMleEnum::DenseArc {
-                    evals: m_tau_arc_ring.as_ref().unwrap().clone(),
+                    evals: h_arc_ring.clone(),
                     num_vars: nvars,
                 });
-                mles.push(StreamingMleEnum::DenseArc {
-                    evals: f_arc_ring.as_ref().unwrap().clone(),
-                    num_vars: nvars,
-                });
-                mles.push(StreamingMleEnum::DenseArc {
-                    evals: h_arc_ring.as_ref().unwrap().clone(),
-                    num_vars: nvars,
-                });
-            }
-            if profile {
-                if mats_const && !use_const_coeff_matvec {
-                    println!(
-                        "[LF+ Cm::sumchecker_streaming] const-coeff mat-vec disabled (L_idx={}): m_tau0_ok={} f0_ok={} h0_ok={}",
-                        i,
-                        mtau0_arc.is_some(),
-                        f0_arc.is_some(),
-                        h0_arc.is_some(),
-                    );
-                } else {
-                    println!(
-                        "[LF+ Cm::sumchecker_streaming] const-coeff mat-vec: enabled={} (L_idx={}, mats_const={})",
-                        use_const_coeff_matvec, i, mats_const
-                    );
-                }
             }
 
-            // Otherwise fall back to the previous ring mat-vec path (requires tau as a ring vector).
-            let tau_ring: Option<Arc<Vec<R>>> = if use_const_coeff_matvec {
+            if profile {
+                println!(
+                    "[LF+ Cm::sumchecker_streaming] const-coeff mat-vec flags (L_idx={}): mats_const={} tau_cc={} mtau_cc={} f_cc={} h_cc={}",
+                    i, mats_const, tau_cc, mtau_cc, f_cc, h_cc
+                );
+            }
+
+            // Only materialize `tau` as a ring vector if we cannot use base-scalar mat-vec for it.
+            let tau_ring: Option<Arc<Vec<R>>> = if tau_cc {
                 None
             } else {
                 // Materialize tau as ring only once for sparse mat-vec evaluation.
@@ -494,57 +481,64 @@ where
             };
 
             for m in m_arcs {
-                if use_const_coeff_matvec {
-                    // Safe: we checked these are all `Some`.
-                    let mtau0 = mtau0_arc.as_ref().unwrap();
-                    let f0 = f0_arc.as_ref().unwrap();
-                    let h0 = h0_arc.as_ref().unwrap();
+                if tau_cc {
                     mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
                         matrix: m.clone(),
                         witness0: tau0_arc.clone(),
                         num_vars: nvars,
                     });
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                } else {
+                    let tau_ring = tau_ring
+                        .as_ref()
+                        .expect("tau_ring must exist when tau_cc is false");
+                    mles.push(StreamingMleEnum::SparseMatVec {
                         matrix: m.clone(),
-                        witness0: mtau0.clone(),
+                        witness: tau_ring.clone(),
                         num_vars: nvars,
                     });
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                        matrix: m.clone(),
-                        witness0: f0.clone(),
-                        num_vars: nvars,
-                    });
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                        matrix: m.clone(),
-                        witness0: h0.clone(),
-                        num_vars: nvars,
-                    });
-                    continue;
                 }
 
-                let tau_ring = tau_ring
-                    .as_ref()
-                    .expect("tau_ring must exist when const-coeff matvec is not used");
-                mles.push(StreamingMleEnum::SparseMatVec {
-                    matrix: m.clone(),
-                    witness: tau_ring.clone(),
-                    num_vars: nvars,
-                });
-                mles.push(StreamingMleEnum::SparseMatVec {
-                    matrix: m.clone(),
-                    witness: m_tau_arc_ring.as_ref().unwrap().clone(),
-                    num_vars: nvars,
-                });
-                mles.push(StreamingMleEnum::SparseMatVec {
-                    matrix: m.clone(),
-                    witness: f_arc_ring.as_ref().unwrap().clone(),
-                    num_vars: nvars,
-                });
-                mles.push(StreamingMleEnum::SparseMatVec {
-                    matrix: m.clone(),
-                    witness: h_arc_ring.as_ref().unwrap().clone(),
-                    num_vars: nvars,
-                });
+                if mtau_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: m.clone(),
+                        witness0: mtau0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    mles.push(StreamingMleEnum::SparseMatVec {
+                        matrix: m.clone(),
+                        witness: m_tau_arc_ring.clone(),
+                        num_vars: nvars,
+                    });
+                }
+
+                if f_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: m.clone(),
+                        witness0: f0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    mles.push(StreamingMleEnum::SparseMatVec {
+                        matrix: m.clone(),
+                        witness: f_arc_ring.clone(),
+                        num_vars: nvars,
+                    });
+                }
+
+                if h_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: m.clone(),
+                        witness0: h0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    mles.push(StreamingMleEnum::SparseMatVec {
+                        matrix: m.clone(),
+                        witness: h_arc_ring.clone(),
+                        num_vars: nvars,
+                    });
+                }
             }
         }
         if profile && profile_detail {
