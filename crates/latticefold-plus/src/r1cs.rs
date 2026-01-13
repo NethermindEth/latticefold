@@ -58,6 +58,24 @@ impl<R: Decompose + Ring> ComR1CS<R> {
         };
         Self { x, f }
     }
+
+    /// Construct a committed R1CS instance from a **fully materialized witness vector** `f`.
+    ///
+    /// This bypasses `gadget_decompose` on an external `z` and is intended for integrations where the
+    /// witness is already represented in the ring domain expected by the protocol (e.g. SP1 witness
+    /// values embedded as constant-coeff ring elements).
+    ///
+    /// NOTE: `z` is left empty in this constructor (it is not used by the verifier-side relation).
+    pub fn from_f(r1cs: R1CS<R>, f: Vec<R>, l_in: usize, A: &Matrix<R>) -> Self {
+        let cm_f = A.try_mul_vec(&f).unwrap();
+        let x = ComR1CSX {
+            r1cs,
+            z: Vec::new(),
+            cm_f,
+            l_in,
+        };
+        Self { x, f }
+    }
 }
 
 impl<R: Ring> ComR1CSX<R> {

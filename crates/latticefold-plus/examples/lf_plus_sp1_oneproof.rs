@@ -1,11 +1,13 @@
-//! LF+ one-proof harness for SP1 shrink verifier R1LF (research).
+//! LF+ one-proof harness for SP1 shrink verifier R1LF (production path).
 //!
-//! This is the intended entrypoint for provers:
-//! - load SP1’s `.r1lf` + `{path}.chunks` cache
-//! - load SP1 witness (base+aux)
-//! - enforce boundedness (base 2^16, k=2) on the full witness (incl. lift `t_i`)
-//! - produce + verify a cryptographic streaming-sumcheck proof that each R1LF chunk satisfies
-//!   the lifted R1CS relation: (A·w) * (B·w) == (C·w)
+//! This produces a real `PlusProof<R, ComR1CSProof<R>>` so the **existing** LF+ WE/DPP gate
+//! (`build_we_dr1cs_for_plus_proof`) can arithmetize and verify it unchanged.
+//!
+//! Implementation strategy (Salsa/Symphony-style):
+//! - load `.r1lf` chunk cache and materialize A/B/C into in-memory sparse matrices (const-coeff)
+//! - load SP1 witness and embed into `R` as constant-coeff ring elements
+//! - run `PlusProver` to produce a `PlusProof`
+//! - record the verifier transcript trace and sanity-check that the WE gate dR1CS is satisfied
 //!
 //! Usage:
 //!   SP1_R1LF=/path/to/shrink_verifier.r1lf \
@@ -14,14 +16,16 @@
 
 #![cfg(feature = "we_gate")]
 
-use ark_ff::{BigInteger, PrimeField};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
+use cyclotomic_rings::rings::GetPoseidonParams;
 use latticefold::transcript::Transcript;
-use latticefold::utils::sumcheck::utils::eq_eval;
-use latticefold::utils::sumcheck::MLSumcheck;
+use latticefold_plus::lin::LinearizedVerify;
+use latticefold_plus::utils::estimate_bound;
+use rand::SeedableRng;
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings::PolyRing;
 use stark_rings::Ring;
+use stark_rings_linalg::{Matrix, SparseMatrix};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -39,44 +43,6 @@ fn babybear_u64_to_centered_host(x: u64, p_bb: u64) -> F {
     }
 }
 
-fn modulus_u128<P: PrimeField>() -> u128 {
-    let le = P::MODULUS.to_bytes_le();
-    let mut out = 0u128;
-    for (i, b) in le.iter().enumerate().take(16) {
-        out |= (*b as u128) << (8 * i);
-    }
-    out
-}
-
-#[inline]
-fn centered_i128_from_canonical_u64(x: u64, q: u128) -> i128 {
-    let xu = x as u128;
-    let half = q >> 1;
-    if xu > half {
-        (xu as i128) - (q as i128)
-    } else {
-        xu as i128
-    }
-}
-
-#[inline]
-fn check_base2_16_k2(centered: i128) -> bool {
-    const B: i128 = 1i128 << 16;
-    const HALF: i128 = 1i128 << 15;
-    let mut x = centered;
-    for _ in 0..2 {
-        let mut d = x.rem_euclid(B);
-        if d >= HALF {
-            d -= B;
-        }
-        if d < i16::MIN as i128 || d > i16::MAX as i128 {
-            return false;
-        }
-        x = (x - d) / B;
-    }
-    x == 0
-}
-
 fn main() {
     let r1lf_path = std::env::var("SP1_R1LF").expect("Set SP1_R1LF=/path/to/shrink.r1lf");
     let witness_path =
@@ -91,7 +57,7 @@ fn main() {
         .unwrap_or(256);
 
     println!("=========================================================");
-    println!("LF+ SP1 One-Proof (R1LF prove+verify, streaming sumcheck per chunk)");
+    println!("LF+ SP1 One-Proof (R1LF -> full PlusProof -> WE gate check)");
     println!("=========================================================");
     println!("  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of}");
 
@@ -111,21 +77,33 @@ fn main() {
     );
     println!("  digest={:02x?}...", &cache.stats.digest[..8]);
 
-    // Load all matrices into RAM up-front (Symphony-style).
-    //
-    // This removes per-chunk I/O + decompression overhead and lets the sumcheck inner loops
-    // fully utilize Rayon for compute.
-    let t_load_mats = Instant::now();
-    let mut all_mats: Vec<[Arc<stark_rings_linalg::SparseMatrix<F>>; 3]> =
-        Vec::with_capacity(cache.num_chunks);
+    // Materialize full (A,B,C) as SparseMatrix<R> (constant-coeff) by concatenating chunk rows.
+    let t_mats = Instant::now();
+    let total_rows = cache.num_chunks * chunk_size;
+    let mut a_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
+    let mut b_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
+    let mut c_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
     for chunk_idx in 0..cache.num_chunks {
         let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
-        all_mats.push([Arc::new(a), Arc::new(b), Arc::new(c)]);
+        debug_assert_eq!(a.nrows, chunk_size);
+        for row in a.coeffs {
+            a_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+        }
+        for row in b.coeffs {
+            b_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+        }
+        for row in c.coeffs {
+            c_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+        }
     }
+    let m_a = SparseMatrix::<R> { nrows: total_rows, ncols: cache.ncols, coeffs: a_rows };
+    let m_b = SparseMatrix::<R> { nrows: total_rows, ncols: cache.ncols, coeffs: b_rows };
+    let m_c = SparseMatrix::<R> { nrows: total_rows, ncols: cache.ncols, coeffs: c_rows };
     println!(
-        "  load all mats: {:?} (chunks={})",
-        t_load_mats.elapsed(),
-        all_mats.len()
+        "  build full mats: {:?} (nrows={} ncols={})",
+        t_mats.elapsed(),
+        total_rows,
+        cache.ncols
     );
 
     let (w_u64, base_len, aux_len) =
@@ -153,130 +131,107 @@ fn main() {
     );
     println!("  map witness u64->F: {:?}", t_w.elapsed());
 
-    // Boundedness (base 2^16, k=2) over the full witness (incl. aux t_i).
-    let t_b = Instant::now();
-    let q = modulus_u128::<F>();
-    #[cfg(feature = "parallel")]
-    {
-        use rayon::prelude::*;
-        let bad = w_host.par_iter().enumerate().find_any(|(_i, fx)| {
-            let bi = fx.into_bigint();
-            let limbs = bi.as_ref();
-            let x0 = limbs.get(0).copied().unwrap_or(0);
-            let centered = centered_i128_from_canonical_u64(x0, q);
-            !check_base2_16_k2(centered)
-        });
-        if let Some((i, fx)) = bad {
-            panic!("boundedness failed at idx={i}: fx={fx:?}");
+    // Embed witness into ring `R` (constant-coeff). Pad to `ncols` (power-of-two).
+    let t_f = Instant::now();
+    let mut f = vec![R::ZERO; cache.ncols];
+    for (i, &x) in w_host.iter().enumerate() {
+        if i >= cache.stats.num_vars {
+            break;
         }
+        f[i] = R::from(x);
     }
-    #[cfg(not(feature = "parallel"))]
-    {
-        for (i, fx) in w_host.iter().enumerate() {
-            let bi = fx.into_bigint();
-            let limbs = bi.as_ref();
-            let x0 = limbs.get(0).copied().unwrap_or(0);
-            let centered = centered_i128_from_canonical_u64(x0, q);
-            if !check_base2_16_k2(centered) {
-                panic!("boundedness failed at idx={i}: fx={fx:?}");
-            }
-        }
+    println!("  build f (const-coeff ring): {:?}", t_f.elapsed());
+
+    // Build `ComR1CS` instance and run the full LF+ prover to produce a `PlusProof`.
+    let t_setup = Instant::now();
+    let r1cs = latticefold::arith::r1cs::R1CS::<R> { l: 0, A: m_a, B: m_b, C: m_c };
+
+    // Deterministic Ajtai commitment matrix (system parameter). Keep kappa=1 for now.
+    let kappa: usize = 1;
+    let mut rng = rand::rngs::StdRng::from_seed(*b"LFP_SP1_AJTAI_SEED_V1_0000000000");
+    let ajtai_a = Matrix::<R>::rand(&mut rng, kappa, cache.ncols);
+
+    let cr1cs = latticefold_plus::r1cs::ComR1CS::from_f(r1cs, f, 0, &ajtai_a);
+    let m = cr1cs.x.matrices_arc();
+
+    // LF+ parameters: boundedness base b=2^16,k=2, and a conservative decomp base B for Π_decomp.
+    let we_params =
+        latticefold_plus::sp1_r1lf::sp1_default_we_params_for_r1lf_cache::<R>(&cache, kappa as u64, m.len() as u64)
+            .expect("sp1_default_we_params_for_r1lf_cache");
+    let dparams = latticefold_plus::rgchk::DecompParameters {
+        b: (we_params.decomp_b as u128),
+        k: (we_params.k as usize),
+        l: (we_params.l as usize),
+    };
+    let lin_params = latticefold_plus::lin::LinParameters { kappa, decomp: dparams };
+    // Non-magic decomposition radix bound (matches existing WE-gate/bench harness style).
+    // This is *not* the SP1 lift boundedness base; it's the radix used by Π_decomp to split/recompose.
+    let sop = R::dimension() * 128;
+    let b_decomp: u128 = estimate_bound(sop, 1, R::dimension(), we_params.k as usize) + 1;
+    let pparams = latticefold_plus::plus::PlusParameters { lin: lin_params, B: b_decomp };
+
+    // Public statement binding: use the SP1 r1lf digest bits as public inputs (boolean field elems).
+    type BFSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+    let public_inputs: Vec<BFSmall> = {
+        let d: [u8; 32] = cache.stats.digest;
+        latticefold_plus::we_statement::digest32_to_bits_field::<BFSmall>(d)
+    };
+
+    let mut prover = latticefold_plus::plus::PlusProver::init(
+        ajtai_a.clone(),
+        m.clone(),
+        1,
+        pparams.clone(),
+        latticefold_plus::transcript::PoseidonTranscript::empty::<PC>(),
+    );
+    for b in &public_inputs {
+        prover.transcript.absorb_field_element(b);
     }
-    println!("  boundedness (base2^16,k=2) OK: {:?}", t_b.elapsed());
+    println!("  setup full LF+: {:?}", t_setup.elapsed());
 
-    // Prove+verify per chunk: sumcheck over rows proving eq(row,r0)*(Aw*Bw - Cw) sums to 0.
-    //
-    // This cryptographically binds the claim via the Fiat–Shamir transcript.
-    let t_pv = Instant::now();
-    for (chunk_idx, mats) in all_mats.iter().enumerate() {
-        let t_chunk = Instant::now();
-        let [a, b, c] = mats;
-        let nrows = a.nrows;
-        assert!(nrows.is_power_of_two(), "chunk nrows must be power-of-two");
-        let nvars = ark_std::log2(nrows) as usize;
+    let t_prove = Instant::now();
+    let proof = prover.prove(std::slice::from_ref(&cr1cs));
+    println!("  PlusProver::prove: {:?}", t_prove.elapsed());
 
-        // Prover transcript.
-        let mut ts = latticefold_plus::transcript::PoseidonTranscript::<R>::empty::<PC>();
-        ts.absorb_field_element(&F::from(0x4c46502b_53503152u128)); // "LFP+SP1R"
-        ts.absorb_field_element(&F::from(chunk_idx as u128));
-        // Bind to the statement digest (cheap field reduction).
-        ts.absorb_field_element(&F::from_le_bytes_mod_order(&cache.stats.digest));
-
-        let r0 = ts.get_challenges(nvars);
-        let one = F::from(1u64);
-        let one_minus_r0 = r0.iter().copied().map(|x| one - x).collect::<Vec<_>>();
-
-        let mles = vec![
-            latticefold_plus::streaming_sumcheck::StreamingMleEnum::<R>::EqBase {
-                scale: one,
-                r: r0.clone(),
-                one_minus_r: one_minus_r0,
-            },
-            latticefold_plus::streaming_sumcheck::StreamingMleEnum::<R>::SparseMatVecConstCoeffBase {
-                matrix: a.clone(),
-                witness0: w_host.clone(),
-                num_vars: nvars,
-            },
-            latticefold_plus::streaming_sumcheck::StreamingMleEnum::<R>::SparseMatVecConstCoeffBase {
-                matrix: b.clone(),
-                witness0: w_host.clone(),
-                num_vars: nvars,
-            },
-            latticefold_plus::streaming_sumcheck::StreamingMleEnum::<R>::SparseMatVecConstCoeffBase {
-                matrix: c.clone(),
-                witness0: w_host.clone(),
-                num_vars: nvars,
-            },
-        ];
-
-        let comb_fn = |vals: &[R]| -> R { vals[0] * (vals[1] * vals[2] - vals[3]) };
-
-        let (proof, _rand, final_vals) =
-            latticefold_plus::streaming_sumcheck::StreamingSumcheck::prove_as_subprotocol(
-                &mut ts,
-                mles,
-                nvars,
-                3,
-                comb_fn,
-            );
-
-        let va = final_vals[1];
-        let vb = final_vals[2];
-        let vc = final_vals[3];
-        ts.absorb_slice(&[va, vb, vc]);
-
-        // Verifier transcript (must match).
-        let mut tv = latticefold_plus::transcript::PoseidonTranscript::<R>::empty::<PC>();
-        tv.absorb_field_element(&F::from(0x4c46502b_53503152u128));
-        tv.absorb_field_element(&F::from(chunk_idx as u128));
-        tv.absorb_field_element(&F::from_le_bytes_mod_order(&cache.stats.digest));
-        let r0_v: Vec<R> = tv
-            .get_challenges(nvars)
-            .into_iter()
-            .map(R::from)
-            .collect();
-
-        let sub = MLSumcheck::verify_as_subprotocol(&mut tv, nvars, 3, R::ZERO, &proof)
-            .expect("sumcheck verify");
-        let ro: Vec<R> = sub.point.into_iter().map(R::from).collect();
-        let s = sub.expected_evaluation;
-
-        tv.absorb_slice(&[va, vb, vc]);
-
-        let eq = eq_eval(&r0_v, &ro).expect("eq_eval");
-        assert_eq!(eq * (va * vb - vc), s, "chunk {chunk_idx} failed");
-
-        if chunk_idx == 0 || chunk_idx + 1 == all_mats.len() {
-            println!(
-                "  chunk {}/{} OK: {:?} (nrows={}, nvars={})",
-                chunk_idx + 1,
-                all_mats.len(),
-                t_chunk.elapsed(),
-                nrows,
-                nvars
-            );
-        }
+    // Record verifier trace and ensure the existing WE gate arithmetization is satisfied.
+    let poseidon_cfg = PC::get_poseidon_config();
+    let mut rec = latticefold_plus::recording_transcript::TracePoseidonTranscript::<R>::empty::<PC>();
+    for b in &public_inputs {
+        rec.absorb_field_element(b);
     }
-    println!("  total prove+verify chunks: {:?}", t_pv.elapsed());
+    let t_verify_record = Instant::now();
+    for lp in &proof.lproof {
+        lp.verify(&mut rec);
+    }
+    proof.cmproof.verify(&m, &mut rec).expect("cm proof verify");
+    println!("  PlusVerifier::verify(record trace): {:?}", t_verify_record.elapsed());
+    let trace = rec.trace().clone();
+
+    let t_we = Instant::now();
+    let out = latticefold_plus::we_gate_arith::build_we_dr1cs_for_plus_proof::<R>(
+        &poseidon_cfg,
+        &trace,
+        &we_params,
+        &public_inputs,
+        &proof,
+        m.len(),
+        b_decomp,
+    )
+    .expect("build_we_dr1cs_for_plus_proof");
+    println!("  WE gate build_dr1cs: {:?}", t_we.elapsed());
+
+    let t_sat = Instant::now();
+    out.inst.check(&out.assignment).expect("we gate dr1cs satisfied");
+    println!("  WE gate dr1cs sat check: {:?}", t_sat.elapsed());
+
+    // Non-transcript (local) consistency check for Π_decomp.
+    // This does not affect the recorded verifier trace; WE gate enforces Π_decomp separately.
+    let t_decomp_local = Instant::now();
+    proof
+        .dproof
+        .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, b_decomp);
+    println!("  Π_decomp local verify (non-trace): {:?}", t_decomp_local.elapsed());
+
+    println!("  OK: WE gate DR1CS satisfied (existing gate, unchanged)");
 }
 
