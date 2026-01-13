@@ -122,7 +122,15 @@ where
     R: OverField + PolyRing,
     R::BaseRing: Zq + PrimeField + From<u64>,
 {
-    pub fn read_chunk(&self, chunk_idx: usize) -> std::io::Result<[stark_rings_linalg::SparseMatrix<R>; 3]> {
+    /// Read one chunk as **base-ring** sparse matrices.
+    ///
+    /// SP1 R1LF coefficients are const-coeff in the cyclotomic ring model, so materializing full
+    /// `R` elements per nonzero is wasted work and memory. This returns matrices over `R::BaseRing`
+    /// directly, which is what downstream SP1/LF+ checks and streaming code paths use.
+    pub fn read_chunk(
+        &self,
+        chunk_idx: usize,
+    ) -> std::io::Result<[stark_rings_linalg::SparseMatrix<<R as PolyRing>::BaseRing>; 3]> {
         use std::io::{BufReader, Seek, SeekFrom};
         const IO_BUFFER_SIZE: usize = 256 * 1024 * 1024;
 
@@ -141,7 +149,8 @@ where
         r.read_exact(&mut buf8)?;
         let nrows = u64::from_le_bytes(buf8) as usize;
 
-        let mut chunk_matrices: [stark_rings_linalg::SparseMatrix<R>; 3] = std::array::from_fn(|_| {
+        let mut chunk_matrices: [stark_rings_linalg::SparseMatrix<<R as PolyRing>::BaseRing>; 3] =
+            std::array::from_fn(|_| {
             stark_rings_linalg::SparseMatrix {
                 nrows,
                 ncols: self.ncols,
@@ -163,8 +172,7 @@ where
                         continue;
                     }
                     let abs = coeff.unsigned_abs();
-                    let base = <R as PolyRing>::BaseRing::from(abs);
-                    let mut val = R::from(base);
+                    let mut val = <R as PolyRing>::BaseRing::from(abs);
                     if coeff < 0 {
                         val = -val;
                     }

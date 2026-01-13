@@ -7,26 +7,6 @@
 #![cfg(feature = "we_gate")]
 
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
-use stark_rings::PolyRing;
-use ark_ff::Field;
-
-fn is_const_coeff_ring(x: &R) -> bool {
-    x.coeffs()
-        .iter()
-        .skip(1)
-        .all(|c| *c == <R as PolyRing>::BaseRing::ZERO)
-}
-
-fn is_const_coeff_sparse_matrix(m: &stark_rings_linalg::SparseMatrix<R>) -> bool {
-    for row in &m.coeffs {
-        for (c, _j) in row {
-            if !is_const_coeff_ring(c) {
-                return false;
-            }
-        }
-    }
-    true
-}
 
 fn main() {
     let path = std::env::var("SP1_R1LF").expect("Set SP1_R1LF=/path/to/file.r1lf");
@@ -41,7 +21,7 @@ fn main() {
         .unwrap_or(256);
 
     println!("=========================================================");
-    println!("LF+ SP1 R1LF One-Proof (loader + const-coeff inspection)");
+    println!("LF+ SP1 R1LF One-Proof");
     println!("=========================================================");
     println!("  CHUNK_SIZE={chunk_size} PAD_COLS={pad_cols_to_multiple_of}");
 
@@ -93,11 +73,7 @@ fn main() {
     let [a, b, c] = cache.read_chunk(0).expect("read_chunk(0)");
     println!("  read chunk0: {:?}", t1.elapsed());
     println!("  chunk0 dims: nrows={} ncols={}", a.nrows, a.ncols);
-    println!(
-        "  const-coeff chunk0: A={} B={} C={}",
-        is_const_coeff_sparse_matrix(&a),
-        is_const_coeff_sparse_matrix(&b),
-        is_const_coeff_sparse_matrix(&c)
-    );
+    // Chunk cache stores base-ring coefficients directly (const-coeff by construction).
+    let _ = (a, b, c);
 }
 

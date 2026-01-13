@@ -26,11 +26,6 @@ use stark_rings::PolyRing;
 
 type F = <R as PolyRing>::BaseRing;
 
-#[inline]
-fn coeff0(c: &R) -> F {
-    c.coeffs()[0]
-}
-
 /// SP1 lift semantics: interpret a BabyBear residue `x in [0,p_bb)` as a centered integer in
 /// (-(p_bb-1)/2 .. (p_bb-1)/2], then embed into the host field `F`.
 ///
@@ -57,11 +52,11 @@ fn bb_centered_i128(x: u64, p_bb: u64) -> i128 {
 }
 
 #[inline]
-fn row_dot_base(row: &[(R, usize)], w: &[F]) -> F {
+fn row_dot_base(row: &[(F, usize)], w: &[F]) -> F {
     let mut acc = F::ZERO;
     for (c, j) in row {
         let wj = w.get(*j).copied().unwrap_or(F::ZERO);
-        acc += coeff0(c) * wj;
+        acc += (*c) * wj;
     }
     acc
 }
@@ -253,7 +248,6 @@ fn main() {
     // This is useful for sanity/telemetry, but **SP1 evaluates all witness slots using centered
     // BabyBear integers**, including aux vars (see `eval_row_i128` in `sp1/.../r1cs/lf.rs`).
     let p_bb = cache.stats.p_bb;
-    let p_bb_f = F::from(p_bb);
     let t_inf = std::time::Instant::now();
     let mut base_vars = cache.stats.num_vars; // fallback if no aux terms exist
     'outer: for chunk_idx in 0..cache.num_chunks {
@@ -262,8 +256,8 @@ fn main() {
             .expect("read_chunk for infer_base_vars");
         for row in &c.coeffs {
             for (coeff, col_idx) in row {
-                let c0 = coeff0(coeff);
-                if c0 == p_bb_f || c0 == -p_bb_f {
+                // Coefficients are stored as base-ring scalars in the chunk cache.
+                if *coeff == F::from(p_bb) || *coeff == -F::from(p_bb) {
                     base_vars = base_vars.min(*col_idx);
                 }
             }
