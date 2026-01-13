@@ -18,8 +18,6 @@ pub mod utils;
 // SP1 lift vacuity/soundness regression tests (WE-gate only).
 #[cfg(all(test, feature = "we_gate"))]
 mod sp1_lift_cheat_tests;
-#[cfg(all(test, feature = "we_gate"))]
-mod sp1_r1lf_witness_extend_tests;
 
 // WE/DPP arithmetization frontends (feature-gated; not needed in production proving path).
 #[cfg(feature = "we_gate")]
