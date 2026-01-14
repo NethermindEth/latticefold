@@ -148,7 +148,7 @@ where
 
         let t = Instant::now();
         maybe_print_rss("cm: build_h start");
-        let h: Vec<Vec<R>> = self
+        let h_vecs: Vec<Vec<R>> = self
             .rg
             .instances
             .iter()
@@ -342,6 +342,9 @@ where
                     .collect::<Vec<R>>()
             })
             .collect::<Vec<_>>();
+        // `h` is huge (length n ring vector per instance). We'll run two sumchecks and both need
+        // to reference `h` as an MLE; avoid cloning `h[i]` into a fresh Arc each time.
+        let h: Vec<Arc<Vec<R>>> = h_vecs.into_iter().map(Arc::new).collect();
 
         let dpp = (0..l)
             .map(|i| R::from(R::BaseRing::from(dp as u128).pow([i as u64])))
@@ -395,10 +398,26 @@ where
         }
         let mats_const = M.iter().all(|m| is_const_coeff_sparse_matrix::<R>(m.as_ref()));
 
-        let (proof_a, evals_a, ro_a) =
-            self.sumchecker_streaming(&dcom, &h, &t0_mle, &t1_mle, &m_arcs, mats_const, transcript, profile);
-        let (proof_b, evals_b, ro_b) =
-            self.sumchecker_streaming(&dcom, &h, &t0_mle, &t1_mle, &m_arcs, mats_const, transcript, profile);
+        let (proof_a, evals_a, ro_a) = self.sumchecker_streaming(
+            &dcom,
+            &h,
+            &t0_mle,
+            &t1_mle,
+            &m_arcs,
+            mats_const,
+            transcript,
+            profile,
+        );
+        let (proof_b, evals_b, ro_b) = self.sumchecker_streaming(
+            &dcom,
+            &h,
+            &t0_mle,
+            &t1_mle,
+            &m_arcs,
+            mats_const,
+            transcript,
+            profile,
+        );
 
         // Step 7
         // TODO needs more folding challenges `s` for the L instances
@@ -454,7 +473,7 @@ where
     fn sumchecker_streaming(
         &self,
         dcom: &Dcom<R>,
-        h: &[Vec<R>],
+        h: &[Arc<Vec<R>>],
         t0_mle: &StreamingMleEnum<R>,
         t1_mle: &StreamingMleEnum<R>,
         m_arcs: &[Arc<SparseMatrix<R>>],
@@ -519,7 +538,7 @@ where
                 None
             };
             let h0_arc: Option<Arc<Vec<R::BaseRing>>> =
-                if mats_const { try_as_base_scalars::<R>(&h[i]).map(Arc::new) } else { None };
+                if mats_const { try_as_base_scalars::<R>(h[i].as_ref()).map(Arc::new) } else { None };
 
             // We apply the const-coeff optimization **per vector**, not all-or-nothing.
             //
@@ -541,7 +560,7 @@ where
             });
 
             let f_arc_ring: Option<Arc<Vec<R>>> = inst.f.as_ring_arc();
-            let h_arc_ring: Arc<Vec<R>> = Arc::new(h[i].clone());
+            let h_arc_ring: Arc<Vec<R>> = h[i].clone();
 
             if mtau_cc {
                 mles.push(StreamingMleEnum::BaseScalarArc {

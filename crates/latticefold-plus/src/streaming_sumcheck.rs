@@ -416,23 +416,38 @@ where
             StreamingMleEnum::DenseArc { evals, num_vars } => {
                 // Avoid allocating a brand new half-sized Vec<R> (which is enormous for n=2^27):
                 // - if the Arc is uniquely owned, take it and fix in-place
-                // - otherwise, clone once (still expensive, but avoids *two* large allocations)
+                // - otherwise, DO NOT clone the full table; compute the half-sized fixed table directly.
                 let arc = std::mem::take(evals);
-                let mut owned = match Arc::try_unwrap(arc) {
-                    Ok(v) => v,
-                    Err(a) => (*a).clone(),
-                };
-                let one_minus = R::ONE - r_ring;
-                for i in 0..half {
-                    let a = owned.get(i << 1).copied().unwrap_or(R::ZERO);
-                    let b = owned.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
-                    owned[i] = one_minus * a + r_ring * b;
+                match Arc::try_unwrap(arc) {
+                    Ok(mut owned) => {
+                        let one_minus = R::ONE - r_ring;
+                        for i in 0..half {
+                            let a = owned.get(i << 1).copied().unwrap_or(R::ZERO);
+                            let b = owned.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
+                            owned[i] = one_minus * a + r_ring * b;
+                        }
+                        owned.truncate(half);
+                        *self = StreamingMleEnum::DenseOwned {
+                            evals: owned,
+                            num_vars: *num_vars - 1,
+                        };
+                    }
+                    Err(a) => {
+                        // Shared table: allocate only the half-sized result.
+                        let src: &[R] = a.as_ref();
+                        let mut out = vec![R::ZERO; half];
+                        let one_minus = R::ONE - r_ring;
+                        for i in 0..half {
+                            let aa = src.get(i << 1).copied().unwrap_or(R::ZERO);
+                            let bb = src.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
+                            out[i] = one_minus * aa + r_ring * bb;
+                        }
+                        *self = StreamingMleEnum::DenseOwned {
+                            evals: out,
+                            num_vars: *num_vars - 1,
+                        };
+                    }
                 }
-                owned.truncate(half);
-                *self = StreamingMleEnum::DenseOwned {
-                    evals: owned,
-                    num_vars: *num_vars - 1,
-                };
             }
             StreamingMleEnum::BaseScalarOwned { evals, num_vars } => {
                 for i in 0..half {
@@ -454,40 +469,72 @@ where
             } => {
                 // Take ownership of the Arc if possible; otherwise clone.
                 let arc = std::mem::take(evals);
-                let mut owned = match Arc::try_unwrap(arc) {
-                    Ok(v) => v,
-                    Err(a) => (*a).clone(),
-                };
-                if *square {
-                    // Vertex-wise squares: square BEFORE combining.
-                    for i in 0..half {
-                        // Allow implicit zero-padding (table shorter than 2^num_vars).
-                        let mut a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
-                        let mut b = owned
-                            .get((i << 1) | 1)
-                            .copied()
-                            .unwrap_or(R::BaseRing::ZERO);
-                        a *= a;
-                        b *= b;
-                        owned[i] = one_minus0 * a + r0 * b;
+                match Arc::try_unwrap(arc) {
+                    Ok(mut owned) => {
+                        if *square {
+                            // Vertex-wise squares: square BEFORE combining.
+                            for i in 0..half {
+                                // Allow implicit zero-padding (table shorter than 2^num_vars).
+                                let mut a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
+                                let mut b = owned
+                                    .get((i << 1) | 1)
+                                    .copied()
+                                    .unwrap_or(R::BaseRing::ZERO);
+                                a *= a;
+                                b *= b;
+                                owned[i] = one_minus0 * a + r0 * b;
+                            }
+                        } else {
+                            for i in 0..half {
+                                // Allow implicit zero-padding (table shorter than 2^num_vars).
+                                let a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
+                                let b = owned
+                                    .get((i << 1) | 1)
+                                    .copied()
+                                    .unwrap_or(R::BaseRing::ZERO);
+                                owned[i] = one_minus0 * a + r0 * b;
+                            }
+                        }
+                        owned.truncate(half);
+                        // After fixing, the table is now the correct MLE values (square semantics consumed).
+                        *self = StreamingMleEnum::BaseScalarOwned {
+                            evals: owned,
+                            num_vars: *num_vars - 1,
+                        };
                     }
-                } else {
-                    for i in 0..half {
-                        // Allow implicit zero-padding (table shorter than 2^num_vars).
-                        let a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
-                        let b = owned
-                            .get((i << 1) | 1)
-                            .copied()
-                            .unwrap_or(R::BaseRing::ZERO);
-                        owned[i] = one_minus0 * a + r0 * b;
+                    Err(a) => {
+                        // Shared table: allocate only the half-sized result.
+                        let src: &[R::BaseRing] = a.as_ref();
+                        let mut out = vec![R::BaseRing::ZERO; half];
+                        if *square {
+                            for i in 0..half {
+                                let mut aa =
+                                    src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
+                                let mut bb = src
+                                    .get((i << 1) | 1)
+                                    .copied()
+                                    .unwrap_or(R::BaseRing::ZERO);
+                                aa *= aa;
+                                bb *= bb;
+                                out[i] = one_minus0 * aa + r0 * bb;
+                            }
+                        } else {
+                            for i in 0..half {
+                                let aa =
+                                    src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
+                                let bb = src
+                                    .get((i << 1) | 1)
+                                    .copied()
+                                    .unwrap_or(R::BaseRing::ZERO);
+                                out[i] = one_minus0 * aa + r0 * bb;
+                            }
+                        }
+                        *self = StreamingMleEnum::BaseScalarOwned {
+                            evals: out,
+                            num_vars: *num_vars - 1,
+                        };
                     }
                 }
-                owned.truncate(half);
-                // After fixing, the table is now the correct MLE values (square semantics consumed).
-                *self = StreamingMleEnum::BaseScalarOwned {
-                    evals: owned,
-                    num_vars: *num_vars - 1,
-                };
             }
             StreamingMleEnum::BaseScalarConst { num_vars, .. } => {
                 // Constant function stays constant after fixing; just decrement dimension.

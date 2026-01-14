@@ -2,7 +2,7 @@ use ark_std::log2;
 use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
     balanced_decomposition::{recompose, Decompose, DecomposeToVec},
-    PolyRing, Zq,
+    OverField, PolyRing, Ring, Zq,
 };
 use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
 use std::time::Instant;
@@ -33,7 +33,7 @@ pub struct DecompProof<R> {
 
 impl<R: PolyRing> Decomp<'_, R>
 where
-    R: Decompose,
+    R: Decompose + OverField,
     R::BaseRing: Zq,
 {
     pub fn decompose(&self, A: &Matrix<R>, B: u128) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
@@ -328,9 +328,40 @@ where
         maybe_print_rss("decomp_seeded: start");
 
         let nvars = log2(scheme.width()) as usize;
-        let mut F = self.f.decompose_to_vec(B, 2).transpose().into_iter();
-        let F0 = F.next().unwrap();
-        let F1 = F.next().unwrap();
+        // Avoid `decompose_to_vec(...).transpose()`:
+        // that creates `Vec<Vec<R>>` of length n with per-entry allocations (huge RSS).
+        // We only need 2 digits, so decompose directly into two length-n vectors.
+        let n = self.f.len();
+        let (F0, F1) = {
+            let mut f0 = vec![R::ZERO; n];
+            let mut f1 = vec![R::ZERO; n];
+            #[cfg(feature = "parallel")]
+            {
+                // Chunked to allow per-thread scratch without per-element allocation.
+                const CHUNK: usize = 1 << 14;
+                f0.par_chunks_mut(CHUNK)
+                    .zip(f1.par_chunks_mut(CHUNK))
+                    .zip(self.f.par_chunks(CHUNK))
+                    .for_each(|((o0, o1), inp)| {
+                        let mut tmp = vec![R::ZERO; 2];
+                        for i in 0..inp.len() {
+                            inp[i].decompose_to(B, &mut tmp);
+                            o0[i] = tmp[0];
+                            o1[i] = tmp[1];
+                        }
+                    });
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                let mut tmp = vec![R::ZERO; 2];
+                for i in 0..n {
+                    self.f[i].decompose_to(B, &mut tmp);
+                    f0[i] = tmp[0];
+                    f1[i] = tmp[1];
+                }
+            }
+            (f0, f1)
+        };
         maybe_print_rss("decomp_seeded: after decompose_to_vec");
 
         let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
@@ -401,6 +432,59 @@ where
         }
 
         #[inline]
+        fn is_const_coeff_ring<Rr: PolyRing>(x: &Rr) -> bool {
+            x.coeffs()
+                .iter()
+                .skip(1)
+                .all(|c| *c == <Rr as PolyRing>::BaseRing::ZERO)
+        }
+
+        // Base-scalar eq-weights: much smaller than storing ring elements.
+        #[inline]
+        fn eq_weights_base<Rr: PolyRing>(r0: &[Rr::BaseRing]) -> Vec<Rr::BaseRing>
+        where
+            Rr::BaseRing: Ring,
+        {
+            let nvars = r0.len();
+            let n = 1usize << nvars;
+            let mut cur = vec![Rr::BaseRing::ZERO; n];
+            let mut next = vec![Rr::BaseRing::ZERO; n];
+            cur[0] = Rr::BaseRing::ONE;
+
+            let mut len = 1usize;
+            let mut cur_is_cur = true;
+            for &rj in r0.iter().rev() {
+                let om = Rr::BaseRing::ONE - rj;
+                let (src, dst) = if cur_is_cur {
+                    (&cur[..len], &mut next[..(2 * len)])
+                } else {
+                    (&next[..len], &mut cur[..(2 * len)])
+                };
+
+                #[cfg(feature = "parallel")]
+                {
+                    dst.par_chunks_mut(2)
+                        .zip(src.par_iter())
+                        .for_each(|(pair, &wi)| {
+                            pair[0] = wi * om;
+                            pair[1] = wi * rj;
+                        });
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    for (i, &wi) in src.iter().enumerate() {
+                        dst[2 * i] = wi * om;
+                        dst[2 * i + 1] = wi * rj;
+                    }
+                }
+
+                len <<= 1;
+                cur_is_cur = !cur_is_cur;
+            }
+            if cur_is_cur { cur } else { next }
+        }
+
+        #[inline]
         fn eval_sparse_mat_two_vecs_at_two_points<Rr: PolyRing>(
             m: &SparseMatrix<Rr>,
             f0: &[Rr],
@@ -439,8 +523,17 @@ where
             let detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
 
             let t_eq = Instant::now();
-            let eq_a = eq_weights::<R>(&r_a);
-            let eq_b = eq_weights::<R>(&r_b);
+            let (eq_a_ring, eq_b_ring, eq_a0, eq_b0) = if r_a.iter().all(is_const_coeff_ring::<R>)
+                && r_b.iter().all(is_const_coeff_ring::<R>)
+            {
+                let r_a0 = r_a.iter().map(|x| x.coeffs()[0]).collect::<Vec<_>>();
+                let r_b0 = r_b.iter().map(|x| x.coeffs()[0]).collect::<Vec<_>>();
+                let ea0 = eq_weights_base::<R>(&r_a0);
+                let eb0 = eq_weights_base::<R>(&r_b0);
+                (None, None, Some(ea0), Some(eb0))
+            } else {
+                (Some(eq_weights::<R>(&r_a)), Some(eq_weights::<R>(&r_b)), None, None)
+            };
             maybe_print_rss("decomp_seeded: after eq_weights");
             if profile && detail {
                 println!(
@@ -468,11 +561,43 @@ where
                 }
             }
 
+            #[inline]
+            fn dot_with_eq_base<Rr: OverField + PolyRing>(f: &[Rr], eq0: &[Rr::BaseRing]) -> Rr
+            where
+                Rr::BaseRing: Ring,
+            {
+                debug_assert_eq!(f.len(), eq0.len());
+                #[cfg(feature = "parallel")]
+                {
+                    f.par_iter()
+                        .zip(eq0.par_iter())
+                        .map(|(&fx, &wx)| fx * wx)
+                        .reduce(|| Rr::ZERO, |a, b| a + b)
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    f.iter()
+                        .zip(eq0.iter())
+                        .fold(Rr::ZERO, |acc, (&fx, &wx)| acc + fx * wx)
+                }
+            }
+
             let t_fv = Instant::now();
             // Base term corresponds to the "no-matrix" entry in `vo`: evaluation of g itself.
             // We need both evaluation points, so we compute both dot-products for both Fi.
-            let fv0 = (dot_with_eq::<R>(&F0, &eq_a), dot_with_eq::<R>(&F0, &eq_b));
-            let fv1 = (dot_with_eq::<R>(&F1, &eq_a), dot_with_eq::<R>(&F1, &eq_b));
+            let (fv0, fv1) = if let (Some(ea0), Some(eb0)) = (eq_a0.as_deref(), eq_b0.as_deref()) {
+                (
+                    (dot_with_eq_base::<R>(&F0, ea0), dot_with_eq_base::<R>(&F0, eb0)),
+                    (dot_with_eq_base::<R>(&F1, ea0), dot_with_eq_base::<R>(&F1, eb0)),
+                )
+            } else {
+                let ea = eq_a_ring.as_ref().unwrap();
+                let eb = eq_b_ring.as_ref().unwrap();
+                (
+                    (dot_with_eq::<R>(&F0, ea), dot_with_eq::<R>(&F0, eb)),
+                    (dot_with_eq::<R>(&F1, ea), dot_with_eq::<R>(&F1, eb)),
+                )
+            };
             if profile && detail {
                 println!(
                     "[LF+ Decomp::decompose_seeded] fv(dot_with_eq) both: {:?}",
@@ -490,8 +615,34 @@ where
                     v0.push(fv0);
                     v1.push(fv1);
                 } else {
-                    let (m0, m1) =
-                        eval_sparse_mat_two_vecs_at_two_points::<R>(M_i, &F0, &F1, &eq_a, &eq_b);
+                    let (m0, m1) = if let (Some(ea0), Some(eb0)) = (eq_a0.as_deref(), eq_b0.as_deref()) {
+                        // Use base-scalar weights (much smaller than ring weights).
+                        // Multiply ring row sums by base scalars via `OverField` scalar mul.
+                        let mut out0 = (R::ZERO, R::ZERO);
+                        let mut out1 = (R::ZERO, R::ZERO);
+                        for (row, terms) in M_i.coeffs.iter().enumerate() {
+                            let wa0 = ea0[row];
+                            let wb0 = eb0[row];
+                            if wa0 == R::BaseRing::ZERO && wb0 == R::BaseRing::ZERO {
+                                continue;
+                            }
+                            let mut s0 = R::ZERO;
+                            let mut s1 = R::ZERO;
+                            for (c, j) in terms {
+                                s0 += *c * F0[*j];
+                                s1 += *c * F1[*j];
+                            }
+                            out0.0 += s0 * wa0;
+                            out0.1 += s0 * wb0;
+                            out1.0 += s1 * wa0;
+                            out1.1 += s1 * wb0;
+                        }
+                        (out0, out1)
+                    } else {
+                        let ea = eq_a_ring.as_ref().unwrap();
+                        let eb = eq_b_ring.as_ref().unwrap();
+                        eval_sparse_mat_two_vecs_at_two_points::<R>(M_i, &F0, &F1, ea, eb)
+                    };
                     v0.push(m0);
                     v1.push(m1);
                 }
