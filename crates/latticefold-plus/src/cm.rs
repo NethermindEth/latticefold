@@ -155,157 +155,144 @@ where
             .map(|inst| {
                 let n = 1 << self.rg.nvars;
                 maybe_print_rss("cm: build_h one inst start");
-                let h_vectors: Vec<Vec<R>> = inst
-                    .M_f
-                    .iter()
-                    .zip(s_prime.iter())
-                    .map(|(M, s_i)| {
-                        debug_assert_eq!(M.nrows, n);
-                        debug_assert_eq!(M.ncols, s_i.len());
-                        // Fast path: for constant-coeff witnesses we store only col0 digits and treat
-                        // all columns 1..d-1 as the fixed zero digit. Then:
-                        //   row_sum = M[row,0]*s_i[0] + exp(0) * Σ_{col>0} s_i[col]
-                        // so we can avoid the inner `for col` loop.
-                        let const_col0 = matches!(&M.digits, crate::setchk::DigitsBacking::ConstCol0 { .. });
-                        // Hoist per-vector constants outside the per-row loop.
-                        let s0 = s_i[0];
-                        let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
+                // Memory-critical: don't materialize `h_vectors` (k vectors of length n).
+                // Instead compute each row directly as Σ_i <M_f_i[row,*], s'_i>.
+                //
+                // In the SP1 regime `M_f_i` is typically `DigitsBacking::ConstCol0`; for that case we
+                // can precompute the monomial-multiplied values for each digit once, and then each row
+                // is just a couple of table lookups + additions.
+                #[inline]
+                fn mon_info<Rr: PolyRing>(mono: &Rr) -> Option<(usize, Rr::BaseRing)>
+                where
+                    Rr::BaseRing: Ring,
+                {
+                    let coeffs = mono.coeffs();
+                    let mut found: Option<(usize, Rr::BaseRing)> = None;
+                    for (i, &ci) in coeffs.iter().enumerate() {
+                        if ci != Rr::BaseRing::ZERO {
+                            if found.is_some() {
+                                return None;
+                            }
+                            found = Some((i, ci));
+                        }
+                    }
+                    found
+                }
+                #[inline]
+                fn mul_negacyclic_by_monomial<Rr>(a: &Rr, shift: usize, scale: Rr::BaseRing) -> Rr
+                where
+                    Rr: PolyRing,
+                    Rr::BaseRing: Ring + Copy,
+                {
+                    if scale == Rr::BaseRing::ZERO {
+                        return Rr::ZERO;
+                    }
+                    let ac = a.coeffs();
+                    let d = ac.len();
+                    if shift == 0 && scale == Rr::BaseRing::ONE {
+                        return *a;
+                    }
+                    let mut out = Rr::ZERO;
+                    let outc = out.coeffs_mut();
+                    for i in 0..d {
+                        let v = ac[i] * scale;
+                        if v == Rr::BaseRing::ZERO {
+                            continue;
+                        }
+                        let j = i + shift;
+                        if j < d {
+                            outc[j] += v;
+                        } else {
+                            outc[j - d] -= v;
+                        }
+                    }
+                    out
+                }
 
-                        // Further speed: exp_table entries are monomials, so multiplying by them can be
-                        // done as a negacyclic rotation+sign instead of a full ring mul.
-                        #[inline]
-                        fn mon_info<Rr: PolyRing>(mono: &Rr) -> Option<(usize, Rr::BaseRing)>
-                        where
-                            Rr::BaseRing: Ring,
-                        {
-                            let coeffs = mono.coeffs();
-                            let mut found: Option<(usize, Rr::BaseRing)> = None;
-                            for (i, &ci) in coeffs.iter().enumerate() {
-                                if ci != Rr::BaseRing::ZERO {
-                                    if found.is_some() {
-                                        return None;
-                                    }
-                                    found = Some((i, ci));
-                                }
+                struct Col0Precomp<Rr: PolyRing> {
+                    col0: Arc<Vec<u16>>,
+                    zero_idx: u16,
+                    term0_tab: Vec<Rr>,
+                    term_rest: Rr,
+                }
+
+                let mut pre = Vec::<Option<Col0Precomp<R>>>::with_capacity(inst.M_f.len());
+                for (M, s_i) in inst.M_f.iter().zip(s_prime.iter()) {
+                    match &M.digits {
+                        crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
+                            // Precompute monomial (shift,scale) table for exp_table entries.
+                            let mut mi_tab = Vec::with_capacity(M.exp_table.len());
+                            for r in M.exp_table.iter() {
+                                mi_tab.push(mon_info::<R>(r).expect("exp_table entry must be monomial"));
                             }
-                            found
-                        }
-                        #[inline]
-                        fn mul_negacyclic_by_monomial<Rr>(a: &Rr, shift: usize, scale: Rr::BaseRing) -> Rr
-                        where
-                            Rr: PolyRing,
-                            Rr::BaseRing: Ring + Copy,
-                        {
-                            if scale == Rr::BaseRing::ZERO {
-                                return Rr::ZERO;
-                            }
-                            let ac = a.coeffs();
-                            let d = ac.len();
-                            if shift == 0 && scale == Rr::BaseRing::ONE {
-                                return *a;
-                            }
-                            // IMPORTANT: avoid allocating per row (this function is called ~n times).
-                            let mut out = Rr::ZERO;
-                            let outc = out.coeffs_mut();
-                            for i in 0..d {
-                                let v = ac[i] * scale;
-                                if v == Rr::BaseRing::ZERO {
-                                    continue;
-                                }
-                                let j = i + shift;
-                                if j < d {
-                                    outc[j] += v;
-                                } else {
-                                    // X^d = -1
-                                    outc[j - d] -= v;
-                                }
-                            }
-                            out
-                        }
-                        #[cfg(feature = "parallel")]
-                        {
-                            use rayon::prelude::*;
-                            (0..n)
-                                .into_par_iter()
-                                .map(|row| {
-                                    if const_col0 {
-                                        match &M.digits {
-                                            crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
-                                                let exp0 = M.exp_table[*zero_idx as usize];
-                                                let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
-                                                let mono = &M.exp_table[dix];
-                                                let term0 = if let Some((shift, scale)) = mon_info::<R>(mono) {
-                                                    mul_negacyclic_by_monomial::<R>(&s0, shift, scale)
-                                                } else {
-                                                    *mono * s0
-                                                };
-                                                let term_rest = if exp0 == R::ONE {
-                                                    rest_sum
-                                                } else if let Some((shift, scale)) = mon_info::<R>(&exp0) {
-                                                    mul_negacyclic_by_monomial::<R>(&rest_sum, shift, scale)
-                                                } else {
-                                                    exp0 * rest_sum
-                                                };
-                                                term0 + term_rest
-                                            }
-                                            crate::setchk::DigitsBacking::Full(_) => unreachable!(),
-                                        }
-                                    } else {
-                                        let mut acc = R::ZERO;
-                                        for col in 0..M.ncols {
-                                            acc += M.get(row, col) * s_i[col];
-                                        }
-                                        acc
-                                    }
-                                })
-                                .collect::<Vec<_>>()
-                        }
-                        #[cfg(not(feature = "parallel"))]
-                        {
-                            let mut out = vec![R::ZERO; n];
-                            if const_col0 {
-                                let (col0, zero_idx) = match &M.digits {
-                                    crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => (col0, zero_idx),
-                                    crate::setchk::DigitsBacking::Full(_) => unreachable!(),
-                                };
-                                let exp0 = M.exp_table[*zero_idx as usize];
-                                for row in 0..n {
-                                    let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
-                                    let mono = &M.exp_table[dix];
-                                    let term0 = if let Some((shift, scale)) = mon_info::<R>(mono) {
-                                        mul_negacyclic_by_monomial::<R>(&s0, shift, scale)
-                                    } else {
-                                        *mono * s0
-                                    };
-                                    let term_rest = if exp0 == R::ONE {
-                                        rest_sum
-                                    } else if let Some((shift, scale)) = mon_info::<R>(&exp0) {
-                                        mul_negacyclic_by_monomial::<R>(&rest_sum, shift, scale)
-                                    } else {
-                                        exp0 * rest_sum
-                                    };
-                                    out[row] = term0 + term_rest;
-                                }
+                            let s0 = s_i[0];
+                            let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
+                            // term0_tab[dig] = exp_table[dig] * s0 (via rotate+sign)
+                            let term0_tab = mi_tab
+                                .iter()
+                                .map(|(shift, scale)| mul_negacyclic_by_monomial::<R>(&s0, *shift, *scale))
+                                .collect::<Vec<_>>();
+                            // term_rest is constant per row for this matrix.
+                            let (shift0, scale0) = mi_tab[*zero_idx as usize];
+                            let term_rest = if shift0 == 0 && scale0 == R::BaseRing::ONE {
+                                rest_sum
                             } else {
-                                for row in 0..n {
-                                    let mut acc = R::ZERO;
+                                mul_negacyclic_by_monomial::<R>(&rest_sum, shift0, scale0)
+                            };
+                            pre.push(Some(Col0Precomp {
+                                col0: col0.clone(),
+                                zero_idx: *zero_idx,
+                                term0_tab,
+                                term_rest,
+                            }));
+                        }
+                        crate::setchk::DigitsBacking::Full(_) => pre.push(None),
+                    }
+                }
+
+                #[cfg(feature = "parallel")]
+                let h = {
+                    use rayon::prelude::*;
+                    (0..n)
+                        .into_par_iter()
+                        .map(|row| {
+                            let mut acc = R::ZERO;
+                            for (i, M) in inst.M_f.iter().enumerate() {
+                                if let Some(p) = &pre[i] {
+                                    let dix = p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
+                                    acc += p.term0_tab[dix] + p.term_rest;
+                                } else {
+                                    // Fallback: dense dot over all columns (rare in SP1 regime).
+                                    let s_i = &s_prime[i];
                                     for col in 0..M.ncols {
                                         acc += M.get(row, col) * s_i[col];
                                     }
-                                    out[row] = acc;
                                 }
                             }
-                            out
+                            acc
+                        })
+                        .collect::<Vec<_>>()
+                };
+                #[cfg(not(feature = "parallel"))]
+                let h = {
+                    let mut h = vec![R::ZERO; n];
+                    for row in 0..n {
+                        let mut acc = R::ZERO;
+                        for (i, M) in inst.M_f.iter().enumerate() {
+                            if let Some(p) = &pre[i] {
+                                let dix = p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
+                                acc += p.term0_tab[dix] + p.term_rest;
+                            } else {
+                                let s_i = &s_prime[i];
+                                for col in 0..M.ncols {
+                                    acc += M.get(row, col) * s_i[col];
+                                }
+                            }
                         }
-                    })
-                    .collect();
-
-                let mut h = vec![R::zero(); n];
-                for v in h_vectors {
-                    for (i, val) in v.iter().enumerate() {
-                        h[i] += *val;
+                        h[row] = acc;
                     }
-                }
+                    h
+                };
                 maybe_print_rss("cm: build_h one inst done");
                 h
             })
