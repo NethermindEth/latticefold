@@ -678,92 +678,165 @@ impl<R: OverField + PolyRing> In<R> {
                 e0.push(v);
             }
             // Digit sets
-            for Md in &Ms_digits {
-                // Fast path: if only col0 digits are stored, then for col>0 the matrix entry is
-                // a constant digit (zero_idx) for all rows, so we can avoid the inner `for col` loop.
-                let v = match &Md.digits {
-                    DigitsBacking::ConstCol0 { col0, zero_idx } => {
-                        let exp0 = Md.exp_table[*zero_idx as usize];
-                        let s0 = exp0; // entry(row,col>0)
-                        #[cfg(feature = "parallel")]
-                        {
-                            let (acc0, sum_w0) = (0..nrows)
-                                .into_par_iter()
-                                .fold(
-                                    || (R::ZERO, R::BaseRing::ZERO),
-                                    |(mut acc0, mut sum_w0), row| {
-                                        let w0 = eq_at(row);
-                                        sum_w0 += w0;
-                                        let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
-                                        acc0 += Md.exp_table[dix] * R::from(w0);
-                                        (acc0, sum_w0)
-                                    },
-                                )
-                                .reduce(
-                                    || (R::ZERO, R::BaseRing::ZERO),
-                                    |(a0, aw), (b0, bw)| (a0 + b0, aw + bw),
-                                );
-                            let common = s0 * R::from(sum_w0);
-                            let mut out = vec![common; ncols];
-                            out[0] = acc0;
-                            out
-                        }
-                        #[cfg(not(feature = "parallel"))]
-                        {
-                            let mut acc0 = R::ZERO;
-                            let mut sum_w0 = R::BaseRing::ZERO;
-                            for row in 0..nrows {
+            if !Ms_digits.is_empty() && Ms_digits
+                .iter()
+                .all(|md| matches!(md.digits, DigitsBacking::ConstCol0 { .. }))
+            {
+                // Fast fused path for the common SP1 regime:
+                // all digit matrices are `ConstCol0`. Then for each matrix we only need:
+                // - acc0 = Σ_row exp(digit[row,0]) * eq(row)
+                // - common = exp(0) * Σ_row eq(row)
+                //
+                // Crucially, `Σ_row eq(row)` is the same across all matrices, so we compute it once.
+                let md_count = Ms_digits.len();
+
+                #[cfg(feature = "parallel")]
+                let sum_w0: R::BaseRing = (0..nrows)
+                    .into_par_iter()
+                    .map(|row| eq_at(row))
+                    .reduce(|| R::BaseRing::ZERO, |a, b| a + b);
+                #[cfg(not(feature = "parallel"))]
+                let sum_w0: R::BaseRing = (0..nrows).map(|row| eq_at(row)).fold(R::BaseRing::ZERO, |a, b| a + b);
+
+                #[cfg(feature = "parallel")]
+                let acc0s: Vec<R> = {
+                    (0..nrows)
+                        .into_par_iter()
+                        .fold(
+                            || vec![R::ZERO; md_count],
+                            |mut accs, row| {
                                 let w0 = eq_at(row);
-                                sum_w0 += w0;
-                                let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
-                                acc0 += Md.exp_table[dix] * R::from(w0);
-                            }
-                            let common = s0 * R::from(sum_w0);
-                            let mut out = vec![common; ncols];
-                            out[0] = acc0;
-                            out
+                                let rw = R::from(w0);
+                                for (k, md) in Ms_digits.iter().enumerate() {
+                                    let DigitsBacking::ConstCol0 { col0, zero_idx } = &md.digits else { unreachable!() };
+                                    let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
+                                    accs[k] += md.exp_table[dix] * rw;
+                                }
+                                accs
+                            },
+                        )
+                        .reduce(
+                            || vec![R::ZERO; md_count],
+                            |mut a, b| {
+                                for k in 0..md_count {
+                                    a[k] += b[k];
+                                }
+                                a
+                            },
+                        )
+                };
+                #[cfg(not(feature = "parallel"))]
+                let acc0s: Vec<R> = {
+                    let mut accs = vec![R::ZERO; md_count];
+                    for row in 0..nrows {
+                        let w0 = eq_at(row);
+                        let rw = R::from(w0);
+                        for (k, md) in Ms_digits.iter().enumerate() {
+                            let DigitsBacking::ConstCol0 { col0, zero_idx } = &md.digits else { unreachable!() };
+                            let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
+                            accs[k] += md.exp_table[dix] * rw;
                         }
                     }
-                    DigitsBacking::Full(_) => {
-                        #[cfg(feature = "parallel")]
-                        {
-                            (0..nrows)
-                                .into_par_iter()
-                                .fold(
-                                    || vec![R::ZERO; ncols],
-                                    |mut acc, row| {
-                                        let w = R::from(eq_at(row));
-                                        for col in 0..ncols {
-                                            acc[col] += Md.get(row, col) * w;
+                    accs
+                };
+
+                for (k, md) in Ms_digits.iter().enumerate() {
+                    let DigitsBacking::ConstCol0 { zero_idx, .. } = &md.digits else { unreachable!() };
+                    let exp0 = md.exp_table[*zero_idx as usize];
+                    let common = exp0 * R::from(sum_w0);
+                    let mut out = vec![common; ncols];
+                    out[0] = acc0s[k];
+                    e0.push(out);
+                }
+            } else {
+                // General path (mixed digit backings)
+                for Md in &Ms_digits {
+                    // Fast path: if only col0 digits are stored, then for col>0 the matrix entry is
+                    // a constant digit (zero_idx) for all rows, so we can avoid the inner `for col` loop.
+                    let v = match &Md.digits {
+                        DigitsBacking::ConstCol0 { col0, zero_idx } => {
+                            let exp0 = Md.exp_table[*zero_idx as usize];
+                            let s0 = exp0; // entry(row,col>0)
+                            #[cfg(feature = "parallel")]
+                            {
+                                let (acc0, sum_w0) = (0..nrows)
+                                    .into_par_iter()
+                                    .fold(
+                                        || (R::ZERO, R::BaseRing::ZERO),
+                                        |(mut acc0, mut sum_w0), row| {
+                                            let w0 = eq_at(row);
+                                            sum_w0 += w0;
+                                            let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
+                                            acc0 += Md.exp_table[dix] * R::from(w0);
+                                            (acc0, sum_w0)
+                                        },
+                                    )
+                                    .reduce(
+                                        || (R::ZERO, R::BaseRing::ZERO),
+                                        |(a0, aw), (b0, bw)| (a0 + b0, aw + bw),
+                                    );
+                                let common = s0 * R::from(sum_w0);
+                                let mut out = vec![common; ncols];
+                                out[0] = acc0;
+                                out
+                            }
+                            #[cfg(not(feature = "parallel"))]
+                            {
+                                let mut acc0 = R::ZERO;
+                                let mut sum_w0 = R::BaseRing::ZERO;
+                                for row in 0..nrows {
+                                    let w0 = eq_at(row);
+                                    sum_w0 += w0;
+                                    let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
+                                    acc0 += Md.exp_table[dix] * R::from(w0);
+                                }
+                                let common = s0 * R::from(sum_w0);
+                                let mut out = vec![common; ncols];
+                                out[0] = acc0;
+                                out
+                            }
+                        }
+                        DigitsBacking::Full(_) => {
+                            #[cfg(feature = "parallel")]
+                            {
+                                (0..nrows)
+                                    .into_par_iter()
+                                    .fold(
+                                        || vec![R::ZERO; ncols],
+                                        |mut acc, row| {
+                                            let w = R::from(eq_at(row));
+                                            for col in 0..ncols {
+                                                acc[col] += Md.get(row, col) * w;
+                                            }
+                                            acc
+                                        },
+                                    )
+                                    .reduce(
+                                        || vec![R::ZERO; ncols],
+                                        |mut a, b| {
+                                            for col in 0..ncols {
+                                                a[col] += b[col];
+                                            }
+                                            a
+                                        },
+                                    )
+                            }
+                            #[cfg(not(feature = "parallel"))]
+                            {
+                                (0..ncols)
+                                    .map(|col| {
+                                        let mut acc = R::ZERO;
+                                        for row in 0..nrows {
+                                            acc += Md.get(row, col) * R::from(eq_at(row));
                                         }
                                         acc
-                                    },
-                                )
-                                .reduce(
-                                    || vec![R::ZERO; ncols],
-                                    |mut a, b| {
-                                        for col in 0..ncols {
-                                            a[col] += b[col];
-                                        }
-                                        a
-                                    },
-                                )
+                                    })
+                                    .collect::<Vec<_>>()
+                            }
                         }
-                        #[cfg(not(feature = "parallel"))]
-                        {
-                            (0..ncols)
-                                .map(|col| {
-                                    let mut acc = R::ZERO;
-                                    for row in 0..nrows {
-                                        acc += Md.get(row, col) * R::from(eq_at(row));
-                                    }
-                                    acc
-                                })
-                                .collect::<Vec<_>>()
-                        }
-                    }
-                };
-                e0.push(v);
+                    };
+                    e0.push(v);
+                }
             }
             // Sparse sets
             #[cfg(feature = "parallel")]
