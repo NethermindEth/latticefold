@@ -432,21 +432,44 @@ where
                 debug_assert_eq!(h[i].len(), n);
                 debug_assert_eq!(inst.f.len(), n);
 
-                (0..n)
-                    .map(|j| {
-                        let r_tau = inst.tau[j];
-                        let r_mtau = inst.m_tau.get(j);
-                        let r_f = match &inst.f {
-                            WitnessVec::Ring(vr) => vr[j],
-                            WitnessVec::ConstCoeffBase { values: v0, .. } => {
-                                // Implicit zero-padding beyond `v0.len()`.
-                                R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
-                            }
-                        };
-                        let r_h = h[i][j];
-                        (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
-                    })
-                    .collect::<Vec<R>>()
+                #[cfg(feature = "parallel")]
+                {
+                    use rayon::prelude::*;
+                    (0..n)
+                        .into_par_iter()
+                        .map(|j| {
+                            let r_tau = inst.tau[j];
+                            let r_mtau = inst.m_tau.get(j);
+                            let r_f = match &inst.f {
+                                WitnessVec::Ring(vr) => vr[j],
+                                WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                    // Implicit zero-padding beyond `v0.len()`.
+                                    R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                }
+                            };
+                            let r_h = h[i][j];
+                            (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                        })
+                        .collect::<Vec<R>>()
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    (0..n)
+                        .map(|j| {
+                            let r_tau = inst.tau[j];
+                            let r_mtau = inst.m_tau.get(j);
+                            let r_f = match &inst.f {
+                                WitnessVec::Ring(vr) => vr[j],
+                                WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                    // Implicit zero-padding beyond `v0.len()`.
+                                    R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                }
+                            };
+                            let r_h = h[i][j];
+                            (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                        })
+                        .collect::<Vec<R>>()
+                }
             })
             .collect::<Vec<_>>();
 
