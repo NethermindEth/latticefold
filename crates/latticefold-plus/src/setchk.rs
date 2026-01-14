@@ -222,9 +222,28 @@ impl<R: OverField + PolyRing> In<R> {
         // Streaming MLEs (avoid materializing DenseMultilinearExtension tables).
         use crate::streaming_sumcheck::{StreamingMleEnum, StreamingSumcheck};
         let Ms_len = Ms_dense.len() + Ms_digits.len() + Ms_sparse.len();
-        let mut mles: Vec<StreamingMleEnum<R>> =
-            Vec::with_capacity((Ms_len + ms.len()) * (ncols * 2 + 1));
-        let mut alphas = Vec::with_capacity(Ms_len);
+        // In the SP1 production regime we represent monomial sets via digit-backed tables
+        // (`DigitsMatrix` / `VectorDigits`). In that case the set-check polynomial is
+        // identically zero (the "m^2 - m'" relation holds by construction), so the sumcheck
+        // prover messages are all zeros.
+        //
+        // We can therefore skip building the huge `mles` list and avoid the 2^n loop entirely,
+        // while keeping the transcript schedule identical by emitting an all-zero sumcheck proof.
+        let trivial_zero_sumcheck = Ms_sparse.is_empty()
+            && Ms_dense.is_empty()
+            && !Ms_digits.is_empty()
+            && ms.iter().all(|m| matches!(m, VecSet::Digits { .. }));
+
+        let mut mles: Vec<StreamingMleEnum<R>> = if trivial_zero_sumcheck {
+            Vec::new()
+        } else {
+            Vec::with_capacity((Ms_len + ms.len()) * (ncols * 2 + 1))
+        };
+        let mut alphas = if trivial_zero_sumcheck {
+            Vec::new()
+        } else {
+            Vec::with_capacity(Ms_len + ms.len())
+        };
 
         // matrix sets (dense path)
         for (mi, Md) in Ms_dense.iter().enumerate() {
@@ -234,40 +253,49 @@ impl<R: OverField + PolyRing> In<R> {
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
             let beta = transcript.get_challenge();
 
-            // Step 2
-            // Fast evaluation uses precomputed beta powers (degree = ring dimension).
-            let beta_pows = beta_pows::<R>(beta);
+            // Step 2 (only needed when building tables)
+            let beta_pows = if trivial_zero_sumcheck {
+                Vec::new()
+            } else {
+                beta_pows::<R>(beta)
+            };
 
             // Avoid materializing full `nrows` tables up front:
             // represent each column as an on-demand MLE that materializes only after the first fix.
             let mat = Md.clone(); // Arc clone (no data copy)
             let beta_pows = Arc::new(beta_pows);
-            for col in 0..ncols {
-                mles.push(StreamingMleEnum::DenseMatrixColEv {
-                    mat: mat.clone(),
-                    col,
-                    beta_pows: beta_pows.clone(),
-                    num_vars: tnvars,
-                    square: false,
-                });
-                mles.push(StreamingMleEnum::DenseMatrixColEv {
-                    mat: mat.clone(),
-                    col,
-                    beta_pows: beta_pows.clone(),
-                    num_vars: tnvars,
-                    square: true,
-                });
+            if !trivial_zero_sumcheck {
+                for col in 0..ncols {
+                    mles.push(StreamingMleEnum::DenseMatrixColEv {
+                        mat: mat.clone(),
+                        col,
+                        beta_pows: beta_pows.clone(),
+                        num_vars: tnvars,
+                        square: false,
+                    });
+                    mles.push(StreamingMleEnum::DenseMatrixColEv {
+                        mat: mat.clone(),
+                        col,
+                        beta_pows: beta_pows.clone(),
+                        num_vars: tnvars,
+                        square: true,
+                    });
+                }
             }
 
             // eq(x,c) as base-ring structured MLE (constant-coeff)
-            mles.push(StreamingMleEnum::EqBase {
-                scale: R::BaseRing::ONE,
-                r: c0,
-                one_minus_r: one_minus_c0,
-            });
+            if !trivial_zero_sumcheck {
+                mles.push(StreamingMleEnum::EqBase {
+                    scale: R::BaseRing::ONE,
+                    r: c0,
+                    one_minus_r: one_minus_c0,
+                });
+            }
 
             let alpha = transcript.get_challenge();
-            alphas.push(alpha);
+            if !trivial_zero_sumcheck {
+                alphas.push(alpha);
+            }
 
             if profile {
                 println!(
@@ -288,35 +316,45 @@ impl<R: OverField + PolyRing> In<R> {
             let beta = transcript.get_challenge();
 
             // Step 2
-            let beta_pows = beta_pows::<R>(beta);
+            let beta_pows = if trivial_zero_sumcheck {
+                Vec::new()
+            } else {
+                beta_pows::<R>(beta)
+            };
             let mat = Md.clone();
             let beta_pows = Arc::new(beta_pows);
-            for col in 0..ncols {
-                mles.push(StreamingMleEnum::DigitsMatrixColEv {
-                    mat: mat.clone(),
-                    col,
-                    beta_pows: beta_pows.clone(),
-                    num_vars: tnvars,
-                    square: false,
-                });
-                mles.push(StreamingMleEnum::DigitsMatrixColEv {
-                    mat: mat.clone(),
-                    col,
-                    beta_pows: beta_pows.clone(),
-                    num_vars: tnvars,
-                    square: true,
-                });
+            if !trivial_zero_sumcheck {
+                for col in 0..ncols {
+                    mles.push(StreamingMleEnum::DigitsMatrixColEv {
+                        mat: mat.clone(),
+                        col,
+                        beta_pows: beta_pows.clone(),
+                        num_vars: tnvars,
+                        square: false,
+                    });
+                    mles.push(StreamingMleEnum::DigitsMatrixColEv {
+                        mat: mat.clone(),
+                        col,
+                        beta_pows: beta_pows.clone(),
+                        num_vars: tnvars,
+                        square: true,
+                    });
+                }
             }
 
             // eq(x,c)
-            mles.push(StreamingMleEnum::EqBase {
-                scale: R::BaseRing::ONE,
-                r: c0,
-                one_minus_r: one_minus_c0,
-            });
+            if !trivial_zero_sumcheck {
+                mles.push(StreamingMleEnum::EqBase {
+                    scale: R::BaseRing::ONE,
+                    r: c0,
+                    one_minus_r: one_minus_c0,
+                });
+            }
 
             let alpha = transcript.get_challenge();
-            alphas.push(alpha);
+            if !trivial_zero_sumcheck {
+                alphas.push(alpha);
+            }
 
             if profile {
                 println!(
@@ -381,39 +419,51 @@ impl<R: OverField + PolyRing> In<R> {
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
             let beta = transcript.get_challenge();
 
-            let beta_pows = beta_pows::<R>(beta);
-            let (v0, m_len) = match mset {
-                VecSet::Dense(m) => {
-                    let mut v0 = vec![R::BaseRing::ZERO; m.len()];
-                    for (i, r_i) in m.iter().enumerate() {
-                        v0[i] = ev_fast::<R>(r_i, &beta_pows);
-                    }
-                    (v0, m.len())
-                }
-                VecSet::Digits { digits, exp_table } => {
-                    // Precompute ev(exp_table[d], beta) for the small digit alphabet, then map.
-                    let mut ev_tab = vec![R::BaseRing::ZERO; exp_table.len()];
-                    for (di, r_di) in exp_table.iter().enumerate() {
-                        ev_tab[di] = ev_fast::<R>(r_di, &beta_pows);
-                    }
-                    let mut v0 = vec![R::BaseRing::ZERO; digits.len()];
-                    for (i, &dix) in digits.iter().enumerate() {
-                        v0[i] = ev_tab[dix as usize];
-                    }
-                    (v0, digits.len())
-                }
+            let beta_pows = if trivial_zero_sumcheck {
+                Vec::new()
+            } else {
+                beta_pows::<R>(beta)
             };
-            let tab = Arc::new(v0);
-            mles.push(StreamingMleEnum::BaseScalarArc { evals: tab.clone(), num_vars: tnvars, square: false });
-            mles.push(StreamingMleEnum::BaseScalarArc { evals: tab, num_vars: tnvars, square: true });
-            mles.push(StreamingMleEnum::EqBase {
-                scale: R::BaseRing::ONE,
-                r: c0,
-                one_minus_r: one_minus_c0,
-            });
+            let m_len = match mset {
+                VecSet::Dense(m) => m.len(),
+                VecSet::Digits { digits, .. } => digits.len(),
+            };
+            if !trivial_zero_sumcheck {
+                let (v0, _m_len2) = match mset {
+                    VecSet::Dense(m) => {
+                        let mut v0 = vec![R::BaseRing::ZERO; m.len()];
+                        for (i, r_i) in m.iter().enumerate() {
+                            v0[i] = ev_fast::<R>(r_i, &beta_pows);
+                        }
+                        (v0, m.len())
+                    }
+                    VecSet::Digits { digits, exp_table } => {
+                        // Precompute ev(exp_table[d], beta) for the small digit alphabet, then map.
+                        let mut ev_tab = vec![R::BaseRing::ZERO; exp_table.len()];
+                        for (di, r_di) in exp_table.iter().enumerate() {
+                            ev_tab[di] = ev_fast::<R>(r_di, &beta_pows);
+                        }
+                        let mut v0 = vec![R::BaseRing::ZERO; digits.len()];
+                        for (i, &dix) in digits.iter().enumerate() {
+                            v0[i] = ev_tab[dix as usize];
+                        }
+                        (v0, digits.len())
+                    }
+                };
+                let tab = Arc::new(v0);
+                mles.push(StreamingMleEnum::BaseScalarArc { evals: tab.clone(), num_vars: tnvars, square: false });
+                mles.push(StreamingMleEnum::BaseScalarArc { evals: tab, num_vars: tnvars, square: true });
+                mles.push(StreamingMleEnum::EqBase {
+                    scale: R::BaseRing::ONE,
+                    r: c0,
+                    one_minus_r: one_minus_c0,
+                });
+            }
 
             let alpha = transcript.get_challenge();
-            alphas.push(alpha);
+            if !trivial_zero_sumcheck {
+                alphas.push(alpha);
+            }
 
             if profile {
                 println!(
@@ -469,8 +519,12 @@ impl<R: OverField + PolyRing> In<R> {
         };
 
         let t_sc = Instant::now();
-        let (sumcheck_proof, r, _final_vals) =
-            StreamingSumcheck::prove_as_subprotocol_base(transcript, mles, self.nvars, 3, comb_fn0);
+        let (sumcheck_proof, r, _final_vals) = if trivial_zero_sumcheck {
+            let (p, r) = StreamingSumcheck::prove_as_subprotocol_zero(transcript, self.nvars, 3);
+            (p, r, Vec::new())
+        } else {
+            StreamingSumcheck::prove_as_subprotocol_base(transcript, mles, self.nvars, 3, comb_fn0)
+        };
         if profile {
             println!(
                 "[LF+ setchk] sumcheck: {:?} (nvars={}, degree=3, ncols={}, Ms={}, ms={})",
