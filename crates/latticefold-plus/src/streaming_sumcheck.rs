@@ -12,9 +12,25 @@ use stark_rings::{OverField, PolyRing, Ring};
 use stark_rings_linalg::{Matrix, SparseMatrix};
 use crate::setchk::DigitsMatrix;
 use crate::utils::maybe_print_rss;
+use core::mem::MaybeUninit;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
+
+#[cfg(feature = "parallel")]
+#[inline]
+fn alloc_init_par<T: Send + Sync>(len: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    // Allocate without zeroing, then fill in parallel.
+    let mut v: Vec<MaybeUninit<T>> = Vec::with_capacity(len);
+    unsafe { v.set_len(len) };
+    v.par_iter_mut()
+        .enumerate()
+        .for_each(|(i, slot)| {
+            slot.write(f(i));
+        });
+    // SAFETY: all elements were written exactly once.
+    unsafe { core::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(v) }
+}
 
 /// A structured multilinear function that supports:
 /// - evaluating at a hypercube vertex index
@@ -443,29 +459,34 @@ where
                         let src: &[R] = a.as_ref();
                         let cur_len = src.len();
                         let new_len = ((cur_len + 1) >> 1).min(half_dom);
-                        let mut out = vec![R::ZERO; new_len];
                         let one_minus = R::ONE - r_ring;
                         #[cfg(feature = "parallel")]
                         {
-                            use rayon::prelude::*;
-                            out.par_iter_mut().enumerate().for_each(|(i, oi)| {
+                            let out = alloc_init_par(new_len, |i| {
                                 let aa = src.get(i << 1).copied().unwrap_or(R::ZERO);
                                 let bb = src.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
-                                *oi = one_minus * aa + r_ring * bb;
+                                one_minus * aa + r_ring * bb
                             });
+                            *self = StreamingMleEnum::DenseOwned {
+                                evals: out,
+                                num_vars: *num_vars - 1,
+                            };
+                            return;
                         }
                         #[cfg(not(feature = "parallel"))]
                         {
+                            let mut out = vec![R::ZERO; new_len];
                             for i in 0..new_len {
                                 let aa = src.get(i << 1).copied().unwrap_or(R::ZERO);
                                 let bb = src.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
                                 out[i] = one_minus * aa + r_ring * bb;
                             }
+                            *self = StreamingMleEnum::DenseOwned {
+                                evals: out,
+                                num_vars: *num_vars - 1,
+                            };
+                            return;
                         }
-                        *self = StreamingMleEnum::DenseOwned {
-                            evals: out,
-                            num_vars: *num_vars - 1,
-                        };
                     }
                 }
             }
@@ -531,12 +552,10 @@ where
                         let src: &[R::BaseRing] = a.as_ref();
                         let cur_len = src.len();
                         let new_len = ((cur_len + 1) >> 1).min(half_dom);
-                        let mut out = vec![R::BaseRing::ZERO; new_len];
                         if *square {
                             #[cfg(feature = "parallel")]
                             {
-                                use rayon::prelude::*;
-                                out.par_iter_mut().enumerate().for_each(|(i, oi)| {
+                                let out = alloc_init_par(new_len, |i| {
                                     let mut aa =
                                         src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
                                     let mut bb = src
@@ -545,11 +564,17 @@ where
                                         .unwrap_or(R::BaseRing::ZERO);
                                     aa *= aa;
                                     bb *= bb;
-                                    *oi = one_minus0 * aa + r0 * bb;
+                                    one_minus0 * aa + r0 * bb
                                 });
+                                *self = StreamingMleEnum::BaseScalarOwned {
+                                    evals: out,
+                                    num_vars: *num_vars - 1,
+                                };
+                                return;
                             }
                             #[cfg(not(feature = "parallel"))]
                             {
+                                let mut out = vec![R::BaseRing::ZERO; new_len];
                                 for i in 0..new_len {
                                     let mut aa =
                                         src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
@@ -561,23 +586,33 @@ where
                                     bb *= bb;
                                     out[i] = one_minus0 * aa + r0 * bb;
                                 }
+                                *self = StreamingMleEnum::BaseScalarOwned {
+                                    evals: out,
+                                    num_vars: *num_vars - 1,
+                                };
+                                return;
                             }
                         } else {
                             #[cfg(feature = "parallel")]
                             {
-                                use rayon::prelude::*;
-                                out.par_iter_mut().enumerate().for_each(|(i, oi)| {
+                                let out = alloc_init_par(new_len, |i| {
                                     let aa =
                                         src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
                                     let bb = src
                                         .get((i << 1) | 1)
                                         .copied()
                                         .unwrap_or(R::BaseRing::ZERO);
-                                    *oi = one_minus0 * aa + r0 * bb;
+                                    one_minus0 * aa + r0 * bb
                                 });
+                                *self = StreamingMleEnum::BaseScalarOwned {
+                                    evals: out,
+                                    num_vars: *num_vars - 1,
+                                };
+                                return;
                             }
                             #[cfg(not(feature = "parallel"))]
                             {
+                                let mut out = vec![R::BaseRing::ZERO; new_len];
                                 for i in 0..new_len {
                                     let aa =
                                         src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
@@ -587,12 +622,13 @@ where
                                         .unwrap_or(R::BaseRing::ZERO);
                                     out[i] = one_minus0 * aa + r0 * bb;
                                 }
+                                *self = StreamingMleEnum::BaseScalarOwned {
+                                    evals: out,
+                                    num_vars: *num_vars - 1,
+                                };
+                                return;
                             }
                         }
-                        *self = StreamingMleEnum::BaseScalarOwned {
-                            evals: out,
-                            num_vars: *num_vars - 1,
-                        };
                     }
                 }
             }
