@@ -115,7 +115,7 @@ where
             r: linb2.x.ro.clone(),
             M: &self.M,
         };
-        let (_linb, dproof) = decomp.decompose(&self.A, self.params.B);
+        let (linb, dproof) = decomp.decompose(&self.A, self.params.B);
 
         let proof = PlusProof {
             linb2x: linb2.x,
