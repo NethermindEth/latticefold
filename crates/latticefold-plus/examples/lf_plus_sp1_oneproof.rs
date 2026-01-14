@@ -21,7 +21,6 @@ use cyclotomic_rings::rings::GetPoseidonParams;
 use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
-use latticefold_plus::utils::estimate_bound;
 use latticefold_plus::utils::maybe_print_rss;
 use cyclotomic_rings::rings::FrogRingPoly as R;
 use stark_rings::PolyRing;
@@ -209,20 +208,35 @@ fn main() {
         l: (we_params.l as usize),
     };
     let lin_params = latticefold_plus::lin::LinParameters { kappa, decomp: dparams };
-    // Non-magic decomposition radix bound (matches existing WE-gate/bench harness style).
-    // This is *not* the SP1 lift boundedness base; it's the radix used by Π_decomp to split/recompose.
+    // Π_decomp splits each base-field element into exactly 2 digits in base `B` (see `decomp.rs`),
+    // so we must pick `B` large enough that **every** value we decompose fits in 2 digits.
     //
-    // IMPORTANT:
-    // Π_decomp splits each field element into exactly 2 digits in base `B` (see `decomp.rs`), so `B`
-    // must be large enough for the actual coefficient growth in this SP1/LF+ instance. Empirically,
-    // the bound analysis here was calibrated for the Frog d=64 parameterization; when switching the
-    // ring dimension (e.g. to d=16) the *same instance* can still require the d=64-calibrated `B`.
-    //
-    // We therefore keep the bound calibration dimension fixed at 64 for this SP1 harness, even if
-    // the ring type used in this run has a different dimension.
-    let d_bound = 64usize;
-    let sop = d_bound * 128;
-    let b_decomp: u128 = estimate_bound(sop, 1, d_bound, we_params.k as usize) + 1;
+    // The balanced decomposition uses signed representatives in [-q/2, q/2], so it's sufficient to
+    // choose B > sqrt(q). We round up to a power-of-two (even) for fast divisions.
+    fn isqrt_u128(x: u128) -> u128 {
+        // Integer floor sqrt via binary search (no floats).
+        let mut lo: u128 = 0;
+        let mut hi: u128 = 1u128 << 64; // sqrt(u128::MAX) < 2^64
+        while lo + 1 < hi {
+            let mid = (lo + hi) >> 1;
+            if mid.saturating_mul(mid) <= x {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        lo
+    }
+    fn next_pow2_u128(x: u128) -> u128 {
+        if x <= 1 {
+            return 1;
+        }
+        let p = 128 - (x - 1).leading_zeros() as u32;
+        1u128 << p
+    }
+    let q_u128: u128 = <F as ark_ff::PrimeField>::MODULUS.0[0] as u128;
+    let b_min = isqrt_u128(q_u128) + 1;
+    let b_decomp: u128 = next_pow2_u128(b_min);
     let pparams = latticefold_plus::plus::PlusParameters { lin: lin_params, B: b_decomp };
 
     // Public statement binding: use the SP1 r1lf digest bits as public inputs (boolean field elems).

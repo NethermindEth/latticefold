@@ -158,29 +158,61 @@ where
                     .map(|(M, s_i)| {
                         debug_assert_eq!(M.nrows, n);
                         debug_assert_eq!(M.ncols, s_i.len());
+                        // Fast path: for constant-coeff witnesses we store only col0 digits and treat
+                        // all columns 1..d-1 as the fixed zero digit. Then:
+                        //   row_sum = M[row,0]*s_i[0] + exp(0) * Σ_{col>0} s_i[col]
+                        // so we can avoid the inner `for col` loop.
+                        let const_col0 = matches!(M.digits, crate::setchk::DigitsBacking::ConstCol0 { .. });
                         #[cfg(feature = "parallel")]
                         {
                             use rayon::prelude::*;
                             (0..n)
                                 .into_par_iter()
                                 .map(|row| {
-                                    let mut acc = R::ZERO;
-                                    for col in 0..M.ncols {
-                                        acc += M.get(row, col) * s_i[col];
+                                    if const_col0 {
+                                        match &M.digits {
+                                            crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
+                                                let s0 = s_i[0];
+                                                let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
+                                                let exp0 = M.exp_table[*zero_idx as usize];
+                                                let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
+                                                M.exp_table[dix] * s0 + exp0 * rest_sum
+                                            }
+                                            crate::setchk::DigitsBacking::Full(_) => unreachable!(),
+                                        }
+                                    } else {
+                                        let mut acc = R::ZERO;
+                                        for col in 0..M.ncols {
+                                            acc += M.get(row, col) * s_i[col];
+                                        }
+                                        acc
                                     }
-                                    acc
                                 })
                                 .collect::<Vec<_>>()
                         }
                         #[cfg(not(feature = "parallel"))]
                         {
                             let mut out = vec![R::ZERO; n];
-                            for row in 0..n {
-                                let mut acc = R::ZERO;
-                                for col in 0..M.ncols {
-                                    acc += M.get(row, col) * s_i[col];
+                            if const_col0 {
+                                let (col0, zero_idx) = match &M.digits {
+                                    crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => (col0, zero_idx),
+                                    crate::setchk::DigitsBacking::Full(_) => unreachable!(),
+                                };
+                                let s0 = s_i[0];
+                                let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
+                                let exp0 = M.exp_table[*zero_idx as usize];
+                                for row in 0..n {
+                                    let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
+                                    out[row] = M.exp_table[dix] * s0 + exp0 * rest_sum;
                                 }
-                                out[row] = acc;
+                            } else {
+                                for row in 0..n {
+                                    let mut acc = R::ZERO;
+                                    for col in 0..M.ncols {
+                                        acc += M.get(row, col) * s_i[col];
+                                    }
+                                    out[row] = acc;
+                                }
                             }
                             out
                         }
