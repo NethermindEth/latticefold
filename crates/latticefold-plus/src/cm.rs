@@ -1623,26 +1623,27 @@ where
             );
         }
 
+        // MUST match `sumchecker_streaming` combiner exactly (including the `tau * t(z)` terms),
+        // otherwise the verifier's sumcheck will fail.
         let comb_fn = |vals: &[R]| -> R {
             (0..L)
                 .map(|l| {
                     let l_idx = 1 + l * (4 + 4 * Mlen);
-                    vals[0]
-                        * (vals[l_idx] * rcps[l_idx - 1]
-                            + vals[l_idx + 1] * rcps[l_idx]
-                            + vals[l_idx + 2] * rcps[l_idx + 1]
-                            + vals[l_idx + 3] * rcps[l_idx + 2]
-                            + (0..Mlen)
-                                .map(|i| {
-                                    let idx = l_idx + 4 + i * 4;
-                                    vals[idx] * rcps[idx - 1]
-                                        + vals[idx + 1] * rcps[idx]
-                                        + vals[idx + 2] * rcps[idx + 1]
-                                        + vals[idx + 3] * rcps[idx + 2]
-                                })
-                                .sum::<R>()
-                            + vals[vals.len() - 2] * rcps[rcps.len() - 2]
-                            + vals[vals.len() - 1] * rcps[rcps.len() - 1])
+                    vals[0] * ( // eq
+                        vals[l_idx] * rcps[l_idx - 1]  // tau
+                        + vals[l_idx + 1] * rcps[l_idx] // m_tau
+                        + vals[l_idx + 2] * rcps[l_idx + 1] // f
+                        + vals[l_idx + 3] * rcps[l_idx + 2] // h
+                        + (0..Mlen).map(|i| {
+                            let idx = l_idx + 4 + i * 4;
+                            vals[idx] * rcps[idx - 1] // M_i * tau
+                            + vals[idx + 1] * rcps[idx] // M_i * m_tau
+                            + vals[idx + 2] * rcps[idx + 1] // M_i * f
+                            + vals[idx + 3] * rcps[idx + 2] // M_i * h
+                         }).sum::<R>()
+                    )
+                    + (vals[l_idx] * vals[vals.len()-2]) * rcps[vals.len() - 3] // t(0)
+                    + (vals[l_idx] * vals[vals.len()-1]) * rcps[vals.len() - 2] // t(1)
                 })
                 .sum::<R>()
         };
