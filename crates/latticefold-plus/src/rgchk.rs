@@ -946,7 +946,8 @@ where
             // Safety: each parallel task writes a distinct `row_idx` across all tables. The `Vec<u16>`
             // allocations are fixed-size and won't reallocate during the fill.
             struct TablePtrs {
-                ptrs: *const *mut u16,
+                // Store as `usize` to avoid `Sync` capture issues with raw pointers.
+                ptrs_addr: usize,
                 len: usize,
             }
             // We only ever write to disjoint indices (row-wise), so sharing these pointers is safe.
@@ -955,7 +956,7 @@ where
 
             let ptrs: Vec<*mut u16> = digits_tables.iter_mut().map(|t| t.as_mut_ptr()).collect();
             let tbl = TablePtrs {
-                ptrs: ptrs.as_ptr(),
+                ptrs_addr: ptrs.as_ptr() as usize,
                 len: ptrs.len(),
             };
             f0.par_iter()
@@ -966,7 +967,8 @@ where
                         let dig = (map_digit_to_idx)(tmp[k_i]);
                         unsafe {
                             debug_assert!(k_i < tbl.len);
-                            *(*tbl.ptrs.add(k_i)).add(row_idx) = dig;
+                            let base = tbl.ptrs_addr as *const *mut u16;
+                            *(*base.add(k_i)).add(row_idx) = dig;
                         }
                     }
                 });
