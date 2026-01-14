@@ -398,19 +398,23 @@ where
     pub fn fix_variable_in_place_base(&mut self, r0: R::BaseRing) {
         let nv = self.num_vars();
         assert!(nv > 0);
-        let half = 1usize << (nv - 1);
+        let half_dom = 1usize << (nv - 1);
         let one_minus0 = R::BaseRing::ONE - r0;
         let r_ring = R::from(r0);
         match self {
             StreamingMleEnum::DenseOwned { evals, num_vars } => {
+                // Allow implicit zero-padding: if `evals.len() < 2^nv`, only the prefix is stored.
+                // After fixing one variable, the stored support shrinks to `ceil(len/2)`.
+                let cur_len = evals.len();
+                let new_len = ((cur_len + 1) >> 1).min(half_dom);
                 let one_minus = R::ONE - r_ring;
-                for i in 0..half {
+                for i in 0..new_len {
                     // Allow implicit zero-padding (table shorter than 2^num_vars).
                     let a = evals.get(i << 1).copied().unwrap_or(R::ZERO);
                     let b = evals.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
                     evals[i] = one_minus * a + r_ring * b;
                 }
-                evals.truncate(half);
+                evals.truncate(new_len);
                 *num_vars -= 1;
             }
             StreamingMleEnum::DenseArc { evals, num_vars } => {
@@ -420,13 +424,15 @@ where
                 let arc = std::mem::take(evals);
                 match Arc::try_unwrap(arc) {
                     Ok(mut owned) => {
+                        let cur_len = owned.len();
+                        let new_len = ((cur_len + 1) >> 1).min(half_dom);
                         let one_minus = R::ONE - r_ring;
-                        for i in 0..half {
+                        for i in 0..new_len {
                             let a = owned.get(i << 1).copied().unwrap_or(R::ZERO);
                             let b = owned.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
                             owned[i] = one_minus * a + r_ring * b;
                         }
-                        owned.truncate(half);
+                        owned.truncate(new_len);
                         *self = StreamingMleEnum::DenseOwned {
                             evals: owned,
                             num_vars: *num_vars - 1,
@@ -435,9 +441,11 @@ where
                     Err(a) => {
                         // Shared table: allocate only the half-sized result.
                         let src: &[R] = a.as_ref();
-                        let mut out = vec![R::ZERO; half];
+                        let cur_len = src.len();
+                        let new_len = ((cur_len + 1) >> 1).min(half_dom);
+                        let mut out = vec![R::ZERO; new_len];
                         let one_minus = R::ONE - r_ring;
-                        for i in 0..half {
+                        for i in 0..new_len {
                             let aa = src.get(i << 1).copied().unwrap_or(R::ZERO);
                             let bb = src.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
                             out[i] = one_minus * aa + r_ring * bb;
@@ -450,7 +458,9 @@ where
                 }
             }
             StreamingMleEnum::BaseScalarOwned { evals, num_vars } => {
-                for i in 0..half {
+                let cur_len = evals.len();
+                let new_len = ((cur_len + 1) >> 1).min(half_dom);
+                for i in 0..new_len {
                     // Allow implicit zero-padding (table shorter than 2^num_vars).
                     let a = evals.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
                     let b = evals
@@ -459,7 +469,7 @@ where
                         .unwrap_or(R::BaseRing::ZERO);
                     evals[i] = one_minus0 * a + r0 * b;
                 }
-                evals.truncate(half);
+                evals.truncate(new_len);
                 *num_vars -= 1;
             }
             StreamingMleEnum::BaseScalarArc {
@@ -471,9 +481,11 @@ where
                 let arc = std::mem::take(evals);
                 match Arc::try_unwrap(arc) {
                     Ok(mut owned) => {
+                        let cur_len = owned.len();
+                        let new_len = ((cur_len + 1) >> 1).min(half_dom);
                         if *square {
                             // Vertex-wise squares: square BEFORE combining.
-                            for i in 0..half {
+                            for i in 0..new_len {
                                 // Allow implicit zero-padding (table shorter than 2^num_vars).
                                 let mut a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
                                 let mut b = owned
@@ -485,7 +497,7 @@ where
                                 owned[i] = one_minus0 * a + r0 * b;
                             }
                         } else {
-                            for i in 0..half {
+                            for i in 0..new_len {
                                 // Allow implicit zero-padding (table shorter than 2^num_vars).
                                 let a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
                                 let b = owned
@@ -495,7 +507,7 @@ where
                                 owned[i] = one_minus0 * a + r0 * b;
                             }
                         }
-                        owned.truncate(half);
+                        owned.truncate(new_len);
                         // After fixing, the table is now the correct MLE values (square semantics consumed).
                         *self = StreamingMleEnum::BaseScalarOwned {
                             evals: owned,
@@ -505,9 +517,11 @@ where
                     Err(a) => {
                         // Shared table: allocate only the half-sized result.
                         let src: &[R::BaseRing] = a.as_ref();
-                        let mut out = vec![R::BaseRing::ZERO; half];
+                        let cur_len = src.len();
+                        let new_len = ((cur_len + 1) >> 1).min(half_dom);
+                        let mut out = vec![R::BaseRing::ZERO; new_len];
                         if *square {
-                            for i in 0..half {
+                            for i in 0..new_len {
                                 let mut aa =
                                     src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
                                 let mut bb = src
@@ -519,7 +533,7 @@ where
                                 out[i] = one_minus0 * aa + r0 * bb;
                             }
                         } else {
-                            for i in 0..half {
+                            for i in 0..new_len {
                                 let aa =
                                     src.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
                                 let bb = src
