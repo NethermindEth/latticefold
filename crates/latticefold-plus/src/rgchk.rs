@@ -847,7 +847,8 @@ where
         //
         // This matches Symphony's `commit_many_with` pattern and avoids an extra full scan / RNG stream.
         let f0: Arc<Vec<R::BaseRing>> = Arc::new(f.iter().map(|x| x.coeffs()[0]).collect());
-        let tau0: Arc<Vec<R::BaseRing>> = Arc::new(tau.clone());
+        // `tau` is huge (length n); avoid cloning it. Wrap once and share the Arc.
+        let tau0: Arc<Vec<R::BaseRing>> = Arc::new(tau);
         let cm_pair = scheme
             .commit_many_const_coeff_base_fast(n, 2, {
                 let f0 = f0.clone();
@@ -870,7 +871,7 @@ where
 
         Self {
             M_f,
-            tau: Arc::new(tau),
+            tau: tau0.clone(),
             m_tau: MonomialVec::Dense(Arc::new(m_tau)),
             f: WitnessVec::Ring(Arc::new(f)),
             comM_f,
@@ -1061,7 +1062,8 @@ where
         }
 
         let t = std::time::Instant::now();
-        let tau0: Arc<Vec<R::BaseRing>> = Arc::new(tau.clone());
+        // `tau` is huge (length n); avoid cloning it. Wrap once and share the Arc.
+        let tau0: Arc<Vec<R::BaseRing>> = Arc::new(tau);
         let cm_pair = scheme
             .commit_many_const_coeff_base_fast(n, 2, {
                 let f0 = f0.clone();
@@ -1093,7 +1095,7 @@ where
 
         Self {
             M_f,
-            tau: Arc::new(tau),
+            tau: tau0.clone(),
             m_tau: MonomialVec::Digits { digits: m_tau_digits, exp_table: exp_table.clone() },
             f: WitnessVec::ConstCoeffBase {
                 values: f0,
