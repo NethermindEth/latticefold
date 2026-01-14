@@ -37,6 +37,15 @@ where
         /// If true, interpret this MLE as **vertex-wise squares** (see Symphony notes).
         square: bool,
     },
+    /// Constant base-scalar MLE (same value at every vertex), optionally vertex-squared.
+    ///
+    /// Useful when a whole column is constant by construction (e.g. DigitsMatrix::ConstCol0 where
+    /// all col>0 entries are the same "zero digit").
+    BaseScalarConst {
+        value: R::BaseRing,
+        num_vars: usize,
+        square: bool,
+    },
     /// On-demand column evaluation from a dense matrix:
     /// evals[row] = ev(mat[row][col], beta) in the base ring, optionally vertex-squared.
     ///
@@ -136,6 +145,7 @@ where
             StreamingMleEnum::DenseArc { num_vars, .. } => *num_vars,
             StreamingMleEnum::BaseScalarOwned { num_vars, .. } => *num_vars,
             StreamingMleEnum::BaseScalarArc { num_vars, .. } => *num_vars,
+            StreamingMleEnum::BaseScalarConst { num_vars, .. } => *num_vars,
             StreamingMleEnum::DenseMatrixColEv { num_vars, .. } => *num_vars,
             StreamingMleEnum::DigitsMatrixColEv { num_vars, .. } => *num_vars,
             StreamingMleEnum::EqBase { r, .. } => r.len(),
@@ -188,6 +198,9 @@ where
             StreamingMleEnum::BaseScalarArc { evals, square, .. } => {
                 let v = evals.get(index).copied().unwrap_or(R::BaseRing::ZERO);
                 if *square { v * v } else { v }
+            }
+            StreamingMleEnum::BaseScalarConst { value, square, .. } => {
+                if *square { *value * *value } else { *value }
             }
             StreamingMleEnum::DenseMatrixColEv {
                 mat,
@@ -273,6 +286,10 @@ where
             } => {
                 let v = evals.get(index).copied().unwrap_or(R::BaseRing::ZERO);
                 let v = if *square { v * v } else { v };
+                R::from(v)
+            }
+            StreamingMleEnum::BaseScalarConst { value, square, .. } => {
+                let v = if *square { *value * *value } else { *value };
                 R::from(v)
             }
             StreamingMleEnum::DenseMatrixColEv {
@@ -453,6 +470,10 @@ where
                     evals: owned,
                     num_vars: *num_vars - 1,
                 };
+            }
+            StreamingMleEnum::BaseScalarConst { num_vars, .. } => {
+                // Constant function stays constant after fixing; just decrement dimension.
+                *num_vars -= 1;
             }
             StreamingMleEnum::DenseMatrixColEv {
                 mat,
@@ -646,6 +667,11 @@ where
                 c.fix_variable_in_place_base(r.coeffs()[0]);
                 c
             }
+            StreamingMleEnum::BaseScalarConst { value, square, .. } => StreamingMleEnum::BaseScalarConst {
+                value: *value,
+                num_vars: nv - 1,
+                square: *square,
+            },
             StreamingMleEnum::DenseMatrixColEv { .. } => {
                 let mut c = self.clone();
                 c.fix_variable_in_place_base(r.coeffs()[0]);

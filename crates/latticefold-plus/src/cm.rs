@@ -189,7 +189,7 @@ where
                         #[inline]
                         fn mul_negacyclic_by_monomial<Rr>(a: &Rr, shift: usize, scale: Rr::BaseRing) -> Rr
                         where
-                            Rr: PolyRing + From<Vec<Rr::BaseRing>>,
+                            Rr: PolyRing,
                             Rr::BaseRing: Ring + Copy,
                         {
                             if scale == Rr::BaseRing::ZERO {
@@ -200,7 +200,9 @@ where
                             if shift == 0 && scale == Rr::BaseRing::ONE {
                                 return *a;
                             }
-                            let mut out = vec![Rr::BaseRing::ZERO; d];
+                            // IMPORTANT: avoid allocating per row (this function is called ~n times).
+                            let mut out = Rr::ZERO;
+                            let outc = out.coeffs_mut();
                             for i in 0..d {
                                 let v = ac[i] * scale;
                                 if v == Rr::BaseRing::ZERO {
@@ -208,13 +210,13 @@ where
                                 }
                                 let j = i + shift;
                                 if j < d {
-                                    out[j] += v;
+                                    outc[j] += v;
                                 } else {
                                     // X^d = -1
-                                    out[j - d] -= v;
+                                    outc[j - d] -= v;
                                 }
                             }
-                            out.into()
+                            out
                         }
                         #[cfg(feature = "parallel")]
                         {

@@ -225,6 +225,11 @@ impl<R: OverField + PolyRing> In<R> {
         let mut mles: Vec<StreamingMleEnum<R>> =
             Vec::with_capacity((Ms_len + ms.len()) * (ncols * 2 + 1));
         let mut alphas = Vec::with_capacity(Ms_len);
+        // Track which matrix sets are stored as `DigitsBacking::ConstCol0`.
+        // For those, only column 0 varies by row; columns 1..d-1 are fixed to a constant monomial
+        // and contribute identically zero to the set-check polynomial. We can omit them from the
+        // sumcheck MLE list to save huge memory/time.
+        let mut mat_is_constcol0: Vec<bool> = Vec::with_capacity(Ms_len);
 
         // matrix sets (dense path)
         for (mi, Md) in Ms_dense.iter().enumerate() {
@@ -268,6 +273,7 @@ impl<R: OverField + PolyRing> In<R> {
 
             let alpha = transcript.get_challenge();
             alphas.push(alpha);
+            mat_is_constcol0.push(false);
 
             if profile {
                 println!(
@@ -291,21 +297,40 @@ impl<R: OverField + PolyRing> In<R> {
             let beta_pows = beta_pows::<R>(beta);
             let mat = Md.clone();
             let beta_pows = Arc::new(beta_pows);
-            for col in 0..ncols {
+            let is_constcol0 = matches!(&mat.digits, DigitsBacking::ConstCol0 { .. });
+            if is_constcol0 {
+                // Only column 0 participates in the polynomial; other columns are constant and contribute 0.
                 mles.push(StreamingMleEnum::DigitsMatrixColEv {
                     mat: mat.clone(),
-                    col,
+                    col: 0,
                     beta_pows: beta_pows.clone(),
                     num_vars: tnvars,
                     square: false,
                 });
                 mles.push(StreamingMleEnum::DigitsMatrixColEv {
                     mat: mat.clone(),
-                    col,
+                    col: 0,
                     beta_pows: beta_pows.clone(),
                     num_vars: tnvars,
                     square: true,
                 });
+            } else {
+                for col in 0..ncols {
+                    mles.push(StreamingMleEnum::DigitsMatrixColEv {
+                        mat: mat.clone(),
+                        col,
+                        beta_pows: beta_pows.clone(),
+                        num_vars: tnvars,
+                        square: false,
+                    });
+                    mles.push(StreamingMleEnum::DigitsMatrixColEv {
+                        mat: mat.clone(),
+                        col,
+                        beta_pows: beta_pows.clone(),
+                        num_vars: tnvars,
+                        square: true,
+                    });
+                }
             }
 
             // eq(x,c)
@@ -317,6 +342,7 @@ impl<R: OverField + PolyRing> In<R> {
 
             let alpha = transcript.get_challenge();
             alphas.push(alpha);
+            mat_is_constcol0.push(is_constcol0);
 
             if profile {
                 println!(
@@ -362,6 +388,7 @@ impl<R: OverField + PolyRing> In<R> {
             });
             let alpha = transcript.get_challenge();
             alphas.push(alpha);
+            mat_is_constcol0.push(false);
 
             if profile {
                 println!(
@@ -436,15 +463,23 @@ impl<R: OverField + PolyRing> In<R> {
             use ark_std::One;
             let mut lc = R::BaseRing::ZERO;
 
+            let mut s = 0usize;
             for (i, alpha) in alphas.iter().enumerate().take(Ms_len) {
-                // 2 * ncols for (m_j, m_prime_j), +1 for eq
-                let s = i * (2 * ncols + 1);
                 let mut res = R::BaseRing::ZERO;
-                for j in 0..ncols {
-                    res += (vals[s + j * 2] * vals[s + j * 2] - vals[s + j * 2 + 1])
-                        * alpha.pow([j as u64])
+                if mat_is_constcol0.get(i).copied().unwrap_or(false) {
+                    // Layout: [m0, m0', eq] (stride 3). alpha^0 = 1.
+                    res += vals[s] * vals[s] - vals[s + 1];
+                    res *= vals[s + 2]; // eq
+                    s += 3;
+                } else {
+                    // Layout: [m_j, m'_j] for j=0..d-1, then eq (stride 2*d+1).
+                    for j in 0..ncols {
+                        res += (vals[s + j * 2] * vals[s + j * 2] - vals[s + j * 2 + 1])
+                            * alpha.pow([j as u64])
+                    }
+                    res *= vals[s + 2 * ncols]; // eq
+                    s += 2 * ncols + 1;
                 }
-                res *= vals[s + 2 * ncols]; // eq
                 let w = rc
                     .as_ref()
                     .map(|rc| rc.pow([i as u64]))
@@ -453,12 +488,11 @@ impl<R: OverField + PolyRing> In<R> {
             }
 
             for i in 0..ms.len() {
-                let s_base = Ms_len * (2 * ncols + 1);
-                let s = s_base + i * 3;
+                let s0 = s + i * 3;
                 let alpha_idx = Ms_len + i;
                 let mut res = R::BaseRing::ZERO;
-                res += (vals[s] * vals[s] - vals[s + 1]) * alphas[alpha_idx];
-                res *= vals[s + 2]; // eq
+                res += (vals[s0] * vals[s0] - vals[s0 + 1]) * alphas[alpha_idx];
+                res *= vals[s0 + 2]; // eq
                 let w = rc
                     .as_ref()
                     .map(|rc| rc.pow([alpha_idx as u64]))
