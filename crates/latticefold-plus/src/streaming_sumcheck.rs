@@ -964,6 +964,11 @@ impl StreamingSumcheck {
         if let Some(r) = v_msg {
             assert!(state.round > 0);
             state.randomness.push(r);
+            // The first "fix" (right after round 1) is where the biggest allocations typically happen
+            // (e.g. DenseArc -> DenseOwned half-table, mat-vec MLEs materializing, etc).
+            if state.round == 1 {
+                crate::utils::maybe_print_rss("streaming_sumcheck: fix(start)");
+            }
             // This step is often O(total_table_size) and can dominate wall time if left serial,
             // especially when some MLE variants need to materialize on first fix.
             #[cfg(feature = "parallel")]
@@ -978,6 +983,9 @@ impl StreamingSumcheck {
                 for m in state.mles.iter_mut() {
                     m.fix_variable_in_place_base(r);
                 }
+            }
+            if state.round == 1 {
+                crate::utils::maybe_print_rss("streaming_sumcheck: fix(done)");
             }
         } else {
             assert!(state.round == 0);
@@ -1088,6 +1096,9 @@ impl StreamingSumcheck {
         if let Some(r) = v_msg {
             assert!(state.round > 0);
             state.randomness.push(r);
+            if state.round == 1 {
+                crate::utils::maybe_print_rss("streaming_sumcheck(base): fix(start)");
+            }
             #[cfg(feature = "parallel")]
             {
                 state
@@ -1100,6 +1111,9 @@ impl StreamingSumcheck {
                 for m in state.mles.iter_mut() {
                     m.fix_variable_in_place_base(r);
                 }
+            }
+            if state.round == 1 {
+                crate::utils::maybe_print_rss("streaming_sumcheck(base): fix(done)");
             }
         } else {
             assert!(state.round == 0);
