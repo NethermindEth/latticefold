@@ -61,9 +61,12 @@ where
                     // Non-seeded path is used only for small/unit tests; cloning here is OK.
                     RgInstance::from_f(vr.as_ref().clone(), A, &self.params.decomp)
                 }
-                crate::rgchk::WitnessVec::ConstCoeffBase(v0) => {
-                    // Fallback for non-seeded path: materialize ring elements.
-                    let f_ring = v0.iter().copied().map(R::from).collect::<Vec<R>>();
+                crate::rgchk::WitnessVec::ConstCoeffBase { values: v0, domain_len } => {
+                    // Fallback for non-seeded path: materialize ring elements (zero-padded).
+                    let mut f_ring = vec![R::ZERO; *domain_len];
+                    for (i, &x) in v0.iter().enumerate() {
+                        f_ring[i] = R::from(x);
+                    }
                     RgInstance::from_f(f_ring, A, &self.params.decomp)
                 }
             })
@@ -157,7 +160,7 @@ where
         let mut n_ring = 0usize;
         for (i, lin) in self.lins.iter().enumerate() {
             match &lin.f {
-                crate::rgchk::WitnessVec::ConstCoeffBase(v0) => {
+                crate::rgchk::WitnessVec::ConstCoeffBase { values: v0, .. } => {
                     n_f0 += 1;
                     if profile {
                         println!(

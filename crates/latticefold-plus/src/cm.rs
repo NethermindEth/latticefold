@@ -318,7 +318,10 @@ where
                         let r_mtau = inst.m_tau[j];
                         let r_f = match &inst.f {
                             WitnessVec::Ring(vr) => vr[j],
-                            WitnessVec::ConstCoeffBase(v0) => R::from(v0[j]),
+                            WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                // Implicit zero-padding beyond `v0.len()`.
+                                R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                            }
                         };
                         let r_h = h[i][j];
                         (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
@@ -407,7 +410,7 @@ where
             };
             let f0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
                 match &inst.f {
-                    WitnessVec::ConstCoeffBase(v0) => Some(v0.clone()),
+                    WitnessVec::ConstCoeffBase { values: v0, .. } => Some(v0.clone()),
                     WitnessVec::Ring(vr) => try_as_base_scalars::<R>(vr.as_ref()).map(Arc::new),
                 }
             } else {

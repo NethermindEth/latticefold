@@ -59,8 +59,16 @@ pub struct RgInstance<R: PolyRing> {
 pub enum WitnessVec<R: PolyRing> {
     /// Fully materialized ring vector.
     Ring(Arc<Vec<R>>),
-    /// Constant-coefficient embedding stored as base scalars (avoids allocating `Vec<R>`).
-    ConstCoeffBase(Arc<Vec<R::BaseRing>>),
+    /// Constant-coefficient embedding stored as base scalars (avoids allocating `Vec<R>`),
+    /// with an explicit *domain length* (typically the Ajtai width / padded `ncols`).
+    ///
+    /// The `values` are interpreted as a prefix of the witness; indices `j >= values.len()`
+    /// are treated as zero. This is CRITICAL for SP1 where `ncols` can be huge but the
+    /// nontrivial witness prefix is much smaller.
+    ConstCoeffBase {
+        values: Arc<Vec<R::BaseRing>>,
+        domain_len: usize,
+    },
 }
 
 impl<R: PolyRing> WitnessVec<R> {
@@ -68,7 +76,15 @@ impl<R: PolyRing> WitnessVec<R> {
     pub fn len(&self) -> usize {
         match self {
             WitnessVec::Ring(v) => v.len(),
-            WitnessVec::ConstCoeffBase(v0) => v0.len(),
+            WitnessVec::ConstCoeffBase { domain_len, .. } => *domain_len,
+        }
+    }
+
+    #[inline]
+    pub fn values_len(&self) -> usize {
+        match self {
+            WitnessVec::Ring(v) => v.len(),
+            WitnessVec::ConstCoeffBase { values, .. } => values.len(),
         }
     }
 
@@ -76,14 +92,14 @@ impl<R: PolyRing> WitnessVec<R> {
     pub fn as_ring_arc(&self) -> Option<Arc<Vec<R>>> {
         match self {
             WitnessVec::Ring(v) => Some(v.clone()),
-            WitnessVec::ConstCoeffBase(_) => None,
+            WitnessVec::ConstCoeffBase { .. } => None,
         }
     }
 
     #[inline]
     pub fn as_const_coeff_base_arc(&self) -> Option<Arc<Vec<R::BaseRing>>> {
         match self {
-            WitnessVec::ConstCoeffBase(v0) => Some(v0.clone()),
+            WitnessVec::ConstCoeffBase { values, .. } => Some(values.clone()),
             WitnessVec::Ring(_) => None,
         }
     }
@@ -973,7 +989,10 @@ where
             M_f,
             tau: Arc::new(tau),
             m_tau: Arc::new(m_tau),
-            f: WitnessVec::ConstCoeffBase(f0),
+            f: WitnessVec::ConstCoeffBase {
+                values: f0,
+                domain_len: n,
+            },
             comM_f,
             fcoms,
         }
@@ -1044,7 +1063,7 @@ where
 {
     match v {
         WitnessVec::Ring(vr) => eval_vec_coeffs_at_point_streaming::<R>(vr.as_ref(), r, one_minus_r),
-        WitnessVec::ConstCoeffBase(v0) => {
+        WitnessVec::ConstCoeffBase { values: v0, .. } => {
             let mut out = vec![R::BaseRing::ZERO; R::dimension()];
             out[0] = dot_base_streaming::<R>(v0.as_ref(), r, one_minus_r);
             out
@@ -1063,7 +1082,9 @@ where
 {
     match v {
         WitnessVec::Ring(vr) => dot_ring_streaming::<R>(vr.as_ref(), r, one_minus_r),
-        WitnessVec::ConstCoeffBase(v0) => R::from(dot_base_streaming::<R>(v0.as_ref(), r, one_minus_r)),
+        WitnessVec::ConstCoeffBase { values: v0, .. } => {
+            R::from(dot_base_streaming::<R>(v0.as_ref(), r, one_minus_r))
+        }
     }
 }
 
@@ -1079,7 +1100,7 @@ where
 {
     match witness {
         WitnessVec::Ring(vr) => sparse_mat_vec_eval_ring_streaming::<R>(m, vr.as_ref(), r, one_minus_r),
-        WitnessVec::ConstCoeffBase(v0) => {
+        WitnessVec::ConstCoeffBase { values: v0, .. } => {
             R::from(sparse_mat_vec_eval_ct_streaming::<R>(m, v0.as_ref(), r, one_minus_r))
         }
     }

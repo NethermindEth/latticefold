@@ -173,13 +173,13 @@ fn main() {
     println!("  map witness u64->F: {:?}", t_w.elapsed());
     maybe_print_rss("after map witness u64->F");
 
-    // Pad witness to `ncols` (power-of-two) as **base scalars** (const-coeff embedding).
+    // Keep witness as **base scalars** (const-coeff embedding).
     //
-    // IMPORTANT: this avoids allocating `Vec<R>` of length `ncols` (which is enormous for d=64).
+    // IMPORTANT: do NOT pad to `ncols`. We treat missing columns as implicit zeros throughout
+    // the prover, while still committing / sampling challenges over the full `ncols` domain.
     let t_f0 = Instant::now();
     let mut f0 = (*w_host).clone();
     f0.truncate(cache.stats.num_vars);
-    f0.resize(cache.ncols, F::ZERO);
     let f0: Arc<Vec<F>> = Arc::new(f0);
     println!("  build f0 (base scalars, padded): {:?}", t_f0.elapsed());
     maybe_print_rss("after build f0 padded");

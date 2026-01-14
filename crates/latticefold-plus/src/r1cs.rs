@@ -140,9 +140,19 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
         R::BaseRing: stark_rings::Ring,
         R: core::ops::Mul<R::BaseRing, Output = R>,
     {
+        let n = scheme.width();
+        // Commit as if `f0` were zero-padded to length `n`.
         let cm_f = scheme
-            .commit_const_coeff_base_fast(f0.as_ref())
-            .expect("commit_const_coeff_base_fast")
+            .commit_many_const_coeff_base_fast(n, 1, {
+                let f0 = f0.clone();
+                move |j, out| {
+                    out[0] = f0.get(j).copied().unwrap_or(R::BaseRing::ZERO);
+                }
+            })
+            .expect("commit_many_const_coeff_base_fast (f0 padded)")
+            .into_iter()
+            .next()
+            .expect("t=1")
             .as_ref()
             .to_vec();
         let l = r1cs.l;
@@ -157,7 +167,10 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
         };
         Self {
             x,
-            f: WitnessVec::ConstCoeffBase(f0),
+            f: WitnessVec::ConstCoeffBase {
+                values: f0,
+                domain_len: n,
+            },
         }
     }
 }
@@ -218,7 +231,7 @@ impl<R: OverField + PolyRing> Linearize<R> for ComR1CS<R> {
                     },
                 ]
             }
-            WitnessVec::ConstCoeffBase(f0) => {
+            WitnessVec::ConstCoeffBase { values: f0, .. } => {
                 // Constant-coefficient witness: represent f as base scalars and avoid allocating `Vec<R>`.
                 //
                 // NOTE: This does not change the verifier relation; it only changes how the prover
