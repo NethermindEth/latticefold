@@ -599,41 +599,47 @@ where
                 (eq_plan_a.as_ref(), eq_plan_b.as_ref())
             {
                 // Stream eq weights on the fly: no length-2^n table allocation.
+                // IMPORTANT: fuse all four dot-products into a single pass over i to avoid
+                // traversing 2^n entries four times.
                 let n = F0.len();
                 let eval_at = |idx: usize, low: &[R::BaseRing], scale: &[R::BaseRing]| -> R::BaseRing {
                     eq_at_base::<R::BaseRing>(idx, low, scale, *low_mask, *t_low)
                 };
                 #[cfg(feature = "parallel")]
-                let f0_a = (0..n)
+                let (f0_a, f0_b, f1_a, f1_b) = (0..n)
                     .into_par_iter()
-                    .map(|i| F0[i] * eval_at(i, low_a, scale_a))
-                    .reduce(|| R::ZERO, |a, b| a + b);
+                    .fold(
+                        || (R::ZERO, R::ZERO, R::ZERO, R::ZERO),
+                        |(mut a0, mut b0, mut a1, mut b1), i| {
+                            let wa = eval_at(i, low_a, scale_a);
+                            let wb = eval_at(i, low_b, scale_b);
+                            a0 += F0[i] * wa;
+                            b0 += F0[i] * wb;
+                            a1 += F1[i] * wa;
+                            b1 += F1[i] * wb;
+                            (a0, b0, a1, b1)
+                        },
+                    )
+                    .reduce(
+                        || (R::ZERO, R::ZERO, R::ZERO, R::ZERO),
+                        |(a0, b0, a1, b1), (c0, d0, c1, d1)| (a0 + c0, b0 + d0, a1 + c1, b1 + d1),
+                    );
                 #[cfg(not(feature = "parallel"))]
-                let f0_a = (0..n).map(|i| F0[i] * eval_at(i, low_a, scale_a)).fold(R::ZERO, |a, b| a + b);
-
-                #[cfg(feature = "parallel")]
-                let f0_b = (0..n)
-                    .into_par_iter()
-                    .map(|i| F0[i] * eval_at(i, low_b, scale_b))
-                    .reduce(|| R::ZERO, |a, b| a + b);
-                #[cfg(not(feature = "parallel"))]
-                let f0_b = (0..n).map(|i| F0[i] * eval_at(i, low_b, scale_b)).fold(R::ZERO, |a, b| a + b);
-
-                #[cfg(feature = "parallel")]
-                let f1_a = (0..n)
-                    .into_par_iter()
-                    .map(|i| F1[i] * eval_at(i, low_a, scale_a))
-                    .reduce(|| R::ZERO, |a, b| a + b);
-                #[cfg(not(feature = "parallel"))]
-                let f1_a = (0..n).map(|i| F1[i] * eval_at(i, low_a, scale_a)).fold(R::ZERO, |a, b| a + b);
-
-                #[cfg(feature = "parallel")]
-                let f1_b = (0..n)
-                    .into_par_iter()
-                    .map(|i| F1[i] * eval_at(i, low_b, scale_b))
-                    .reduce(|| R::ZERO, |a, b| a + b);
-                #[cfg(not(feature = "parallel"))]
-                let f1_b = (0..n).map(|i| F1[i] * eval_at(i, low_b, scale_b)).fold(R::ZERO, |a, b| a + b);
+                let (f0_a, f0_b, f1_a, f1_b) = {
+                    let mut a0 = R::ZERO;
+                    let mut b0 = R::ZERO;
+                    let mut a1 = R::ZERO;
+                    let mut b1 = R::ZERO;
+                    for i in 0..n {
+                        let wa = eval_at(i, low_a, scale_a);
+                        let wb = eval_at(i, low_b, scale_b);
+                        a0 += F0[i] * wa;
+                        b0 += F0[i] * wb;
+                        a1 += F1[i] * wa;
+                        b1 += F1[i] * wb;
+                    }
+                    (a0, b0, a1, b1)
+                };
 
                 ((f0_a, f0_b), (f1_a, f1_b))
             } else {
