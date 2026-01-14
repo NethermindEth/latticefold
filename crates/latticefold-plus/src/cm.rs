@@ -162,7 +162,10 @@ where
                         // all columns 1..d-1 as the fixed zero digit. Then:
                         //   row_sum = M[row,0]*s_i[0] + exp(0) * Σ_{col>0} s_i[col]
                         // so we can avoid the inner `for col` loop.
-                        let const_col0 = matches!(M.digits, crate::setchk::DigitsBacking::ConstCol0 { .. });
+                        let const_col0 = matches!(&M.digits, crate::setchk::DigitsBacking::ConstCol0 { .. });
+                        // Hoist per-vector constants outside the per-row loop.
+                        let s0 = s_i[0];
+                        let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
                         #[cfg(feature = "parallel")]
                         {
                             use rayon::prelude::*;
@@ -172,8 +175,6 @@ where
                                     if const_col0 {
                                         match &M.digits {
                                             crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
-                                                let s0 = s_i[0];
-                                                let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
                                                 let exp0 = M.exp_table[*zero_idx as usize];
                                                 let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
                                                 M.exp_table[dix] * s0 + exp0 * rest_sum
@@ -198,8 +199,6 @@ where
                                     crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => (col0, zero_idx),
                                     crate::setchk::DigitsBacking::Full(_) => unreachable!(),
                                 };
-                                let s0 = s_i[0];
-                                let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
                                 let exp0 = M.exp_table[*zero_idx as usize];
                                 for row in 0..n {
                                     let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;

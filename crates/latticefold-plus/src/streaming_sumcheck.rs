@@ -1023,39 +1023,51 @@ impl StreamingSumcheck {
         let num_polys = state.mles.len();
 
         #[cfg(feature = "parallel")]
-        let evals0 = (0..domain_half)
-            .into_par_iter()
-            .map(|b| {
-                let mut vals0 = vec![R::BaseRing::ZERO; num_polys];
-                let mut vals1 = vec![R::BaseRing::ZERO; num_polys];
-                let mut steps = vec![R::BaseRing::ZERO; num_polys];
-                let mut vals = vec![R::BaseRing::ZERO; num_polys];
-                let mut out = vec![R::BaseRing::ZERO; degree + 1];
-
-                for (i, mle) in state.mles.iter().enumerate() {
-                    vals0[i] = mle.eval0_at_index(b << 1);
-                    vals1[i] = mle.eval0_at_index((b << 1) | 1);
-                }
-                out[0] = comb_fn0(&vals0);
-                out[1] = comb_fn0(&vals1);
-                for i in 0..num_polys {
-                    steps[i] = vals1[i] - vals0[i];
-                    vals[i] = vals1[i];
-                }
-                for d in 2..=degree {
-                    for i in 0..num_polys {
-                        vals[i] += steps[i];
+        let evals0 = {
+            // Avoid per-vertex allocations (critical for performance at 2^27).
+            struct Scratch<BR> {
+                acc: Vec<BR>,
+                vals0: Vec<BR>,
+                vals1: Vec<BR>,
+                steps: Vec<BR>,
+                vals: Vec<BR>,
+            }
+            let mk_scratch = || Scratch {
+                acc: vec![R::BaseRing::ZERO; degree + 1],
+                vals0: vec![R::BaseRing::ZERO; num_polys],
+                vals1: vec![R::BaseRing::ZERO; num_polys],
+                steps: vec![R::BaseRing::ZERO; num_polys],
+                vals: vec![R::BaseRing::ZERO; num_polys],
+            };
+            (0..domain_half)
+                .into_par_iter()
+                .fold(mk_scratch, |mut s, b| {
+                    for (i, mle) in state.mles.iter().enumerate() {
+                        s.vals0[i] = mle.eval0_at_index(b << 1);
+                        s.vals1[i] = mle.eval0_at_index((b << 1) | 1);
                     }
-                    out[d] = comb_fn0(&vals);
-                }
-                out
-            })
-            .reduce(|| vec![R::BaseRing::ZERO; degree + 1], |mut acc, v| {
-                for (a, e) in acc.iter_mut().zip(v) {
-                    *a += e;
-                }
-                acc
-            });
+                    s.acc[0] += comb_fn0(&s.vals0);
+                    s.acc[1] += comb_fn0(&s.vals1);
+                    for i in 0..num_polys {
+                        s.steps[i] = s.vals1[i] - s.vals0[i];
+                        s.vals[i] = s.vals1[i];
+                    }
+                    for d in 2..=degree {
+                        for i in 0..num_polys {
+                            s.vals[i] += s.steps[i];
+                        }
+                        s.acc[d] += comb_fn0(&s.vals);
+                    }
+                    s
+                })
+                .reduce(mk_scratch, |mut a, b| {
+                    for d in 0..=degree {
+                        a.acc[d] += b.acc[d];
+                    }
+                    a
+                })
+                .acc
+        };
 
         #[cfg(not(feature = "parallel"))]
         let evals0 = {

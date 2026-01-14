@@ -446,22 +446,48 @@ where
                 );
             }
 
+            #[inline]
+            fn dot_with_eq<Rr: PolyRing>(f: &[Rr], eq: &[Rr]) -> Rr {
+                debug_assert_eq!(f.len(), eq.len());
+                #[cfg(feature = "parallel")]
+                {
+                    f.par_iter()
+                        .zip(eq.par_iter())
+                        .map(|(&fx, &wx)| fx * wx)
+                        .reduce(|| Rr::ZERO, |a, b| a + b)
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    f.iter()
+                        .zip(eq.iter())
+                        .fold(Rr::ZERO, |acc, (&fx, &wx)| acc + fx * wx)
+                }
+            }
+
             let t_fv = Instant::now();
-            let fv0 = F0.iter().zip(eq_a.iter()).map(|(f, e)| *f * *e).sum::<R>();
-            let fv1 = F1.iter().zip(eq_b.iter()).map(|(f, e)| *f * *e).sum::<R>();
+            // Base term corresponds to the "no-matrix" entry in `vo`: evaluation of g itself.
+            // We need both evaluation points, so we compute both dot-products for both Fi.
+            let fv0 = (dot_with_eq::<R>(&F0, &eq_a), dot_with_eq::<R>(&F0, &eq_b));
+            let fv1 = (dot_with_eq::<R>(&F1, &eq_a), dot_with_eq::<R>(&F1, &eq_b));
             if profile && detail {
-                println!("[LF+ Decomp::decompose_seeded] f evals: {:?}", t_fv.elapsed());
+                println!(
+                    "[LF+ Decomp::decompose_seeded] fv(dot_with_eq) both: {:?}",
+                    t_fv.elapsed()
+                );
             }
 
             let t_mats = Instant::now();
-            let mut v0 = Vec::with_capacity(self.M.len());
-            let mut v1 = Vec::with_capacity(self.M.len());
+            let mut v0 = Vec::with_capacity(1 + self.M.len());
+            let mut v1 = Vec::with_capacity(1 + self.M.len());
+            v0.push(fv0);
+            v1.push(fv1);
             for M_i in self.M.iter().map(|m| m.as_ref()) {
                 if is_identity_matrix::<R>(M_i) {
-                    v0.push((fv0, fv0));
-                    v1.push((fv1, fv1));
+                    v0.push(fv0);
+                    v1.push(fv1);
                 } else {
-                    let (m0, m1) = eval_sparse_mat_two_vecs_at_two_points::<R>(M_i, &F0, &F1, &eq_a, &eq_b);
+                    let (m0, m1) =
+                        eval_sparse_mat_two_vecs_at_two_points::<R>(M_i, &F0, &F1, &eq_a, &eq_b);
                     v0.push(m0);
                     v1.push(m1);
                 }
