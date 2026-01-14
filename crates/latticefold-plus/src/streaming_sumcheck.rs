@@ -857,10 +857,21 @@ where
                 // If we haven't reached the lazy threshold, just update the fixed-bit weights and shrink `num_vars`.
                 if fixed.len() < *max_lazy {
                     fixed.push(r0);
-                    let mut next = Vec::with_capacity(weights.len() << 1);
-                    for &w in weights.iter() {
-                        next.push(w * (R::BaseRing::ONE - r0));
-                        next.push(w * r0);
+                    // IMPORTANT: fixed bits are LSB-first in the sumcheck schedule.
+                    // We maintain `weights[b] = Π_{j=0..k-1} (bit_j ? r_j : (1-r_j))` where `bit_j`
+                    // is the j-th LSB of `b` (so the *first fixed variable* corresponds to bit 0).
+                    //
+                    // When appending a new fixed variable `r_k`, it becomes bit `k` (i.e. the new MSB
+                    // among the fixed bits), so we update:
+                    // - next[b]         = weights[b] * (1-r_k)
+                    // - next[b + 2^k]   = weights[b] * r_k
+                    let old_len = weights.len();
+                    let mut next = vec![R::BaseRing::ZERO; old_len << 1];
+                    let om = R::BaseRing::ONE - r0;
+                    for b in 0..old_len {
+                        let w = weights[b];
+                        next[b] = w * om;
+                        next[b + old_len] = w * r0;
                     }
                     *weights = next;
                     *num_vars -= 1;
