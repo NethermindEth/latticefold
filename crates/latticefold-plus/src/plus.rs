@@ -115,7 +115,7 @@ where
             r: linb2.x.ro.clone(),
             M: &self.M,
         };
-        let (linb, dproof) = decomp.decompose(&self.A, self.params.B);
+        let (_linb, dproof) = decomp.decompose(&self.A, self.params.B);
 
         let proof = PlusProof {
             linb2x: linb2.x,
@@ -160,45 +160,6 @@ where
         }
     }
 
-    /// Prove (seeded Ajtai path).
-    pub fn prove_sparse<L>(&mut self, comp: &[L]) -> PlusProof<R, L::Proof>
-    where
-        L: Linearize<R>,
-    {
-        maybe_print_rss("PlusProverSparse::prove_sparse (start)");
-        let mut lproof = Vec::with_capacity(comp.len());
-        comp.iter().for_each(|compi| {
-            let (linb, lp) = compi.linearize(&mut self.transcript);
-            lproof.push(lp);
-            self.acc.lins.push(linb);
-        });
-
-        maybe_print_rss("PlusProverSparse::prove_sparse (after linearize)");
-        let (linb2, cmproof) = self.acc.mlin_seeded(&self.scheme, &self.M, &mut self.transcript);
-        maybe_print_rss("PlusProverSparse::prove_sparse (after mlin_seeded)");
-        let decomp = Decomp {
-            f: linb2.g,
-            r: linb2.x.ro.clone(),
-            M: &self.M,
-        };
-        let (linb, dproof) = decomp.decompose_seeded(&self.scheme, self.params.B);
-        maybe_print_rss("PlusProverSparse::prove_sparse (after decompose_seeded)");
-
-        let proof = PlusProof {
-            linb2x: linb2.x,
-            lproof,
-            cmproof,
-            dproof,
-        };
-
-        // Keep only accumulated instance
-        self.acc.lins.clear();
-        self.acc.lins.push(linb.0);
-        self.acc.lins.push(linb.1);
-        proof
-    }
-}
-
 impl<R, TS> PlusProverSparseBase<R, TS>
 where
     R::BaseRing: ConvertibleRing + Decompose + Zq,
@@ -229,7 +190,7 @@ where
     where
         L: Linearize<R>,
     {
-        maybe_print_rss("PlusProverSparse::prove_sparse (start)");
+        maybe_print_rss("PlusProverSparse::prove_sparse_base (start)");
         let mut lproof = Vec::with_capacity(comp.len());
         comp.iter().for_each(|compi| {
             let (linb, lp) = compi.linearize(&mut self.transcript);
@@ -237,19 +198,19 @@ where
             self.acc.lins.push(linb);
         });
 
-        maybe_print_rss("PlusProverSparse::prove_sparse (after linearize)");
+        maybe_print_rss("PlusProverSparse::prove_sparse_base (after linearize)");
         let (linb2, cmproof) =
             self.acc
                 .mlin_seeded_base(&self.scheme, &self.M0, &mut self.transcript);
-        maybe_print_rss("PlusProverSparse::prove_sparse (after mlin_seeded)");
+        maybe_print_rss("PlusProverSparse::prove_sparse_base (after mlin_seeded)");
 
         let decomp = crate::decomp::DecompBase {
             f: linb2.g,
             r: linb2.x.ro.clone(),
             M0: &self.M0,
         };
-        let (linb, dproof) = decomp.decompose_seeded_base(&self.scheme, self.params.B);
-        maybe_print_rss("PlusProverSparse::prove_sparse (after decompose_seeded)");
+        let (_linb, dproof) = decomp.decompose_seeded_base(&self.scheme, self.params.B);
+        maybe_print_rss("PlusProverSparse::prove_sparse_base (after decompose_seeded)");
 
         let proof = PlusProof {
             linb2x: linb2.x,
@@ -258,9 +219,8 @@ where
             dproof,
         };
 
+        // One-shot proving: don't retain large witnesses in the prover state.
         self.acc.lins.clear();
-        self.acc.lins.push(linb.0);
-        self.acc.lins.push(linb.1);
         proof
     }
 }

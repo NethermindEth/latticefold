@@ -253,8 +253,8 @@ fn main() {
 
     let t_prove = Instant::now();
     let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
-    println!("  PlusProverSparse::prove_sparse: {:?}", t_prove.elapsed());
-    maybe_print_rss("after prove_sparse");
+    println!("  PlusProverSparse::prove_sparse_base: {:?}", t_prove.elapsed());
+    maybe_print_rss("after prove_sparse_base");
 
     // Record verifier trace and ensure the existing WE gate arithmetization is satisfied.
     let poseidon_cfg = PC::get_poseidon_config();
