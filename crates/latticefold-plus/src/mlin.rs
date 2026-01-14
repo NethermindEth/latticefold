@@ -3,7 +3,7 @@ use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use stark_rings::{
     balanced_decomposition::{convertible_ring::ConvertibleRing, Decompose},
-    CoeffRing, Zq,
+    CoeffRing, PolyRing, Zq,
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
 use std::sync::Arc;
@@ -16,25 +16,25 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct Mlin<R> {
+pub struct Mlin<R: PolyRing> {
     pub lins: Vec<LinB<R>>,
     pub params: LinParameters,
 }
 
 #[derive(Clone, Debug)]
-pub struct LinB2X<R> {
+pub struct LinB2X<R: PolyRing> {
     pub cm_g: Vec<R>,
     pub ro: Vec<(R, R)>,
     pub vo: Vec<(R, R)>,
 }
 
 #[derive(Clone, Debug)]
-pub struct LinB2<R> {
+pub struct LinB2<R: PolyRing> {
     pub g: Vec<R>,
     pub x: LinB2X<R>,
 }
 
-impl<R: CoeffRing> Mlin<R>
+impl<R: CoeffRing + PolyRing> Mlin<R>
 where
     R::BaseRing: ConvertibleRing + Decompose + Zq,
     R: Decompose,
@@ -56,7 +56,17 @@ where
         let instances = self
             .lins
             .iter()
-            .map(|lin| RgInstance::from_f(lin.f.clone(), A, &self.params.decomp))
+            .map(|lin| match &lin.f {
+                crate::rgchk::WitnessVec::Ring(vr) => {
+                    // Non-seeded path is used only for small/unit tests; cloning here is OK.
+                    RgInstance::from_f(vr.as_ref().clone(), A, &self.params.decomp)
+                }
+                crate::rgchk::WitnessVec::ConstCoeffBase(v0) => {
+                    // Fallback for non-seeded path: materialize ring elements.
+                    let f_ring = v0.iter().copied().map(R::from).collect::<Vec<R>>();
+                    RgInstance::from_f(f_ring, A, &self.params.decomp)
+                }
+            })
             .collect::<Vec<_>>();
         if profile {
             println!(
@@ -145,7 +155,15 @@ where
         let instances = self
             .lins
             .iter()
-            .map(|lin| RgInstance::from_f_seeded(lin.f.clone(), scheme, &self.params.decomp))
+            .map(|lin| match &lin.f {
+                crate::rgchk::WitnessVec::ConstCoeffBase(v0) => {
+                    RgInstance::from_f0_seeded(v0.clone(), scheme, &self.params.decomp)
+                }
+                crate::rgchk::WitnessVec::Ring(vr) => {
+                    // Fallback for small cases: keep existing ring-vector seeded constructor.
+                    RgInstance::from_f_seeded(vr.as_ref().clone(), scheme, &self.params.decomp)
+                }
+            })
             .collect::<Vec<_>>();
         if profile {
             println!(

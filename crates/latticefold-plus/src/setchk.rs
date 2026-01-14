@@ -32,7 +32,8 @@ pub enum MonomialSet<R: PolyRing> {
     /// This avoids storing `n×d` full ring elements (which is huge), while keeping prover
     /// transcript / verifier behavior identical.
     DigitsMatrix(Arc<DigitsMatrix<R>>),
-    Vector(Vec<R>),
+    /// Vector set of monomials (Arc-backed to avoid cloning large vectors).
+    Vector(Arc<Vec<R>>),
 }
 
 /// Compact monomial matrix backed by a digit table.
@@ -165,7 +166,7 @@ impl<R: OverField + PolyRing> In<R> {
             .sets
             .iter()
             .filter_map(|set| match set {
-                MonomialSet::Vector(v) => Some(v),
+                MonomialSet::Vector(v) => Some(v.as_ref()),
                 _ => None,
             })
             .collect();
@@ -1112,8 +1113,8 @@ mod tests {
         let n = 4;
         let M0 = SparseMatrix::<R>::identity(n);
         let M1 = SparseMatrix::<R>::identity(n);
-        let m0 = vec![R::one(); n];
-        let m1 = vec![unit_monomial(2); n];
+        let m0 = Arc::new(vec![R::one(); n]);
+        let m1 = Arc::new(vec![unit_monomial(2); n]);
 
         let scin = In {
             sets: vec![
@@ -1141,6 +1142,7 @@ mod tests {
         let mut onepx = R::one();
         onepx.coeffs_mut()[1] = 1u128.into();
         m0[0] = onepx;
+        let m0 = Arc::new(m0);
 
         let scin = In {
             sets: vec![

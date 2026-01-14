@@ -9,6 +9,7 @@ use std::time::Instant;
 use std::sync::Arc;
 
 use crate::lin::{LinB, LinBX};
+use crate::rgchk::WitnessVec;
 
 pub type RxR<R> = (R, R);
 
@@ -295,7 +296,7 @@ where
                 r: self.r.clone(),
                 v: v0.clone(),
             },
-            f: F0,
+            f: WitnessVec::Ring(Arc::new(F0)),
         };
         let linb1 = LinB {
             x: LinBX {
@@ -303,7 +304,7 @@ where
                 r: self.r.clone(),
                 v: v1.clone(),
             },
-            f: F1,
+            f: WitnessVec::Ring(Arc::new(F1)),
         };
         let proof = DecompProof {
             C: (C0, C1),
@@ -518,7 +519,7 @@ where
                 r: self.r.clone(),
                 v: v0.clone(),
             },
-            f: F0,
+            f: WitnessVec::Ring(Arc::new(F0)),
         };
         let linb1 = LinB {
             x: LinBX {
@@ -526,7 +527,7 @@ where
                 r: self.r.clone(),
                 v: v1.clone(),
             },
-            f: F1,
+            f: WitnessVec::Ring(Arc::new(F1)),
         };
         let proof = DecompProof { C: (C0, C1), v: (v0, v1) };
 
@@ -617,7 +618,14 @@ mod tests {
         let r = lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>();
 
         let decomp = Decomp {
-            f: cr1cs.f,
+            // Decomp currently expects an owned witness vector.
+            // This test is small; cloning is fine here.
+            f: cr1cs
+                .f
+                .as_ring_arc()
+                .expect("test uses ring witness")
+                .as_ref()
+                .clone(),
             r,
             M: &M,
         };

@@ -21,6 +21,8 @@ use crate::{
     utils::{short_challenge, tensor, tensor_product},
 };
 
+use crate::rgchk::WitnessVec;
+
 #[inline]
 fn is_const_coeff_ring<R: PolyRing>(x: &R) -> bool {
     let coeffs = x.coeffs();
@@ -305,13 +307,21 @@ where
             .iter()
             .enumerate()
             .map(|(i, inst)| {
-                inst.tau
-                    .iter()
-                    .zip(&inst.m_tau)
-                    .zip(&inst.f)
-                    .zip(&h[i])
-                    .map(|(((r_tau, r_mtau), r_f), r_h)| {
-                        (s[0] * R::from(*r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                let n = inst.tau.len();
+                debug_assert_eq!(inst.m_tau.len(), n);
+                debug_assert_eq!(h[i].len(), n);
+                debug_assert_eq!(inst.f.len(), n);
+
+                (0..n)
+                    .map(|j| {
+                        let r_tau = inst.tau[j];
+                        let r_mtau = inst.m_tau[j];
+                        let r_f = match &inst.f {
+                            WitnessVec::Ring(vr) => vr[j],
+                            WitnessVec::ConstCoeffBase(v0) => R::from(v0[j]),
+                        };
+                        let r_h = h[i][j];
+                        (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
                     })
                     .collect::<Vec<R>>()
             })
@@ -389,11 +399,20 @@ where
             //
             // This is the only path we care about for SP1 (const-coeff matrices), and it is
             // algebraically identical to using ring tables: BaseScalarArc evaluates to `R::from(scalar)`.
-            let tau0_arc: Arc<Vec<R::BaseRing>> = Arc::new(inst.tau.clone());
-            let mtau0_arc: Option<Arc<Vec<R::BaseRing>>> =
-                if mats_const { try_as_base_scalars::<R>(&inst.m_tau).map(Arc::new) } else { None };
-            let f0_arc: Option<Arc<Vec<R::BaseRing>>> =
-                if mats_const { try_as_base_scalars::<R>(&inst.f).map(Arc::new) } else { None };
+            let tau0_arc: Arc<Vec<R::BaseRing>> = inst.tau.clone();
+            let mtau0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
+                try_as_base_scalars::<R>(inst.m_tau.as_ref()).map(Arc::new)
+            } else {
+                None
+            };
+            let f0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
+                match &inst.f {
+                    WitnessVec::ConstCoeffBase(v0) => Some(v0.clone()),
+                    WitnessVec::Ring(vr) => try_as_base_scalars::<R>(vr.as_ref()).map(Arc::new),
+                }
+            } else {
+                None
+            };
             let h0_arc: Option<Arc<Vec<R::BaseRing>>> =
                 if mats_const { try_as_base_scalars::<R>(&h[i]).map(Arc::new) } else { None };
 
@@ -416,8 +435,8 @@ where
                 square: false,
             });
 
-            let m_tau_arc_ring: Arc<Vec<R>> = Arc::new(inst.m_tau.clone());
-            let f_arc_ring: Arc<Vec<R>> = Arc::new(inst.f.clone());
+            let m_tau_arc_ring: Arc<Vec<R>> = inst.m_tau.clone();
+            let f_arc_ring: Option<Arc<Vec<R>>> = inst.f.as_ring_arc();
             let h_arc_ring: Arc<Vec<R>> = Arc::new(h[i].clone());
 
             if mtau_cc {
@@ -440,7 +459,10 @@ where
                 });
             } else {
                 mles.push(StreamingMleEnum::DenseArc {
-                    evals: f_arc_ring.clone(),
+                    evals: f_arc_ring
+                        .as_ref()
+                        .expect("Ring witness required when f_cc is false")
+                        .clone(),
                     num_vars: nvars,
                 });
             }
@@ -521,7 +543,10 @@ where
                 } else {
                     mles.push(StreamingMleEnum::SparseMatVec {
                         matrix: m.clone(),
-                        witness: f_arc_ring.clone(),
+                        witness: f_arc_ring
+                            .as_ref()
+                            .expect("Ring witness required when f_cc is false")
+                            .clone(),
                         num_vars: nvars,
                     });
                 }

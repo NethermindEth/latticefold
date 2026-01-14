@@ -45,11 +45,48 @@ pub struct Rg<R: PolyRing> {
 pub struct RgInstance<R: PolyRing> {
     /// Monomial matrices in compact digit form (k matrices, each n×d).
     pub M_f: Vec<Arc<DigitsMatrix<R>>>,
-    pub tau: Vec<R::BaseRing>, // n
-    pub m_tau: Vec<R>,         // n, monomials
-    pub f: Vec<R>,             // n
+    pub tau: Arc<Vec<R::BaseRing>>, // n
+    pub m_tau: Arc<Vec<R>>,         // n, monomials
+    pub f: WitnessVec<R>,           // n
     pub comM_f: Vec<Matrix<R>>,
     pub fcoms: FComs<R>,
+}
+
+/// Witness vector representation used by the prover.
+///
+/// This is a **prover-only** representation choice; verifier behavior/proofs are unchanged.
+#[derive(Clone, Debug)]
+pub enum WitnessVec<R: PolyRing> {
+    /// Fully materialized ring vector.
+    Ring(Arc<Vec<R>>),
+    /// Constant-coefficient embedding stored as base scalars (avoids allocating `Vec<R>`).
+    ConstCoeffBase(Arc<Vec<R::BaseRing>>),
+}
+
+impl<R: PolyRing> WitnessVec<R> {
+    #[inline]
+    pub fn len(&self) -> usize {
+        match self {
+            WitnessVec::Ring(v) => v.len(),
+            WitnessVec::ConstCoeffBase(v0) => v0.len(),
+        }
+    }
+
+    #[inline]
+    pub fn as_ring_arc(&self) -> Option<Arc<Vec<R>>> {
+        match self {
+            WitnessVec::Ring(v) => Some(v.clone()),
+            WitnessVec::ConstCoeffBase(_) => None,
+        }
+    }
+
+    #[inline]
+    pub fn as_const_coeff_base_arc(&self) -> Option<Arc<Vec<R::BaseRing>>> {
+        match self {
+            WitnessVec::ConstCoeffBase(v0) => Some(v0.clone()),
+            WitnessVec::Ring(_) => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -135,11 +172,16 @@ where
                 let mut c = Vec::with_capacity(1 + M.len());
 
                 // v: coefficient-wise evaluation of f at out_rel.r
-                let v = eval_vec_coeffs_at_point_streaming::<R>(&inst.f, &out_rel.r, &one_minus_r);
+                let v =
+                    eval_vec_coeffs_at_point_streaming_witness::<R>(&inst.f, &out_rel.r, &one_minus_r);
 
-                a.push(dot_base_streaming::<R>(&inst.tau, &out_rel.r, &one_minus_r));
+                a.push(dot_base_streaming::<R>(
+                    inst.tau.as_ref(),
+                    &out_rel.r,
+                    &one_minus_r,
+                ));
                 b.push(out_rel.b[l]);
-                c.push(dot_ring_streaming::<R>(&inst.f, &out_rel.r, &one_minus_r));
+                c.push(dot_ring_streaming_witness::<R>(&inst.f, &out_rel.r, &one_minus_r));
 
                 // Evaluate M * tau / m_tau / f at out_rel.r *without materializing length-n vectors*.
                 //
@@ -148,17 +190,17 @@ where
                 for m in M {
                     a.push(sparse_mat_vec_eval_ct_streaming::<R>(
                         m,
-                        &inst.tau,
+                        inst.tau.as_ref(),
                         &out_rel.r,
                         &one_minus_r,
                     ));
                     b.push(sparse_mat_vec_eval_ring_streaming::<R>(
                         m,
-                        &inst.m_tau,
+                        inst.m_tau.as_ref(),
                         &out_rel.r,
                         &one_minus_r,
                     ));
-                    c.push(sparse_mat_vec_eval_ring_streaming::<R>(
+                    c.push(sparse_mat_vec_eval_ring_streaming_witness::<R>(
                         m,
                         &inst.f,
                         &out_rel.r,
@@ -511,9 +553,9 @@ where
 
         Self {
             M_f,
-            tau,
-            m_tau,
-            f,
+            tau: Arc::new(tau),
+            m_tau: Arc::new(m_tau),
+            f: WitnessVec::Ring(Arc::new(f)),
             comM_f,
             fcoms,
         }
@@ -706,9 +748,173 @@ where
 
         Self {
             M_f,
-            tau,
-            m_tau,
-            f,
+            tau: Arc::new(tau),
+            m_tau: Arc::new(m_tau),
+            f: WitnessVec::Ring(Arc::new(f)),
+            comM_f,
+            fcoms,
+        }
+    }
+
+    /// Construct an [`RgInstance`] from a **constant-coefficient** witness `f0` (base scalars),
+    /// using a seeded implicit Ajtai matrix.
+    ///
+    /// This avoids allocating the huge `Vec<R>` when the witness is embedded as constant-coeff
+    /// ring elements (the SP1 production regime).
+    pub fn from_f0_seeded(
+        f0: Arc<Vec<R::BaseRing>>,
+        scheme: &AjtaiCommitmentScheme<R>,
+        decomp: &DecompParameters,
+    ) -> Self {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = std::time::Instant::now();
+
+        let n = f0.len();
+        let kappa = scheme.kappa();
+        let d = R::dimension();
+        let k = decomp.k;
+
+        // Digit alphabet for balanced decomposition digits in [-b, b].
+        let b_i128: i128 = decomp.b as i128;
+        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+            .map(|x| {
+                if x >= 0 {
+                    R::BaseRing::from(x as u128)
+                } else {
+                    -R::BaseRing::from((-x) as u128)
+                }
+            })
+            .collect();
+        let exp_table: Arc<Vec<R>> = Arc::new(
+            digit_elems
+                .iter()
+                .map(|&x| exp::<R>(x).unwrap())
+                .collect::<Vec<_>>(),
+        );
+        let digit_elems = Arc::new(digit_elems);
+        let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
+            Box::new(move |dig: R::BaseRing| -> u16 {
+                digit_elems
+                    .iter()
+                    .position(|&x| x == dig)
+                    .expect("digit not in [-b,b] alphabet") as u16
+            });
+
+        // Const-coeff witness: store only col0 digit table.
+        let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
+        let mut digits_tables: Vec<Vec<u16>> = (0..k).map(|_| vec![zero_idx; n]).collect();
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            digits_tables
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(k_i, table)| {
+                    let mut tmp_local = vec![R::BaseRing::ZERO; k];
+                    for (row_idx, &c0) in f0.iter().enumerate() {
+                        c0.decompose_to(decomp.b, &mut tmp_local);
+                        table[row_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                    }
+                });
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut tmp = vec![R::BaseRing::ZERO; k];
+            for (row_idx, &c0) in f0.iter().enumerate() {
+                c0.decompose_to(decomp.b, &mut tmp);
+                for k_i in 0..k {
+                    digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
+                }
+            }
+        }
+
+        let M_f: Vec<Arc<DigitsMatrix<R>>> = digits_tables
+            .into_iter()
+            .map(|digits| {
+                Arc::new(DigitsMatrix {
+                    nrows: n,
+                    ncols: d,
+                    digits: crate::setchk::DigitsBacking::ConstCol0 {
+                        col0: Arc::new(digits),
+                        zero_idx,
+                    },
+                    exp_table: exp_table.clone(),
+                })
+            })
+            .collect();
+
+        // Commit monomial matrices (Ajtai seeded).
+        let t = std::time::Instant::now();
+        let comM_f = M_f
+            .iter()
+            .enumerate()
+            .map(|(_ki, dm)| {
+                let cs = scheme
+                    .commit_many_with(n, d, |row, out| {
+                        for col in 0..d {
+                            out[col] = dm.get(row, col);
+                        }
+                    })
+                    .expect("commit_many_with M_f");
+                let mut mat = Matrix::zero(kappa, d);
+                for col in 0..d {
+                    let ccol = cs[col].as_ref();
+                    for r in 0..kappa {
+                        mat.vals[r][col] = ccol[r];
+                    }
+                }
+                mat
+            })
+            .collect::<Vec<_>>();
+        if profile {
+            println!(
+                "[LF+ RgInstance::from_f0_seeded] commit monomial mats (Ajtai seeded): {:?} (kappa×(k*d) = {}×{})",
+                t.elapsed(),
+                kappa,
+                decomp.k * d
+            );
+        }
+
+        let com = Matrix::hconcat(&comM_f).unwrap();
+
+        let t = std::time::Instant::now();
+        let tau = split(&com, n, (R::dimension() / 2) as u128, decomp.l);
+        if profile {
+            println!("[LF+ RgInstance::from_f0_seeded] split tau: {:?}", t.elapsed());
+        }
+
+        let t = std::time::Instant::now();
+        let m_tau = tau.iter().map(|c| exp::<R>(*c).unwrap()).collect::<Vec<_>>();
+        if profile {
+            println!("[LF+ RgInstance::from_f0_seeded] build m_tau via exp: {:?}", t.elapsed());
+        }
+
+        let t = std::time::Instant::now();
+        let tau0: Arc<Vec<R::BaseRing>> = Arc::new(tau.clone());
+        let cm_pair = scheme
+            .commit_many_const_coeff_base_fast(n, 2, {
+                let f0 = f0.clone();
+                let tau0 = tau0.clone();
+                move |j, out| {
+                    out[0] = f0[j];
+                    out[1] = tau0[j];
+                }
+            })
+            .expect("commit_many_const_coeff_base_fast (f0,tau)");
+        let cm_f = cm_pair[0].as_ref().to_vec();
+        let C_Mf = cm_pair[1].as_ref().to_vec();
+        let cm_mtau = scheme.commit(&m_tau).expect("commit m_tau").as_ref().to_vec();
+        if profile {
+            println!("[LF+ RgInstance::from_f0_seeded] commit f/tau/m_tau: {:?}", t.elapsed());
+            println!("[LF+ RgInstance::from_f0_seeded] total: {:?}", t_total.elapsed());
+        }
+        let fcoms = FComs { cm_f, C_Mf, cm_mtau };
+
+        Self {
+            M_f,
+            tau: Arc::new(tau),
+            m_tau: Arc::new(m_tau),
+            f: WitnessVec::ConstCoeffBase(f0),
             comM_f,
             fcoms,
         }
@@ -767,6 +973,57 @@ where
 fn choose_t_low(nvars: usize) -> usize {
     // Keep a tiny table (<= 2^12 = 4096) to avoid big allocations across many chunks.
     nvars.min(12)
+}
+
+fn eval_vec_coeffs_at_point_streaming_witness<R: PolyRing>(
+    v: &WitnessVec<R>,
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> Vec<R::BaseRing>
+where
+    R::BaseRing: Ring,
+{
+    match v {
+        WitnessVec::Ring(vr) => eval_vec_coeffs_at_point_streaming::<R>(vr.as_ref(), r, one_minus_r),
+        WitnessVec::ConstCoeffBase(v0) => {
+            let mut out = vec![R::BaseRing::ZERO; R::dimension()];
+            out[0] = dot_base_streaming::<R>(v0.as_ref(), r, one_minus_r);
+            out
+        }
+    }
+}
+
+fn dot_ring_streaming_witness<R>(
+    v: &WitnessVec<R>,
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> R
+where
+    R: PolyRing + From<R::BaseRing>,
+    R::BaseRing: Ring,
+{
+    match v {
+        WitnessVec::Ring(vr) => dot_ring_streaming::<R>(vr.as_ref(), r, one_minus_r),
+        WitnessVec::ConstCoeffBase(v0) => R::from(dot_base_streaming::<R>(v0.as_ref(), r, one_minus_r)),
+    }
+}
+
+fn sparse_mat_vec_eval_ring_streaming_witness<R>(
+    m: &SparseMatrix<R>,
+    witness: &WitnessVec<R>,
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> R
+where
+    R: PolyRing + From<R::BaseRing>,
+    R::BaseRing: Ring,
+{
+    match witness {
+        WitnessVec::Ring(vr) => sparse_mat_vec_eval_ring_streaming::<R>(m, vr.as_ref(), r, one_minus_r),
+        WitnessVec::ConstCoeffBase(v0) => {
+            R::from(sparse_mat_vec_eval_ct_streaming::<R>(m, v0.as_ref(), r, one_minus_r))
+        }
+    }
 }
 
 fn dot_base_streaming<R: PolyRing>(

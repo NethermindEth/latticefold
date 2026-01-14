@@ -131,16 +131,15 @@ fn main() {
     );
     println!("  map witness u64->F: {:?}", t_w.elapsed());
 
-    // Embed witness into ring `R` (constant-coeff). Pad to `ncols` (power-of-two).
-    let t_f = Instant::now();
-    let mut f = vec![R::ZERO; cache.ncols];
-    for (i, &x) in w_host.iter().enumerate() {
-        if i >= cache.stats.num_vars {
-            break;
-        }
-        f[i] = R::from(x);
-    }
-    println!("  build f (const-coeff ring): {:?}", t_f.elapsed());
+    // Pad witness to `ncols` (power-of-two) as **base scalars** (const-coeff embedding).
+    //
+    // IMPORTANT: this avoids allocating `Vec<R>` of length `ncols` (which is enormous for d=64).
+    let t_f0 = Instant::now();
+    let mut f0 = (*w_host).clone();
+    f0.truncate(cache.stats.num_vars);
+    f0.resize(cache.ncols, F::ZERO);
+    let f0: Arc<Vec<F>> = Arc::new(f0);
+    println!("  build f0 (base scalars, padded): {:?}", t_f0.elapsed());
 
     // Build `ComR1CS` instance and run the full LF+ prover to produce a `PlusProof`.
     let t_setup = Instant::now();
@@ -151,7 +150,7 @@ fn main() {
     const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
     let ajtai = AjtaiCommitmentScheme::<R>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, cache.ncols);
 
-    let cr1cs = latticefold_plus::r1cs::ComR1CS::from_f_seeded(r1cs, f, 0, &ajtai);
+    let cr1cs = latticefold_plus::r1cs::ComR1CS::from_f0_seeded(r1cs, f0, 0, &ajtai);
     let m = cr1cs.x.matrices_arc();
 
     // LF+ parameters: boundedness base b=2^16,k=2, and a conservative decomp base B for Π_decomp.

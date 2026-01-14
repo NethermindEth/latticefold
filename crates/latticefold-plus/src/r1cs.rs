@@ -10,21 +10,22 @@ use latticefold::{
 use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
     balanced_decomposition::{Decompose, GadgetDecompose},
-    OverField, Ring,
+    OverField, PolyRing, Ring,
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
 use std::sync::Arc;
 
 use crate::lin::{LinB, LinBX, Linearize, LinearizedVerify};
+use crate::rgchk::WitnessVec;
 use crate::streaming_sumcheck::{StreamingMleEnum, StreamingSumcheck};
 
 /// Committed R1CS
 ///
 /// Assume $n=m*\hat{l}$.
 #[derive(Clone, Debug)]
-pub struct ComR1CS<R: Ring> {
+pub struct ComR1CS<R: Ring + PolyRing> {
     pub x: ComR1CSX<R>,
-    pub f: Vec<R>, // n
+    pub f: WitnessVec<R>, // n (prover-only representation; verifier unaffected)
 }
 
 #[derive(Clone, Debug)]
@@ -47,7 +48,7 @@ pub struct ComR1CSProof<R: Ring> {
     pub vc: R,
 }
 
-impl<R: Decompose + Ring> ComR1CS<R> {
+impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
     pub fn new(r1cs: R1CS<R>, z: Vec<R>, l_in: usize, b: u128, k: usize, A: &Matrix<R>) -> Self {
         let f = z.gadget_decompose(b, k);
         let cm_f = A.try_mul_vec(&f).unwrap();
@@ -57,7 +58,10 @@ impl<R: Decompose + Ring> ComR1CS<R> {
             cm_f,
             l_in,
         };
-        Self { x, f }
+        Self {
+            x,
+            f: WitnessVec::Ring(Arc::new(f)),
+        }
     }
 
     /// Construct a committed R1CS instance from a **fully materialized witness vector** `f`.
@@ -75,7 +79,10 @@ impl<R: Decompose + Ring> ComR1CS<R> {
             cm_f,
             l_in,
         };
-        Self { x, f }
+        Self {
+            x,
+            f: WitnessVec::Ring(Arc::new(f)),
+        }
     }
 
     /// Construct a committed R1CS instance from `f`, using a seeded implicit Ajtai matrix.
@@ -96,7 +103,41 @@ impl<R: Decompose + Ring> ComR1CS<R> {
             cm_f,
             l_in,
         };
-        Self { x, f }
+        Self {
+            x,
+            f: WitnessVec::Ring(Arc::new(f)),
+        }
+    }
+
+    /// Construct a committed R1CS instance from a **constant-coefficient** witness (base scalars),
+    /// using a seeded implicit Ajtai matrix.
+    ///
+    /// This avoids allocating `Vec<R>` for the witness in the common SP1 regime.
+    pub fn from_f0_seeded(
+        r1cs: R1CS<R>,
+        f0: Arc<Vec<R::BaseRing>>,
+        l_in: usize,
+        scheme: &AjtaiCommitmentScheme<R>,
+    ) -> Self
+    where
+        R::BaseRing: stark_rings::Ring,
+        R: core::ops::Mul<R::BaseRing, Output = R>,
+    {
+        let cm_f = scheme
+            .commit_const_coeff_base_fast(f0.as_ref())
+            .expect("commit_const_coeff_base_fast")
+            .as_ref()
+            .to_vec();
+        let x = ComR1CSX {
+            r1cs,
+            z: Vec::new(),
+            cm_f,
+            l_in,
+        };
+        Self {
+            x,
+            f: WitnessVec::ConstCoeffBase(f0),
+        }
     }
 }
 
@@ -114,41 +155,82 @@ impl<R: Ring> ComR1CSX<R> {
     }
 }
 
-impl<R: OverField> Linearize<R> for ComR1CS<R> {
+impl<R: OverField + PolyRing> Linearize<R> for ComR1CS<R> {
     type Proof = ComR1CSProof<R>;
     fn linearize(&self, transcript: &mut impl Transcript<R>) -> (LinB<R>, Self::Proof) {
-        let nvars = log2(self.f.len().next_power_of_two()) as usize;
-        let ga = self.x.r1cs.A.try_mul_vec(&self.f).unwrap();
-        let gb = self.x.r1cs.B.try_mul_vec(&self.f).unwrap();
-        let gc = self.x.r1cs.C.try_mul_vec(&self.f).unwrap();
+        let n = self.f.len().next_power_of_two();
+        let nvars = log2(n) as usize;
+
         // Streaming sumcheck (memory-friendly) producing the same `Proof<R>` type.
         let r0 = transcript.get_challenges(nvars);
         let one_minus_r0 = r0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
-        let mles = vec![
-            // eq(x, r0) (constant-coeff)
-            StreamingMleEnum::EqBase {
-                scale: R::BaseRing::ONE,
-                r: r0,
-                one_minus_r: one_minus_r0,
-            },
-            StreamingMleEnum::DenseArc {
-                evals: Arc::new(ga),
-                num_vars: nvars,
-            },
-            StreamingMleEnum::DenseArc {
-                evals: Arc::new(gb),
-                num_vars: nvars,
-            },
-            StreamingMleEnum::DenseArc {
-                evals: Arc::new(gc),
-                num_vars: nvars,
-            },
-            // include f so we can extract v = f(ro) without a separate dense MLE eval
-            StreamingMleEnum::DenseArc {
-                evals: Arc::new(self.f.clone()),
-                num_vars: nvars,
-            },
-        ];
+
+        let mles = match &self.f {
+            WitnessVec::Ring(f) => {
+                let ga = self.x.r1cs.A.try_mul_vec(f.as_ref()).unwrap();
+                let gb = self.x.r1cs.B.try_mul_vec(f.as_ref()).unwrap();
+                let gc = self.x.r1cs.C.try_mul_vec(f.as_ref()).unwrap();
+                vec![
+                    // eq(x, r0) (constant-coeff)
+                    StreamingMleEnum::EqBase {
+                        scale: R::BaseRing::ONE,
+                        r: r0,
+                        one_minus_r: one_minus_r0,
+                    },
+                    StreamingMleEnum::DenseArc {
+                        evals: Arc::new(ga),
+                        num_vars: nvars,
+                    },
+                    StreamingMleEnum::DenseArc {
+                        evals: Arc::new(gb),
+                        num_vars: nvars,
+                    },
+                    StreamingMleEnum::DenseArc {
+                        evals: Arc::new(gc),
+                        num_vars: nvars,
+                    },
+                    StreamingMleEnum::DenseArc {
+                        evals: f.clone(),
+                        num_vars: nvars,
+                    },
+                ]
+            }
+            WitnessVec::ConstCoeffBase(f0) => {
+                // Constant-coefficient witness: represent f as base scalars and avoid allocating `Vec<R>`.
+                //
+                // NOTE: This does not change the verifier relation; it only changes how the prover
+                // evaluates MLEs during sumcheck.
+                vec![
+                    StreamingMleEnum::EqBase {
+                        scale: R::BaseRing::ONE,
+                        r: r0,
+                        one_minus_r: one_minus_r0,
+                    },
+                    // For now we keep ga/gb/gc as dense vectors (computed on demand by downstream callers).
+                    // Large-scale SP1 proving uses chunking; this path is intended for const-coeff chunks.
+                    StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: Arc::new(self.x.r1cs.A.clone()),
+                        witness0: f0.clone(),
+                        num_vars: nvars,
+                    },
+                    StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: Arc::new(self.x.r1cs.B.clone()),
+                        witness0: f0.clone(),
+                        num_vars: nvars,
+                    },
+                    StreamingMleEnum::SparseMatVecConstCoeff {
+                        matrix: Arc::new(self.x.r1cs.C.clone()),
+                        witness0: f0.clone(),
+                        num_vars: nvars,
+                    },
+                    StreamingMleEnum::BaseScalarArc {
+                        evals: f0.clone(),
+                        num_vars: nvars,
+                        square: false,
+                    },
+                ]
+            }
+        };
 
         let comb_fn = |vals: &[R]| -> R { vals[0] * (vals[1] * vals[2] - vals[3]) };
 
@@ -279,7 +361,8 @@ mod tests {
 
         let A = Matrix::<R>::rand(&mut ark_std::test_rng(), kappa, n);
         let cr1cs = ComR1CS::new(r1cs, z, 1, b, k, &A);
-        cr1cs.x.r1cs.check_relation(&cr1cs.f).unwrap();
+        let f_ring = cr1cs.f.as_ring_arc().expect("test uses ring witness");
+        cr1cs.x.r1cs.check_relation(f_ring.as_ref()).unwrap();
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         let (_linb, lproof) = cr1cs.linearize(&mut ts);
