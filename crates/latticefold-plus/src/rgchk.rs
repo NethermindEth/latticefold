@@ -833,6 +833,12 @@ where
         let kappa = scheme.kappa();
         let d = R::dimension();
         let k = decomp.k;
+        if profile {
+            println!(
+                "[LF+ RgInstance::from_f0_seeded] start: n(domain)={} prefix_len={} kappa={} d={} k={}",
+                n, prefix_len, kappa, d, k
+            );
+        }
 
         // Digit alphabet for balanced decomposition digits in [-b, b].
         let b_i128: i128 = decomp.b as i128;
@@ -864,6 +870,7 @@ where
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
         // Only materialize digits for the prefix; rows beyond `prefix_len` are implicitly zero digits.
         let mut digits_tables: Vec<Vec<u16>> = (0..k).map(|_| vec![zero_idx; prefix_len]).collect();
+        let t_digits = std::time::Instant::now();
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
@@ -887,6 +894,12 @@ where
                     digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
                 }
             }
+        }
+        if profile {
+            println!(
+                "[LF+ RgInstance::from_f0_seeded] build digit tables (prefix only): {:?}",
+                t_digits.elapsed()
+            );
         }
 
         let M_f: Vec<Arc<DigitsMatrix<R>>> = digits_tables
@@ -914,6 +927,12 @@ where
             .expect("commit_many_with const exp(0) col")[0]
             .as_ref()
             .to_vec();
+        if profile {
+            println!(
+                "[LF+ RgInstance::from_f0_seeded] commit const exp(0) col: {:?}",
+                t.elapsed()
+            );
+        }
 
         let comM_f = M_f
             .iter()
@@ -974,7 +993,8 @@ where
                 let f0 = f0.clone();
                 let tau0 = tau0.clone();
                 move |j, out| {
-                    out[0] = f0[j];
+                    // f0 is a prefix; missing entries are implicit zeros.
+                    out[0] = f0.get(j).copied().unwrap_or(R::BaseRing::ZERO);
                     out[1] = tau0[j];
                 }
             })
