@@ -939,14 +939,35 @@ where
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
-            digits_tables
-                .par_iter_mut()
+            // Don't parallelize over `k` (k=11) because it only uses ~k threads and also recomputes the
+            // full decomposition k times per row (O(k^2) work). Instead decompose once per row and
+            // write all k digits, parallelizing over rows.
+            //
+            // Safety: each parallel task writes a distinct `row_idx` across all tables. The `Vec<u16>`
+            // allocations are fixed-size and won't reallocate during the fill.
+            struct TablePtrs {
+                ptrs: *const *mut u16,
+                len: usize,
+            }
+            // We only ever write to disjoint indices (row-wise), so sharing these pointers is safe.
+            unsafe impl Sync for TablePtrs {}
+            unsafe impl Send for TablePtrs {}
+
+            let ptrs: Vec<*mut u16> = digits_tables.iter_mut().map(|t| t.as_mut_ptr()).collect();
+            let tbl = TablePtrs {
+                ptrs: ptrs.as_ptr(),
+                len: ptrs.len(),
+            };
+            f0.par_iter()
                 .enumerate()
-                .for_each(|(k_i, table)| {
-                    let mut tmp_local = vec![R::BaseRing::ZERO; k];
-                    for (row_idx, &c0) in f0.iter().enumerate() {
-                        c0.decompose_to(decomp.b, &mut tmp_local);
-                        table[row_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                .for_each_init(|| vec![R::BaseRing::ZERO; k], |tmp, (row_idx, &c0)| {
+                    c0.decompose_to(decomp.b, tmp);
+                    for k_i in 0..k {
+                        let dig = (map_digit_to_idx)(tmp[k_i]);
+                        unsafe {
+                            debug_assert!(k_i < tbl.len);
+                            *(*tbl.ptrs.add(k_i)).add(row_idx) = dig;
+                        }
                     }
                 });
         }
