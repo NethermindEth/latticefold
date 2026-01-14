@@ -18,45 +18,32 @@ pub type RxR<R> = (R, R);
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
-/// Packed representation for a length-`n` ring vector whose coefficients are small.
+/// Packed representation for a length-`n` ring vector's coefficients.
 ///
-/// Layout: `coeffs[j * d + k]` stores the `k`-th base coefficient for entry `j`.
-/// We use this to avoid allocating `Vec<R>` for digit vectors during decomposition.
+/// Layout: `coeffs[j * d + k]` stores the `k`-th base coefficient (balanced, signed) for entry `j`.
+/// This is specialized to `i32` so production and tests exercise the same code path.
 #[derive(Clone, Debug)]
-enum PackedDigitVec<BR: Ring> {
-    I16 { coeffs: Vec<i16>, d: usize, n: usize, _br: core::marker::PhantomData<BR> },
-    I32 { coeffs: Vec<i32>, d: usize, n: usize, _br: core::marker::PhantomData<BR> },
+struct PackedDigitVec<BR: Ring> {
+    coeffs: Vec<i32>,
+    d: usize,
+    n: usize,
+    _br: core::marker::PhantomData<BR>,
 }
 
 impl<BR: Ring> PackedDigitVec<BR> {
     #[inline]
-    fn new_i16(n: usize, d: usize) -> Self {
-        PackedDigitVec::I16 { coeffs: vec![0i16; n * d], d, n, _br: core::marker::PhantomData }
-    }
-
-    #[inline]
-    fn upgrade_to_i32(&mut self) {
-        if let PackedDigitVec::I16 { coeffs, d, n, .. } = self {
-            let mut out = Vec::<i32>::with_capacity(coeffs.len());
-            out.extend(coeffs.iter().map(|&x| x as i32));
-            *self = PackedDigitVec::I32 { coeffs: out, d: *d, n: *n, _br: core::marker::PhantomData };
-        }
+    fn new_i32(n: usize, d: usize) -> Self {
+        Self { coeffs: vec![0i32; n * d], d, n, _br: core::marker::PhantomData }
     }
 
     #[inline]
     fn dims(&self) -> (usize, usize) {
-        match self {
-            PackedDigitVec::I16 { d, n, .. } => (*d, *n),
-            PackedDigitVec::I32 { d, n, .. } => (*d, *n),
-        }
+        (self.d, self.n)
     }
 
     #[inline]
     fn get_i64(&self, j: usize, k: usize) -> i64 {
-        match self {
-            PackedDigitVec::I16 { coeffs, d, .. } => coeffs[j * *d + k] as i64,
-            PackedDigitVec::I32 { coeffs, d, .. } => coeffs[j * *d + k] as i64,
-        }
+        self.coeffs[j * self.d + k] as i64
     }
 
     #[inline]
@@ -103,85 +90,6 @@ impl<BR: Ring> PackedDigitVec<BR> {
         }
     }
 
-    #[inline]
-    fn set_coeffs_from_ring<Rr>(&mut self, j: usize, x: &Rr)
-    where
-        Rr: PolyRing<BaseRing = BR>,
-        BR: PrimeField,
-        <BR as PrimeField>::BigInt: BigInteger,
-    {
-        #[inline]
-        fn br_to_i64_balanced<BRr: PrimeField>(x: BRr) -> i64
-        where
-            <BRr as PrimeField>::BigInt: BigInteger,
-        {
-            let rep = x.into_bigint();
-            let limbs = rep.as_ref();
-            // Convert canonical rep to u128 (we only expect small moduli in this codebase).
-            let mut v: u128 = 0;
-            let take = core::cmp::min(limbs.len(), 2);
-            for i in 0..take {
-                v |= (limbs[i] as u128) << (64 * i);
-            }
-            for i in take..limbs.len() {
-                debug_assert_eq!(limbs[i], 0, "unexpected large modulus limb in coefficient rep");
-            }
-
-            let modulus = BRr::MODULUS;
-            let mod_limbs = modulus.as_ref();
-            let mut q: u128 = 0;
-            let take_q = core::cmp::min(mod_limbs.len(), 2);
-            for i in 0..take_q {
-                q |= (mod_limbs[i] as u128) << (64 * i);
-            }
-            for i in take_q..mod_limbs.len() {
-                debug_assert_eq!(mod_limbs[i], 0, "unexpected large modulus limb");
-            }
-
-            // Map to balanced representative in (-q/2, q/2].
-            let half = q >> 1;
-            if v <= half {
-                v as i64
-            } else {
-                (v as i128 - q as i128) as i64
-            }
-        }
-
-        let xc = x.coeffs();
-        loop {
-            match self {
-                PackedDigitVec::I16 { coeffs, d, .. } => {
-                    debug_assert_eq!(xc.len(), *d);
-                    let base = j * *d;
-                    let mut ok = true;
-                    for k in 0..*d {
-                        let v = br_to_i64_balanced::<BR>(xc[k]);
-                        if v < i16::MIN as i64 || v > i16::MAX as i64 {
-                            ok = false;
-                            break;
-                        }
-                        coeffs[base + k] = v as i16;
-                    }
-                    if ok {
-                        return;
-                    }
-                    self.upgrade_to_i32();
-                }
-                PackedDigitVec::I32 { coeffs, d, .. } => {
-                    debug_assert_eq!(xc.len(), *d);
-                    let base = j * *d;
-                    for k in 0..*d {
-                        let v = br_to_i64_balanced::<BR>(xc[k]);
-                        if v < i32::MIN as i64 || v > i32::MAX as i64 {
-                            panic!("packed digit overflow: coefficient doesn't fit i32");
-                        }
-                        coeffs[base + k] = v as i32;
-                    }
-                    return;
-                }
-            }
-        }
-    }
 }
 
 #[inline]
@@ -1016,75 +924,54 @@ where
         let n = F0.len();
         let d = R::dimension();
 
-        let use_i32 = B > (i16::MAX as u128);
-        let mut F1_packed: PackedDigitVec<R::BaseRing> = if use_i32 {
-            PackedDigitVec::I32 {
-                coeffs: vec![0i32; n * d],
-                d,
-                n,
-                _br: core::marker::PhantomData,
-            }
-        } else {
-            PackedDigitVec::new_i16(n, d)
-        };
+        // Always use i32 so production/tests share the same code path.
+        let mut F1_packed: PackedDigitVec<R::BaseRing> = PackedDigitVec::new_i32(n, d);
 
         #[cfg(feature = "parallel")]
         {
             const CHUNK: usize = 1 << 14;
-            match &mut F1_packed {
-                PackedDigitVec::I16 { coeffs, d: dd, .. } => {
-                    debug_assert_eq!(*dd, d);
-                    F0.par_chunks_mut(CHUNK)
-                        .zip(coeffs.par_chunks_mut(CHUNK * d))
-                        .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1_flat)| {
-                            for i in 0..c0.len() {
-                                let orig = std::mem::replace(&mut c0[i], R::ZERO);
-                                orig.decompose_to(B, tmp);
-                                c0[i] = tmp[0];
-                                let c1c = tmp[1].coeffs();
-                                let base = i * d;
-                                for k in 0..d {
-                                    let v = {
-                                        // Interpret coefficient as signed balanced integer.
-                                        let rep = c1c[k].into_bigint();
-                                        let limbs = rep.as_ref();
-                                        let mut vv: u128 = 0;
-                                        let take = core::cmp::min(limbs.len(), 2);
-                                        for t in 0..take {
-                                            vv |= (limbs[t] as u128) << (64 * t);
-                                        }
-                                        let modulus = <R::BaseRing as PrimeField>::MODULUS;
-                                        let mod_limbs = modulus.as_ref();
-                                        let mut q: u128 = 0;
-                                        let take_q = core::cmp::min(mod_limbs.len(), 2);
-                                        for t in 0..take_q {
-                                            q |= (mod_limbs[t] as u128) << (64 * t);
-                                        }
-                                        let half = q >> 1;
-                                        if vv <= half {
-                                            vv as i64
-                                        } else {
-                                            (vv as i128 - q as i128) as i64
-                                        }
-                                    };
-                                    debug_assert!(
-                                        v >= i16::MIN as i64 && v <= i16::MAX as i64,
-                                        "packed F1 coefficient out of i16 range"
-                                    );
-                                    c1_flat[base + k] = v as i16;
+            let (coeffs, dd, _nn) = (&mut F1_packed.coeffs, F1_packed.d, F1_packed.n);
+            debug_assert_eq!(dd, d);
+            F0.par_chunks_mut(CHUNK)
+                .zip(coeffs.par_chunks_mut(CHUNK * d))
+                .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1_flat)| {
+                    for i in 0..c0.len() {
+                        let orig = std::mem::replace(&mut c0[i], R::ZERO);
+                        orig.decompose_to(B, tmp);
+                        c0[i] = tmp[0];
+                        let c1c = tmp[1].coeffs();
+                        let base = i * d;
+                        for k in 0..d {
+                            let v = {
+                                let rep = c1c[k].into_bigint();
+                                let limbs = rep.as_ref();
+                                let mut vv: u128 = 0;
+                                let take = core::cmp::min(limbs.len(), 2);
+                                for t in 0..take {
+                                    vv |= (limbs[t] as u128) << (64 * t);
                                 }
-                            }
-                        });
-                }
-                PackedDigitVec::I32 { .. } => {
-                    // Rare case (very large B): fall back to the existing materialized implementation.
-                    // This preserves correctness/transcript but doesn't reduce memory.
-                    drop(F1_packed);
-                    let ((_linb0, _linb1), proof) = DecompBase { f: F0, r: self.r, M0: self.M0 }
-                        .decompose_seeded_base(scheme, B);
-                    return proof;
-                }
-            }
+                                let modulus = <R::BaseRing as PrimeField>::MODULUS;
+                                let mod_limbs = modulus.as_ref();
+                                let mut q: u128 = 0;
+                                let take_q = core::cmp::min(mod_limbs.len(), 2);
+                                for t in 0..take_q {
+                                    q |= (mod_limbs[t] as u128) << (64 * t);
+                                }
+                                let half = q >> 1;
+                                if vv <= half {
+                                    vv as i64
+                                } else {
+                                    (vv as i128 - q as i128) as i64
+                                }
+                            };
+                            debug_assert!(
+                                v >= i32::MIN as i64 && v <= i32::MAX as i64,
+                                "packed F1 coefficient out of i32 range"
+                            );
+                            c1_flat[base + k] = v as i32;
+                        }
+                    }
+                });
         }
         #[cfg(not(feature = "parallel"))]
         {

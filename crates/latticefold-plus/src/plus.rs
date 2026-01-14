@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::{
     cm::CmProof,
-    decomp::{Decomp, DecompProof},
+    decomp::DecompProof,
     lin::{LinParameters, Linearize, LinearizedVerify},
     mlin::{LinB2X, Mlin},
     utils::maybe_print_rss,
@@ -26,17 +26,6 @@ pub struct PlusProver<R: OverField, TS: Transcript<R>> {
     pub params: PlusParameters,
 }
 
-/// Prover variant that uses an implicitly-defined (seeded) Ajtai matrix.
-///
-/// This avoids materializing a `kappa × n` dense matrix in memory and is intended for large `n`.
-#[derive(Clone, Debug)]
-pub struct PlusProverSparse<R: OverField, TS: Transcript<R>> {
-    pub acc: Mlin<R>,
-    pub scheme: AjtaiCommitmentScheme<R>,
-    pub M: Vec<Arc<SparseMatrix<R>>>,
-    pub transcript: TS,
-    pub params: PlusParameters,
-}
 
 /// Prover variant for the const-coeff/SP1 regime where the external matrices are stored over the base ring.
 #[derive(Clone, Debug)]
@@ -71,97 +60,6 @@ pub struct PlusParameters {
     pub B: u128,
 }
 
-impl<R, TS> PlusProver<R, TS>
-where
-    R::BaseRing: ConvertibleRing + Decompose + Zq,
-    R: CoeffRing + Decompose,
-    TS: Transcript<R>,
-{
-    /// Initialize
-    pub fn init(
-        A: Matrix<R>,
-        M: Vec<Arc<SparseMatrix<R>>>,
-        ncomp: usize,
-        params: PlusParameters,
-        transcript: TS,
-    ) -> Self {
-        let mlin = Mlin {
-            lins: Vec::with_capacity(2 + ncomp),
-            params: params.lin.clone(),
-        };
-
-        PlusProver {
-            acc: mlin,
-            A,
-            M,
-            transcript,
-            params,
-        }
-    }
-
-    /// Prove
-    pub fn prove<L>(&mut self, comp: &[L]) -> PlusProof<R, L::Proof>
-    where
-        L: Linearize<R>,
-    {
-        let mut lproof = Vec::with_capacity(comp.len());
-        comp.iter().for_each(|compi| {
-            let (linb, lp) = compi.linearize(&mut self.transcript);
-            lproof.push(lp);
-            self.acc.lins.push(linb);
-        });
-        let (linb2, cmproof) = self.acc.mlin(&self.A, &self.M, &mut self.transcript);
-        let decomp = Decomp {
-            f: linb2.g,
-            r: linb2.x.ro.clone(),
-            M: &self.M,
-        };
-        let (linb, dproof) = decomp.decompose(&self.A, self.params.B);
-
-        let proof = PlusProof {
-            linb2x: linb2.x,
-            lproof,
-            cmproof,
-            dproof,
-        };
-
-        // Keep only accumulated instance
-        self.acc.lins.clear();
-        self.acc.lins.push(linb.0);
-        self.acc.lins.push(linb.1);
-
-        proof
-    }
-}
-
-impl<R, TS> PlusProverSparse<R, TS>
-where
-    R::BaseRing: ConvertibleRing + Decompose + Zq,
-    R: CoeffRing + Decompose,
-    TS: Transcript<R>,
-{
-    /// Initialize with a seeded implicit Ajtai matrix.
-    pub fn init_seeded(
-        scheme: AjtaiCommitmentScheme<R>,
-        M: Vec<Arc<SparseMatrix<R>>>,
-        ncomp: usize,
-        params: PlusParameters,
-        transcript: TS,
-    ) -> Self {
-        let mlin = Mlin {
-            lins: Vec::with_capacity(2 + ncomp),
-            params: params.lin.clone(),
-        };
-        PlusProverSparse {
-            acc: mlin,
-            scheme,
-            M,
-            transcript,
-            params,
-        }
-    }
-}
-
 impl<R, TS> PlusProverSparseBase<R, TS>
 where
     R::BaseRing: ConvertibleRing + Decompose + Zq,
@@ -194,7 +92,7 @@ where
         R::BaseRing: PrimeField,
         <R::BaseRing as PrimeField>::BigInt: BigInteger,
     {
-        maybe_print_rss("PlusProverSparse::prove_sparse_base (start)");
+        maybe_print_rss("PlusProverSparseBase::prove_sparse_base (start)");
         let mut lproof = Vec::with_capacity(comp.len());
         comp.iter().for_each(|compi| {
             let (linb, lp) = compi.linearize(&mut self.transcript);
@@ -202,11 +100,11 @@ where
             self.acc.lins.push(linb);
         });
 
-        maybe_print_rss("PlusProverSparse::prove_sparse_base (after linearize)");
+        maybe_print_rss("PlusProverSparseBase::prove_sparse_base (after linearize)");
         let (linb2, cmproof) =
             self.acc
                 .mlin_seeded_base(&self.scheme, &self.M0, &mut self.transcript);
-        maybe_print_rss("PlusProverSparse::prove_sparse_base (after mlin_seeded)");
+        maybe_print_rss("PlusProverSparseBase::prove_sparse_base (after mlin_seeded)");
 
         let decomp = crate::decomp::DecompBase {
             f: linb2.g,
@@ -214,7 +112,7 @@ where
             M0: &self.M0,
         };
         let dproof = decomp.decompose_seeded_base_one_shot(&self.scheme, self.params.B);
-        maybe_print_rss("PlusProverSparse::prove_sparse_base (after decompose_seeded)");
+        maybe_print_rss("PlusProverSparseBase::prove_sparse_base (after decompose_seeded)");
 
         let proof = PlusProof {
             linb2x: linb2.x,
