@@ -679,13 +679,24 @@ where
         }
 
         let t = std::time::Instant::now();
-        let cm_f = scheme
-            .commit_const_coeff_fast(&f)
-            .expect("commit_const_coeff_fast f")
-            .as_ref()
-            .to_vec();
-        let tau_ring = tau.iter().map(|z| R::from(*z)).collect::<Vec<R>>();
-        let C_Mf = scheme.commit(&tau_ring).expect("commit tau").as_ref().to_vec();
+        // Batch the two constant-coeff commitments (f and tau) in a single pass over columns.
+        //
+        // This matches Symphony's `commit_many_with` pattern and avoids an extra full scan / RNG stream.
+        let f0: Arc<Vec<R::BaseRing>> = Arc::new(f.iter().map(|x| x.coeffs()[0]).collect());
+        let tau0: Arc<Vec<R::BaseRing>> = Arc::new(tau.clone());
+        let cm_pair = scheme
+            .commit_many_const_coeff_base_fast(n, 2, {
+                let f0 = f0.clone();
+                let tau0 = tau0.clone();
+                move |j, out| {
+                    // out.len()==2
+                    out[0] = f0[j];
+                    out[1] = tau0[j];
+                }
+            })
+            .expect("commit_many_const_coeff_base_fast (f,tau)");
+        let cm_f = cm_pair[0].as_ref().to_vec();
+        let C_Mf = cm_pair[1].as_ref().to_vec();
         let cm_mtau = scheme.commit(&m_tau).expect("commit m_tau").as_ref().to_vec();
         if profile {
             println!("[LF+ RgInstance::from_f_seeded] commit f/tau/m_tau: {:?}", t.elapsed());
