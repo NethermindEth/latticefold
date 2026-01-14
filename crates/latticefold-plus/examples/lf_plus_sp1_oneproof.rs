@@ -22,6 +22,7 @@ use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
 use latticefold_plus::utils::estimate_bound;
+use latticefold_plus::utils::maybe_print_rss;
 use cyclotomic_rings::rings::FrogRing64 as R;
 use stark_rings::PolyRing;
 use stark_rings::Ring;
@@ -66,6 +67,7 @@ fn main() {
         latticefold_plus::sp1_r1lf::open_sp1_r1lf_chunk_cache::<R>(&r1lf_path, chunk_size, pad_cols_to_multiple_of)
             .expect("open_sp1_r1lf_chunk_cache");
     println!("  cache open: {:?}", t0.elapsed());
+    maybe_print_rss("after cache open");
     println!("  chunks={} ncols={}", cache.num_chunks, cache.ncols);
     println!(
         "  stats: num_vars={} num_constraints={} num_public={} p_bb={} total_nonzeros={}",
@@ -105,12 +107,14 @@ fn main() {
         total_rows,
         cache.ncols
     );
+    maybe_print_rss("after build full mats (A,B,C)");
 
     let (w_u64, base_len, aux_len) =
         latticefold_plus::sp1_witness_io::load_sp1_witness_any(&witness_path, cache.stats.num_vars)
             .expect("load witness");
     println!("  loaded witness: base={} aux={} full={}", base_len, aux_len, w_u64.len());
     assert!(!w_u64.is_empty() && w_u64[0] == 1, "witness must have w[0]=1");
+    maybe_print_rss("after load witness u64");
 
     // Map u64 witness -> Frog base field scalars once, matching SP1 lift semantics:
     // - **all vars (including aux)**: centered embedding mod p_bb
@@ -130,6 +134,7 @@ fn main() {
             .collect(),
     );
     println!("  map witness u64->F: {:?}", t_w.elapsed());
+    maybe_print_rss("after map witness u64->F");
 
     // Pad witness to `ncols` (power-of-two) as **base scalars** (const-coeff embedding).
     //
@@ -140,18 +145,23 @@ fn main() {
     f0.resize(cache.ncols, F::ZERO);
     let f0: Arc<Vec<F>> = Arc::new(f0);
     println!("  build f0 (base scalars, padded): {:?}", t_f0.elapsed());
+    maybe_print_rss("after build f0 padded");
 
     // Build `ComR1CS` instance and run the full LF+ prover to produce a `PlusProof`.
     let t_setup = Instant::now();
     let r1cs = latticefold::arith::r1cs::R1CS::<R> { l: 0, A: m_a, B: m_b, C: m_c };
+    maybe_print_rss("after build r1cs struct");
 
     // Deterministic Ajtai commitment scheme (system parameter). Keep kappa=1 for now.
     let kappa: usize = 1;
     const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
     let ajtai = AjtaiCommitmentScheme::<R>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, cache.ncols);
+    maybe_print_rss("after init Ajtai scheme");
 
     let cr1cs = latticefold_plus::r1cs::ComR1CS::from_f0_seeded(r1cs, f0, 0, &ajtai);
+    maybe_print_rss("after ComR1CS::from_f0_seeded");
     let m = cr1cs.x.matrices_arc();
+    maybe_print_rss("after matrices_arc");
 
     // LF+ parameters: boundedness base b=2^16,k=2, and a conservative decomp base B for Π_decomp.
     let we_params =
@@ -187,10 +197,12 @@ fn main() {
         prover.transcript.absorb_field_element(b);
     }
     println!("  setup full LF+: {:?}", t_setup.elapsed());
+    maybe_print_rss("after setup full LF+");
 
     let t_prove = Instant::now();
     let proof = prover.prove_sparse(std::slice::from_ref(&cr1cs));
     println!("  PlusProverSparse::prove_sparse: {:?}", t_prove.elapsed());
+    maybe_print_rss("after prove_sparse");
 
     // Record verifier trace and ensure the existing WE gate arithmetization is satisfied.
     let poseidon_cfg = PC::get_poseidon_config();
@@ -204,6 +216,7 @@ fn main() {
     }
     proof.cmproof.verify(&m, &mut rec).expect("cm proof verify");
     println!("  PlusVerifier::verify(record trace): {:?}", t_verify_record.elapsed());
+    maybe_print_rss("after verify(record)");
     let trace = rec.trace().clone();
 
     let t_we = Instant::now();
@@ -218,10 +231,12 @@ fn main() {
     )
     .expect("build_we_dr1cs_for_plus_proof");
     println!("  WE gate build_dr1cs: {:?}", t_we.elapsed());
+    maybe_print_rss("after WE build_dr1cs");
 
     let t_sat = Instant::now();
     out.inst.check(&out.assignment).expect("we gate dr1cs satisfied");
     println!("  WE gate dr1cs sat check: {:?}", t_sat.elapsed());
+    maybe_print_rss("after WE sat check");
 
     // Non-transcript (local) consistency check for Π_decomp.
     // This does not affect the recorded verifier trace; WE gate enforces Π_decomp separately.

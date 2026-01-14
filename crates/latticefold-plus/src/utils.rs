@@ -111,6 +111,41 @@ pub fn estimate_bound(sop: usize, L: usize, d: usize, k: usize) -> u128 {
     (b.ceil()) as u128
 }
 
+/// Return current RSS (resident set size) in KiB on Linux.
+///
+/// This is used for lightweight memory profiling in large SP1 runs without adding dependencies.
+#[cfg(target_os = "linux")]
+pub fn current_rss_kib() -> Option<u64> {
+    let s = std::fs::read_to_string("/proc/self/status").ok()?;
+    for line in s.lines() {
+        // Example: "VmRSS:    123456 kB"
+        if let Some(rest) = line.strip_prefix("VmRSS:") {
+            let rest = rest.trim();
+            let num = rest.split_whitespace().next()?;
+            return num.parse::<u64>().ok();
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn current_rss_kib() -> Option<u64> {
+    None
+}
+
+/// If `LF_MEM=1`, print current RSS with a tag.
+pub fn maybe_print_rss(tag: &str) {
+    if std::env::var("LF_MEM").ok().as_deref() != Some("1") {
+        return;
+    }
+    if let Some(kib) = current_rss_kib() {
+        let gib = (kib as f64) / (1024.0 * 1024.0);
+        println!("[mem] rss={gib:.2} GiB  tag={tag}");
+    } else {
+        println!("[mem] rss=unknown  tag={tag}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

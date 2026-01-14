@@ -12,6 +12,7 @@ use crate::{
     decomp::{Decomp, DecompProof},
     lin::{LinParameters, Linearize, LinearizedVerify},
     mlin::{LinB2X, Mlin},
+    utils::maybe_print_rss,
 };
 
 #[derive(Clone, Debug)]
@@ -154,6 +155,7 @@ where
     where
         L: Linearize<R>,
     {
+        maybe_print_rss("PlusProverSparse::prove_sparse (start)");
         let mut lproof = Vec::with_capacity(comp.len());
         comp.iter().for_each(|compi| {
             let (linb, lp) = compi.linearize(&mut self.transcript);
@@ -161,13 +163,16 @@ where
             self.acc.lins.push(linb);
         });
 
+        maybe_print_rss("PlusProverSparse::prove_sparse (after linearize)");
         let (linb2, cmproof) = self.acc.mlin_seeded(&self.scheme, &self.M, &mut self.transcript);
+        maybe_print_rss("PlusProverSparse::prove_sparse (after mlin_seeded)");
         let decomp = Decomp {
             f: linb2.g,
             r: linb2.x.ro.clone(),
             M: &self.M,
         };
         let (linb, dproof) = decomp.decompose_seeded(&self.scheme, self.params.B);
+        maybe_print_rss("PlusProverSparse::prove_sparse (after decompose_seeded)");
 
         let proof = PlusProof {
             linb2x: linb2.x,
