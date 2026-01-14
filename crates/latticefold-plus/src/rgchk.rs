@@ -673,25 +673,67 @@ where
             .collect();
 
         // Commit monomial matrices: comM_f[k_i] is kappa×d, column-wise Ajtai commitments under the same scheme.
+        //
+        // Optimization (critical for SP1 const-coeff regime):
+        // If `DigitsBacking::ConstCol0` is used, then only column 0 varies by row; all columns 1..d-1
+        // are the constant `exp(0)` column. We can commit that constant column once and reuse it,
+        // turning a ~d× scan of the Ajtai matrix into ~2× (col0 + const column).
         let t = std::time::Instant::now();
+        let const_exp0_commit: Option<Vec<R>> = if is_const_coeff && d > 1 {
+            let exp0 = M_f[0].exp_table[zero_idx as usize];
+            let c = scheme
+                .commit_many_with(n, 1, move |_row, out| {
+                    out[0] = exp0;
+                })
+                .expect("commit_many_with const exp(0) col");
+            Some(c[0].as_ref().to_vec())
+        } else {
+            None
+        };
+
         let comM_f = M_f
             .iter()
-            .enumerate()
-            .map(|(_ki, dm)| {
-                // Commit d vectors (one per column) at once.
-                let cs = scheme
-                    .commit_many_with(n, d, |row, out| {
-                        // out has length d: out[col] = M_f[row,col]
-                        for col in 0..d {
-                            out[col] = dm.get(row, col);
+            .map(|dm| {
+                let mut mat = Matrix::zero(kappa, d);
+
+                // Commit column 0 (the only non-constant column in const-coeff mode).
+                let c0 = scheme
+                    .commit_many_with(n, 1, {
+                        let dm = dm.clone();
+                        move |row, out| {
+                            out[0] = dm.get(row, 0);
                         }
                     })
-                    .expect("commit_many_with M_f");
-                let mut mat = Matrix::zero(kappa, d);
-                for col in 0..d {
-                    let ccol = cs[col].as_ref();
-                    for r in 0..kappa {
-                        mat.vals[r][col] = ccol[r];
+                    .expect("commit_many_with M_f col0");
+                let c0 = c0[0].as_ref();
+                for r in 0..kappa {
+                    mat.vals[r][0] = c0[r];
+                }
+
+                if let Some(cc) = const_exp0_commit.as_ref() {
+                    // Reuse constant exp(0) commitment for columns 1..d-1.
+                    for col in 1..d {
+                        for r in 0..kappa {
+                            mat.vals[r][col] = cc[r];
+                        }
+                    }
+                } else if d > 1 {
+                    // General path: commit remaining columns in one batch.
+                    let cs = scheme
+                        .commit_many_with(n, d - 1, {
+                            let dm = dm.clone();
+                            move |row, out| {
+                                for col in 1..d {
+                                    out[col - 1] = dm.get(row, col);
+                                }
+                            }
+                        })
+                        .expect("commit_many_with M_f cols1..d-1");
+                    for col in 1..d {
+                        let ccol = cs[col - 1].as_ref();
+                        for r in 0..kappa {
+                            mat.vals[r][col] = ccol[r];
+                        }
                     }
                 }
                 mat
@@ -845,22 +887,39 @@ where
 
         // Commit monomial matrices (Ajtai seeded).
         let t = std::time::Instant::now();
+        let exp0 = M_f[0].exp_table[zero_idx as usize];
+        let const_exp0_commit = scheme
+            .commit_many_with(n, 1, move |_row, out| {
+                out[0] = exp0;
+            })
+            .expect("commit_many_with const exp(0) col")[0]
+            .as_ref()
+            .to_vec();
+
         let comM_f = M_f
             .iter()
-            .enumerate()
-            .map(|(_ki, dm)| {
-                let cs = scheme
-                    .commit_many_with(n, d, |row, out| {
-                        for col in 0..d {
-                            out[col] = dm.get(row, col);
+            .map(|dm| {
+                let mut mat = Matrix::zero(kappa, d);
+
+                // Commit col=0 (variable by row).
+                let c0 = scheme
+                    .commit_many_with(n, 1, {
+                        let dm = dm.clone();
+                        move |row, out| {
+                            out[0] = dm.get(row, 0);
                         }
                     })
-                    .expect("commit_many_with M_f");
-                let mut mat = Matrix::zero(kappa, d);
-                for col in 0..d {
-                    let ccol = cs[col].as_ref();
+                    .expect("commit_many_with M_f col0")[0]
+                    .as_ref()
+                    .to_vec();
+                for r in 0..kappa {
+                    mat.vals[r][0] = c0[r];
+                }
+
+                // cols 1..d-1 are constant exp(0) in ConstCol0 mode.
+                for col in 1..d {
                     for r in 0..kappa {
-                        mat.vals[r][col] = ccol[r];
+                        mat.vals[r][col] = const_exp0_commit[r];
                     }
                 }
                 mat

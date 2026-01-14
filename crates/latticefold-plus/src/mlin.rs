@@ -152,26 +152,51 @@ where
         let n = self.lins[0].f.len();
 
         let t = Instant::now();
-        let instances = self
-            .lins
-            .iter()
-            .map(|lin| match &lin.f {
+        let mut instances = Vec::with_capacity(self.lins.len());
+        let mut n_f0 = 0usize;
+        let mut n_ring = 0usize;
+        for (i, lin) in self.lins.iter().enumerate() {
+            match &lin.f {
                 crate::rgchk::WitnessVec::ConstCoeffBase(v0) => {
-                    RgInstance::from_f0_seeded(v0.clone(), scheme, &self.params.decomp)
+                    n_f0 += 1;
+                    if profile {
+                        println!(
+                            "[LF+ Mlin::mlin_seeded] instance[{i}] witness=ConstCoeffBase(len={}) -> RgInstance::from_f0_seeded",
+                            v0.len()
+                        );
+                    }
+                    instances.push(RgInstance::from_f0_seeded(
+                        v0.clone(),
+                        scheme,
+                        &self.params.decomp,
+                    ));
                 }
                 crate::rgchk::WitnessVec::Ring(vr) => {
+                    n_ring += 1;
+                    if profile {
+                        println!(
+                            "[LF+ Mlin::mlin_seeded] instance[{i}] witness=Ring(len={}) -> RgInstance::from_f_seeded",
+                            vr.len()
+                        );
+                    }
                     // Fallback for small cases: keep existing ring-vector seeded constructor.
-                    RgInstance::from_f_seeded(vr.as_ref().clone(), scheme, &self.params.decomp)
+                    instances.push(RgInstance::from_f_seeded(
+                        vr.as_ref().clone(),
+                        scheme,
+                        &self.params.decomp,
+                    ));
                 }
-            })
-            .collect::<Vec<_>>();
+            }
+        }
         if profile {
             println!(
-                "[LF+ Mlin::mlin_seeded] build instances: {:?} (L={}, n={}, kappa={})",
+                "[LF+ Mlin::mlin_seeded] build instances: {:?} (L={}, n={}, kappa={}, f0_instances={}, ring_instances={})",
                 t.elapsed(),
                 self.lins.len(),
                 n,
-                self.params.kappa
+                self.params.kappa,
+                n_f0,
+                n_ring
             );
         }
 
