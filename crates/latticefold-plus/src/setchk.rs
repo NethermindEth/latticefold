@@ -96,7 +96,8 @@ impl<R: PolyRing> DigitsMatrix<R> {
             DigitsBacking::Full(d) => (d[row * self.ncols + col]) as usize,
             DigitsBacking::ConstCol0 { col0, zero_idx } => {
                 if col == 0 {
-                    col0[row] as usize
+                    // Allow implicit zero-padding when we only materialize a prefix.
+                    col0.get(row).copied().unwrap_or(*zero_idx) as usize
                 } else {
                     (*zero_idx) as usize
                 }

@@ -191,7 +191,7 @@ where
         use std::io::{BufReader, Seek, SeekFrom};
         // This reader sits on top of a file slice for a *single* matrix payload; keep it modest.
         // (Huge buffers here can dominate runtime via page-zeroing.)
-        const IO_BUFFER_SIZE: usize = 1 * 1024 * 1024;
+        const IO_BUFFER_SIZE: usize = 8 * 1024 * 1024;
 
         if chunk_idx >= self.num_chunks {
             return Err(std::io::Error::new(

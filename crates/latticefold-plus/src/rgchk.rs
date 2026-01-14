@@ -827,7 +827,9 @@ where
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = std::time::Instant::now();
 
-        let n = f0.len();
+        // Domain length must match the Ajtai width (padded `ncols`), even if the witness is only a prefix.
+        let n = scheme.width();
+        let prefix_len = f0.len();
         let kappa = scheme.kappa();
         let d = R::dimension();
         let k = decomp.k;
@@ -860,7 +862,8 @@ where
 
         // Const-coeff witness: store only col0 digit table.
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
-        let mut digits_tables: Vec<Vec<u16>> = (0..k).map(|_| vec![zero_idx; n]).collect();
+        // Only materialize digits for the prefix; rows beyond `prefix_len` are implicitly zero digits.
+        let mut digits_tables: Vec<Vec<u16>> = (0..k).map(|_| vec![zero_idx; prefix_len]).collect();
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
