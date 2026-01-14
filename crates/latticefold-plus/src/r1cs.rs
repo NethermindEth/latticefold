@@ -30,11 +30,16 @@ pub struct ComR1CS<R: Ring + PolyRing> {
 
 #[derive(Clone, Debug)]
 pub struct ComR1CSX<R: Ring> {
-    pub r1cs: R1CS<R>,
-    pub z: Vec<R>,    // m
-    pub cm_f: Vec<R>, // kappa
+    // Store matrices as Arc to avoid catastrophic deep clones.
+    pub a: Arc<SparseMatrix<R>>,
+    pub b: Arc<SparseMatrix<R>>,
+    pub c: Arc<SparseMatrix<R>>,
     /// Public input length
     pub l_in: usize,
+    /// Number of public inputs in the underlying R1CS (kept for tests/debug).
+    pub l: usize,
+    pub z: Vec<R>,    // m (unused by verifier; retained for legacy/tests)
+    pub cm_f: Vec<R>, // kappa
 }
 
 #[derive(Clone, Debug)]
@@ -52,11 +57,15 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
     pub fn new(r1cs: R1CS<R>, z: Vec<R>, l_in: usize, b: u128, k: usize, A: &Matrix<R>) -> Self {
         let f = z.gadget_decompose(b, k);
         let cm_f = A.try_mul_vec(&f).unwrap();
+        let l = r1cs.l;
         let x = ComR1CSX {
-            r1cs,
+            a: Arc::new(r1cs.A),
+            b: Arc::new(r1cs.B),
+            c: Arc::new(r1cs.C),
             z,
             cm_f,
             l_in,
+            l,
         };
         Self {
             x,
@@ -73,11 +82,15 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
     /// NOTE: `z` is left empty in this constructor (it is not used by the verifier-side relation).
     pub fn from_f(r1cs: R1CS<R>, f: Vec<R>, l_in: usize, A: &Matrix<R>) -> Self {
         let cm_f = A.try_mul_vec(&f).unwrap();
+        let l = r1cs.l;
         let x = ComR1CSX {
-            r1cs,
+            a: Arc::new(r1cs.A),
+            b: Arc::new(r1cs.B),
+            c: Arc::new(r1cs.C),
             z: Vec::new(),
             cm_f,
             l_in,
+            l,
         };
         Self {
             x,
@@ -97,11 +110,15 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
             .expect("commit_const_coeff_fast")
             .as_ref()
             .to_vec();
+        let l = r1cs.l;
         let x = ComR1CSX {
-            r1cs,
+            a: Arc::new(r1cs.A),
+            b: Arc::new(r1cs.B),
+            c: Arc::new(r1cs.C),
             z: Vec::new(),
             cm_f,
             l_in,
+            l,
         };
         Self {
             x,
@@ -128,11 +145,15 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
             .expect("commit_const_coeff_base_fast")
             .as_ref()
             .to_vec();
+        let l = r1cs.l;
         let x = ComR1CSX {
-            r1cs,
+            a: Arc::new(r1cs.A),
+            b: Arc::new(r1cs.B),
+            c: Arc::new(r1cs.C),
             z: Vec::new(),
             cm_f,
             l_in,
+            l,
         };
         Self {
             x,
@@ -142,16 +163,18 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
 }
 
 impl<R: Ring> ComR1CSX<R> {
-    pub fn matrices(&self) -> Vec<SparseMatrix<R>> {
-        vec![
-            self.r1cs.A.clone(),
-            self.r1cs.B.clone(),
-            self.r1cs.C.clone(),
-        ]
+    pub fn matrices_arc(&self) -> Vec<Arc<SparseMatrix<R>>> {
+        vec![self.a.clone(), self.b.clone(), self.c.clone()]
     }
 
-    pub fn matrices_arc(&self) -> Vec<Arc<SparseMatrix<R>>> {
-        self.matrices().into_iter().map(Arc::new).collect()
+    /// Legacy helper for small tests/debugging: materialize a temporary `R1CS<R>` by cloning matrices.
+    pub fn r1cs_cloned(&self) -> R1CS<R> {
+        R1CS {
+            l: self.l,
+            A: (*self.a).clone(),
+            B: (*self.b).clone(),
+            C: (*self.c).clone(),
+        }
     }
 }
 
@@ -167,9 +190,9 @@ impl<R: OverField + PolyRing> Linearize<R> for ComR1CS<R> {
 
         let mles = match &self.f {
             WitnessVec::Ring(f) => {
-                let ga = self.x.r1cs.A.try_mul_vec(f.as_ref()).unwrap();
-                let gb = self.x.r1cs.B.try_mul_vec(f.as_ref()).unwrap();
-                let gc = self.x.r1cs.C.try_mul_vec(f.as_ref()).unwrap();
+                let ga = self.x.a.try_mul_vec(f.as_ref()).unwrap();
+                let gb = self.x.b.try_mul_vec(f.as_ref()).unwrap();
+                let gc = self.x.c.try_mul_vec(f.as_ref()).unwrap();
                 vec![
                     // eq(x, r0) (constant-coeff)
                     StreamingMleEnum::EqBase {
@@ -209,17 +232,17 @@ impl<R: OverField + PolyRing> Linearize<R> for ComR1CS<R> {
                     // For now we keep ga/gb/gc as dense vectors (computed on demand by downstream callers).
                     // Large-scale SP1 proving uses chunking; this path is intended for const-coeff chunks.
                     StreamingMleEnum::SparseMatVecConstCoeff {
-                        matrix: Arc::new(self.x.r1cs.A.clone()),
+                        matrix: self.x.a.clone(),
                         witness0: f0.clone(),
                         num_vars: nvars,
                     },
                     StreamingMleEnum::SparseMatVecConstCoeff {
-                        matrix: Arc::new(self.x.r1cs.B.clone()),
+                        matrix: self.x.b.clone(),
                         witness0: f0.clone(),
                         num_vars: nvars,
                     },
                     StreamingMleEnum::SparseMatVecConstCoeff {
-                        matrix: Arc::new(self.x.r1cs.C.clone()),
+                        matrix: self.x.c.clone(),
                         witness0: f0.clone(),
                         num_vars: nvars,
                     },
@@ -362,7 +385,7 @@ mod tests {
         let A = Matrix::<R>::rand(&mut ark_std::test_rng(), kappa, n);
         let cr1cs = ComR1CS::new(r1cs, z, 1, b, k, &A);
         let f_ring = cr1cs.f.as_ring_arc().expect("test uses ring witness");
-        cr1cs.x.r1cs.check_relation(f_ring.as_ref()).unwrap();
+        cr1cs.x.r1cs_cloned().check_relation(f_ring.as_ref()).unwrap();
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         let (_linb, lproof) = cr1cs.linearize(&mut ts);
