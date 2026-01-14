@@ -427,23 +427,28 @@ impl<R: OverField + PolyRing> In<R> {
         // random linear combinator, for batching
         let rc: Option<R::BaseRing> = (Ms_len > 1).then(|| transcript.get_challenge());
 
-        let comb_fn = |vals: &[R]| -> R {
+        // Base-ring combiner (all tables here are constant-coeff), so we can use the
+        // base-optimized streaming sumcheck prover.
+        let comb_fn0 = |vals: &[R::BaseRing]| -> R::BaseRing {
             // When there is only a single term, `rc` is omitted; semantically this means
             // "all terms have weight 1". (We must still include both matrix- and vector-set
             // contributions, otherwise the sumcheck claim won't match Step 3.)
             use ark_std::One;
-            let mut lc = R::zero();
+            let mut lc = R::BaseRing::ZERO;
 
             for (i, alpha) in alphas.iter().enumerate().take(Ms_len) {
                 // 2 * ncols for (m_j, m_prime_j), +1 for eq
                 let s = i * (2 * ncols + 1);
-                let mut res = R::zero();
+                let mut res = R::BaseRing::ZERO;
                 for j in 0..ncols {
                     res += (vals[s + j * 2] * vals[s + j * 2] - vals[s + j * 2 + 1])
                         * alpha.pow([j as u64])
                 }
                 res *= vals[s + 2 * ncols]; // eq
-                let w = rc.as_ref().map(|rc| rc.pow([i as u64])).unwrap_or(R::BaseRing::one());
+                let w = rc
+                    .as_ref()
+                    .map(|rc| rc.pow([i as u64]))
+                    .unwrap_or(R::BaseRing::one());
                 lc += res * w;
             }
 
@@ -451,7 +456,7 @@ impl<R: OverField + PolyRing> In<R> {
                 let s_base = Ms_len * (2 * ncols + 1);
                 let s = s_base + i * 3;
                 let alpha_idx = Ms_len + i;
-                let mut res = R::zero();
+                let mut res = R::BaseRing::ZERO;
                 res += (vals[s] * vals[s] - vals[s + 1]) * alphas[alpha_idx];
                 res *= vals[s + 2]; // eq
                 let w = rc
@@ -465,7 +470,7 @@ impl<R: OverField + PolyRing> In<R> {
 
         let t_sc = Instant::now();
         let (sumcheck_proof, r, _final_vals) =
-            StreamingSumcheck::prove_as_subprotocol(transcript, mles, self.nvars, 3, comb_fn);
+            StreamingSumcheck::prove_as_subprotocol_base(transcript, mles, self.nvars, 3, comb_fn0);
         if profile {
             println!(
                 "[LF+ setchk] sumcheck: {:?} (nvars={}, degree=3, ncols={}, Ms={}, ms={})",

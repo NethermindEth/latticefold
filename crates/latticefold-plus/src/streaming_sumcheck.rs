@@ -1186,6 +1186,70 @@ impl StreamingSumcheck {
 
         (Proof::new(msgs), state.randomness, final_evals)
     }
+
+    /// Like `prove_as_subprotocol`, but using the **base-ring optimized** round prover.
+    ///
+    /// This is valid when:
+    /// - every MLE is constant-coeff (so only its base term matters), and
+    /// - the combination function lives entirely in `R::BaseRing`.
+    ///
+    /// The transcript interaction and proof format are identical; only prover-side computation
+    /// is faster (avoids lifting to `R` during the hot loop).
+    pub fn prove_as_subprotocol_base<R: OverField + PolyRing, T: Transcript<R>>(
+        transcript: &mut T,
+        mles: Vec<StreamingMleEnum<R>>,
+        nvars: usize,
+        degree: usize,
+        comb_fn0: impl Fn(&[R::BaseRing]) -> R::BaseRing + Sync + Send,
+    ) -> (Proof<R>, Vec<R::BaseRing>, Vec<R>)
+    where
+        R::BaseRing: Ring,
+    {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = std::time::Instant::now();
+
+        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
+
+        let mut state = Self::prover_init(mles, nvars, degree);
+        if profile {
+            println!(
+                "[LF+ streaming_sumcheck] init(base): {:?} (nvars={}, degree={}, mles={})",
+                t_total.elapsed(),
+                nvars,
+                degree,
+                state.mles.len()
+            );
+        }
+
+        let mut msgs = Vec::with_capacity(nvars);
+        let mut v_msg: Option<R::BaseRing> = None;
+
+        for _round in 0..nvars {
+            let pm = Self::prove_round_base(&mut state, v_msg, &comb_fn0);
+            transcript.absorb_slice(&pm.evaluations);
+            msgs.push(pm);
+
+            let r = transcript.get_challenge();
+            transcript.absorb_field_element(&r);
+            v_msg = Some(r);
+        }
+
+        // Apply last sampled randomness (standard sumcheck schedule).
+        let last_r = v_msg.expect("nvars>0");
+        state.randomness.push(last_r);
+        state.fix_last_variable(last_r);
+
+        let final_evals = state.final_evals();
+        if profile {
+            println!(
+                "[LF+ streaming_sumcheck] total(base): {:?}",
+                t_total.elapsed()
+            );
+        }
+
+        (Proof::new(msgs), state.randomness, final_evals)
+    }
 }
 
 #[cfg(test)]
