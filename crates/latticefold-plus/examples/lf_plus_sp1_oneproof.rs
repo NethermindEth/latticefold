@@ -85,17 +85,54 @@ fn main() {
     let mut a_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
     let mut b_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
     let mut c_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
-    for chunk_idx in 0..cache.num_chunks {
-        let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
-        debug_assert_eq!(a.nrows, chunk_size);
-        for row in a.coeffs {
-            a_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+
+        // NOTE: `into_par_iter()` over a range is an IndexedParallelIterator, so `collect::<Vec<_>>()`
+        // preserves order by `chunk_idx`. This keeps row ordering deterministic.
+        let chunks: Vec<(
+            Vec<Vec<(R, usize)>>,
+            Vec<Vec<(R, usize)>>,
+            Vec<Vec<(R, usize)>>,
+        )> = (0..cache.num_chunks)
+            .into_par_iter()
+            .map(|chunk_idx| {
+                let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
+                debug_assert_eq!(a.nrows, chunk_size);
+
+                let conv = |m: stark_rings_linalg::SparseMatrix<F>| {
+                    m.coeffs
+                        .into_iter()
+                        .map(|row| row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect())
+                        .collect::<Vec<Vec<(R, usize)>>>()
+                };
+
+                (conv(a), conv(b), conv(c))
+            })
+            .collect();
+
+        for (ar, br, cr) in chunks {
+            a_rows.extend(ar);
+            b_rows.extend(br);
+            c_rows.extend(cr);
         }
-        for row in b.coeffs {
-            b_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
-        }
-        for row in c.coeffs {
-            c_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+    }
+
+    #[cfg(not(feature = "parallel"))]
+    {
+        for chunk_idx in 0..cache.num_chunks {
+            let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
+            debug_assert_eq!(a.nrows, chunk_size);
+            for row in a.coeffs {
+                a_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+            }
+            for row in b.coeffs {
+                b_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+            }
+            for row in c.coeffs {
+                c_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+            }
         }
     }
     let m_a = SparseMatrix::<R> { nrows: total_rows, ncols: cache.ncols, coeffs: a_rows };
