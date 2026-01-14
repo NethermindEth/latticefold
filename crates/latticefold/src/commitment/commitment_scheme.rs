@@ -9,7 +9,7 @@ use stark_rings_linalg::Matrix;
 use rand_chacha::ChaCha20Rng;
 use rand::SeedableRng;
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
+use ark_std::sync::Arc;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 #[cfg(feature = "parallel")]
