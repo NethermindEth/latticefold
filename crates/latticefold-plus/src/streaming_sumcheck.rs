@@ -413,9 +413,26 @@ where
                 evals.truncate(half);
                 *num_vars -= 1;
             }
-            StreamingMleEnum::DenseArc { .. } => {
-                let next = self.fix_variable(r_ring);
-                *self = next;
+            StreamingMleEnum::DenseArc { evals, num_vars } => {
+                // Avoid allocating a brand new half-sized Vec<R> (which is enormous for n=2^27):
+                // - if the Arc is uniquely owned, take it and fix in-place
+                // - otherwise, clone once (still expensive, but avoids *two* large allocations)
+                let arc = std::mem::take(evals);
+                let mut owned = match Arc::try_unwrap(arc) {
+                    Ok(v) => v,
+                    Err(a) => (*a).clone(),
+                };
+                let one_minus = R::ONE - r_ring;
+                for i in 0..half {
+                    let a = owned.get(i << 1).copied().unwrap_or(R::ZERO);
+                    let b = owned.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
+                    owned[i] = one_minus * a + r_ring * b;
+                }
+                owned.truncate(half);
+                *self = StreamingMleEnum::DenseOwned {
+                    evals: owned,
+                    num_vars: *num_vars - 1,
+                };
             }
             StreamingMleEnum::BaseScalarOwned { evals, num_vars } => {
                 for i in 0..half {
