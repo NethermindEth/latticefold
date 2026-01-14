@@ -23,7 +23,7 @@ use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
 use latticefold_plus::utils::estimate_bound;
 use latticefold_plus::utils::maybe_print_rss;
-use cyclotomic_rings::rings::FrogRing64 as R;
+use cyclotomic_rings::rings::FrogRing as R;
 use stark_rings::PolyRing;
 use stark_rings::Ring;
 use stark_rings_linalg::SparseMatrix;
