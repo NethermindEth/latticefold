@@ -159,6 +159,7 @@ where
             params,
         }
     }
+}
 
 impl<R, TS> PlusProverSparseBase<R, TS>
 where
