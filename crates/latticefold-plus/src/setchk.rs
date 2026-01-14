@@ -1502,7 +1502,8 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+        let empty_m: Vec<Arc<SparseMatrix<R>>> = Vec::new();
+        let out = scin.set_check(ExternalMats::Ring(&empty_m), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
@@ -1523,7 +1524,8 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+        let empty_m: Vec<Arc<SparseMatrix<R>>> = Vec::new();
+        let out = scin.set_check(ExternalMats::Ring(&empty_m), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
@@ -1541,7 +1543,8 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+        let empty_m: Vec<Arc<SparseMatrix<R>>> = Vec::new();
+        let out = scin.set_check(ExternalMats::Ring(&empty_m), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
@@ -1563,7 +1566,8 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+        let empty_m: Vec<Arc<SparseMatrix<R>>> = Vec::new();
+        let out = scin.set_check(ExternalMats::Ring(&empty_m), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
@@ -1588,7 +1592,8 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+        let empty_m: Vec<Arc<SparseMatrix<R>>> = Vec::new();
+        let out = scin.set_check(ExternalMats::Ring(&empty_m), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         out.verify(&mut ts).unwrap();
@@ -1615,7 +1620,8 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+        let empty_m: Vec<Arc<SparseMatrix<R>>> = Vec::new();
+        let out = scin.set_check(ExternalMats::Ring(&empty_m), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
@@ -1654,7 +1660,8 @@ mod tests {
         };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+        let empty_m: Vec<Arc<SparseMatrix<R>>> = Vec::new();
+        let out = scin.set_check(ExternalMats::Ring(&empty_m), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
