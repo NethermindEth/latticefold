@@ -1,10 +1,10 @@
 use ark_std::log2;
 use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
-    balanced_decomposition::{recompose, Decompose, DecomposeToVec},
+    balanced_decomposition::{recompose, Decompose},
     OverField, PolyRing, Ring, Zq,
 };
-use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
+use stark_rings_linalg::{Matrix, SparseMatrix};
 use std::time::Instant;
 use std::sync::Arc;
 
@@ -36,14 +36,40 @@ where
     R: Decompose + OverField,
     R::BaseRing: Zq,
 {
-    pub fn decompose(&self, A: &Matrix<R>, B: u128) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
+    pub fn decompose(self, A: &Matrix<R>, B: u128) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = Instant::now();
 
         let nvars = log2(A.ncols) as usize;
-        let mut F = self.f.decompose_to_vec(B, 2).transpose().into_iter();
-        let F0 = F.next().unwrap();
-        let F1 = F.next().unwrap();
+        // In-place 2-digit decomposition:
+        // reuse the original `f` buffer for F0 to avoid holding `f + F0 + F1` at once.
+        let mut F0 = self.f;
+        let n = F0.len();
+        let mut F1 = vec![R::ZERO; n];
+        #[cfg(feature = "parallel")]
+        {
+            const CHUNK: usize = 1 << 14;
+            F0.par_chunks_mut(CHUNK)
+                .zip(F1.par_chunks_mut(CHUNK))
+                .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1)| {
+                    for i in 0..c0.len() {
+                        let orig = std::mem::replace(&mut c0[i], R::ZERO);
+                        orig.decompose_to(B, tmp);
+                        c0[i] = tmp[0];
+                        c1[i] = tmp[1];
+                    }
+                });
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut tmp = vec![R::ZERO; 2];
+            for i in 0..n {
+                let orig = std::mem::replace(&mut F0[i], R::ZERO);
+                orig.decompose_to(B, &mut tmp);
+                F0[i] = tmp[0];
+                F1[i] = tmp[1];
+            }
+        }
 
         let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
         let r_b = self.r.iter().map(|rr| rr.1).collect::<Vec<_>>();
@@ -319,7 +345,7 @@ where
     ///
     /// This avoids materializing a `kappa × n` dense matrix. The verifier-side checks are unchanged.
     pub fn decompose_seeded(
-        &self,
+        self,
         scheme: &AjtaiCommitmentScheme<R>,
         B: u128,
     ) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
@@ -328,40 +354,35 @@ where
         maybe_print_rss("decomp_seeded: start");
 
         let nvars = log2(scheme.width()) as usize;
-        // Avoid `decompose_to_vec(...).transpose()`:
-        // that creates `Vec<Vec<R>>` of length n with per-entry allocations (huge RSS).
-        // We only need 2 digits, so decompose directly into two length-n vectors.
-        let n = self.f.len();
-        let (F0, F1) = {
-            let mut f0 = vec![R::ZERO; n];
-            let mut f1 = vec![R::ZERO; n];
-            #[cfg(feature = "parallel")]
-            {
-                // Chunked to allow per-thread scratch without per-element allocation.
-                const CHUNK: usize = 1 << 14;
-                f0.par_chunks_mut(CHUNK)
-                    .zip(f1.par_chunks_mut(CHUNK))
-                    .zip(self.f.par_chunks(CHUNK))
-                    .for_each(|((o0, o1), inp)| {
-                        let mut tmp = vec![R::ZERO; 2];
-                        for i in 0..inp.len() {
-                            inp[i].decompose_to(B, &mut tmp);
-                            o0[i] = tmp[0];
-                            o1[i] = tmp[1];
-                        }
-                    });
+        // In-place 2-digit decomposition:
+        // reuse the original `f` buffer for F0 to avoid holding `f + F0 + F1` at once.
+        let mut F0 = self.f;
+        let n = F0.len();
+        let mut F1 = vec![R::ZERO; n];
+        #[cfg(feature = "parallel")]
+        {
+            const CHUNK: usize = 1 << 14;
+            F0.par_chunks_mut(CHUNK)
+                .zip(F1.par_chunks_mut(CHUNK))
+                .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1)| {
+                    for i in 0..c0.len() {
+                        let orig = std::mem::replace(&mut c0[i], R::ZERO);
+                        orig.decompose_to(B, tmp);
+                        c0[i] = tmp[0];
+                        c1[i] = tmp[1];
+                    }
+                });
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut tmp = vec![R::ZERO; 2];
+            for i in 0..n {
+                let orig = std::mem::replace(&mut F0[i], R::ZERO);
+                orig.decompose_to(B, &mut tmp);
+                F0[i] = tmp[0];
+                F1[i] = tmp[1];
             }
-            #[cfg(not(feature = "parallel"))]
-            {
-                let mut tmp = vec![R::ZERO; 2];
-                for i in 0..n {
-                    self.f[i].decompose_to(B, &mut tmp);
-                    f0[i] = tmp[0];
-                    f1[i] = tmp[1];
-                }
-            }
-            (f0, f1)
-        };
+        }
         maybe_print_rss("decomp_seeded: after decompose_to_vec");
 
         let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
