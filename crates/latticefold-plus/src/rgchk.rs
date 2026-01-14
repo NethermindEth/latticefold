@@ -207,7 +207,7 @@ where
             sets,
             nvars: self.nvars,
         };
-        let out_rel = in_rel.set_check(M, transcript);
+        let out_rel = in_rel.set_check(crate::setchk::ExternalMats::Ring(M), transcript);
 
         // Avoid allocating a full eq-table of size 2^nvars.
         // We instead stream eq-weights in small blocks in the evaluation routines below.
@@ -277,6 +277,127 @@ where
                     });
                     c.push(sparse_mat_vec_eval_ring_streaming_witness::<R>(
                         m,
+                        &inst.f,
+                        &out_rel.r,
+                        &one_minus_r,
+                    ));
+                }
+                DcomEvals { v, a, b, c }
+            })
+            .collect::<Vec<_>>();
+
+        absorb_evaluations(&evals, transcript);
+
+        if profile {
+            println!("[LF+ Rg::range_check] evals+absorb: {:?}", t_total.elapsed());
+        }
+
+        Dcom {
+            evals,
+            fcoms: self
+                .instances
+                .iter()
+                .map(|inst| inst.fcoms.clone())
+                .collect(),
+            out: out_rel,
+            dparams: self.dparams.clone(),
+        }
+    }
+
+    /// Range checks, but with external matrices represented over the **base ring**.
+    ///
+    /// This is the natural representation for SP1/R1LF chunks (const-coeff by construction) and
+    /// avoids materializing `SparseMatrix<R>` which is catastrophic at large `R::dimension()`.
+    pub fn range_check_base(
+        &self,
+        M0: &[Arc<SparseMatrix<R::BaseRing>>],
+        transcript: &mut impl Transcript<R>,
+    ) -> Dcom<R> {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = std::time::Instant::now();
+
+        let mut sets =
+            Vec::with_capacity(self.instances.len() * (self.instances[0].M_f.len() + 1));
+        for inst in &self.instances {
+            inst.M_f.iter().for_each(|m| {
+                sets.push(MonomialSet::DigitsMatrix(m.clone()));
+            });
+        }
+        for inst in &self.instances {
+            sets.push(match &inst.m_tau {
+                MonomialVec::Dense(v) => MonomialSet::Vector(v.clone()),
+                MonomialVec::Digits { digits, exp_table } => {
+                    MonomialSet::VectorDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                }
+            });
+        }
+
+        let in_rel = In {
+            sets,
+            nvars: self.nvars,
+        };
+        let out_rel = in_rel.set_check(crate::setchk::ExternalMats::Base(M0), transcript);
+
+        let one_minus_r = out_rel
+            .r
+            .iter()
+            .copied()
+            .map(|x| R::BaseRing::ONE - x)
+            .collect::<Vec<_>>();
+        if profile {
+            println!(
+                "[LF+ Rg::range_check] set_check: {:?} (nvars={})",
+                t_total.elapsed(),
+                self.nvars
+            );
+        }
+
+        let evals = self
+            .instances
+            .iter()
+            .enumerate()
+            .map(|(l, inst)| {
+                let mut a = Vec::with_capacity(1 + M0.len());
+                let mut b = Vec::with_capacity(1 + M0.len());
+                let mut c = Vec::with_capacity(1 + M0.len());
+
+                let v =
+                    eval_vec_coeffs_at_point_streaming_witness::<R>(&inst.f, &out_rel.r, &one_minus_r);
+
+                a.push(dot_base_streaming::<R>(
+                    inst.tau.as_ref(),
+                    &out_rel.r,
+                    &one_minus_r,
+                ));
+                b.push(out_rel.b[l]);
+                c.push(dot_ring_streaming_witness::<R>(&inst.f, &out_rel.r, &one_minus_r));
+
+                for m0 in M0 {
+                    a.push(sparse_mat0_vec_eval_ct_streaming::<R>(
+                        m0,
+                        inst.tau.as_ref(),
+                        &out_rel.r,
+                        &one_minus_r,
+                    ));
+                    b.push(match &inst.m_tau {
+                        MonomialVec::Dense(v) => sparse_mat0_vec_eval_ring_streaming::<R>(
+                            m0,
+                            v.as_ref(),
+                            &out_rel.r,
+                            &one_minus_r,
+                        ),
+                        MonomialVec::Digits { digits, exp_table } => {
+                            sparse_mat0_vec_eval_ring_streaming_monomial_digits::<R>(
+                                m0,
+                                digits.as_ref(),
+                                exp_table.as_ref(),
+                                &out_rel.r,
+                                &one_minus_r,
+                            )
+                        }
+                    });
+                    c.push(sparse_mat0_vec_eval_ring_streaming_witness::<R>(
+                        m0,
                         &inst.f,
                         &out_rel.r,
                         &one_minus_r,
@@ -1477,6 +1598,76 @@ where
     }
 }
 
+fn sparse_mat0_vec_eval_ct_streaming<R: PolyRing>(
+    m0: &SparseMatrix<R::BaseRing>,
+    witness0: &[R::BaseRing],
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> R::BaseRing
+where
+    R::BaseRing: Ring,
+{
+    debug_assert_eq!(r.len(), one_minus_r.len());
+    let nvars = r.len();
+    let n = m0.nrows;
+    let t = choose_t_low(nvars);
+    let low = build_eq_low_table::<R>(&r[..t], &one_minus_r[..t]);
+    let low_len = 1usize << t;
+    let high_bits = nvars - t;
+    let high_len = ((n + low_len - 1) / low_len).min(1usize << high_bits);
+    #[cfg(feature = "parallel")]
+    {
+        (0..high_len)
+            .into_par_iter()
+            .map(|h| {
+                let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+                let base = h * low_len;
+                let mut acc = R::BaseRing::ZERO;
+                for i in 0..low_len {
+                    let row_idx = base + i;
+                    if row_idx >= n {
+                        break;
+                    }
+                    let w_row = scale * low[i];
+                    let row = &m0.coeffs[row_idx];
+                    let mut sum0 = R::BaseRing::ZERO;
+                    for (coeff0, col_idx) in row {
+                        if *col_idx < witness0.len() {
+                            sum0 += *coeff0 * witness0[*col_idx];
+                        }
+                    }
+                    acc += sum0 * w_row;
+                }
+                acc
+            })
+            .reduce(|| R::BaseRing::ZERO, |a, b| a + b)
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        let mut acc = R::BaseRing::ZERO;
+        for h in 0..high_len {
+            let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+            let base = h * low_len;
+            for i in 0..low_len {
+                let row_idx = base + i;
+                if row_idx >= n {
+                    break;
+                }
+                let w_row = scale * low[i];
+                let row = &m0.coeffs[row_idx];
+                let mut sum0 = R::BaseRing::ZERO;
+                for (coeff0, col_idx) in row {
+                    if *col_idx < witness0.len() {
+                        sum0 += *coeff0 * witness0[*col_idx];
+                    }
+                }
+                acc += sum0 * w_row;
+            }
+        }
+        acc
+    }
+}
+
 fn sparse_mat_vec_eval_ring_streaming<R>(
     m: &SparseMatrix<R>,
     witness: &[R],
@@ -1539,6 +1730,77 @@ where
                 for (coeff, col_idx) in row {
                     if *col_idx < witness.len() {
                         row_dot += *coeff * witness[*col_idx];
+                    }
+                }
+                acc += row_dot * w_row;
+            }
+        }
+        acc
+    }
+}
+
+fn sparse_mat0_vec_eval_ring_streaming<R>(
+    m0: &SparseMatrix<R::BaseRing>,
+    witness: &[R],
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> R
+where
+    R: PolyRing + From<R::BaseRing>,
+    R::BaseRing: Ring,
+{
+    debug_assert_eq!(r.len(), one_minus_r.len());
+    let nvars = r.len();
+    let n = m0.nrows;
+    let t = choose_t_low(nvars);
+    let low = build_eq_low_table::<R>(&r[..t], &one_minus_r[..t]);
+    let low_len = 1usize << t;
+    let high_bits = nvars - t;
+    let high_len = ((n + low_len - 1) / low_len).min(1usize << high_bits);
+    #[cfg(feature = "parallel")]
+    {
+        (0..high_len)
+            .into_par_iter()
+            .map(|h| {
+                let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+                let base = h * low_len;
+                let mut acc = R::ZERO;
+                for i in 0..low_len {
+                    let row_idx = base + i;
+                    if row_idx >= n {
+                        break;
+                    }
+                    let w_row0 = scale * low[i];
+                    let row = &m0.coeffs[row_idx];
+                    let mut row_dot = R::ZERO;
+                    for (coeff0, col_idx) in row {
+                        if *col_idx < witness.len() {
+                            row_dot += witness[*col_idx] * R::from(*coeff0);
+                        }
+                    }
+                    acc += row_dot * R::from(w_row0);
+                }
+                acc
+            })
+            .reduce(|| R::ZERO, |a, b| a + b)
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        let mut acc = R::ZERO;
+        for h in 0..high_len {
+            let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+            let base = h * low_len;
+            for i in 0..low_len {
+                let row_idx = base + i;
+                if row_idx >= n {
+                    break;
+                }
+                let w_row = R::from(scale * low[i]);
+                let row = &m0.coeffs[row_idx];
+                let mut row_dot = R::ZERO;
+                for (coeff0, col_idx) in row {
+                    if *col_idx < witness.len() {
+                        row_dot += witness[*col_idx] * *coeff0;
                     }
                 }
                 acc += row_dot * w_row;
@@ -1619,6 +1881,98 @@ where
             }
         }
         acc
+    }
+}
+
+fn sparse_mat0_vec_eval_ring_streaming_monomial_digits<R>(
+    m0: &SparseMatrix<R::BaseRing>,
+    digits: &[u16],
+    exp_table: &[R],
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> R
+where
+    R: PolyRing + From<R::BaseRing>,
+    R::BaseRing: Ring,
+{
+    debug_assert_eq!(r.len(), one_minus_r.len());
+    let nvars = r.len();
+    let n = m0.nrows;
+    let t = choose_t_low(nvars);
+    let low = build_eq_low_table::<R>(&r[..t], &one_minus_r[..t]);
+    let low_len = 1usize << t;
+    let high_bits = nvars - t;
+    let high_len = ((n + low_len - 1) / low_len).min(1usize << high_bits);
+    #[cfg(feature = "parallel")]
+    {
+        (0..high_len)
+            .into_par_iter()
+            .map(|h| {
+                let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+                let base = h * low_len;
+                let mut acc = R::ZERO;
+                for i in 0..low_len {
+                    let row_idx = base + i;
+                    if row_idx >= n {
+                        break;
+                    }
+                    let w_row0 = scale * low[i];
+                    let row = &m0.coeffs[row_idx];
+                    let mut row_dot = R::ZERO;
+                    for (coeff0, col_idx) in row {
+                        let cj = *col_idx;
+                        if cj < digits.len() {
+                            row_dot += exp_table[digits[cj] as usize] * R::from(*coeff0);
+                        }
+                    }
+                    acc += row_dot * R::from(w_row0);
+                }
+                acc
+            })
+            .reduce(|| R::ZERO, |a, b| a + b)
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        let mut acc = R::ZERO;
+        for h in 0..high_len {
+            let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+            let base = h * low_len;
+            for i in 0..low_len {
+                let row_idx = base + i;
+                if row_idx >= n {
+                    break;
+                }
+                let w_row = R::from(scale * low[i]);
+                let row = &m0.coeffs[row_idx];
+                let mut row_dot = R::ZERO;
+                for (coeff0, col_idx) in row {
+                    let cj = *col_idx;
+                    if cj < digits.len() {
+                        row_dot += exp_table[digits[cj] as usize] * *coeff0;
+                    }
+                }
+                acc += row_dot * w_row;
+            }
+        }
+        acc
+    }
+}
+
+fn sparse_mat0_vec_eval_ring_streaming_witness<R>(
+    m0: &SparseMatrix<R::BaseRing>,
+    witness: &WitnessVec<R>,
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> R
+where
+    R: PolyRing + From<R::BaseRing>,
+    R::BaseRing: Ring,
+{
+    match witness {
+        WitnessVec::Ring(vr) => sparse_mat0_vec_eval_ring_streaming::<R>(m0, vr.as_ref(), r, one_minus_r),
+        WitnessVec::ConstCoeffBase { values: v0, .. } => {
+            R::from(sparse_mat0_vec_eval_ct_streaming::<R>(m0, v0.as_ref(), r, one_minus_r))
+        }
     }
 }
 

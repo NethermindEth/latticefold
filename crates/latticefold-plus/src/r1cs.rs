@@ -42,6 +42,26 @@ pub struct ComR1CSX<R: Ring> {
     pub cm_f: Vec<R>, // kappa
 }
 
+/// Committed R1CS (const-coeff/SP1 regime) where A/B/C are stored over the **base ring**.
+///
+/// This avoids storing `SparseMatrix<R>` (catastrophic for large ring dimension) while keeping the
+/// verifier-side protocol unchanged: all proof objects and transcript flow remain identical.
+#[derive(Clone, Debug)]
+pub struct ComR1CSBase<R: Ring + PolyRing> {
+    pub x: ComR1CSXBase<R>,
+    pub f: WitnessVec<R>, // prover-only; should be `ConstCoeffBase` in this construction
+}
+
+#[derive(Clone, Debug)]
+pub struct ComR1CSXBase<R: Ring + PolyRing> {
+    pub a: Arc<SparseMatrix<R::BaseRing>>,
+    pub b: Arc<SparseMatrix<R::BaseRing>>,
+    pub c: Arc<SparseMatrix<R::BaseRing>>,
+    pub l_in: usize,
+    pub l: usize,
+    pub cm_f: Vec<R>, // kappa
+}
+
 #[derive(Clone, Debug)]
 pub struct ComR1CSProof<R: Ring> {
     pub sumcheck_proof: Proof<R>,
@@ -161,6 +181,58 @@ impl<R: Decompose + Ring + PolyRing> ComR1CS<R> {
             b: Arc::new(r1cs.B),
             c: Arc::new(r1cs.C),
             z: Vec::new(),
+            cm_f,
+            l_in,
+            l,
+        };
+        Self {
+            x,
+            f: WitnessVec::ConstCoeffBase {
+                values: f0,
+                domain_len: n,
+            },
+        }
+    }
+}
+
+impl<R: Ring + PolyRing> ComR1CSXBase<R> {
+    pub fn matrices_arc_base(&self) -> Vec<Arc<SparseMatrix<R::BaseRing>>> {
+        vec![self.a.clone(), self.b.clone(), self.c.clone()]
+    }
+}
+
+impl<R: Decompose + Ring + PolyRing> ComR1CSBase<R> {
+    /// Construct a committed R1CS instance from **base-ring matrices** (const-coeff) and a
+    /// constant-coefficient witness (base scalars), using a seeded implicit Ajtai matrix.
+    pub fn from_f0_seeded_base(
+        r1cs: R1CS<R::BaseRing>,
+        f0: Arc<Vec<R::BaseRing>>,
+        l_in: usize,
+        scheme: &AjtaiCommitmentScheme<R>,
+    ) -> Self
+    where
+        R::BaseRing: stark_rings::Ring,
+        R: core::ops::Mul<R::BaseRing, Output = R>,
+    {
+        let n = scheme.width();
+        let cm_f = scheme
+            .commit_many_const_coeff_base_fast(n, 1, {
+                let f0 = f0.clone();
+                move |j, out| {
+                    out[0] = f0.get(j).copied().unwrap_or(R::BaseRing::ZERO);
+                }
+            })
+            .expect("commit_many_const_coeff_base_fast (f0 padded)")
+            .into_iter()
+            .next()
+            .expect("t=1")
+            .as_ref()
+            .to_vec();
+        let l = r1cs.l;
+        let x = ComR1CSXBase {
+            a: Arc::new(r1cs.A),
+            b: Arc::new(r1cs.B),
+            c: Arc::new(r1cs.C),
             cm_f,
             l_in,
             l,
@@ -303,6 +375,85 @@ impl<R: OverField + PolyRing> Linearize<R> for ComR1CS<R> {
             f: self.f.clone(),
             x,
         };
+
+        (linb, proof)
+    }
+}
+
+impl<R: OverField + PolyRing> Linearize<R> for ComR1CSBase<R> {
+    type Proof = ComR1CSProof<R>;
+    fn linearize(&self, transcript: &mut impl Transcript<R>) -> (LinB<R>, Self::Proof) {
+        let n = self.f.len().next_power_of_two();
+        let nvars = log2(n) as usize;
+
+        let r0 = transcript.get_challenges(nvars);
+        let one_minus_r0 = r0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
+
+        let f0 = match &self.f {
+            WitnessVec::ConstCoeffBase { values, .. } => values.clone(),
+            _ => panic!("ComR1CSBase requires ConstCoeffBase witness"),
+        };
+
+        let mles = vec![
+            StreamingMleEnum::EqBase {
+                scale: R::BaseRing::ONE,
+                r: r0,
+                one_minus_r: one_minus_r0,
+            },
+            StreamingMleEnum::SparseMatVecConstCoeffBase {
+                matrix: self.x.a.clone(),
+                witness0: f0.clone(),
+                num_vars: nvars,
+            },
+            StreamingMleEnum::SparseMatVecConstCoeffBase {
+                matrix: self.x.b.clone(),
+                witness0: f0.clone(),
+                num_vars: nvars,
+            },
+            StreamingMleEnum::SparseMatVecConstCoeffBase {
+                matrix: self.x.c.clone(),
+                witness0: f0.clone(),
+                num_vars: nvars,
+            },
+            StreamingMleEnum::BaseScalarArc {
+                evals: f0.clone(),
+                num_vars: nvars,
+                square: false,
+            },
+        ];
+
+        let comb_fn = |vals: &[R]| -> R { vals[0] * (vals[1] * vals[2] - vals[3]) };
+
+        let (sumcheck_proof, randomness, final_vals) =
+            StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 3, comb_fn);
+
+        let ro = randomness.into_iter().map(|x| x.into()).collect::<Vec<R>>();
+        let va = final_vals[1];
+        let vb = final_vals[2];
+        let vc = final_vals[3];
+        let v = final_vals[4];
+
+        absorb_evaluations(&[v, va, vb, vc], transcript);
+
+        let proof = Self::Proof {
+            sumcheck_proof,
+            nvars,
+            r: ro.clone(),
+            v,
+            va,
+            vb,
+            vc,
+        };
+
+        let r = ro.iter().map(|&r| (r, r)).collect::<Vec<_>>();
+        let v_pairs = vec![(v, v), (va, va), (vb, vb), (vc, vc)];
+
+        let x = LinBX {
+            cm_f: self.x.cm_f.clone(),
+            r,
+            v: v_pairs,
+        };
+        let linb = LinB { f: self.f.clone(), x };
 
         (linb, proof)
     }

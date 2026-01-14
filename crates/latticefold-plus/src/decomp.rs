@@ -73,6 +73,15 @@ pub struct Decomp<'a, R> {
     pub M: &'a [Arc<SparseMatrix<R>>],
 }
 
+/// Decomposition prover for the const-coeff/SP1 regime where the external matrices are stored over
+/// the base ring.
+#[derive(Debug)]
+pub struct DecompBase<'a, R: PolyRing> {
+    pub f: Vec<R>,
+    pub r: Vec<(R, R)>,
+    pub M0: &'a [Arc<SparseMatrix<R::BaseRing>>],
+}
+
 #[derive(Clone, Debug)]
 pub struct DecompProof<R> {
     /// C = com(F)
@@ -809,6 +818,433 @@ where
         ((linb0, linb1), proof)
     }
 
+}
+
+impl<R: PolyRing> DecompBase<'_, R>
+where
+    R: Decompose + OverField,
+    R::BaseRing: Zq,
+{
+    /// Same as [`Decomp::decompose_seeded`], but with external matrices represented over the base ring.
+    pub fn decompose_seeded_base(
+        self,
+        scheme: &AjtaiCommitmentScheme<R>,
+        B: u128,
+    ) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = Instant::now();
+        maybe_print_rss("decomp_seeded: start");
+
+        let nvars = log2(scheme.width()) as usize;
+        let mut F0 = self.f;
+        let n = F0.len();
+        let mut F1 = vec![R::ZERO; n];
+        #[cfg(feature = "parallel")]
+        {
+            const CHUNK: usize = 1 << 14;
+            F0.par_chunks_mut(CHUNK)
+                .zip(F1.par_chunks_mut(CHUNK))
+                .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1)| {
+                    for i in 0..c0.len() {
+                        let orig = std::mem::replace(&mut c0[i], R::ZERO);
+                        orig.decompose_to(B, tmp);
+                        c0[i] = tmp[0];
+                        c1[i] = tmp[1];
+                    }
+                });
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut tmp = vec![R::ZERO; 2];
+            for i in 0..n {
+                let orig = std::mem::replace(&mut F0[i], R::ZERO);
+                orig.decompose_to(B, &mut tmp);
+                F0[i] = tmp[0];
+                F1[i] = tmp[1];
+            }
+        }
+        maybe_print_rss("decomp_seeded: after decompose_to_vec");
+
+        let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
+        let r_b = self.r.iter().map(|rr| rr.1).collect::<Vec<_>>();
+
+        #[inline]
+        fn is_identity_matrix_base<BR: Ring>(m: &SparseMatrix<BR>) -> bool {
+            if m.nrows != m.ncols {
+                return false;
+            }
+            if m.coeffs.len() != m.nrows {
+                return false;
+            }
+            for (i, row) in m.coeffs.iter().enumerate() {
+                if row.len() != 1 {
+                    return false;
+                }
+                let (c, j) = row[0];
+                if j != i {
+                    return false;
+                }
+                if c != BR::ONE {
+                    return false;
+                }
+            }
+            true
+        }
+
+        #[inline]
+        fn eq_weights<Rr: PolyRing>(r: &[Rr]) -> Vec<Rr> {
+            let nvars = r.len();
+            let n = 1usize << nvars;
+            let mut cur = vec![Rr::ZERO; n];
+            let mut next = vec![Rr::ZERO; n];
+            cur[0] = Rr::ONE;
+
+            let mut len = 1usize;
+            let mut cur_is_cur = true;
+            for &rj in r.iter().rev() {
+                let om = Rr::ONE - rj;
+                let (src, dst) = if cur_is_cur {
+                    (&cur[..len], &mut next[..(2 * len)])
+                } else {
+                    (&next[..len], &mut cur[..(2 * len)])
+                };
+
+                #[cfg(feature = "parallel")]
+                {
+                    dst.par_chunks_mut(2)
+                        .zip(src.par_iter())
+                        .for_each(|(pair, &wi)| {
+                            pair[0] = wi * om;
+                            pair[1] = wi * rj;
+                        });
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    for (i, &wi) in src.iter().enumerate() {
+                        dst[2 * i] = wi * om;
+                        dst[2 * i + 1] = wi * rj;
+                    }
+                }
+
+                len <<= 1;
+                cur_is_cur = !cur_is_cur;
+            }
+            if cur_is_cur { cur } else { next }
+        }
+
+        #[inline]
+        fn is_const_coeff_ring<Rr: PolyRing>(x: &Rr) -> bool {
+            x.coeffs()
+                .iter()
+                .skip(1)
+                .all(|c| *c == <Rr as PolyRing>::BaseRing::ZERO)
+        }
+
+        #[inline]
+        fn eval_sparse_mat0_two_vecs_at_two_points<Rr: PolyRing>(
+            m0: &SparseMatrix<Rr::BaseRing>,
+            f0: &[Rr],
+            f1: &[Rr],
+            eq_a: &[Rr],
+            eq_b: &[Rr],
+        ) -> (RxR<Rr>, RxR<Rr>)
+        where
+            Rr::BaseRing: Ring,
+            Rr: core::ops::Mul<Rr::BaseRing, Output = Rr>,
+        {
+            debug_assert_eq!(m0.ncols, f0.len());
+            debug_assert_eq!(m0.ncols, f1.len());
+            debug_assert_eq!(m0.nrows, eq_a.len());
+            debug_assert_eq!(m0.nrows, eq_b.len());
+
+            let mut out0 = (Rr::ZERO, Rr::ZERO);
+            let mut out1 = (Rr::ZERO, Rr::ZERO);
+            for (row, terms) in m0.coeffs.iter().enumerate() {
+                let wa = eq_a[row];
+                let wb = eq_b[row];
+                if wa == Rr::ZERO && wb == Rr::ZERO {
+                    continue;
+                }
+                let mut s0 = Rr::ZERO;
+                let mut s1 = Rr::ZERO;
+                for (c0, j) in terms {
+                    s0 += f0[*j] * *c0;
+                    s1 += f1[*j] * *c0;
+                }
+                out0.0 += wa * s0;
+                out0.1 += wb * s0;
+                out1.0 += wa * s1;
+                out1.1 += wb * s1;
+            }
+            (out0, out1)
+        }
+
+        #[inline]
+        fn dot_with_eq<Rr: PolyRing>(f: &[Rr], eq: &[Rr]) -> Rr {
+            debug_assert_eq!(f.len(), eq.len());
+            #[cfg(feature = "parallel")]
+            {
+                f.par_iter()
+                    .zip(eq.par_iter())
+                    .map(|(&fx, &wx)| fx * wx)
+                    .reduce(|| Rr::ZERO, |a, b| a + b)
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                f.iter()
+                    .zip(eq.iter())
+                    .fold(Rr::ZERO, |acc, (&fx, &wx)| acc + fx * wx)
+            }
+        }
+
+        let vi_calc_pair = || {
+            let t_eq = Instant::now();
+            let (eq_a_ring, eq_b_ring, eq_plan_a, eq_plan_b) = if r_a
+                .iter()
+                .all(is_const_coeff_ring::<R>)
+                && r_b.iter().all(is_const_coeff_ring::<R>)
+            {
+                let r_a0 = r_a.iter().map(|x| x.coeffs()[0]).collect::<Vec<_>>();
+                let r_b0 = r_b.iter().map(|x| x.coeffs()[0]).collect::<Vec<_>>();
+
+                let one_minus_a0 =
+                    r_a0.iter().copied().map(|x| R::BaseRing::ONE - x).collect::<Vec<_>>();
+                let one_minus_b0 =
+                    r_b0.iter().copied().map(|x| R::BaseRing::ONE - x).collect::<Vec<_>>();
+                let t_low = choose_t_low(r_a0.len());
+
+                let low_a =
+                    build_eq_low_table_base::<R::BaseRing>(&r_a0[..t_low], &one_minus_a0[..t_low]);
+                let low_b =
+                    build_eq_low_table_base::<R::BaseRing>(&r_b0[..t_low], &one_minus_b0[..t_low]);
+                let low_mask = (1usize << t_low) - 1;
+                let scale_a = build_scale_high_base::<R::BaseRing>(&r_a0, &one_minus_a0, t_low);
+                let scale_b = build_scale_high_base::<R::BaseRing>(&r_b0, &one_minus_b0, t_low);
+
+                (None, None, Some((t_low, low_mask, low_a, scale_a)), Some((t_low, low_mask, low_b, scale_b)))
+            } else {
+                (Some(eq_weights::<R>(&r_a)), Some(eq_weights::<R>(&r_b)), None, None)
+            };
+            maybe_print_rss("decomp_seeded: after eq_weights");
+            if profile {
+                println!(
+                    "[LF+ Decomp::decompose_seeded_base] eq_weights: {:?} (nvars={})",
+                    t_eq.elapsed(),
+                    nvars
+                );
+            }
+
+            let t_fv = Instant::now();
+            let (fv0, fv1) = if let (Some((t_low, low_mask, low_a, scale_a)), Some((_, _, low_b, scale_b))) =
+                (eq_plan_a.as_ref(), eq_plan_b.as_ref())
+            {
+                let n = F0.len();
+                let eval_at = |idx: usize, low: &[R::BaseRing], scale: &[R::BaseRing]| -> R::BaseRing {
+                    eq_at_base::<R::BaseRing>(idx, low, scale, *low_mask, *t_low)
+                };
+                #[cfg(feature = "parallel")]
+                let (f0_a, f0_b, f1_a, f1_b) = (0..n)
+                    .into_par_iter()
+                    .fold(
+                        || (R::ZERO, R::ZERO, R::ZERO, R::ZERO),
+                        |(mut a0, mut b0, mut a1, mut b1), i| {
+                            let wa = eval_at(i, low_a, scale_a);
+                            let wb = eval_at(i, low_b, scale_b);
+                            a0 += F0[i] * wa;
+                            b0 += F0[i] * wb;
+                            a1 += F1[i] * wa;
+                            b1 += F1[i] * wb;
+                            (a0, b0, a1, b1)
+                        },
+                    )
+                    .reduce(
+                        || (R::ZERO, R::ZERO, R::ZERO, R::ZERO),
+                        |(a0, b0, a1, b1), (c0, d0, c1, d1)| (a0 + c0, b0 + d0, a1 + c1, b1 + d1),
+                    );
+                #[cfg(not(feature = "parallel"))]
+                let (f0_a, f0_b, f1_a, f1_b) = {
+                    let mut a0 = R::ZERO;
+                    let mut b0 = R::ZERO;
+                    let mut a1 = R::ZERO;
+                    let mut b1 = R::ZERO;
+                    for i in 0..n {
+                        let wa = eval_at(i, low_a, scale_a);
+                        let wb = eval_at(i, low_b, scale_b);
+                        a0 += F0[i] * wa;
+                        b0 += F0[i] * wb;
+                        a1 += F1[i] * wa;
+                        b1 += F1[i] * wb;
+                    }
+                    (a0, b0, a1, b1)
+                };
+                ((f0_a, f0_b), (f1_a, f1_b))
+            } else {
+                let ea = eq_a_ring.as_ref().unwrap();
+                let eb = eq_b_ring.as_ref().unwrap();
+                (
+                    (dot_with_eq(&F0, ea), dot_with_eq(&F0, eb)),
+                    (dot_with_eq(&F1, ea), dot_with_eq(&F1, eb)),
+                )
+            };
+            if profile {
+                println!(
+                    "[LF+ Decomp::decompose_seeded_base] fv(dot_with_eq) both: {:?}",
+                    t_fv.elapsed()
+                );
+            }
+
+            let t_mats = Instant::now();
+            let mut v0 = Vec::with_capacity(1 + self.M0.len());
+            let mut v1 = Vec::with_capacity(1 + self.M0.len());
+            v0.push(fv0);
+            v1.push(fv1);
+
+            for M_i in self.M0.iter().map(|x| x.as_ref()) {
+                if is_identity_matrix_base::<R::BaseRing>(M_i) {
+                    v0.push(fv0);
+                    v1.push(fv1);
+                    continue;
+                }
+                let (m0, m1) = if let (Some((t_low, low_mask, low_a, scale_a)), Some((_, _, low_b, scale_b))) =
+                    (eq_plan_a.as_ref(), eq_plan_b.as_ref())
+                {
+                    let eval_at = |idx: usize, low: &[R::BaseRing], scale: &[R::BaseRing]| -> R::BaseRing {
+                        eq_at_base::<R::BaseRing>(idx, low, scale, *low_mask, *t_low)
+                    };
+                    #[cfg(feature = "parallel")]
+                    let (out0, out1) = M_i
+                        .coeffs
+                        .par_iter()
+                        .enumerate()
+                        .fold(
+                            || ((R::ZERO, R::ZERO), (R::ZERO, R::ZERO)),
+                            |(mut o0, mut o1), (row, terms)| {
+                                let wa0 = eval_at(row, low_a, scale_a);
+                                let wb0 = eval_at(row, low_b, scale_b);
+                                if wa0 == R::BaseRing::ZERO && wb0 == R::BaseRing::ZERO {
+                                    return (o0, o1);
+                                }
+                                let mut s0 = R::ZERO;
+                                let mut s1 = R::ZERO;
+                                for (c0, j) in terms {
+                                    s0 += F0[*j] * *c0;
+                                    s1 += F1[*j] * *c0;
+                                }
+                                o0.0 += s0 * wa0;
+                                o0.1 += s0 * wb0;
+                                o1.0 += s1 * wa0;
+                                o1.1 += s1 * wb0;
+                                (o0, o1)
+                            },
+                        )
+                        .reduce(
+                            || ((R::ZERO, R::ZERO), (R::ZERO, R::ZERO)),
+                            |(a0, a1), (b0, b1)| {
+                                ((a0.0 + b0.0, a0.1 + b0.1), (a1.0 + b1.0, a1.1 + b1.1))
+                            },
+                        );
+                    #[cfg(not(feature = "parallel"))]
+                    let (out0, out1) = {
+                        let mut out0 = (R::ZERO, R::ZERO);
+                        let mut out1 = (R::ZERO, R::ZERO);
+                        for (row, terms) in M_i.coeffs.iter().enumerate() {
+                            let wa0 = eval_at(row, low_a, scale_a);
+                            let wb0 = eval_at(row, low_b, scale_b);
+                            if wa0 == R::BaseRing::ZERO && wb0 == R::BaseRing::ZERO {
+                                continue;
+                            }
+                            let mut s0 = R::ZERO;
+                            let mut s1 = R::ZERO;
+                            for (c0, j) in terms {
+                                s0 += F0[*j] * *c0;
+                                s1 += F1[*j] * *c0;
+                            }
+                            out0.0 += s0 * wa0;
+                            out0.1 += s0 * wb0;
+                            out1.0 += s1 * wa0;
+                            out1.1 += s1 * wb0;
+                        }
+                        (out0, out1)
+                    };
+                    (out0, out1)
+                } else {
+                    let ea = eq_a_ring.as_ref().unwrap();
+                    let eb = eq_b_ring.as_ref().unwrap();
+                    eval_sparse_mat0_two_vecs_at_two_points::<R>(M_i, &F0, &F1, ea, eb)
+                };
+                v0.push(m0);
+                v1.push(m1);
+            }
+            if profile {
+                println!(
+                    "[LF+ Decomp::decompose_seeded_base] mats(eval_sparse_mat_two_vecs_at_two_points): {:?} (Mlen={})",
+                    t_mats.elapsed(),
+                    self.M0.len()
+                );
+            }
+            maybe_print_rss("decomp_seeded: after v0/v1 mats");
+            (v0, v1)
+        };
+
+        if profile {
+            println!(
+                "[LF+ Decomp::decompose_seeded_base] setup+split: {:?} (nvars={}, Mlen={})",
+                t_total.elapsed(),
+                nvars,
+                self.M0.len()
+            );
+        }
+
+        let t = Instant::now();
+        let (v0, v1) = vi_calc_pair();
+        if profile {
+            println!("[LF+ Decomp::decompose_seeded_base] compute v0/v1: {:?}", t.elapsed());
+        }
+        maybe_print_rss("decomp_seeded: after compute v0/v1");
+
+        let t = Instant::now();
+        let (C0, C1) = {
+            #[cfg(feature = "parallel")]
+            {
+                rayon::join(
+                    || scheme.commit(&F0).unwrap().as_ref().to_vec(),
+                    || scheme.commit(&F1).unwrap().as_ref().to_vec(),
+                )
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                (
+                    scheme.commit(&F0).unwrap().as_ref().to_vec(),
+                    scheme.commit(&F1).unwrap().as_ref().to_vec(),
+                )
+            }
+        };
+        if profile {
+            println!("[LF+ Decomp::decompose_seeded_base] commitments C0/C1: {:?}", t.elapsed());
+            println!("[LF+ Decomp::decompose_seeded_base] total: {:?}", t_total.elapsed());
+        }
+        maybe_print_rss("decomp_seeded: done");
+
+        let linb0 = LinB {
+            x: LinBX {
+                cm_f: C0.clone(),
+                r: self.r.clone(),
+                v: v0.clone(),
+            },
+            f: WitnessVec::Ring(Arc::new(F0)),
+        };
+        let linb1 = LinB {
+            x: LinBX {
+                cm_f: C1.clone(),
+                r: self.r.clone(),
+                v: v1.clone(),
+            },
+            f: WitnessVec::Ring(Arc::new(F1)),
+        };
+        let proof = DecompProof { C: (C0, C1), v: (v0, v1) };
+
+        ((linb0, linb1), proof)
+    }
 }
 
 impl<R: PolyRing> DecompProof<R> {

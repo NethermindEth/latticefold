@@ -493,6 +493,390 @@ where
         (com, proof)
     }
 
+    /// Prove, but with external matrices represented over the **base ring**.
+    ///
+    /// This is the natural representation for SP1/R1LF chunks (const-coeff by construction) and
+    /// avoids materializing `SparseMatrix<R>` which is catastrophic at large `R::dimension()`.
+    pub fn prove_base(
+        &self,
+        M0: &[Arc<SparseMatrix<R::BaseRing>>],
+        transcript: &mut impl Transcript<R>,
+    ) -> (Com<R>, CmProof<R>) {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = Instant::now();
+        maybe_print_rss("cm: prove start");
+
+        let k = self.rg.dparams.k;
+        let d = R::dimension();
+        let dp = R::dimension() / 2;
+        let l = self.rg.dparams.l;
+        let n = self.rg.instances[0].tau.len();
+
+        if profile {
+            #[cfg(feature = "parallel")]
+            println!(
+                "[LF+ Cm::prove] start: n={} nvars={} Mlen={} rayon_threads={}",
+                n,
+                self.rg.nvars,
+                M0.len(),
+                rayon::current_num_threads()
+            );
+            #[cfg(not(feature = "parallel"))]
+            println!(
+                "[LF+ Cm::prove] start: n={} nvars={} Mlen={} rayon_threads=DISABLED(feature=parallel)",
+                n,
+                self.rg.nvars,
+                M0.len(),
+            );
+        }
+
+        let t = Instant::now();
+        let dcom = self.rg.range_check_base(M0, transcript);
+        if profile {
+            println!("[LF+ Cm::prove] range_check: {:?}", t.elapsed());
+        }
+        maybe_print_rss("cm: after range_check");
+
+        let s = (0..3)
+            .map(|_| short_challenge(128, transcript))
+            .collect::<Vec<R>>();
+
+        let s_prime = (0..k)
+            .map(|_| {
+                (0..d)
+                    .map(|_| short_challenge(128, transcript))
+                    .collect::<Vec<R>>()
+            })
+            .collect::<Vec<_>>();
+        let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
+
+        let t = Instant::now();
+        maybe_print_rss("cm: build_h start");
+        let h_vecs: Vec<Vec<R>> = self
+            .rg
+            .instances
+            .iter()
+            .map(|inst| {
+                let n = 1 << self.rg.nvars;
+                maybe_print_rss("cm: build_h one inst start");
+                // Same build-h as `prove` (does not depend on external M representation).
+                #[inline]
+                fn mon_info<Rr: PolyRing>(mono: &Rr) -> Option<(usize, Rr::BaseRing)>
+                where
+                    Rr::BaseRing: Ring,
+                {
+                    let coeffs = mono.coeffs();
+                    let mut found: Option<(usize, Rr::BaseRing)> = None;
+                    for (i, &ci) in coeffs.iter().enumerate() {
+                        if ci != Rr::BaseRing::ZERO {
+                            if found.is_some() {
+                                return None;
+                            }
+                            found = Some((i, ci));
+                        }
+                    }
+                    found
+                }
+                #[inline]
+                fn mul_negacyclic_by_monomial<Rr>(a: &Rr, shift: usize, scale: Rr::BaseRing) -> Rr
+                where
+                    Rr: PolyRing,
+                    Rr::BaseRing: Ring + Copy,
+                {
+                    if scale == Rr::BaseRing::ZERO {
+                        return Rr::ZERO;
+                    }
+                    let ac = a.coeffs();
+                    let d = ac.len();
+                    if shift == 0 && scale == Rr::BaseRing::ONE {
+                        return *a;
+                    }
+                    let mut out = Rr::ZERO;
+                    let outc = out.coeffs_mut();
+                    for i in 0..d {
+                        let v = ac[i] * scale;
+                        if v == Rr::BaseRing::ZERO {
+                            continue;
+                        }
+                        let j = i + shift;
+                        if j < d {
+                            outc[j] += v;
+                        } else {
+                            outc[j - d] -= v;
+                        }
+                    }
+                    out
+                }
+
+                struct Col0Precomp<Rr: PolyRing> {
+                    col0: Arc<Vec<u16>>,
+                    zero_idx: u16,
+                    term0_tab: Vec<Rr>,
+                    term_rest: Rr,
+                }
+
+                let mut pre = Vec::<Option<Col0Precomp<R>>>::with_capacity(inst.M_f.len());
+                for (M, s_i) in inst.M_f.iter().zip(s_prime.iter()) {
+                    match &M.digits {
+                        crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
+                            let mut mi_tab = Vec::with_capacity(M.exp_table.len());
+                            for r in M.exp_table.iter() {
+                                mi_tab.push(mon_info::<R>(r).expect("exp_table entry must be monomial"));
+                            }
+                            let s0 = s_i[0];
+                            let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
+                            let term0_tab = mi_tab
+                                .iter()
+                                .map(|(shift, scale)| mul_negacyclic_by_monomial::<R>(&s0, *shift, *scale))
+                                .collect::<Vec<_>>();
+                            let (shift0, scale0) = mi_tab[*zero_idx as usize];
+                            let term_rest = if shift0 == 0 && scale0 == R::BaseRing::ONE {
+                                rest_sum
+                            } else {
+                                mul_negacyclic_by_monomial::<R>(&rest_sum, shift0, scale0)
+                            };
+                            pre.push(Some(Col0Precomp {
+                                col0: col0.clone(),
+                                zero_idx: *zero_idx,
+                                term0_tab,
+                                term_rest,
+                            }));
+                        }
+                        crate::setchk::DigitsBacking::Full(_) => pre.push(None),
+                    }
+                }
+
+                #[cfg(feature = "parallel")]
+                let h = {
+                    use rayon::prelude::*;
+                    (0..n)
+                        .into_par_iter()
+                        .map(|row| {
+                            let mut acc = R::ZERO;
+                            for (i, M) in inst.M_f.iter().enumerate() {
+                                if let Some(p) = &pre[i] {
+                                    let dix = p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
+                                    acc += p.term0_tab[dix] + p.term_rest;
+                                } else {
+                                    let s_i = &s_prime[i];
+                                    for col in 0..M.ncols {
+                                        acc += M.get(row, col) * s_i[col];
+                                    }
+                                }
+                            }
+                            acc
+                        })
+                        .collect::<Vec<_>>()
+                };
+                #[cfg(not(feature = "parallel"))]
+                let h = {
+                    let mut h = vec![R::ZERO; n];
+                    for row in 0..n {
+                        let mut acc = R::ZERO;
+                        for (i, M) in inst.M_f.iter().enumerate() {
+                            if let Some(p) = &pre[i] {
+                                let dix = p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
+                                acc += p.term0_tab[dix] + p.term_rest;
+                            } else {
+                                let s_i = &s_prime[i];
+                                for col in 0..M.ncols {
+                                    acc += M.get(row, col) * s_i[col];
+                                }
+                            }
+                        }
+                        h[row] = acc;
+                    }
+                    h
+                };
+                maybe_print_rss("cm: build_h one inst done");
+                h
+            })
+            .collect();
+        if profile {
+            println!("[LF+ Cm::prove] build h: {:?}", t.elapsed());
+        }
+        maybe_print_rss("cm: build_h done");
+
+        let t = Instant::now();
+        let comh: Vec<Vec<R>> = self
+            .rg
+            .instances
+            .iter()
+            .map(|inst| {
+                let comh_vectors = inst
+                    .comM_f
+                    .iter()
+                    .zip(s_prime.iter())
+                    .map(|(comM_f_i, s_i)| comM_f_i.try_mul_vec(s_i).unwrap())
+                    .collect::<Vec<_>>();
+
+                let mut comh = vec![R::zero(); inst.comM_f[0].nrows];
+                for v in comh_vectors {
+                    for (i, val) in v.iter().enumerate() {
+                        comh[i] += *val;
+                    }
+                }
+                comh
+            })
+            .collect();
+        if profile {
+            println!("[LF+ Cm::prove] build comh: {:?}", t.elapsed());
+        }
+
+        absorb_comh(&comh, transcript);
+
+        let kappa = comh[0].len();
+        let log_kappa = log2(kappa) as usize;
+
+        let c = (0..2)
+            .map(|_| {
+                transcript
+                    .get_challenges(log_kappa)
+                    .into_iter()
+                    .map(|x| x.into())
+                    .collect::<Vec<R>>()
+            })
+            .collect::<Vec<_>>();
+        let h: Vec<Arc<Vec<R>>> = h_vecs.into_iter().map(Arc::new).collect();
+
+        let dpp = (0..l)
+            .map(|i| R::from(R::BaseRing::from(dp as u128).pow([i as u64])))
+            .collect::<Vec<_>>();
+        let xp = (0..d).map(|i| unit_monomial::<R>(i)).collect::<Vec<_>>();
+
+        let t = Instant::now();
+        let tensor_c0 = crate::utils::tensor(&c[0]);
+        let tensor_c1 = crate::utils::tensor(&c[1]);
+        let tensor_len = tensor_c0.len() * s_prime_flat.len() * dpp.len() * xp.len();
+        assert_eq!(tensor_c0.len(), tensor_c1.len());
+        if tensor_len > n {
+            panic!("t(z) tensor_len {} > n {}", tensor_len, n);
+        }
+        let t0_mle = StreamingMleEnum::Tensor4Padded {
+            t1: Arc::new(tensor_c0),
+            t2: Arc::new(s_prime_flat.clone()),
+            t3: Arc::new(dpp.clone()),
+            t4: Arc::new(xp.clone()),
+            tensor_len,
+            num_vars: self.rg.nvars,
+        };
+        let t1_mle = StreamingMleEnum::Tensor4Padded {
+            t1: Arc::new(tensor_c1),
+            t2: Arc::new(s_prime_flat.clone()),
+            t3: Arc::new(dpp.clone()),
+            t4: Arc::new(xp.clone()),
+            tensor_len,
+            num_vars: self.rg.nvars,
+        };
+        if profile {
+            println!(
+                "[LF+ Cm::prove] build t(z) streaming: {:?} (tensor_len={}, padded_to_n={})",
+                t.elapsed(),
+                tensor_len,
+                n
+            );
+        }
+
+        let t_m_arcs = Instant::now();
+        let m_arcs0: Vec<Arc<SparseMatrix<R::BaseRing>>> = M0.to_vec();
+        if profile {
+            println!(
+                "[LF+ Cm::prove] build shared m_arcs: {:?} (Mlen={})",
+                t_m_arcs.elapsed(),
+                M0.len()
+            );
+        }
+        let mats_const = true;
+
+        let (proof_a, evals_a, ro_a) = self.sumchecker_streaming_base(
+            &dcom,
+            &h,
+            &t0_mle,
+            &t1_mle,
+            &m_arcs0,
+            mats_const,
+            transcript,
+            profile,
+        );
+        let (proof_b, evals_b, ro_b) = self.sumchecker_streaming_base(
+            &dcom,
+            &h,
+            &t0_mle,
+            &t1_mle,
+            &m_arcs0,
+            mats_const,
+            transcript,
+            profile,
+        );
+
+        // Step 7 (unchanged)
+        let g = self
+            .rg
+            .instances
+            .iter()
+            .enumerate()
+            .map(|(i, inst)| {
+                let n = inst.tau.len();
+                debug_assert_eq!(inst.m_tau.len(), n);
+                debug_assert_eq!(h[i].len(), n);
+                debug_assert_eq!(inst.f.len(), n);
+
+                #[cfg(feature = "parallel")]
+                {
+                    use rayon::prelude::*;
+                    (0..n)
+                        .into_par_iter()
+                        .map(|j| {
+                            let r_tau = inst.tau[j];
+                            let r_mtau = inst.m_tau.get(j);
+                            let r_f = match &inst.f {
+                                WitnessVec::Ring(vr) => vr[j],
+                                WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                    R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                }
+                            };
+                            let r_h = h[i][j];
+                            (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                        })
+                        .collect::<Vec<R>>()
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    (0..n)
+                        .map(|j| {
+                            let r_tau = inst.tau[j];
+                            let r_mtau = inst.m_tau.get(j);
+                            let r_f = match &inst.f {
+                                WitnessVec::Ring(vr) => vr[j],
+                                WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                    R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                }
+                            };
+                            let r_h = h[i][j];
+                            (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                        })
+                        .collect::<Vec<R>>()
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let proof = CmProof {
+            dcom,
+            comh,
+            sumcheck_proofs: (proof_a, proof_b),
+            evals: (evals_a, evals_b),
+        };
+
+        let ro = ro_a.into_iter().zip(ro_b).collect::<Vec<_>>();
+        let x = proof.x(&s, ro);
+        let com = Com { g, x };
+
+        if profile {
+            println!("[LF+ Cm::prove] total: {:?}", t_total.elapsed());
+        }
+        (com, proof)
+    }
+
     fn sumchecker_streaming(
         &self,
         dcom: &Dcom<R>,
@@ -540,7 +924,7 @@ where
         let cm_lazy: usize = std::env::var("LF_PLUS_CM_LAZY_FIX")
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(2);
+            .unwrap_or(4);
         for (i, inst) in self.rg.instances.iter().enumerate() {
             // Build the base-scalar tables once and share them across:
             // - the direct MLEs for (tau, m_tau, f, h), and
@@ -933,15 +1317,402 @@ where
 
         (sumcheck_proof, evals, ro)
     }
+
+    fn sumchecker_streaming_base(
+        &self,
+        dcom: &Dcom<R>,
+        h: &[Arc<Vec<R>>],
+        t0_mle: &StreamingMleEnum<R>,
+        t1_mle: &StreamingMleEnum<R>,
+        m_arcs0: &[Arc<SparseMatrix<R::BaseRing>>],
+        mats_const: bool,
+        transcript: &mut impl Transcript<R>,
+        profile: bool,
+    ) -> (Proof<R>, Vec<InstanceEvals<R>>, Vec<R>) {
+        let t_sumcheck = Instant::now();
+        let nvars = self.rg.nvars;
+
+        let rc = transcript.get_challenge();
+        let L = self.rg.instances.len();
+
+        let mut mles = Vec::with_capacity(
+            1 + L * (4 + 4 * m_arcs0.len()) + 2,
+        );
+
+        let r0 = dcom.out.r.clone();
+        let one_minus_r0 = r0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
+        mles.push(StreamingMleEnum::EqBase {
+            scale: R::BaseRing::ONE,
+            r: r0,
+            one_minus_r: one_minus_r0,
+        });
+
+        let t_build_mles = Instant::now();
+        let cm_lazy: usize = std::env::var("LF_PLUS_CM_LAZY_FIX")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(4);
+
+        for (i, inst) in self.rg.instances.iter().enumerate() {
+            let tau0_arc: Arc<Vec<R::BaseRing>> = inst.tau.clone();
+            let mtau0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
+                inst.m_tau
+                    .as_dense_arc()
+                    .and_then(|v| try_as_base_scalars::<R>(v.as_ref()).map(Arc::new))
+            } else {
+                None
+            };
+            let f0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
+                match &inst.f {
+                    WitnessVec::ConstCoeffBase { values: v0, .. } => Some(v0.clone()),
+                    WitnessVec::Ring(vr) => try_as_base_scalars::<R>(vr.as_ref()).map(Arc::new),
+                }
+            } else {
+                None
+            };
+            let h0_arc: Option<Arc<Vec<R::BaseRing>>> =
+                if mats_const { try_as_base_scalars::<R>(h[i].as_ref()).map(Arc::new) } else { None };
+
+            let tau_cc = mats_const;
+            let mtau_cc = mats_const && mtau0_arc.is_some();
+            let f_cc = mats_const && f0_arc.is_some();
+            let h_cc = mats_const && h0_arc.is_some();
+
+            mles.push(StreamingMleEnum::BaseScalarArc {
+                evals: tau0_arc.clone(),
+                num_vars: nvars,
+                square: false,
+            });
+
+            let f_arc_ring: Option<Arc<Vec<R>>> = inst.f.as_ring_arc();
+            let h_arc_ring: Arc<Vec<R>> = h[i].clone();
+
+            if mtau_cc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: mtau0_arc.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                match &inst.m_tau {
+                    crate::rgchk::MonomialVec::Dense(v) => {
+                        let mle = StreamingMleEnum::DenseArc {
+                            evals: v.clone(),
+                            num_vars: nvars,
+                        };
+                        if cm_lazy > 0 {
+                            mles.push(StreamingMleEnum::LazyFixed {
+                                inner: Box::new(mle),
+                                num_vars: nvars,
+                                fixed: Vec::new(),
+                                weights: vec![R::BaseRing::ONE],
+                                max_lazy: cm_lazy,
+                            });
+                        } else {
+                            mles.push(mle);
+                        }
+                    }
+                    crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                        let mle = StreamingMleEnum::MonomialDigitsArc {
+                            digits: digits.clone(),
+                            exp_table: exp_table.clone(),
+                            num_vars: nvars,
+                        };
+                        if cm_lazy > 0 {
+                            mles.push(StreamingMleEnum::LazyFixed {
+                                inner: Box::new(mle),
+                                num_vars: nvars,
+                                fixed: Vec::new(),
+                                weights: vec![R::BaseRing::ONE],
+                                max_lazy: cm_lazy,
+                            });
+                        } else {
+                            mles.push(mle);
+                        }
+                    }
+                }
+            }
+
+            if f_cc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: f0_arc.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                mles.push(StreamingMleEnum::DenseArc {
+                    evals: f_arc_ring
+                        .as_ref()
+                        .expect("Ring witness required when f_cc is false")
+                        .clone(),
+                    num_vars: nvars,
+                });
+            }
+
+            if h_cc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: h0_arc.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                let mle = StreamingMleEnum::DenseArc {
+                    evals: h_arc_ring.clone(),
+                    num_vars: nvars,
+                };
+                if cm_lazy > 0 {
+                    mles.push(StreamingMleEnum::LazyFixed {
+                        inner: Box::new(mle),
+                        num_vars: nvars,
+                        fixed: Vec::new(),
+                        weights: vec![R::BaseRing::ONE],
+                        max_lazy: cm_lazy,
+                    });
+                } else {
+                    mles.push(mle);
+                }
+            }
+
+            if profile {
+                println!(
+                    "[LF+ Cm::sumchecker_streaming] const-coeff mat-vec flags (L_idx={}): mats_const={} tau_cc={} mtau_cc={} f_cc={} h_cc={}",
+                    i, mats_const, tau_cc, mtau_cc, f_cc, h_cc
+                );
+            }
+
+            for m0 in m_arcs0 {
+                // M * tau : base mat + base witness => base-scalar output
+                mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
+                    matrix: m0.clone(),
+                    witness0: tau0_arc.clone(),
+                    num_vars: nvars,
+                });
+
+                // M * m_tau
+                if mtau_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
+                        matrix: m0.clone(),
+                        witness0: mtau0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    match &inst.m_tau {
+                        crate::rgchk::MonomialVec::Dense(v) => {
+                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
+                                matrix0: m0.clone(),
+                                witness: v.clone(),
+                                num_vars: nvars,
+                            };
+                            if cm_lazy > 0 {
+                                mles.push(StreamingMleEnum::LazyFixed {
+                                    inner: Box::new(mle),
+                                    num_vars: nvars,
+                                    fixed: Vec::new(),
+                                    weights: vec![R::BaseRing::ONE],
+                                    max_lazy: cm_lazy,
+                                });
+                            } else {
+                                mles.push(mle);
+                            }
+                        }
+                        crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits {
+                                matrix0: m0.clone(),
+                                digits: digits.clone(),
+                                exp_table: exp_table.clone(),
+                                num_vars: nvars,
+                            };
+                            if cm_lazy > 0 {
+                                mles.push(StreamingMleEnum::LazyFixed {
+                                    inner: Box::new(mle),
+                                    num_vars: nvars,
+                                    fixed: Vec::new(),
+                                    weights: vec![R::BaseRing::ONE],
+                                    max_lazy: cm_lazy,
+                                });
+                            } else {
+                                mles.push(mle);
+                            }
+                        }
+                    }
+                }
+
+                // M * f
+                if f_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
+                        matrix: m0.clone(),
+                        witness0: f0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
+                        matrix0: m0.clone(),
+                        witness: f_arc_ring
+                            .as_ref()
+                            .expect("Ring witness required when f_cc is false")
+                            .clone(),
+                        num_vars: nvars,
+                    };
+                    mles.push(mle);
+                }
+
+                // M * h
+                if h_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
+                        matrix: m0.clone(),
+                        witness0: h0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
+                        matrix0: m0.clone(),
+                        witness: h_arc_ring.clone(),
+                        num_vars: nvars,
+                    };
+                    if cm_lazy > 0 {
+                        mles.push(StreamingMleEnum::LazyFixed {
+                            inner: Box::new(mle),
+                            num_vars: nvars,
+                            fixed: Vec::new(),
+                            weights: vec![R::BaseRing::ONE],
+                            max_lazy: cm_lazy,
+                        });
+                    } else {
+                        mles.push(mle);
+                    }
+                }
+            }
+        }
+
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build mles: {:?} (mles={})",
+                t_build_mles.elapsed(),
+                mles.len()
+            );
+        }
+
+        mles.push(t0_mle.clone());
+        mles.push(t1_mle.clone());
+
+        let Mlen = m_arcs0.len();
+
+        let t_rcps = Instant::now();
+        let mut rcps = vec![];
+        let mut rcp = R::BaseRing::ONE;
+        for _ in 0..L {
+            for _ in 0..4 {
+                rcps.push(rcp);
+                rcp *= rc;
+            }
+            for _ in 0..Mlen {
+                for _ in 0..4 {
+                    rcps.push(rcp);
+                    rcp *= rc;
+                }
+            }
+        }
+        rcps.push(rcp);
+        rcp *= rc;
+        rcps.push(rcp);
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build rc powers: {:?} (len={})",
+                t_rcps.elapsed(),
+                rcps.len()
+            );
+        }
+
+        let comb_fn = |vals: &[R]| -> R {
+            (0..L)
+                .map(|l| {
+                    let l_idx = 1 + l * (4 + 4 * Mlen);
+                    vals[0]
+                        * (vals[l_idx] * rcps[l_idx - 1]
+                            + vals[l_idx + 1] * rcps[l_idx]
+                            + vals[l_idx + 2] * rcps[l_idx + 1]
+                            + vals[l_idx + 3] * rcps[l_idx + 2]
+                            + (0..Mlen)
+                                .map(|i| {
+                                    let idx = l_idx + 4 + i * 4;
+                                    vals[idx] * rcps[idx - 1]
+                                        + vals[idx + 1] * rcps[idx]
+                                        + vals[idx + 2] * rcps[idx + 1]
+                                        + vals[idx + 3] * rcps[idx + 2]
+                                })
+                                .sum::<R>()
+                            + vals[vals.len() - 2] * rcps[rcps.len() - 2]
+                            + vals[vals.len() - 1] * rcps[rcps.len() - 1])
+                })
+                .sum::<R>()
+        };
+
+        let (sumcheck_proof, randomness, final_vals) =
+            StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 2, comb_fn);
+
+        let ro = randomness.into_iter().map(|x| x.into()).collect::<Vec<R>>();
+
+        let t_evals = Instant::now();
+        let evals = (0..L)
+            .map(|l| {
+                let mut e = Vec::with_capacity(1 + Mlen);
+                let l_idx = 1 + l * (4 + 4 * Mlen);
+                e.push([
+                    final_vals[l_idx],
+                    final_vals[l_idx + 1],
+                    final_vals[l_idx + 2],
+                    final_vals[l_idx + 3],
+                ]);
+                for i in 0..Mlen {
+                    let idx = l_idx + 4 + i * 4;
+                    e.push([
+                        final_vals[idx],
+                        final_vals[idx + 1],
+                        final_vals[idx + 2],
+                        final_vals[idx + 3],
+                    ]);
+                }
+                InstanceEvals(e)
+            })
+            .collect::<Vec<_>>();
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build evals structs: {:?}",
+                t_evals.elapsed()
+            );
+        }
+
+        let t_absorb = Instant::now();
+        absorb_evaluations(&evals, transcript);
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] absorb evals: {:?}",
+                t_absorb.elapsed()
+            );
+        }
+
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] sumcheck+evals: {:?} (mles={}, L={}, Mlen={})",
+                t_sumcheck.elapsed(),
+                final_vals.len(),
+                L,
+                Mlen
+            );
+        }
+
+        (sumcheck_proof, evals, ro)
+    }
 }
 
 impl<R: CoeffRing> CmProof<R>
 where
     R::BaseRing: Zq,
 {
-    pub fn verify(
+    #[inline]
+    pub fn verify_with_mlen(
         &self,
-        M: &[Arc<SparseMatrix<R>>],
+        mlen: usize,
         transcript: &mut impl Transcript<R>,
     ) -> Result<ComX<R>, SumCheckError<R>> {
         let k = self.dcom.dparams.k;
@@ -1034,7 +1805,7 @@ where
             |sumcheck_proof: &Proof<R>, evals: &[InstanceEvals<R>]| -> Result<Vec<R>, ()> {
                 let rc: R = transcript.get_challenge().into();
 
-                let z_idx = L * (4 + 4 * M.len());
+                let z_idx = L * (4 + 4 * mlen);
 
                 let claimed_sum = self
                     .dcom
@@ -1042,13 +1813,13 @@ where
                     .iter()
                     .enumerate()
                     .map(|(l, eval)| {
-                        let l_idx = l * (4 + 4 * M.len());
+                        let l_idx = l * (4 + 4 * mlen);
 
                         R::from(eval.a[0]) * rc.pow([l_idx as u64])
                             + eval.b[0] * rc.pow([l_idx as u64 + 1])
                             + eval.c[0] * rc.pow([l_idx as u64 + 2])
                             + u[l][0] * rc.pow([l_idx as u64 + 3])
-                            + (0..M.len())
+                            + (0..mlen)
                                 .map(|i| {
                                     let idx = l_idx + 4 + i * 4;
                                     R::from(eval.a[1 + i]) * rc.pow([idx as u64])
@@ -1073,7 +1844,7 @@ where
 
                 let r: Vec<R> = self.dcom.out.r.iter().map(|x| R::from(*x)).collect();
                 let ro: Vec<R> = subclaim.point.into_iter().map(|x| x.into()).collect();
-                
+
                 // OPTIMIZED: Use tensor structure for O(small) evaluation instead of O(n)
                 // The tensor product t(z) = tensor(c_z) ⊗ s' ⊗ d_powers ⊗ x_powers
                 // can be evaluated factor-by-factor in O(κ + k*d + ℓ + d) time.
@@ -1092,12 +1863,12 @@ where
                     .enumerate()
                     .map(|(l, el)| {
                         let el = &el.0;
-                        let l_idx = l * (4 + 4 * M.len());
+                        let l_idx = l * (4 + 4 * mlen);
                         eq * (el[0][0] * rc.pow([l_idx as u64])
                             + el[0][1] * rc.pow([l_idx as u64 + 1])
                             + el[0][2] * rc.pow([l_idx as u64 + 2])
                             + el[0][3] * rc.pow([l_idx as u64 + 3])
-                            + (0..M.len())
+                            + (0..mlen)
                                 .map(|i| {
                                     // M_i
                                     let M_evals = el[i + 1];
@@ -1125,6 +1896,14 @@ where
 
         // Step 6
         Ok(self.x(&s, ro))
+    }
+
+    pub fn verify(
+        &self,
+        M: &[Arc<SparseMatrix<R>>],
+        transcript: &mut impl Transcript<R>,
+    ) -> Result<ComX<R>, SumCheckError<R>> {
+        self.verify_with_mlen(M.len(), transcript)
     }
 
     pub fn x(&self, s: &[R], ro: Vec<(R, R)>) -> ComX<R> {

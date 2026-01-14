@@ -77,34 +77,26 @@ fn main() {
     );
     println!("  digest={:02x?}...", &cache.stats.digest[..8]);
 
-    // Materialize full (A,B,C) as SparseMatrix<R> (constant-coeff) by concatenating chunk rows.
+    // Materialize full (A,B,C) as SparseMatrix<F> (constant-coeff) by concatenating chunk rows.
     let t_mats = Instant::now();
     let total_rows = cache.num_chunks * chunk_size;
-    let mut a_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
-    let mut b_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
-    let mut c_rows: Vec<Vec<(R, usize)>> = Vec::with_capacity(total_rows);
+    let mut a_rows: Vec<Vec<(F, usize)>> = Vec::with_capacity(total_rows);
+    let mut b_rows: Vec<Vec<(F, usize)>> = Vec::with_capacity(total_rows);
+    let mut c_rows: Vec<Vec<(F, usize)>> = Vec::with_capacity(total_rows);
     #[cfg(feature = "parallel")]
     {
         use rayon::prelude::*;
+        type Rows = Vec<Vec<(F, usize)>>;
 
         // NOTE: `into_par_iter()` over a range is an IndexedParallelIterator, so `collect::<Vec<_>>()`
         // preserves order by `chunk_idx`. This keeps row ordering deterministic.
-        let chunks: Vec<(
-            Vec<Vec<(R, usize)>>,
-            Vec<Vec<(R, usize)>>,
-            Vec<Vec<(R, usize)>>,
-        )> = (0..cache.num_chunks)
+        let chunks: Vec<(Rows, Rows, Rows)> = (0..cache.num_chunks)
             .into_par_iter()
             .map(|chunk_idx| {
                 let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
                 debug_assert_eq!(a.nrows, chunk_size);
 
-                let conv = |m: stark_rings_linalg::SparseMatrix<F>| {
-                    m.coeffs
-                        .into_iter()
-                        .map(|row| row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect())
-                        .collect::<Vec<Vec<(R, usize)>>>()
-                };
+                let conv = |m: stark_rings_linalg::SparseMatrix<F>| m.coeffs;
 
                 (conv(a), conv(b), conv(c))
             })
@@ -123,19 +115,19 @@ fn main() {
             let [a, b, c] = cache.read_chunk(chunk_idx).expect("read_chunk");
             debug_assert_eq!(a.nrows, chunk_size);
             for row in a.coeffs {
-                a_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+                a_rows.push(row);
             }
             for row in b.coeffs {
-                b_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+                b_rows.push(row);
             }
             for row in c.coeffs {
-                c_rows.push(row.into_iter().map(|(cc, j)| (R::from(cc), j)).collect());
+                c_rows.push(row);
             }
         }
     }
-    let m_a = SparseMatrix::<R> { nrows: total_rows, ncols: cache.ncols, coeffs: a_rows };
-    let m_b = SparseMatrix::<R> { nrows: total_rows, ncols: cache.ncols, coeffs: b_rows };
-    let m_c = SparseMatrix::<R> { nrows: total_rows, ncols: cache.ncols, coeffs: c_rows };
+    let m_a = SparseMatrix::<F> { nrows: total_rows, ncols: cache.ncols, coeffs: a_rows };
+    let m_b = SparseMatrix::<F> { nrows: total_rows, ncols: cache.ncols, coeffs: b_rows };
+    let m_c = SparseMatrix::<F> { nrows: total_rows, ncols: cache.ncols, coeffs: c_rows };
     println!(
         "  build full mats: {:?} (nrows={} ncols={})",
         t_mats.elapsed(),
@@ -184,7 +176,7 @@ fn main() {
 
     // Build `ComR1CS` instance and run the full LF+ prover to produce a `PlusProof`.
     let t_setup = Instant::now();
-    let r1cs = latticefold::arith::r1cs::R1CS::<R> { l: 0, A: m_a, B: m_b, C: m_c };
+    let r1cs = latticefold::arith::r1cs::R1CS::<F> { l: 0, A: m_a, B: m_b, C: m_c };
     maybe_print_rss("after build r1cs struct");
 
     // Deterministic Ajtai commitment scheme (system parameter). Keep kappa=1 for now.
@@ -193,14 +185,14 @@ fn main() {
     let ajtai = AjtaiCommitmentScheme::<R>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, cache.ncols);
     maybe_print_rss("after init Ajtai scheme");
 
-    let cr1cs = latticefold_plus::r1cs::ComR1CS::from_f0_seeded(r1cs, f0, 0, &ajtai);
+    let cr1cs = latticefold_plus::r1cs::ComR1CSBase::<R>::from_f0_seeded_base(r1cs, f0, 0, &ajtai);
     maybe_print_rss("after ComR1CS::from_f0_seeded");
-    let m = cr1cs.x.matrices_arc();
+    let m0 = cr1cs.x.matrices_arc_base();
     maybe_print_rss("after matrices_arc");
 
     // LF+ parameters: boundedness base b=2^16,k=2, and a conservative decomp base B for Π_decomp.
     let we_params =
-        latticefold_plus::sp1_r1lf::sp1_default_we_params_for_r1lf_cache::<R>(&cache, kappa as u64, m.len() as u64)
+        latticefold_plus::sp1_r1lf::sp1_default_we_params_for_r1lf_cache::<R>(&cache, kappa as u64, m0.len() as u64)
             .expect("sp1_default_we_params_for_r1lf_cache");
     let dparams = latticefold_plus::rgchk::DecompParameters {
         b: (we_params.decomp_b as u128),
@@ -246,9 +238,9 @@ fn main() {
         latticefold_plus::we_statement::digest32_to_bits_field::<BFSmall>(d)
     };
 
-    let mut prover = latticefold_plus::plus::PlusProverSparse::init_seeded(
+    let mut prover = latticefold_plus::plus::PlusProverSparseBase::init_seeded_base(
         ajtai.clone(),
-        m.clone(),
+        m0.clone(),
         1,
         pparams.clone(),
         latticefold_plus::transcript::PoseidonTranscript::empty::<PC>(),
@@ -260,7 +252,7 @@ fn main() {
     maybe_print_rss("after setup full LF+");
 
     let t_prove = Instant::now();
-    let proof = prover.prove_sparse(std::slice::from_ref(&cr1cs));
+    let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
     println!("  PlusProverSparse::prove_sparse: {:?}", t_prove.elapsed());
     maybe_print_rss("after prove_sparse");
 
@@ -274,7 +266,9 @@ fn main() {
     for lp in &proof.lproof {
         lp.verify(&mut rec);
     }
-    proof.cmproof.verify(&m, &mut rec).expect("cm proof verify");
+    proof.cmproof
+        .verify_with_mlen(m0.len(), &mut rec)
+        .expect("cm proof verify");
     println!("  PlusVerifier::verify(record trace): {:?}", t_verify_record.elapsed());
     maybe_print_rss("after verify(record)");
     let trace = rec.trace().clone();
@@ -286,7 +280,7 @@ fn main() {
         &we_params,
         &public_inputs,
         &proof,
-        m.len(),
+        m0.len(),
         b_decomp,
     )
     .expect("build_we_dr1cs_for_plus_proof");

@@ -119,6 +119,14 @@ where
         witness0: Arc<Vec<R::BaseRing>>,
         num_vars: usize,
     },
+    /// y[row] = (M0 * w)[row] where `M0` has **base-ring coefficients** and `w` is ring-valued.
+    ///
+    /// This avoids storing constant-coeff matrices as full ring elements (huge win for d64).
+    SparseMatVecBaseCoeffRing {
+        matrix0: Arc<SparseMatrix<R::BaseRing>>,
+        witness: Arc<Vec<R>>,
+        num_vars: usize,
+    },
     /// Monomial vector given by small digits into `exp_table` (e.g. m_tau).
     MonomialDigitsArc {
         digits: Arc<Vec<u16>>,
@@ -128,6 +136,13 @@ where
     /// Sparse mat-vec where witness is monomial digits (e.g. M * m_tau).
     SparseMatVecMonomialDigits {
         matrix: Arc<SparseMatrix<R>>,
+        digits: Arc<Vec<u16>>,
+        exp_table: Arc<Vec<R>>,
+        num_vars: usize,
+    },
+    /// Sparse mat-vec where matrix is base-ring coeffs but witness is monomial digits.
+    SparseMatVecBaseCoeffMonomialDigits {
+        matrix0: Arc<SparseMatrix<R::BaseRing>>,
         digits: Arc<Vec<u16>>,
         exp_table: Arc<Vec<R>>,
         num_vars: usize,
@@ -190,8 +205,10 @@ where
             StreamingMleEnum::SparseMatVec { num_vars, .. } => *num_vars,
             StreamingMleEnum::SparseMatVecConstCoeff { num_vars, .. } => *num_vars,
             StreamingMleEnum::SparseMatVecConstCoeffBase { num_vars, .. } => *num_vars,
+            StreamingMleEnum::SparseMatVecBaseCoeffRing { num_vars, .. } => *num_vars,
             StreamingMleEnum::MonomialDigitsArc { num_vars, .. } => *num_vars,
             StreamingMleEnum::SparseMatVecMonomialDigits { num_vars, .. } => *num_vars,
+            StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits { num_vars, .. } => *num_vars,
             StreamingMleEnum::Tensor4Padded { num_vars, .. } => *num_vars,
             StreamingMleEnum::LazyFixed { num_vars, .. } => *num_vars,
         }
@@ -302,6 +319,7 @@ where
                 witness0,
                 ..
             } => eval0_sparse_matvec_const_coeff_base::<R>(matrix, witness0, index),
+            StreamingMleEnum::SparseMatVecBaseCoeffRing { .. } => self.eval_at_index(index).coeffs()[0],
             StreamingMleEnum::LazyFixed { .. } => self.eval_at_index(index).coeffs()[0],
             // Fallback: compute full ring value then project constant term.
             _ => self.eval_at_index(index).coeffs()[0],
@@ -389,6 +407,22 @@ where
             }
             StreamingMleEnum::SparseMatVecConstCoeff { .. } => R::from(self.eval0_at_index(index)),
             StreamingMleEnum::SparseMatVecConstCoeffBase { .. } => R::from(self.eval0_at_index(index)),
+            StreamingMleEnum::SparseMatVecBaseCoeffRing {
+                matrix0,
+                witness,
+                ..
+            } => {
+                if index >= matrix0.coeffs.len() {
+                    return R::ZERO;
+                }
+                let mut sum = R::ZERO;
+                for (coeff0, col_idx) in &matrix0.coeffs[index] {
+                    if *col_idx < witness.len() {
+                        sum += witness[*col_idx] * *coeff0;
+                    }
+                }
+                sum
+            }
             StreamingMleEnum::MonomialDigitsArc { digits, exp_table, .. } => {
                 let di = digits.get(index).copied().unwrap_or(0) as usize;
                 exp_table[di]
@@ -402,6 +436,24 @@ where
                     let cj = *col_idx;
                     if cj < digits.len() {
                         sum += *coeff * exp_table[digits[cj] as usize];
+                    }
+                }
+                sum
+            }
+            StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits {
+                matrix0,
+                digits,
+                exp_table,
+                ..
+            } => {
+                if index >= matrix0.coeffs.len() {
+                    return R::ZERO;
+                }
+                let mut sum = R::ZERO;
+                for (coeff0, col_idx) in &matrix0.coeffs[index] {
+                    let cj = *col_idx;
+                    if cj < digits.len() {
+                        sum += exp_table[digits[cj] as usize] * *coeff0;
                     }
                 }
                 sum
@@ -768,6 +820,14 @@ where
                 let next = self.fix_variable(r_ring);
                 *self = next;
             }
+            StreamingMleEnum::SparseMatVecBaseCoeffRing { .. } => {
+                let next = self.fix_variable(r_ring);
+                *self = next;
+            }
+            StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits { .. } => {
+                let next = self.fix_variable(r_ring);
+                *self = next;
+            }
             StreamingMleEnum::SparseMatVecConstCoeff {
                 matrix,
                 witness0,
@@ -1080,6 +1140,58 @@ where
             }
             StreamingMleEnum::SparseMatVecMonomialDigits { .. } => {
                 // After fixing, the result is a general dense table.
+                #[cfg(feature = "parallel")]
+                let new_evals: Vec<R> = {
+                    use rayon::prelude::*;
+                    (0..half)
+                        .into_par_iter()
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect()
+                };
+                #[cfg(not(feature = "parallel"))]
+                let new_evals: Vec<R> = (0..half)
+                    .map(|i| {
+                        let v0 = self.eval_at_index(i << 1);
+                        let v1 = self.eval_at_index((i << 1) | 1);
+                        (R::ONE - r) * v0 + r * v1
+                    })
+                    .collect();
+                StreamingMleEnum::DenseOwned {
+                    evals: new_evals,
+                    num_vars: nv - 1,
+                }
+            }
+            StreamingMleEnum::SparseMatVecBaseCoeffRing { .. } => {
+                #[cfg(feature = "parallel")]
+                let new_evals: Vec<R> = {
+                    use rayon::prelude::*;
+                    (0..half)
+                        .into_par_iter()
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect()
+                };
+                #[cfg(not(feature = "parallel"))]
+                let new_evals: Vec<R> = (0..half)
+                    .map(|i| {
+                        let v0 = self.eval_at_index(i << 1);
+                        let v1 = self.eval_at_index((i << 1) | 1);
+                        (R::ONE - r) * v0 + r * v1
+                    })
+                    .collect();
+                StreamingMleEnum::DenseOwned {
+                    evals: new_evals,
+                    num_vars: nv - 1,
+                }
+            }
+            StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits { .. } => {
                 #[cfg(feature = "parallel")]
                 let new_evals: Vec<R> = {
                     use rayon::prelude::*;

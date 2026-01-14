@@ -126,6 +126,27 @@ pub struct In<R: PolyRing> {
     pub sets: Vec<MonomialSet<R>>, // Ms and ms: n x m, or n
 }
 
+/// External matrices used by the LF+ set-check (coming from the surrounding protocol).
+///
+/// In the SP1/const-coeff regime, these matrices are naturally represented over the base ring.
+/// We allow passing them either as full ring matrices (`Ring`) or base-ring matrices (`Base`) to
+/// avoid catastrophic memory usage when `R::dimension()` is large (e.g. d64).
+#[derive(Clone, Copy, Debug)]
+pub enum ExternalMats<'a, R: PolyRing> {
+    Ring(&'a [Arc<SparseMatrix<R>>]),
+    Base(&'a [Arc<SparseMatrix<R::BaseRing>>]),
+}
+
+impl<'a, R: PolyRing> ExternalMats<'a, R> {
+    #[inline]
+    pub fn len(&self) -> usize {
+        match self {
+            ExternalMats::Ring(m) => m.len(),
+            ExternalMats::Base(m) => m.len(),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Out<R: PolyRing> {
     pub nvars: usize,
@@ -162,10 +183,11 @@ impl<R: OverField + PolyRing> In<R> {
     /// Proves sets rings are all unit monomials.
     /// Currently requires k >= 1 monomial matrices sets. TODO support other scenarios.
     /// If k > 1, sumcheck batching is employed.
-    pub fn set_check(&self, M: &[Arc<SparseMatrix<R>>], transcript: &mut impl Transcript<R>) -> Out<R> {
+    pub fn set_check(&self, M: ExternalMats<'_, R>, transcript: &mut impl Transcript<R>) -> Out<R> {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = Instant::now();
         maybe_print_rss("setchk: start");
+        let mlen = M.len();
 
         let Ms_sparse: Vec<&SparseMatrix<R>> = self
             .sets
@@ -547,81 +569,123 @@ impl<R: OverField + PolyRing> In<R> {
             Ring(Vec<Vec<Rr>>),
         }
 
-        let mats_const = M.iter().all(|m| is_const_coeff_sparse_matrix::<R>(m.as_ref()));
-        let y_mats: YMats<R> = if mats_const {
-            #[cfg(feature = "parallel")]
-            {
-                YMats::Base(
-                    M.par_iter()
-                        .map(|mi| {
-                            let mi = mi.as_ref();
-                            let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
-                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
-                                let w = eq_at(row_idx);
-                                for (coeff, col_idx) in row {
-                                    // Constant-coeff assumption: use only coeffs()[0].
-                                    y0[*col_idx] += coeff.coeffs()[0] * w;
+        let y_mats: YMats<R> = match M {
+            ExternalMats::Base(M0) => {
+                #[cfg(feature = "parallel")]
+                {
+                    YMats::Base(
+                        M0.par_iter()
+                            .map(|mi| {
+                                let mi = mi.as_ref();
+                                let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
+                                for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                    let w = eq_at(row_idx);
+                                    for (coeff0, col_idx) in row {
+                                        y0[*col_idx] += *coeff0 * w;
+                                    }
                                 }
-                            }
-                            y0
-                        })
-                        .collect(),
-                )
+                                y0
+                            })
+                            .collect(),
+                    )
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    YMats::Base(
+                        M0.iter()
+                            .map(|mi| {
+                                let mi = mi.as_ref();
+                                let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
+                                for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                    let w = eq_at(row_idx);
+                                    for (coeff0, col_idx) in row {
+                                        y0[*col_idx] += *coeff0 * w;
+                                    }
+                                }
+                                y0
+                            })
+                            .collect(),
+                    )
+                }
             }
-            #[cfg(not(feature = "parallel"))]
-            {
-                YMats::Base(
-                    M.iter()
-                        .map(|mi| {
-                            let mi = mi.as_ref();
-                            let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
-                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
-                                let w = eq_at(row_idx);
-                                for (coeff, col_idx) in row {
-                                    y0[*col_idx] += coeff.coeffs()[0] * w;
-                                }
-                            }
-                            y0
-                        })
-                        .collect(),
-                )
-            }
-        } else {
-            #[cfg(feature = "parallel")]
-            {
-                YMats::Ring(
-                    M.par_iter()
-                        .map(|mi| {
-                            let mi = mi.as_ref();
-                            let mut y = vec![R::ZERO; mi.ncols];
-                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
-                                let w = R::from(eq_at(row_idx));
-                                for (coeff, col_idx) in row {
-                                    y[*col_idx] += *coeff * w;
-                                }
-                            }
-                            y
-                        })
-                        .collect(),
-                )
-            }
-            #[cfg(not(feature = "parallel"))]
-            {
-                YMats::Ring(
-                    M.iter()
-                        .map(|mi| {
-                            let mi = mi.as_ref();
-                            let mut y = vec![R::ZERO; mi.ncols];
-                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
-                                let w = R::from(eq_at(row_idx));
-                                for (coeff, col_idx) in row {
-                                    y[*col_idx] += *coeff * w;
-                                }
-                            }
-                            y
-                        })
-                        .collect(),
-                )
+            ExternalMats::Ring(Mr) => {
+                let mats_const = Mr.iter().all(|m| is_const_coeff_sparse_matrix::<R>(m.as_ref()));
+                if mats_const {
+                    #[cfg(feature = "parallel")]
+                    {
+                        YMats::Base(
+                            Mr.par_iter()
+                                .map(|mi| {
+                                    let mi = mi.as_ref();
+                                    let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
+                                    for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                        let w = eq_at(row_idx);
+                                        for (coeff, col_idx) in row {
+                                            // Constant-coeff assumption: use only coeffs()[0].
+                                            y0[*col_idx] += coeff.coeffs()[0] * w;
+                                        }
+                                    }
+                                    y0
+                                })
+                                .collect(),
+                        )
+                    }
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        YMats::Base(
+                            Mr.iter()
+                                .map(|mi| {
+                                    let mi = mi.as_ref();
+                                    let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
+                                    for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                        let w = eq_at(row_idx);
+                                        for (coeff, col_idx) in row {
+                                            y0[*col_idx] += coeff.coeffs()[0] * w;
+                                        }
+                                    }
+                                    y0
+                                })
+                                .collect(),
+                        )
+                    }
+                } else {
+                    #[cfg(feature = "parallel")]
+                    {
+                        YMats::Ring(
+                            Mr.par_iter()
+                                .map(|mi| {
+                                    let mi = mi.as_ref();
+                                    let mut y = vec![R::ZERO; mi.ncols];
+                                    for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                        let w = R::from(eq_at(row_idx));
+                                        for (coeff, col_idx) in row {
+                                            y[*col_idx] += *coeff * w;
+                                        }
+                                    }
+                                    y
+                                })
+                                .collect(),
+                        )
+                    }
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        YMats::Ring(
+                            Mr.iter()
+                                .map(|mi| {
+                                    let mi = mi.as_ref();
+                                    let mut y = vec![R::ZERO; mi.ncols];
+                                    for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                        let w = R::from(eq_at(row_idx));
+                                        for (coeff, col_idx) in row {
+                                            y[*col_idx] += *coeff * w;
+                                        }
+                                    }
+                                    y
+                                })
+                                .collect(),
+                        )
+                    }
+                }
             }
         };
         if profile {
@@ -630,7 +694,7 @@ impl<R: OverField + PolyRing> In<R> {
 
         let t_e = Instant::now();
         let e: Vec<Vec<Vec<R>>> = {
-            let mut e = Vec::with_capacity(1 + M.len());
+            let mut e = Vec::with_capacity(1 + mlen);
 
             // e0:
             // - for dense matrices: e0[m][col] = Σ_row Md[row][col] * eq(row)
@@ -880,7 +944,7 @@ impl<R: OverField + PolyRing> In<R> {
             e.push(e0);
 
             // Mf
-            for mi in 0..M.len() {
+            for mi in 0..mlen {
                 let mut ei: Vec<Vec<R>> = Vec::with_capacity(Ms_dense.len() + Ms_digits.len() + MTs.len());
 
                 // Dense sets: Σ_row Md[row][col] * y[row]

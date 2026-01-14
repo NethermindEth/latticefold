@@ -259,6 +259,126 @@ where
         }
         (linb2, proof)
     }
+
+    /// Πmlin protocol, but with external matrices represented over the **base ring**.
+    ///
+    /// This avoids materializing `SparseMatrix<R>` when the matrices are constant-coefficient by
+    /// construction (SP1/R1LF regime), which is catastrophic at large ring dimension (e.g. d64).
+    pub fn mlin_seeded_base(
+        &self,
+        scheme: &AjtaiCommitmentScheme<R>,
+        M0: &[Arc<SparseMatrix<R::BaseRing>>],
+        transcript: &mut impl Transcript<R>,
+    ) -> (LinB2<R>, CmProof<R>) {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = Instant::now();
+        let n = self.lins[0].f.len();
+
+        let t = Instant::now();
+        let mut instances = Vec::with_capacity(self.lins.len());
+        let mut n_f0 = 0usize;
+        let mut n_ring = 0usize;
+        for (i, lin) in self.lins.iter().enumerate() {
+            match &lin.f {
+                crate::rgchk::WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                    n_f0 += 1;
+                    if profile {
+                        println!(
+                            "[LF+ Mlin::mlin_seeded_base] instance[{i}] witness=ConstCoeffBase(len={}) -> RgInstance::from_f0_seeded",
+                            v0.len()
+                        );
+                    }
+                    instances.push(RgInstance::from_f0_seeded(
+                        v0.clone(),
+                        scheme,
+                        &self.params.decomp,
+                    ));
+                }
+                crate::rgchk::WitnessVec::Ring(vr) => {
+                    n_ring += 1;
+                    if profile {
+                        println!(
+                            "[LF+ Mlin::mlin_seeded_base] instance[{i}] witness=Ring(len={}) -> RgInstance::from_f_seeded",
+                            vr.len()
+                        );
+                    }
+                    instances.push(RgInstance::from_f_seeded(
+                        vr.as_ref().clone(),
+                        scheme,
+                        &self.params.decomp,
+                    ));
+                }
+            }
+        }
+        if profile {
+            println!(
+                "[LF+ Mlin::mlin_seeded_base] build instances: {:?} (L={}, n={}, kappa={}, f0_instances={}, ring_instances={})",
+                t.elapsed(),
+                self.lins.len(),
+                n,
+                self.params.kappa,
+                n_f0,
+                n_ring
+            );
+        }
+
+        let rg = Rg {
+            nvars: log2(n) as usize,
+            instances,
+            dparams: self.params.decomp.clone(),
+        };
+        let cm = Cm { rg };
+
+        let t = Instant::now();
+        let (com, proof) = cm.prove_base(M0, transcript);
+        if profile {
+            println!("[LF+ Mlin::mlin_seeded_base] Cm::prove_base: {:?}", t.elapsed());
+        }
+
+        let cm_g = com
+            .x
+            .cm_g
+            .iter()
+            .fold(vec![R::zero(); self.params.kappa], |mut acc, cm| {
+                acc.iter_mut().zip(cm.iter()).for_each(|(acc_r, cm_r)| {
+                    *acc_r += cm_r;
+                });
+                acc
+            });
+
+        let nlin = com.x.vo[0].len();
+        let vo = com
+            .x
+            .vo
+            .iter()
+            .fold(vec![(R::zero(), R::zero()); nlin], |mut acc, v| {
+                v.iter().enumerate().for_each(|(i, v)| {
+                    acc[i].0 += v.0;
+                    acc[i].1 += v.1;
+                });
+                acc
+            });
+
+        let x = LinB2X {
+            cm_g,
+            ro: com.x.ro,
+            vo,
+        };
+
+        let g = com.g.iter().fold(vec![R::zero(); n], |mut acc, gi| {
+            acc.iter_mut().zip(gi.iter()).for_each(|(acc_r, gi_r)| {
+                *acc_r += gi_r;
+            });
+            acc
+        });
+        let linb2 = LinB2 { g, x };
+
+        if profile {
+            println!("[LF+ Mlin::mlin_seeded_base] total: {:?}", t_total.elapsed());
+        }
+
+        (linb2, proof)
+    }
 }
 
 #[cfg(test)]
