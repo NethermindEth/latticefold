@@ -25,7 +25,6 @@ use latticefold_plus::utils::estimate_bound;
 use latticefold_plus::utils::maybe_print_rss;
 use cyclotomic_rings::rings::FrogRingPoly as R;
 use stark_rings::PolyRing;
-use stark_rings::Ring;
 use stark_rings_linalg::SparseMatrix;
 use std::sync::Arc;
 use std::time::Instant;
@@ -212,8 +211,18 @@ fn main() {
     let lin_params = latticefold_plus::lin::LinParameters { kappa, decomp: dparams };
     // Non-magic decomposition radix bound (matches existing WE-gate/bench harness style).
     // This is *not* the SP1 lift boundedness base; it's the radix used by Π_decomp to split/recompose.
-    let sop = R::dimension() * 128;
-    let b_decomp: u128 = estimate_bound(sop, 1, R::dimension(), we_params.k as usize) + 1;
+    //
+    // IMPORTANT:
+    // Π_decomp splits each field element into exactly 2 digits in base `B` (see `decomp.rs`), so `B`
+    // must be large enough for the actual coefficient growth in this SP1/LF+ instance. Empirically,
+    // the bound analysis here was calibrated for the Frog d=64 parameterization; when switching the
+    // ring dimension (e.g. to d=16) the *same instance* can still require the d=64-calibrated `B`.
+    //
+    // We therefore keep the bound calibration dimension fixed at 64 for this SP1 harness, even if
+    // the ring type used in this run has a different dimension.
+    let d_bound = 64usize;
+    let sop = d_bound * 128;
+    let b_decomp: u128 = estimate_bound(sop, 1, d_bound, we_params.k as usize) + 1;
     let pparams = latticefold_plus::plus::PlusParameters { lin: lin_params, B: b_decomp };
 
     // Public statement binding: use the SP1 r1lf digest bits as public inputs (boolean field elems).
