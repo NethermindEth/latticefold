@@ -9,6 +9,7 @@ use stark_rings_linalg::Matrix;
 use rand_chacha::ChaCha20Rng;
 use rand::SeedableRng;
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 #[cfg(feature = "parallel")]
@@ -724,6 +725,204 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if fj0 != R::BaseRing::ZERO {
                                     acc[which][i] += aij * fj0;
                                 }
+                            }
+                        }
+                    }
+                    Ok(acc.into_iter().map(Commitment::from_vec_raw).collect())
+                }
+            }
+        }
+    }
+
+    /// Commit to `t` witnesses of length `n` where each witness entry is a **unit monomial**
+    /// given by a small digit index into an `exp_table`.
+    ///
+    /// This is a high-performance specialization for cyclotomic/negacyclic rings where
+    /// multiplying by a monomial is just a rotation+sign (O(d)), instead of a full ring mul.
+    ///
+    /// Transcript/commitment outputs are identical to calling `commit_many_with` with
+    /// `out[w] = exp_table[digits[w]]`, but much faster for large `n`.
+    pub fn commit_many_with_monomial_digits<F>(
+        &self,
+        n: usize,
+        t: usize,
+        exp_table: Arc<Vec<R>>,
+        fill_digit_at: F,
+    ) -> Result<Vec<Commitment<R>>, CommitmentError>
+    where
+        R: PolyRing + Send + Sync + Copy,
+        R::BaseRing: Ring + Send + Sync + Copy,
+        R: From<Vec<R::BaseRing>>,
+        F: Fn(usize, &mut [u16]) + Sync,
+    {
+        if t == 0 {
+            return Ok(vec![]);
+        }
+
+        // Precompute (shift, scale) for each exp_table entry if it is a monomial.
+        // This must hold for the SP1/LF+ digit alphabets we use.
+        let mon_info: Arc<Vec<(usize, R::BaseRing)>> = {
+            let mut info = Vec::with_capacity(exp_table.len());
+            for r in exp_table.iter() {
+                let coeffs = r.coeffs();
+                let mut found: Option<(usize, R::BaseRing)> = None;
+                for (i, &ci) in coeffs.iter().enumerate() {
+                    if ci != R::BaseRing::ZERO {
+                        if found.is_some() {
+                            panic!("commit_many_with_monomial_digits: exp_table entry is not monomial");
+                        }
+                        found = Some((i, ci));
+                    }
+                }
+                info.push(found.unwrap_or((0, R::BaseRing::ZERO)));
+            }
+            Arc::new(info)
+        };
+
+        #[inline]
+        fn mul_negacyclic_by_monomial<Rr>(
+            a: &Rr,
+            shift: usize,
+            scale: Rr::BaseRing,
+        ) -> Rr
+        where
+            Rr: PolyRing + From<Vec<Rr::BaseRing>>,
+            Rr::BaseRing: Ring + Copy,
+        {
+            if scale == Rr::BaseRing::ZERO {
+                return Rr::ZERO;
+            }
+            let ac = a.coeffs();
+            let d = ac.len();
+            if shift == 0 && scale == Rr::BaseRing::ONE {
+                return *a;
+            }
+            let mut out = vec![Rr::BaseRing::ZERO; d];
+            for i in 0..d {
+                let v = ac[i] * scale;
+                if v == Rr::BaseRing::ZERO {
+                    continue;
+                }
+                let j = i + shift;
+                if j < d {
+                    out[j] += v;
+                } else {
+                    // X^d = -1
+                    out[j - d] -= v;
+                }
+            }
+            out.into()
+        }
+
+        match &self.matrix {
+            AjtaiMatrix::Explicit(_) => {
+                // Fallback to generic path; explicit matrices are for small cases anyway.
+                self.commit_many_with(n, t, |j, out| {
+                    let mut digs = vec![0u16; t];
+                    fill_digit_at(j, &mut digs);
+                    for which in 0..t {
+                        out[which] = exp_table[digs[which] as usize];
+                    }
+                })
+            }
+            AjtaiMatrix::Seeded { seed, domain, kappa, n: n_expected } => {
+                if n != *n_expected {
+                    return Err(CommitmentError::WrongWitnessLength(n, *n_expected));
+                }
+
+                // SHA256 midstate optimization (same as `commit_many_with`).
+                let prefix_hasher = {
+                    let mut h = Sha256::new();
+                    h.update(b"AJTAI_COL_V1");
+                    h.update((domain.len() as u64).to_le_bytes());
+                    h.update(domain);
+                    h.update(seed);
+                    h
+                };
+
+                #[cfg(feature = "parallel")]
+                {
+                    let kappa = *kappa;
+                    let mon_info = mon_info.clone();
+                    let acc = cfg_into_iter!(0..n)
+                        .fold(
+                            || (
+                                vec![vec![R::ZERO; kappa]; t],
+                                vec![0u16; t],
+                                prefix_hasher.clone(),
+                            ),
+                            |(mut local, mut scratch, prefix), j| {
+                                scratch.fill(0u16);
+                                fill_digit_at(j, &mut scratch);
+
+                                // Sample Ajtai column element(s) once.
+                                let col_seed = {
+                                    let mut h = prefix.clone();
+                                    h.update((j as u64).to_le_bytes());
+                                    let out = h.finalize();
+                                    let mut s = [0u8; 32];
+                                    s.copy_from_slice(&out);
+                                    s
+                                };
+                                let mut rng = ChaCha20Rng::from_seed(col_seed);
+                                for i in 0..kappa {
+                                    let aij = R::rand(&mut rng);
+                                    for which in 0..t {
+                                        let dig = scratch[which] as usize;
+                                        let (shift, scale) = mon_info[dig];
+                                        if scale == R::BaseRing::ZERO {
+                                            continue;
+                                        }
+                                        local[which][i] += mul_negacyclic_by_monomial::<R>(&aij, shift, scale);
+                                    }
+                                }
+                                (local, scratch, prefix)
+                            },
+                        )
+                        .reduce(
+                            || (
+                                vec![vec![R::ZERO; kappa]; t],
+                                vec![0u16; t],
+                                prefix_hasher.clone(),
+                            ),
+                            |(mut a, scratch_a, prefix_a), (b, _scratch_b, _prefix_b)| {
+                                for which in 0..t {
+                                    for i in 0..kappa {
+                                        a[which][i] += b[which][i];
+                                    }
+                                }
+                                (a, scratch_a, prefix_a)
+                            },
+                        )
+                        .0;
+                    Ok(acc.into_iter().map(Commitment::from_vec_raw).collect())
+                }
+                #[cfg(not(feature = "parallel"))]
+                {
+                    let mut acc = vec![vec![R::ZERO; *kappa]; t];
+                    let mut scratch = vec![0u16; t];
+                    let prefix = prefix_hasher;
+                    for j in 0..n {
+                        scratch.fill(0u16);
+                        fill_digit_at(j, &mut scratch);
+                        let col_seed = {
+                            let mut h = prefix.clone();
+                            h.update((j as u64).to_le_bytes());
+                            let out = h.finalize();
+                            let mut s = [0u8; 32];
+                            s.copy_from_slice(&out);
+                            s
+                        };
+                        let mut rng = ChaCha20Rng::from_seed(col_seed);
+                        for i in 0..*kappa {
+                            let aij = R::rand(&mut rng);
+                            for which in 0..t {
+                                let dig = scratch[which] as usize;
+                                let (shift, scale) = mon_info[dig];
+                                if scale == R::BaseRing::ZERO {
+                                    continue;
+                                }
+                                acc[which][i] += mul_negacyclic_by_monomial::<R>(&aij, shift, scale);
                             }
                         }
                     }
