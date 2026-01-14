@@ -920,41 +920,30 @@ where
         // Commit monomial matrices (Ajtai seeded).
         let t = std::time::Instant::now();
         let exp0 = M_f[0].exp_table[zero_idx as usize];
-        let const_exp0_commit = scheme
-            .commit_many_with(n, 1, move |_row, out| {
-                out[0] = exp0;
+        // Major speed win: batch ALL k col0 vectors + the constant exp(0) vector in one Ajtai pass.
+        //
+        // This reduces PRG/seed-derivation work by ~k× (here k=7), while producing identical
+        // commitment vectors (thus identical transcripts).
+        let mfs = M_f.clone();
+        let cs = scheme
+            .commit_many_with(n, k + 1, move |row, out| {
+                // out[0..k) are the varying col=0 vectors for each digit-matrix k_i.
+                for ki in 0..k {
+                    out[ki] = mfs[ki].get(row, 0);
+                }
+                // out[k] is the constant exp(0) column (for cols 1..d-1).
+                out[k] = exp0;
             })
-            .expect("commit_many_with const exp(0) col")[0]
-            .as_ref()
-            .to_vec();
-        if profile {
-            println!(
-                "[LF+ RgInstance::from_f0_seeded] commit const exp(0) col: {:?}",
-                t.elapsed()
-            );
-        }
+            .expect("commit_many_with M_f col0 batch + const exp(0)");
 
-        let comM_f = M_f
-            .iter()
-            .map(|dm| {
+        let const_exp0_commit = cs[k].as_ref().to_vec();
+        let comM_f = (0..k)
+            .map(|ki| {
                 let mut mat = Matrix::zero(kappa, d);
-
-                // Commit col=0 (variable by row).
-                let c0 = scheme
-                    .commit_many_with(n, 1, {
-                        let dm = dm.clone();
-                        move |row, out| {
-                            out[0] = dm.get(row, 0);
-                        }
-                    })
-                    .expect("commit_many_with M_f col0")[0]
-                    .as_ref()
-                    .to_vec();
+                let c0 = cs[ki].as_ref();
                 for r in 0..kappa {
                     mat.vals[r][0] = c0[r];
                 }
-
-                // cols 1..d-1 are constant exp(0) in ConstCol0 mode.
                 for col in 1..d {
                     for r in 0..kappa {
                         mat.vals[r][col] = const_exp0_commit[r];
