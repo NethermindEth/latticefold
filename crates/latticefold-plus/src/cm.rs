@@ -623,72 +623,70 @@ where
             .collect::<Vec<_>>();
         let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
 
+        // Optional: avoid materializing the full length-2^n `h: Vec<R>` (big RSS jump).
+        // NOTE: this must be enabled explicitly, and only works when every `M_f` is `ConstCol0`.
+        let stream_h = std::env::var("LF_PLUS_CM_STREAM_H").ok().as_deref() == Some("1");
+        let mut h_mles_full: Option<Vec<Arc<StreamingMleEnum<R>>>> = None;
+
+        // Helpers for fast negacyclic-by-monomial multiplication in cyclotomic rings.
+        #[inline]
+        fn mon_info<Rr: PolyRing>(mono: &Rr) -> Option<(usize, Rr::BaseRing)>
+        where
+            Rr::BaseRing: Ring,
+        {
+            let coeffs = mono.coeffs();
+            let mut found: Option<(usize, Rr::BaseRing)> = None;
+            for (i, &ci) in coeffs.iter().enumerate() {
+                if ci != Rr::BaseRing::ZERO {
+                    if found.is_some() {
+                        return None;
+                    }
+                    found = Some((i, ci));
+                }
+            }
+            found
+        }
+        #[inline]
+        fn mul_negacyclic_by_monomial<Rr>(a: &Rr, shift: usize, scale: Rr::BaseRing) -> Rr
+        where
+            Rr: PolyRing,
+            Rr::BaseRing: Ring + Copy,
+        {
+            if scale == Rr::BaseRing::ZERO {
+                return Rr::ZERO;
+            }
+            let ac = a.coeffs();
+            let d = ac.len();
+            if shift == 0 && scale == Rr::BaseRing::ONE {
+                return *a;
+            }
+            let mut out = Rr::ZERO;
+            let outc = out.coeffs_mut();
+            for i in 0..d {
+                let v = ac[i] * scale;
+                if v == Rr::BaseRing::ZERO {
+                    continue;
+                }
+                let j = i + shift;
+                if j < d {
+                    outc[j] += v;
+                } else {
+                    outc[j - d] -= v;
+                }
+            }
+            out
+        }
+
         let t = Instant::now();
         maybe_print_rss("cm: build_h start");
-        let h_vecs: Vec<Vec<R>> = self
-            .rg
-            .instances
-            .iter()
-            .map(|inst| {
-                let n = 1 << self.rg.nvars;
+        // First, try streaming-h if enabled. If anything is not `ConstCol0`, we fall back to materializing.
+        let mut can_stream = stream_h;
+        if can_stream {
+            let mut hm = Vec::with_capacity(self.rg.instances.len());
+            for inst in self.rg.instances.iter() {
                 maybe_print_rss("cm: build_h one inst start");
-                // Same build-h as `prove` (does not depend on external M representation).
-                #[inline]
-                fn mon_info<Rr: PolyRing>(mono: &Rr) -> Option<(usize, Rr::BaseRing)>
-                where
-                    Rr::BaseRing: Ring,
-                {
-                    let coeffs = mono.coeffs();
-                    let mut found: Option<(usize, Rr::BaseRing)> = None;
-                    for (i, &ci) in coeffs.iter().enumerate() {
-                        if ci != Rr::BaseRing::ZERO {
-                            if found.is_some() {
-                                return None;
-                            }
-                            found = Some((i, ci));
-                        }
-                    }
-                    found
-                }
-                #[inline]
-                fn mul_negacyclic_by_monomial<Rr>(a: &Rr, shift: usize, scale: Rr::BaseRing) -> Rr
-                where
-                    Rr: PolyRing,
-                    Rr::BaseRing: Ring + Copy,
-                {
-                    if scale == Rr::BaseRing::ZERO {
-                        return Rr::ZERO;
-                    }
-                    let ac = a.coeffs();
-                    let d = ac.len();
-                    if shift == 0 && scale == Rr::BaseRing::ONE {
-                        return *a;
-                    }
-                    let mut out = Rr::ZERO;
-                    let outc = out.coeffs_mut();
-                    for i in 0..d {
-                        let v = ac[i] * scale;
-                        if v == Rr::BaseRing::ZERO {
-                            continue;
-                        }
-                        let j = i + shift;
-                        if j < d {
-                            outc[j] += v;
-                        } else {
-                            outc[j - d] -= v;
-                        }
-                    }
-                    out
-                }
-
-                struct Col0Precomp<Rr: PolyRing> {
-                    col0: Arc<Vec<u16>>,
-                    zero_idx: u16,
-                    term0_tab: Vec<Rr>,
-                    term_rest: Rr,
-                }
-
-                let mut pre = Vec::<Option<Col0Precomp<R>>>::with_capacity(inst.M_f.len());
+                let mut precomps: Vec<HCol0Precomp<R>> = Vec::with_capacity(inst.M_f.len());
+                let mut ok = true;
                 for (M, s_i) in inst.M_f.iter().zip(s_prime.iter()) {
                     match &M.digits {
                         crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
@@ -698,37 +696,129 @@ where
                             }
                             let s0 = s_i[0];
                             let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
-                            let term0_tab = mi_tab
-                                .iter()
-                                .map(|(shift, scale)| mul_negacyclic_by_monomial::<R>(&s0, *shift, *scale))
-                                .collect::<Vec<_>>();
+                            let term0_tab: Arc<Vec<R>> = Arc::new(
+                                mi_tab
+                                    .iter()
+                                    .map(|(shift, scale)| mul_negacyclic_by_monomial::<R>(&s0, *shift, *scale))
+                                    .collect::<Vec<_>>(),
+                            );
                             let (shift0, scale0) = mi_tab[*zero_idx as usize];
                             let term_rest = if shift0 == 0 && scale0 == R::BaseRing::ONE {
                                 rest_sum
                             } else {
                                 mul_negacyclic_by_monomial::<R>(&rest_sum, shift0, scale0)
                             };
-                            pre.push(Some(Col0Precomp {
+                            precomps.push(HCol0Precomp {
                                 col0: col0.clone(),
                                 zero_idx: *zero_idx,
                                 term0_tab,
                                 term_rest,
-                            }));
+                            });
                         }
-                        crate::setchk::DigitsBacking::Full(_) => pre.push(None),
+                        crate::setchk::DigitsBacking::Full(_) => {
+                            ok = false;
+                            break;
+                        }
                     }
                 }
+                if !ok {
+                    can_stream = false;
+                    break;
+                }
+                let mle = StreamingMleEnum::HFromMfDigitsConstCol0 {
+                    precomps: Arc::new(precomps),
+                    num_vars: self.rg.nvars,
+                };
+                hm.push(Arc::new(mle));
+                maybe_print_rss("cm: build_h one inst done");
+            }
+            if can_stream {
+                h_mles_full = Some(hm);
+                if profile {
+                    println!("[LF+ Cm::prove_base] stream_h active (no h materialization)");
+                }
+            } else if profile {
+                println!("[LF+ Cm::prove_base] stream_h requested but fell back (non-ConstCol0 M_f)");
+            }
+        }
 
-                #[cfg(feature = "parallel")]
-                let h = {
-                    use rayon::prelude::*;
-                    (0..n)
-                        .into_par_iter()
-                        .map(|row| {
+        // Materialize `h` only if streaming is disabled or fell back.
+        let h_vecs: Vec<Vec<R>> = if h_mles_full.is_none() {
+            self.rg
+                .instances
+                .iter()
+                .map(|inst| {
+                    let n = 1 << self.rg.nvars;
+                    maybe_print_rss("cm: build_h one inst start");
+                    // Reuse the optimized `ConstCol0` build-h logic from before.
+                    struct Col0Precomp<Rr: PolyRing> {
+                        col0: Arc<Vec<u16>>,
+                        zero_idx: u16,
+                        term0_tab: Vec<Rr>,
+                        term_rest: Rr,
+                    }
+                    let mut pre = Vec::<Option<Col0Precomp<R>>>::with_capacity(inst.M_f.len());
+                    for (M, s_i) in inst.M_f.iter().zip(s_prime.iter()) {
+                        match &M.digits {
+                            crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
+                                let mut mi_tab = Vec::with_capacity(M.exp_table.len());
+                                for r in M.exp_table.iter() {
+                                    mi_tab.push(mon_info::<R>(r).expect("exp_table entry must be monomial"));
+                                }
+                                let s0 = s_i[0];
+                                let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
+                                let term0_tab = mi_tab
+                                    .iter()
+                                    .map(|(shift, scale)| mul_negacyclic_by_monomial::<R>(&s0, *shift, *scale))
+                                    .collect::<Vec<_>>();
+                                let (shift0, scale0) = mi_tab[*zero_idx as usize];
+                                let term_rest = if shift0 == 0 && scale0 == R::BaseRing::ONE {
+                                    rest_sum
+                                } else {
+                                    mul_negacyclic_by_monomial::<R>(&rest_sum, shift0, scale0)
+                                };
+                                pre.push(Some(Col0Precomp {
+                                    col0: col0.clone(),
+                                    zero_idx: *zero_idx,
+                                    term0_tab,
+                                    term_rest,
+                                }));
+                            }
+                            crate::setchk::DigitsBacking::Full(_) => pre.push(None),
+                        }
+                    }
+                    #[cfg(feature = "parallel")]
+                    let h = {
+                        use rayon::prelude::*;
+                        (0..n)
+                            .into_par_iter()
+                            .map(|row| {
+                                let mut acc = R::ZERO;
+                                for (i, M) in inst.M_f.iter().enumerate() {
+                                    if let Some(p) = &pre[i] {
+                                        let dix =
+                                            p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
+                                        acc += p.term0_tab[dix] + p.term_rest;
+                                    } else {
+                                        let s_i = &s_prime[i];
+                                        for col in 0..M.ncols {
+                                            acc += M.get(row, col) * s_i[col];
+                                        }
+                                    }
+                                }
+                                acc
+                            })
+                            .collect::<Vec<_>>()
+                    };
+                    #[cfg(not(feature = "parallel"))]
+                    let h = {
+                        let mut h = vec![R::ZERO; n];
+                        for row in 0..n {
                             let mut acc = R::ZERO;
                             for (i, M) in inst.M_f.iter().enumerate() {
                                 if let Some(p) = &pre[i] {
-                                    let dix = p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
+                                    let dix =
+                                        p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
                                     acc += p.term0_tab[dix] + p.term_rest;
                                 } else {
                                     let s_i = &s_prime[i];
@@ -737,34 +827,17 @@ where
                                     }
                                 }
                             }
-                            acc
-                        })
-                        .collect::<Vec<_>>()
-                };
-                #[cfg(not(feature = "parallel"))]
-                let h = {
-                    let mut h = vec![R::ZERO; n];
-                    for row in 0..n {
-                        let mut acc = R::ZERO;
-                        for (i, M) in inst.M_f.iter().enumerate() {
-                            if let Some(p) = &pre[i] {
-                                let dix = p.col0.get(row).copied().unwrap_or(p.zero_idx) as usize;
-                                acc += p.term0_tab[dix] + p.term_rest;
-                            } else {
-                                let s_i = &s_prime[i];
-                                for col in 0..M.ncols {
-                                    acc += M.get(row, col) * s_i[col];
-                                }
-                            }
+                            h[row] = acc;
                         }
-                        h[row] = acc;
-                    }
+                        h
+                    };
+                    maybe_print_rss("cm: build_h one inst done");
                     h
-                };
-                maybe_print_rss("cm: build_h one inst done");
-                h
-            })
-            .collect();
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         if profile {
             println!("[LF+ Cm::prove] build h: {:?}", t.elapsed());
         }
@@ -810,7 +883,11 @@ where
                     .collect::<Vec<R>>()
             })
             .collect::<Vec<_>>();
-        let h: Vec<Arc<Vec<R>>> = h_vecs.into_iter().map(Arc::new).collect();
+        let h: Vec<Arc<Vec<R>>> = if h_mles_full.is_some() {
+            Vec::new()
+        } else {
+            h_vecs.into_iter().map(Arc::new).collect()
+        };
 
         let dpp = (0..l)
             .map(|i| R::from(R::BaseRing::from(dp as u128).pow([i as u64])))
@@ -860,78 +937,142 @@ where
             );
         }
         let mats_const = true;
-
-        let (proof_a, evals_a, ro_a) = self.sumchecker_streaming_base(
-            &dcom,
-            &h,
-            &t0_mle,
-            &t1_mle,
-            &m_arcs0,
-            mats_const,
-            transcript,
-            profile,
-        );
-        let (proof_b, evals_b, ro_b) = self.sumchecker_streaming_base(
-            &dcom,
-            &h,
-            &t0_mle,
-            &t1_mle,
-            &m_arcs0,
-            mats_const,
-            transcript,
-            profile,
-        );
-
-        // Step 7 (unchanged)
-        let g = self
-            .rg
-            .instances
-            .iter()
-            .enumerate()
-            .map(|(i, inst)| {
-                let n = inst.tau.len();
-                debug_assert_eq!(inst.m_tau.len(), n);
-                debug_assert_eq!(h[i].len(), n);
-                debug_assert_eq!(inst.f.len(), n);
-
-                #[cfg(feature = "parallel")]
-                {
-                    use rayon::prelude::*;
-                    (0..n)
-                        .into_par_iter()
-                        .map(|j| {
-                            let r_tau = inst.tau[j];
-                            let r_mtau = inst.m_tau.get(j);
-                            let r_f = match &inst.f {
-                                WitnessVec::Ring(vr) => vr[j],
-                                WitnessVec::ConstCoeffBase { values: v0, .. } => {
-                                    R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
-                                }
-                            };
-                            let r_h = h[i][j];
-                            (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
-                        })
-                        .collect::<Vec<R>>()
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    (0..n)
-                        .map(|j| {
-                            let r_tau = inst.tau[j];
-                            let r_mtau = inst.m_tau.get(j);
-                            let r_f = match &inst.f {
-                                WitnessVec::Ring(vr) => vr[j],
-                                WitnessVec::ConstCoeffBase { values: v0, .. } => {
-                                    R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
-                                }
-                            };
-                            let r_h = h[i][j];
-                            (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
-                        })
-                        .collect::<Vec<R>>()
-                }
-            })
-            .collect::<Vec<_>>();
+        let (proof_a, evals_a, ro_a, proof_b, evals_b, ro_b, g) = if let Some(hm) = h_mles_full.as_ref() {
+            let (p0, e0, r0) = self.sumchecker_streaming_base_hmle(
+                &dcom,
+                hm,
+                &t0_mle,
+                &t1_mle,
+                &m_arcs0,
+                mats_const,
+                transcript,
+                profile,
+            );
+            let (p1, e1, r1) = self.sumchecker_streaming_base_hmle(
+                &dcom,
+                hm,
+                &t0_mle,
+                &t1_mle,
+                &m_arcs0,
+                mats_const,
+                transcript,
+                profile,
+            );
+            let g = self
+                .rg
+                .instances
+                .iter()
+                .enumerate()
+                .map(|(i, inst)| {
+                    let n = inst.tau.len();
+                    let h_mle = hm[i].clone();
+                    #[cfg(feature = "parallel")]
+                    {
+                        use rayon::prelude::*;
+                        (0..n)
+                            .into_par_iter()
+                            .map(|j| {
+                                let r_tau = inst.tau[j];
+                                let r_mtau = inst.m_tau.get(j);
+                                let r_f = match &inst.f {
+                                    WitnessVec::Ring(vr) => vr[j],
+                                    WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                        R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                    }
+                                };
+                                let r_h = h_mle.eval_at_index(j);
+                                (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                            })
+                            .collect::<Vec<R>>()
+                    }
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        (0..n)
+                            .map(|j| {
+                                let r_tau = inst.tau[j];
+                                let r_mtau = inst.m_tau.get(j);
+                                let r_f = match &inst.f {
+                                    WitnessVec::Ring(vr) => vr[j],
+                                    WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                        R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                    }
+                                };
+                                let r_h = h_mle.eval_at_index(j);
+                                (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                            })
+                            .collect::<Vec<R>>()
+                    }
+                })
+                .collect::<Vec<_>>();
+            (p0, e0, r0, p1, e1, r1, g)
+        } else {
+            let (p0, e0, r0) = self.sumchecker_streaming_base(
+                &dcom,
+                &h,
+                &t0_mle,
+                &t1_mle,
+                &m_arcs0,
+                mats_const,
+                transcript,
+                profile,
+            );
+            let (p1, e1, r1) = self.sumchecker_streaming_base(
+                &dcom,
+                &h,
+                &t0_mle,
+                &t1_mle,
+                &m_arcs0,
+                mats_const,
+                transcript,
+                profile,
+            );
+            let g = self
+                .rg
+                .instances
+                .iter()
+                .enumerate()
+                .map(|(i, inst)| {
+                    let n = inst.tau.len();
+                    #[cfg(feature = "parallel")]
+                    {
+                        use rayon::prelude::*;
+                        (0..n)
+                            .into_par_iter()
+                            .map(|j| {
+                                let r_tau = inst.tau[j];
+                                let r_mtau = inst.m_tau.get(j);
+                                let r_f = match &inst.f {
+                                    WitnessVec::Ring(vr) => vr[j],
+                                    WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                        R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                    }
+                                };
+                                let r_h = h[i][j];
+                                (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                            })
+                            .collect::<Vec<R>>()
+                    }
+                    #[cfg(not(feature = "parallel"))]
+                    {
+                        (0..n)
+                            .map(|j| {
+                                let r_tau = inst.tau[j];
+                                let r_mtau = inst.m_tau.get(j);
+                                let r_f = match &inst.f {
+                                    WitnessVec::Ring(vr) => vr[j],
+                                    WitnessVec::ConstCoeffBase { values: v0, .. } => {
+                                        R::from(v0.get(j).copied().unwrap_or(R::BaseRing::ZERO))
+                                    }
+                                };
+                                let r_h = h[i][j];
+                                (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
+                            })
+                            .collect::<Vec<R>>()
+                    }
+                })
+                .collect::<Vec<_>>();
+            (p0, e0, r0, p1, e1, r1, g)
+        };
 
         let proof = CmProof {
             dcom,
@@ -1764,6 +1905,400 @@ where
 
         (sumcheck_proof, evals, ro)
     }
+
+    fn sumchecker_streaming_base_hmle(
+        &self,
+        dcom: &Dcom<R>,
+        h_mles_full: &[Arc<StreamingMleEnum<R>>],
+        t0_mle: &StreamingMleEnum<R>,
+        t1_mle: &StreamingMleEnum<R>,
+        m_arcs0: &[Arc<SparseMatrix<R::BaseRing>>],
+        mats_const: bool,
+        transcript: &mut impl Transcript<R>,
+        profile: bool,
+    ) -> (Proof<R>, Vec<InstanceEvals<R>>, Vec<R>) {
+        let t_sumcheck = Instant::now();
+        let nvars = self.rg.nvars;
+
+        let rc = transcript.get_challenge();
+        let L = self.rg.instances.len();
+        let Mlen = m_arcs0.len();
+
+        let mut mles = Vec::with_capacity(1 + L * (4 + 4 * Mlen) + 2);
+
+        let r0 = dcom.out.r.clone();
+        let one_minus_r0 = r0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
+        mles.push(StreamingMleEnum::EqBase {
+            scale: R::BaseRing::ONE,
+            r: r0,
+            one_minus_r: one_minus_r0,
+        });
+
+        let t_build_mles = Instant::now();
+        let cm_lazy: usize = std::env::var("LF_PLUS_CM_LAZY_FIX")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(4);
+
+        for (i, inst) in self.rg.instances.iter().enumerate() {
+            let tau0_arc: Arc<Vec<R::BaseRing>> = inst.tau.clone();
+            let mtau0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
+                inst.m_tau
+                    .as_dense_arc()
+                    .and_then(|v| try_as_base_scalars::<R>(v.as_ref()).map(Arc::new))
+            } else {
+                None
+            };
+            let f0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
+                match &inst.f {
+                    WitnessVec::ConstCoeffBase { values: v0, .. } => Some(v0.clone()),
+                    WitnessVec::Ring(vr) => try_as_base_scalars::<R>(vr.as_ref()).map(Arc::new),
+                }
+            } else {
+                None
+            };
+
+            let tau_cc = mats_const;
+            let mtau_cc = mats_const && mtau0_arc.is_some();
+            let f_cc = mats_const && f0_arc.is_some();
+            let h_cc = false; // h is derived and not const-coeff in the SP1 regime
+
+            mles.push(StreamingMleEnum::BaseScalarArc {
+                evals: tau0_arc.clone(),
+                num_vars: nvars,
+                square: false,
+            });
+
+            let f_arc_ring: Option<Arc<Vec<R>>> = inst.f.as_ring_arc();
+
+            // m_tau
+            if mtau_cc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: mtau0_arc.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                match &inst.m_tau {
+                    crate::rgchk::MonomialVec::Dense(v) => {
+                        let mle = StreamingMleEnum::DenseArc {
+                            evals: v.clone(),
+                            num_vars: nvars,
+                        };
+                        if cm_lazy > 0 {
+                            mles.push(StreamingMleEnum::LazyFixed {
+                                inner: Box::new(mle),
+                                num_vars: nvars,
+                                fixed: Vec::new(),
+                                weights: vec![R::BaseRing::ONE],
+                                max_lazy: cm_lazy,
+                            });
+                        } else {
+                            mles.push(mle);
+                        }
+                    }
+                    crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                        let mle = StreamingMleEnum::MonomialDigitsArc {
+                            digits: digits.clone(),
+                            exp_table: exp_table.clone(),
+                            num_vars: nvars,
+                        };
+                        if cm_lazy > 0 {
+                            mles.push(StreamingMleEnum::LazyFixed {
+                                inner: Box::new(mle),
+                                num_vars: nvars,
+                                fixed: Vec::new(),
+                                weights: vec![R::BaseRing::ONE],
+                                max_lazy: cm_lazy,
+                            });
+                        } else {
+                            mles.push(mle);
+                        }
+                    }
+                }
+            }
+
+            // f
+            if f_cc {
+                mles.push(StreamingMleEnum::BaseScalarArc {
+                    evals: f0_arc.as_ref().unwrap().clone(),
+                    num_vars: nvars,
+                    square: false,
+                });
+            } else {
+                let mle = StreamingMleEnum::DenseArc {
+                    evals: f_arc_ring.clone().unwrap(),
+                    num_vars: nvars,
+                };
+                if cm_lazy > 0 {
+                    mles.push(StreamingMleEnum::LazyFixed {
+                        inner: Box::new(mle),
+                        num_vars: nvars,
+                        fixed: Vec::new(),
+                        weights: vec![R::BaseRing::ONE],
+                        max_lazy: cm_lazy,
+                    });
+                } else {
+                    mles.push(mle);
+                }
+            }
+
+            // h (on demand)
+            if h_cc {
+                unreachable!("streaming-h path should not mark h as const-coeff");
+            } else {
+                let mle = (*h_mles_full[i]).clone();
+                if cm_lazy > 0 {
+                    mles.push(StreamingMleEnum::LazyFixed {
+                        inner: Box::new(mle),
+                        num_vars: nvars,
+                        fixed: Vec::new(),
+                        weights: vec![R::BaseRing::ONE],
+                        max_lazy: cm_lazy,
+                    });
+                } else {
+                    mles.push(mle);
+                }
+            }
+
+            // mat-vecs: for each external M
+            for m0 in m_arcs0 {
+                // M * tau
+                if tau_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
+                        matrix: m0.clone(),
+                        witness0: tau0_arc.clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    unreachable!("base path expects tau const-coeff");
+                }
+
+                // M * m_tau
+                if mtau_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
+                        matrix: m0.clone(),
+                        witness0: mtau0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    match &inst.m_tau {
+                        crate::rgchk::MonomialVec::Dense(v) => {
+                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
+                                matrix0: m0.clone(),
+                                witness: v.clone(),
+                                num_vars: nvars,
+                            };
+                            if cm_lazy > 0 {
+                                mles.push(StreamingMleEnum::LazyFixed {
+                                    inner: Box::new(mle),
+                                    num_vars: nvars,
+                                    fixed: Vec::new(),
+                                    weights: vec![R::BaseRing::ONE],
+                                    max_lazy: cm_lazy,
+                                });
+                            } else {
+                                mles.push(mle);
+                            }
+                        }
+                        crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits {
+                                matrix0: m0.clone(),
+                                digits: digits.clone(),
+                                exp_table: exp_table.clone(),
+                                num_vars: nvars,
+                            };
+                            if cm_lazy > 0 {
+                                mles.push(StreamingMleEnum::LazyFixed {
+                                    inner: Box::new(mle),
+                                    num_vars: nvars,
+                                    fixed: Vec::new(),
+                                    weights: vec![R::BaseRing::ONE],
+                                    max_lazy: cm_lazy,
+                                });
+                            } else {
+                                mles.push(mle);
+                            }
+                        }
+                    }
+                }
+
+                // M * f
+                if f_cc {
+                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
+                        matrix: m0.clone(),
+                        witness0: f0_arc.as_ref().unwrap().clone(),
+                        num_vars: nvars,
+                    });
+                } else {
+                    let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
+                        matrix0: m0.clone(),
+                        witness: f_arc_ring.clone().unwrap(),
+                        num_vars: nvars,
+                    };
+                    if cm_lazy > 0 {
+                        mles.push(StreamingMleEnum::LazyFixed {
+                            inner: Box::new(mle),
+                            num_vars: nvars,
+                            fixed: Vec::new(),
+                            weights: vec![R::BaseRing::ONE],
+                            max_lazy: cm_lazy,
+                        });
+                    } else {
+                        mles.push(mle);
+                    }
+                }
+
+                // M * h (h is another MLE)
+                let mle = StreamingMleEnum::SparseMatVecBaseCoeffFromMle {
+                    matrix0: m0.clone(),
+                    witness_mle: h_mles_full[i].clone(),
+                    num_vars: nvars,
+                };
+                if cm_lazy > 0 {
+                    mles.push(StreamingMleEnum::LazyFixed {
+                        inner: Box::new(mle),
+                        num_vars: nvars,
+                        fixed: Vec::new(),
+                        weights: vec![R::BaseRing::ONE],
+                        max_lazy: cm_lazy,
+                    });
+                } else {
+                    mles.push(mle);
+                }
+            }
+        }
+
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build mles: {:?} (mles={})",
+                t_build_mles.elapsed(),
+                mles.len()
+            );
+        }
+
+        mles.push(t0_mle.clone());
+        mles.push(t1_mle.clone());
+
+        // Pre-compute random-combinator powers
+        let t_rcps = Instant::now();
+        let mut rcps = vec![];
+        let mut rcp = R::BaseRing::ONE;
+        for _ in 0..L {
+            // [tau, m_tau, f, h]
+            for _ in 0..4 {
+                rcps.push(rcp);
+                rcp *= rc;
+            }
+            for _ in 0..Mlen {
+                // M_i * [tau, m_tau, f, h]
+                for _ in 0..4 {
+                    rcps.push(rcp);
+                    rcp *= rc;
+                }
+            }
+        }
+        rcps.push(rcp); // t(0)
+        rcp *= rc;
+        rcps.push(rcp); // t(1)
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build rc powers: {:?} (len={})",
+                t_rcps.elapsed(),
+                rcps.len()
+            );
+        }
+
+        let comb_fn = |vals: &[R]| -> R {
+            (0..L)
+                .map(|l| {
+                    let l_idx = 1 + l * (4 + 4 * Mlen);
+                    vals[0]
+                        * ( // eq
+                            vals[l_idx] * rcps[l_idx - 1] // tau
+                            + vals[l_idx + 1] * rcps[l_idx] // m_tau
+                            + vals[l_idx + 2] * rcps[l_idx + 1] // f
+                            + vals[l_idx + 3] * rcps[l_idx + 2] // h
+                            + (0..Mlen)
+                                .map(|i| {
+                                    let idx = l_idx + 4 + i * 4;
+                                    vals[idx] * rcps[idx - 1] // M_i * tau
+                                        + vals[idx + 1] * rcps[idx] // M_i * m_tau
+                                        + vals[idx + 2] * rcps[idx + 1] // M_i * f
+                                        + vals[idx + 3] * rcps[idx + 2] // M_i * h
+                                })
+                                .sum::<R>()
+                        )
+                        + (vals[l_idx] * vals[vals.len() - 2]) * rcps[vals.len() - 3] // tau * t(0)
+                        + (vals[l_idx] * vals[vals.len() - 1]) * rcps[vals.len() - 2] // tau * t(1)
+                })
+                .sum::<R>()
+        };
+
+        let t_sc = Instant::now();
+        let (sumcheck_proof, randomness, final_vals) =
+            StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 2, comb_fn);
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] streaming sumcheck: {:?}",
+                t_sc.elapsed()
+            );
+        }
+
+        let ro = randomness.into_iter().map(|x| x.into()).collect::<Vec<R>>();
+
+        let t_evals = Instant::now();
+        let evals = (0..L)
+            .map(|l| {
+                let mut e = Vec::with_capacity(1 + Mlen);
+                let l_idx = 1 + l * (4 + 4 * Mlen);
+                e.push([
+                    final_vals[l_idx],
+                    final_vals[l_idx + 1],
+                    final_vals[l_idx + 2],
+                    final_vals[l_idx + 3],
+                ]);
+                for i in 0..Mlen {
+                    let idx = l_idx + 4 + i * 4;
+                    e.push([
+                        final_vals[idx],
+                        final_vals[idx + 1],
+                        final_vals[idx + 2],
+                        final_vals[idx + 3],
+                    ]);
+                }
+                InstanceEvals(e)
+            })
+            .collect::<Vec<_>>();
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] build evals structs: {:?}",
+                t_evals.elapsed()
+            );
+        }
+
+        let t_absorb = Instant::now();
+        absorb_evaluations(&evals, transcript);
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] absorb evals: {:?}",
+                t_absorb.elapsed()
+            );
+        }
+
+        if profile {
+            println!(
+                "[LF+ Cm::sumchecker_streaming] sumcheck+evals: {:?} (mles={}, L={}, Mlen={})",
+                t_sumcheck.elapsed(),
+                final_vals.len(),
+                L,
+                Mlen
+            );
+        }
+
+        (sumcheck_proof, evals, ro)
+    }
+
     fn sumchecker_streaming_base(
         &self,
         dcom: &Dcom<R>,
