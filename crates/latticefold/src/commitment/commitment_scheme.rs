@@ -116,8 +116,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 #[cfg(feature = "parallel")]
                 {
                     let kappa = *kappa;
-                    let domain = domain.as_slice();
-                    let seed = *seed;
+                    // NOTE: `domain` and `seed` are already folded into `prefix_hasher`.
                     let acc = cfg_into_iter!(0..f.len())
                         .fold(
                             || (vec![R::ZERO; kappa], prefix_hasher.clone()),
@@ -235,8 +234,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 #[cfg(feature = "parallel")]
                 {
                     let kappa = *kappa;
-                    let domain = domain.as_slice();
-                    let seed = *seed;
+                    // NOTE: `domain` and `seed` are already folded into `prefix_hasher`.
                     let acc = cfg_into_iter!(0..n)
                         .fold(
                             || (vec![vec![R::ZERO; kappa]; t], vec![R::ZERO; t], prefix_hasher.clone()),

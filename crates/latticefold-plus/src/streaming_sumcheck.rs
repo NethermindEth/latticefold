@@ -705,6 +705,35 @@ where
                     num_vars: nv - 1,
                 }
             }
+            StreamingMleEnum::MonomialDigitsArc { .. } => {
+                // After fixing, the result is no longer guaranteed to be a pure monomial table,
+                // so we fall back to dense materialization.
+                let new_evals: Vec<R> = (0..half)
+                    .map(|i| {
+                        let v0 = self.eval_at_index(i << 1);
+                        let v1 = self.eval_at_index((i << 1) | 1);
+                        (R::ONE - r) * v0 + r * v1
+                    })
+                    .collect();
+                StreamingMleEnum::DenseOwned {
+                    evals: new_evals,
+                    num_vars: nv - 1,
+                }
+            }
+            StreamingMleEnum::SparseMatVecMonomialDigits { .. } => {
+                // After fixing, the result is a general dense table.
+                let new_evals: Vec<R> = (0..half)
+                    .map(|i| {
+                        let v0 = self.eval_at_index(i << 1);
+                        let v1 = self.eval_at_index((i << 1) | 1);
+                        (R::ONE - r) * v0 + r * v1
+                    })
+                    .collect();
+                StreamingMleEnum::DenseOwned {
+                    evals: new_evals,
+                    num_vars: nv - 1,
+                }
+            }
             StreamingMleEnum::Tensor4Padded { .. } => {
                 let new_evals: Vec<R> = (0..half)
                     .map(|i| {

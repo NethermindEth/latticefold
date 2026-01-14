@@ -382,7 +382,7 @@ impl<R: OverField + PolyRing> In<R> {
             let beta = transcript.get_challenge();
 
             let beta_pows = beta_pows::<R>(beta);
-            let (mut v0, m_len) = match mset {
+            let (v0, m_len) = match mset {
                 VecSet::Dense(m) => {
                     let mut v0 = vec![R::BaseRing::ZERO; m.len()];
                     for (i, r_i) in m.iter().enumerate() {

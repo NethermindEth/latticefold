@@ -438,7 +438,6 @@ where
                 square: false,
             });
 
-            let m_tau_arc_ring: Option<Arc<Vec<R>>> = inst.m_tau.as_dense_arc();
             let f_arc_ring: Option<Arc<Vec<R>>> = inst.f.as_ring_arc();
             let h_arc_ring: Arc<Vec<R>> = Arc::new(h[i].clone());
 
