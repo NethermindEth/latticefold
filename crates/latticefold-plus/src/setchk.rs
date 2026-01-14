@@ -1356,4 +1356,43 @@ mod tests {
         let mut ts = PoseidonTranscript::empty::<PC>();
         assert!(out.verify(&mut ts).is_err());
     }
+
+    #[test]
+    fn test_set_check_digits_bad() {
+        // Ensure the digit-backed (oracle) path rejects non-monomial entries.
+        //
+        // This is important for the SP1 regime where we heavily rely on DigitsMatrix/VectorDigits
+        // representations for performance.
+        let n = 8usize;
+        let nvars = ark_std::log2(n) as usize;
+        let d = R::dimension();
+
+        // exp_table[0] = 1 (monomial), exp_table[1] = 1 + X (NOT a monomial).
+        let exp0 = R::one();
+        let mut exp1 = R::one();
+        exp1.coeffs_mut()[1] = 1u128.into();
+        let exp_table: Arc<Vec<R>> = Arc::new(vec![exp0, exp1]);
+
+        // Put the bad entry in col=0 at one row; all other cols are treated as exp(0).
+        let mut col0 = vec![0u16; n];
+        col0[3] = 1u16;
+
+        let dm = DigitsMatrix::<R> {
+            nrows: n,
+            ncols: d,
+            digits: DigitsBacking::ConstCol0 { col0: Arc::new(col0), zero_idx: 0u16 },
+            exp_table,
+        };
+
+        let scin = In {
+            sets: vec![MonomialSet::DigitsMatrix(Arc::new(dm))],
+            nvars,
+        };
+
+        let mut ts = PoseidonTranscript::empty::<PC>();
+        let out = scin.set_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
+
+        let mut ts = PoseidonTranscript::empty::<PC>();
+        assert!(out.verify(&mut ts).is_err());
+    }
 }
