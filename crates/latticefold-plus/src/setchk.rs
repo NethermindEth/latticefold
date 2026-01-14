@@ -15,6 +15,26 @@ use std::time::Instant;
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+#[inline]
+fn is_const_coeff_ring<R: PolyRing>(x: &R) -> bool {
+    x.coeffs()
+        .iter()
+        .skip(1)
+        .all(|c| *c == <R as PolyRing>::BaseRing::ZERO)
+}
+
+#[inline]
+fn is_const_coeff_sparse_matrix<R: PolyRing>(m: &SparseMatrix<R>) -> bool {
+    for row in &m.coeffs {
+        for (c, _j) in row {
+            if !is_const_coeff_ring::<R>(c) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 // (legacy) build_eq_x_r is no longer used in the streaming prover path
 
 // cM: double commitment, commitment to M
@@ -442,40 +462,89 @@ impl<R: OverField + PolyRing> In<R> {
 
         // Precompute y_i = M_i^T * eq_r (so eval(M_i * row)(r) = <y_i, row>).
         //
-        // NOTE: we intentionally keep `eq_r` in the base ring to avoid allocating a length-2^n
-        // vector of full ring elements (important when scaling to many chunks in parallel).
-        let y_mats: Vec<Vec<R>> = {
+        // CRITICAL (Symphony lesson): if `M` is constant-coeff (SP1 regime), `y_i` is also
+        // constant-coeff. Storing it as `Vec<R>` blows up RAM for large `ncols` (e.g. 2^27 with d=64).
+        // We therefore store `y_i` in the **base ring** whenever possible.
+        enum YMats<Rr: PolyRing> {
+            Base(Vec<Vec<Rr::BaseRing>>),
+            Ring(Vec<Vec<Rr>>),
+        }
+
+        let mats_const = M.iter().all(|m| is_const_coeff_sparse_matrix::<R>(m.as_ref()));
+        let y_mats: YMats<R> = if mats_const {
             #[cfg(feature = "parallel")]
             {
-                M.par_iter()
-                    .map(|mi| {
-                        let mi = mi.as_ref();
-                        let mut y = vec![R::ZERO; mi.ncols];
-                        for (row_idx, row) in mi.coeffs.iter().enumerate() {
-                            let w = R::from(eq_at(row_idx));
-                            for (coeff, col_idx) in row {
-                                y[*col_idx] += *coeff * w;
+                YMats::Base(
+                    M.par_iter()
+                        .map(|mi| {
+                            let mi = mi.as_ref();
+                            let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
+                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                let w = eq_at(row_idx);
+                                for (coeff, col_idx) in row {
+                                    // Constant-coeff assumption: use only coeffs()[0].
+                                    y0[*col_idx] += coeff.coeffs()[0] * w;
+                                }
                             }
-                        }
-                        y
-                    })
-                    .collect()
+                            y0
+                        })
+                        .collect(),
+                )
             }
             #[cfg(not(feature = "parallel"))]
             {
-                M.iter()
-                    .map(|mi| {
-                        let mi = mi.as_ref();
-                        let mut y = vec![R::ZERO; mi.ncols];
-                        for (row_idx, row) in mi.coeffs.iter().enumerate() {
-                            let w = R::from(eq_at(row_idx));
-                            for (coeff, col_idx) in row {
-                                y[*col_idx] += *coeff * w;
+                YMats::Base(
+                    M.iter()
+                        .map(|mi| {
+                            let mi = mi.as_ref();
+                            let mut y0 = vec![R::BaseRing::ZERO; mi.ncols];
+                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                let w = eq_at(row_idx);
+                                for (coeff, col_idx) in row {
+                                    y0[*col_idx] += coeff.coeffs()[0] * w;
+                                }
                             }
-                        }
-                        y
-                    })
-                    .collect()
+                            y0
+                        })
+                        .collect(),
+                )
+            }
+        } else {
+            #[cfg(feature = "parallel")]
+            {
+                YMats::Ring(
+                    M.par_iter()
+                        .map(|mi| {
+                            let mi = mi.as_ref();
+                            let mut y = vec![R::ZERO; mi.ncols];
+                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                let w = R::from(eq_at(row_idx));
+                                for (coeff, col_idx) in row {
+                                    y[*col_idx] += *coeff * w;
+                                }
+                            }
+                            y
+                        })
+                        .collect(),
+                )
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                YMats::Ring(
+                    M.iter()
+                        .map(|mi| {
+                            let mi = mi.as_ref();
+                            let mut y = vec![R::ZERO; mi.ncols];
+                            for (row_idx, row) in mi.coeffs.iter().enumerate() {
+                                let w = R::from(eq_at(row_idx));
+                                for (coeff, col_idx) in row {
+                                    y[*col_idx] += *coeff * w;
+                                }
+                            }
+                            y
+                        })
+                        .collect(),
+                )
             }
         };
         if profile && profile_detail {
@@ -609,7 +678,7 @@ impl<R: OverField + PolyRing> In<R> {
             e.push(e0);
 
             // Mf
-            for (mi, y) in y_mats.iter().enumerate() {
+            for mi in 0..M.len() {
                 let mut ei: Vec<Vec<R>> = Vec::with_capacity(Ms_dense.len() + Ms_digits.len() + MTs.len());
 
                 // Dense sets: Σ_row Md[row][col] * y[row]
@@ -621,7 +690,10 @@ impl<R: OverField + PolyRing> In<R> {
                             || vec![R::ZERO; ncols],
                             |mut acc, row| {
                                 let row_vals = &Md.vals[row];
-                                let wy = y[row];
+                                let wy = match &y_mats {
+                                    YMats::Base(ys) => R::from(ys[mi][row]),
+                                    YMats::Ring(ys) => ys[mi][row],
+                                };
                                 for col in 0..ncols {
                                     acc[col] += row_vals[col] * wy;
                                 }
@@ -642,7 +714,11 @@ impl<R: OverField + PolyRing> In<R> {
                         .map(|col| {
                             let mut acc = R::ZERO;
                             for row in 0..nrows {
-                                acc += Md.vals[row][col] * y[row];
+                                let wy = match &y_mats {
+                                    YMats::Base(ys) => R::from(ys[mi][row]),
+                                    YMats::Ring(ys) => ys[mi][row],
+                                };
+                                acc += Md.vals[row][col] * wy;
                             }
                             acc
                         })
@@ -657,7 +733,10 @@ impl<R: OverField + PolyRing> In<R> {
                         .fold(
                             || vec![R::ZERO; ncols],
                             |mut acc, row| {
-                                let wy = y[row];
+                                let wy = match &y_mats {
+                                    YMats::Base(ys) => R::from(ys[mi][row]),
+                                    YMats::Ring(ys) => ys[mi][row],
+                                };
                                 for col in 0..ncols {
                                     acc[col] += Md.get(row, col) * wy;
                                 }
@@ -678,7 +757,11 @@ impl<R: OverField + PolyRing> In<R> {
                         .map(|col| {
                             let mut acc = R::ZERO;
                             for row in 0..nrows {
-                                acc += Md.get(row, col) * y[row];
+                                let wy = match &y_mats {
+                                    YMats::Base(ys) => R::from(ys[mi][row]),
+                                    YMats::Ring(ys) => ys[mi][row],
+                                };
+                                acc += Md.get(row, col) * wy;
                             }
                             acc
                         })
@@ -697,7 +780,11 @@ impl<R: OverField + PolyRing> In<R> {
                                 .map(|row| {
                                     let mut acc = R::ZERO;
                                     for &(rij, idx) in row {
-                                        acc += rij * y[idx];
+                                        let wy = match &y_mats {
+                                            YMats::Base(ys) => R::from(ys[mi][idx]),
+                                            YMats::Ring(ys) => ys[mi][idx],
+                                        };
+                                        acc += rij * wy;
                                     }
                                     acc
                                 })
@@ -716,7 +803,11 @@ impl<R: OverField + PolyRing> In<R> {
                                 .map(|row| {
                                     let mut acc = R::ZERO;
                                     for &(rij, idx) in row {
-                                        acc += rij * y[idx];
+                                        let wy = match &y_mats {
+                                            YMats::Base(ys) => R::from(ys[mi][idx]),
+                                            YMats::Ring(ys) => ys[mi][idx],
+                                        };
+                                        acc += rij * wy;
                                     }
                                     acc
                                 })
@@ -725,7 +816,6 @@ impl<R: OverField + PolyRing> In<R> {
                         .collect::<Vec<Vec<R>>>();
                     ei.extend(v);
                 }
-                let _ = mi;
                 e.push(ei);
             }
             e
