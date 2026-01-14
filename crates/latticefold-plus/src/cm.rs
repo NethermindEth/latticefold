@@ -166,6 +166,56 @@ where
                         // Hoist per-vector constants outside the per-row loop.
                         let s0 = s_i[0];
                         let rest_sum = s_i.iter().skip(1).copied().sum::<R>();
+
+                        // Further speed: exp_table entries are monomials, so multiplying by them can be
+                        // done as a negacyclic rotation+sign instead of a full ring mul.
+                        #[inline]
+                        fn mon_info<Rr: PolyRing>(mono: &Rr) -> Option<(usize, Rr::BaseRing)>
+                        where
+                            Rr::BaseRing: Ring,
+                        {
+                            let coeffs = mono.coeffs();
+                            let mut found: Option<(usize, Rr::BaseRing)> = None;
+                            for (i, &ci) in coeffs.iter().enumerate() {
+                                if ci != Rr::BaseRing::ZERO {
+                                    if found.is_some() {
+                                        return None;
+                                    }
+                                    found = Some((i, ci));
+                                }
+                            }
+                            found
+                        }
+                        #[inline]
+                        fn mul_negacyclic_by_monomial<Rr>(a: &Rr, shift: usize, scale: Rr::BaseRing) -> Rr
+                        where
+                            Rr: PolyRing + From<Vec<Rr::BaseRing>>,
+                            Rr::BaseRing: Ring + Copy,
+                        {
+                            if scale == Rr::BaseRing::ZERO {
+                                return Rr::ZERO;
+                            }
+                            let ac = a.coeffs();
+                            let d = ac.len();
+                            if shift == 0 && scale == Rr::BaseRing::ONE {
+                                return *a;
+                            }
+                            let mut out = vec![Rr::BaseRing::ZERO; d];
+                            for i in 0..d {
+                                let v = ac[i] * scale;
+                                if v == Rr::BaseRing::ZERO {
+                                    continue;
+                                }
+                                let j = i + shift;
+                                if j < d {
+                                    out[j] += v;
+                                } else {
+                                    // X^d = -1
+                                    out[j - d] -= v;
+                                }
+                            }
+                            out.into()
+                        }
                         #[cfg(feature = "parallel")]
                         {
                             use rayon::prelude::*;
@@ -177,7 +227,20 @@ where
                                             crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
                                                 let exp0 = M.exp_table[*zero_idx as usize];
                                                 let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
-                                                M.exp_table[dix] * s0 + exp0 * rest_sum
+                                                let mono = &M.exp_table[dix];
+                                                let term0 = if let Some((shift, scale)) = mon_info::<R>(mono) {
+                                                    mul_negacyclic_by_monomial::<R>(&s0, shift, scale)
+                                                } else {
+                                                    *mono * s0
+                                                };
+                                                let term_rest = if exp0 == R::ONE {
+                                                    rest_sum
+                                                } else if let Some((shift, scale)) = mon_info::<R>(&exp0) {
+                                                    mul_negacyclic_by_monomial::<R>(&rest_sum, shift, scale)
+                                                } else {
+                                                    exp0 * rest_sum
+                                                };
+                                                term0 + term_rest
                                             }
                                             crate::setchk::DigitsBacking::Full(_) => unreachable!(),
                                         }
@@ -202,7 +265,20 @@ where
                                 let exp0 = M.exp_table[*zero_idx as usize];
                                 for row in 0..n {
                                     let dix = col0.get(row).copied().unwrap_or(*zero_idx) as usize;
-                                    out[row] = M.exp_table[dix] * s0 + exp0 * rest_sum;
+                                    let mono = &M.exp_table[dix];
+                                    let term0 = if let Some((shift, scale)) = mon_info::<R>(mono) {
+                                        mul_negacyclic_by_monomial::<R>(&s0, shift, scale)
+                                    } else {
+                                        *mono * s0
+                                    };
+                                    let term_rest = if exp0 == R::ONE {
+                                        rest_sum
+                                    } else if let Some((shift, scale)) = mon_info::<R>(&exp0) {
+                                        mul_negacyclic_by_monomial::<R>(&rest_sum, shift, scale)
+                                    } else {
+                                        exp0 * rest_sum
+                                    };
+                                    out[row] = term0 + term_rest;
                                 }
                             } else {
                                 for row in 0..n {
