@@ -149,6 +149,27 @@ where
         tensor_len: usize,
         num_vars: usize,
     },
+    /// Lazily apply the first `max_lazy` variable fixes without materializing a dense half-table.
+    ///
+    /// This is used to **avoid the huge RSS jump** at the first fix in CM sumcheck by delaying
+    /// densification to a later round (so the materialized table is smaller by 2^max_lazy).
+    ///
+    /// Semantics: this represents the function
+    ///   g(x_high) = Σ_{b in {0,1}^k} inner( (x_high << k) | b ) * w[b]
+    /// where `k = fixed.len()` and `w` is the corresponding eq-weight table for the fixed bits.
+    ///
+    /// Once `fixed.len() == max_lazy`, the *next* fix triggers materialization into `DenseOwned`.
+    LazyFixed {
+        inner: Box<StreamingMleEnum<R>>,
+        /// Remaining variables in the *outer* function (excluding fixed prefix).
+        num_vars: usize,
+        /// Fixed prefix bits (LSB-first), stored as base-ring scalars.
+        fixed: Vec<R::BaseRing>,
+        /// Precomputed eq weights for the fixed prefix bits (length 2^fixed.len()).
+        weights: Vec<R::BaseRing>,
+        /// Maximum number of lazy fixed bits before materializing.
+        max_lazy: usize,
+    },
 }
 
 impl<R: OverField + PolyRing> StreamingMleEnum<R>
@@ -172,6 +193,7 @@ where
             StreamingMleEnum::MonomialDigitsArc { num_vars, .. } => *num_vars,
             StreamingMleEnum::SparseMatVecMonomialDigits { num_vars, .. } => *num_vars,
             StreamingMleEnum::Tensor4Padded { num_vars, .. } => *num_vars,
+            StreamingMleEnum::LazyFixed { num_vars, .. } => *num_vars,
         }
     }
 
@@ -280,6 +302,7 @@ where
                 witness0,
                 ..
             } => eval0_sparse_matvec_const_coeff_base::<R>(matrix, witness0, index),
+            StreamingMleEnum::LazyFixed { .. } => self.eval_at_index(index).coeffs()[0],
             // Fallback: compute full ring value then project constant term.
             _ => self.eval_at_index(index).coeffs()[0],
         }
@@ -406,6 +429,28 @@ where
                 let i2 = q % n2;
                 let i1 = q / n2;
                 t1[i1] * t2[i2] * t3[i3] * t4[i4]
+            }
+            StreamingMleEnum::LazyFixed {
+                inner,
+                fixed,
+                weights,
+                ..
+            } => {
+                // Combine along the fixed low bits.
+                let k = fixed.len();
+                if k == 0 {
+                    return inner.eval_at_index(index);
+                }
+                let mut acc = R::ZERO;
+                // index refers to the remaining high bits.
+                let base = index << k;
+                for (b, &w) in weights.iter().enumerate() {
+                    if w == R::BaseRing::ZERO {
+                        continue;
+                    }
+                    acc += inner.eval_at_index(base | b) * w;
+                }
+                acc
             }
         }
     }
@@ -802,6 +847,71 @@ where
                     unreachable!();
                 }
             }
+            StreamingMleEnum::LazyFixed {
+                inner,
+                num_vars,
+                fixed,
+                weights,
+                max_lazy,
+            } => {
+                // If we haven't reached the lazy threshold, just update the fixed-bit weights and shrink `num_vars`.
+                if fixed.len() < *max_lazy {
+                    fixed.push(r0);
+                    let mut next = Vec::with_capacity(weights.len() << 1);
+                    for &w in weights.iter() {
+                        next.push(w * (R::BaseRing::ONE - r0));
+                        next.push(w * r0);
+                    }
+                    *weights = next;
+                    *num_vars -= 1;
+                    return;
+                }
+
+                // Materialize the current outer function (with fixed bits applied) into a dense table,
+                // then fall through by re-invoking the fix on the dense table.
+                let cur_nv = *num_vars;
+                let len = 1usize << cur_nv;
+                let k = fixed.len();
+                let wtab = weights.clone(); // small (<= 2^max_lazy)
+                let inner_ref = inner.as_ref();
+
+                #[cfg(feature = "parallel")]
+                let dense = alloc_init_par(len, |i| {
+                    let base = i << k;
+                    let mut acc = R::ZERO;
+                    for (b, &w) in wtab.iter().enumerate() {
+                        if w == R::BaseRing::ZERO {
+                            continue;
+                        }
+                        acc += inner_ref.eval_at_index(base | b) * w;
+                    }
+                    acc
+                });
+                #[cfg(not(feature = "parallel"))]
+                let dense = {
+                    let mut out = vec![R::ZERO; len];
+                    for i in 0..len {
+                        let base = i << k;
+                        let mut acc = R::ZERO;
+                        for (b, &w) in wtab.iter().enumerate() {
+                            if w == R::BaseRing::ZERO {
+                                continue;
+                            }
+                            acc += inner_ref.eval_at_index(base | b) * w;
+                        }
+                        out[i] = acc;
+                    }
+                    out
+                };
+
+                // Replace self with a dense table for the already-fixed function.
+                *self = StreamingMleEnum::DenseOwned {
+                    evals: dense,
+                    num_vars: cur_nv,
+                };
+                // Now apply this fix to the dense table in-place.
+                self.fix_variable_in_place_base(r0);
+            }
         }
     }
 
@@ -1017,6 +1127,12 @@ where
                     evals: new_evals,
                     num_vars: nv - 1,
                 }
+            }
+            StreamingMleEnum::LazyFixed { .. } => {
+                // Use clone + in-place to keep logic centralized.
+                let mut c = self.clone();
+                c.fix_variable_in_place_base(r.coeffs()[0]);
+                c
             }
         }
     }

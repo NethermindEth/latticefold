@@ -537,6 +537,10 @@ where
         // `mats_const` is computed once in `prove` and threaded through to cover both sumchecks.
 
         let t_build_mles = Instant::now();
+        let cm_lazy: usize = std::env::var("LF_PLUS_CM_LAZY_FIX")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(2);
         for (i, inst) in self.rg.instances.iter().enumerate() {
             // Build the base-scalar tables once and share them across:
             // - the direct MLEs for (tau, m_tau, f, h), and
@@ -594,17 +598,39 @@ where
             } else {
                 match &inst.m_tau {
                     crate::rgchk::MonomialVec::Dense(v) => {
-                        mles.push(StreamingMleEnum::DenseArc {
+                        let mle = StreamingMleEnum::DenseArc {
                             evals: v.clone(),
                             num_vars: nvars,
-                        });
+                        };
+                        if cm_lazy > 0 {
+                            mles.push(StreamingMleEnum::LazyFixed {
+                                inner: Box::new(mle),
+                                num_vars: nvars,
+                                fixed: Vec::new(),
+                                weights: vec![R::BaseRing::ONE],
+                                max_lazy: cm_lazy,
+                            });
+                        } else {
+                            mles.push(mle);
+                        }
                     }
                     crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                        mles.push(StreamingMleEnum::MonomialDigitsArc {
+                        let mle = StreamingMleEnum::MonomialDigitsArc {
                             digits: digits.clone(),
                             exp_table: exp_table.clone(),
                             num_vars: nvars,
-                        });
+                        };
+                        if cm_lazy > 0 {
+                            mles.push(StreamingMleEnum::LazyFixed {
+                                inner: Box::new(mle),
+                                num_vars: nvars,
+                                fixed: Vec::new(),
+                                weights: vec![R::BaseRing::ONE],
+                                max_lazy: cm_lazy,
+                            });
+                        } else {
+                            mles.push(mle);
+                        }
                     }
                 }
             }
@@ -630,10 +656,21 @@ where
                     square: false,
                 });
             } else {
-                mles.push(StreamingMleEnum::DenseArc {
+                let mle = StreamingMleEnum::DenseArc {
                     evals: h_arc_ring.clone(),
                     num_vars: nvars,
-                });
+                };
+                if cm_lazy > 0 {
+                    mles.push(StreamingMleEnum::LazyFixed {
+                        inner: Box::new(mle),
+                        num_vars: nvars,
+                        fixed: Vec::new(),
+                        weights: vec![R::BaseRing::ONE],
+                        max_lazy: cm_lazy,
+                    });
+                } else {
+                    mles.push(mle);
+                }
             }
 
             if profile {
@@ -686,19 +723,41 @@ where
                 } else {
                     match &inst.m_tau {
                         crate::rgchk::MonomialVec::Dense(v) => {
-                            mles.push(StreamingMleEnum::SparseMatVec {
+                            let mle = StreamingMleEnum::SparseMatVec {
                                 matrix: m.clone(),
                                 witness: v.clone(),
                                 num_vars: nvars,
-                            });
+                            };
+                            if cm_lazy > 0 {
+                                mles.push(StreamingMleEnum::LazyFixed {
+                                    inner: Box::new(mle),
+                                    num_vars: nvars,
+                                    fixed: Vec::new(),
+                                    weights: vec![R::BaseRing::ONE],
+                                    max_lazy: cm_lazy,
+                                });
+                            } else {
+                                mles.push(mle);
+                            }
                         }
                         crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                            mles.push(StreamingMleEnum::SparseMatVecMonomialDigits {
+                            let mle = StreamingMleEnum::SparseMatVecMonomialDigits {
                                 matrix: m.clone(),
                                 digits: digits.clone(),
                                 exp_table: exp_table.clone(),
                                 num_vars: nvars,
-                            });
+                            };
+                            if cm_lazy > 0 {
+                                mles.push(StreamingMleEnum::LazyFixed {
+                                    inner: Box::new(mle),
+                                    num_vars: nvars,
+                                    fixed: Vec::new(),
+                                    weights: vec![R::BaseRing::ONE],
+                                    max_lazy: cm_lazy,
+                                });
+                            } else {
+                                mles.push(mle);
+                            }
                         }
                     }
                 }
@@ -727,11 +786,22 @@ where
                         num_vars: nvars,
                     });
                 } else {
-                    mles.push(StreamingMleEnum::SparseMatVec {
+                    let mle = StreamingMleEnum::SparseMatVec {
                         matrix: m.clone(),
                         witness: h_arc_ring.clone(),
                         num_vars: nvars,
-                    });
+                    };
+                    if cm_lazy > 0 {
+                        mles.push(StreamingMleEnum::LazyFixed {
+                            inner: Box::new(mle),
+                            num_vars: nvars,
+                            fixed: Vec::new(),
+                            weights: vec![R::BaseRing::ONE],
+                            max_lazy: cm_lazy,
+                        });
+                    } else {
+                        mles.push(mle);
+                    }
                 }
             }
         }
