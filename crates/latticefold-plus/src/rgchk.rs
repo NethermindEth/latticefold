@@ -983,22 +983,25 @@ where
 
         // Commit monomial matrices (Ajtai seeded).
         let t = std::time::Instant::now();
-        let exp0 = M_f[0].exp_table[zero_idx as usize];
-        // Major speed win: batch ALL k col0 vectors + the constant exp(0) vector in one Ajtai pass.
-        //
-        // This reduces PRG/seed-derivation work by ~k× (here k=7), while producing identical
-        // commitment vectors (thus identical transcripts).
+        // Major speed win: batch ALL k col0 vectors + the constant exp(0) vector in one Ajtai pass,
+        // using the **monomial-digit** specialization (rotation instead of full ring mul).
         let mfs = M_f.clone();
+        let exp_table = exp_table.clone();
         let cs = scheme
-            .commit_many_with(n, k + 1, move |row, out| {
-                // out[0..k) are the varying col=0 vectors for each digit-matrix k_i.
+            .commit_many_with_monomial_digits(n, k + 1, exp_table.clone(), move |row, out| {
                 for ki in 0..k {
-                    out[ki] = mfs[ki].get(row, 0);
+                    let dm = mfs[ki].as_ref();
+                    match &dm.digits {
+                        crate::setchk::DigitsBacking::ConstCol0 { col0, zero_idx } => {
+                            out[ki] = col0.get(row).copied().unwrap_or(*zero_idx);
+                        }
+                        crate::setchk::DigitsBacking::Full(_) => unreachable!("from_f0_seeded uses ConstCol0"),
+                    }
                 }
-                // out[k] is the constant exp(0) column (for cols 1..d-1).
-                out[k] = exp0;
+                // constant exp(0) digit
+                out[k] = zero_idx;
             })
-            .expect("commit_many_with M_f col0 batch + const exp(0)");
+            .expect("commit_many_with_monomial_digits (M_f col0 batch + const exp0)");
 
         let const_exp0_commit = cs[k].as_ref().to_vec();
         let comM_f = (0..k)
@@ -1073,11 +1076,10 @@ where
         let cm_f = cm_pair[0].as_ref().to_vec();
         let C_Mf = cm_pair[1].as_ref().to_vec();
         let cm_mtau = scheme
-            .commit_many_with(n, 1, {
+            .commit_many_with_monomial_digits(n, 1, exp_table.clone(), {
                 let digits = m_tau_digits.clone();
-                let exp_table = exp_table.clone();
                 move |j, out| {
-                    out[0] = exp_table[digits[j] as usize];
+                    out[0] = digits[j];
                 }
             })
             .expect("commit m_tau (digits)")[0]
