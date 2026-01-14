@@ -1,3 +1,4 @@
+use ark_ff::{BigInteger, PrimeField};
 use latticefold::transcript::Transcript;
 use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
@@ -190,6 +191,8 @@ where
     pub fn prove_sparse_base<L>(&mut self, comp: &[L]) -> PlusProof<R, L::Proof>
     where
         L: Linearize<R>,
+        R::BaseRing: PrimeField,
+        <R::BaseRing as PrimeField>::BigInt: BigInteger,
     {
         maybe_print_rss("PlusProverSparse::prove_sparse_base (start)");
         let mut lproof = Vec::with_capacity(comp.len());
@@ -210,7 +213,7 @@ where
             r: linb2.x.ro.clone(),
             M0: &self.M0,
         };
-        let (_linb, dproof) = decomp.decompose_seeded_base(&self.scheme, self.params.B);
+        let dproof = decomp.decompose_seeded_base_one_shot(&self.scheme, self.params.B);
         maybe_print_rss("PlusProverSparse::prove_sparse_base (after decompose_seeded)");
 
         let proof = PlusProof {

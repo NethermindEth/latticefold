@@ -1,4 +1,5 @@
 use ark_std::log2;
+use ark_ff::{BigInteger, PrimeField};
 use latticefold::commitment::AjtaiCommitmentScheme;
 use stark_rings::{
     balanced_decomposition::{recompose, Decompose},
@@ -16,6 +17,172 @@ pub type RxR<R> = (R, R);
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
+
+/// Packed representation for a length-`n` ring vector whose coefficients are small.
+///
+/// Layout: `coeffs[j * d + k]` stores the `k`-th base coefficient for entry `j`.
+/// We use this to avoid allocating `Vec<R>` for digit vectors during decomposition.
+#[derive(Clone, Debug)]
+enum PackedDigitVec<BR: Ring> {
+    I16 { coeffs: Vec<i16>, d: usize, n: usize, _br: core::marker::PhantomData<BR> },
+    I32 { coeffs: Vec<i32>, d: usize, n: usize, _br: core::marker::PhantomData<BR> },
+}
+
+impl<BR: Ring> PackedDigitVec<BR> {
+    #[inline]
+    fn new_i16(n: usize, d: usize) -> Self {
+        PackedDigitVec::I16 { coeffs: vec![0i16; n * d], d, n, _br: core::marker::PhantomData }
+    }
+
+    #[inline]
+    fn upgrade_to_i32(&mut self) {
+        if let PackedDigitVec::I16 { coeffs, d, n, .. } = self {
+            let mut out = Vec::<i32>::with_capacity(coeffs.len());
+            out.extend(coeffs.iter().map(|&x| x as i32));
+            *self = PackedDigitVec::I32 { coeffs: out, d: *d, n: *n, _br: core::marker::PhantomData };
+        }
+    }
+
+    #[inline]
+    fn dims(&self) -> (usize, usize) {
+        match self {
+            PackedDigitVec::I16 { d, n, .. } => (*d, *n),
+            PackedDigitVec::I32 { d, n, .. } => (*d, *n),
+        }
+    }
+
+    #[inline]
+    fn get_i64(&self, j: usize, k: usize) -> i64 {
+        match self {
+            PackedDigitVec::I16 { coeffs, d, .. } => coeffs[j * *d + k] as i64,
+            PackedDigitVec::I32 { coeffs, d, .. } => coeffs[j * *d + k] as i64,
+        }
+    }
+
+    #[inline]
+    fn fill_ring_at<Rr>(&self, j: usize, out: &mut Rr)
+    where
+        Rr: PolyRing<BaseRing = BR>,
+        BR: Ring + Copy,
+    {
+        let oc = out.coeffs_mut();
+        let d = oc.len();
+        let (_, n) = self.dims();
+        debug_assert!(j < n);
+        debug_assert_eq!(d, self.dims().0);
+        for k in 0..d {
+            let v = self.get_i64(j, k);
+            if v >= 0 {
+                oc[k] = BR::from(v as u128);
+            } else {
+                oc[k] = -BR::from((-v) as u128);
+            }
+        }
+    }
+
+    /// dst += scale * F1[j], where `F1` is represented in packed coefficients.
+    #[inline]
+    fn mul_add_into_ring<Rr>(&self, dst: &mut Rr, j: usize, scale: BR)
+    where
+        Rr: PolyRing<BaseRing = BR>,
+        BR: Ring + Copy,
+    {
+        if scale == BR::ZERO {
+            return;
+        }
+        let dc = dst.coeffs_mut();
+        let d = dc.len();
+        debug_assert_eq!(d, self.dims().0);
+        for k in 0..d {
+            let v = self.get_i64(j, k);
+            if v >= 0 {
+                dc[k] += BR::from(v as u128) * scale;
+            } else {
+                dc[k] -= BR::from((-v) as u128) * scale;
+            }
+        }
+    }
+
+    #[inline]
+    fn set_coeffs_from_ring<Rr>(&mut self, j: usize, x: &Rr)
+    where
+        Rr: PolyRing<BaseRing = BR>,
+        BR: PrimeField,
+        <BR as PrimeField>::BigInt: BigInteger,
+    {
+        #[inline]
+        fn br_to_i64_balanced<BRr: PrimeField>(x: BRr) -> i64
+        where
+            <BRr as PrimeField>::BigInt: BigInteger,
+        {
+            let rep = x.into_bigint();
+            let limbs = rep.as_ref();
+            // Convert canonical rep to u128 (we only expect small moduli in this codebase).
+            let mut v: u128 = 0;
+            let take = core::cmp::min(limbs.len(), 2);
+            for i in 0..take {
+                v |= (limbs[i] as u128) << (64 * i);
+            }
+            for i in take..limbs.len() {
+                debug_assert_eq!(limbs[i], 0, "unexpected large modulus limb in coefficient rep");
+            }
+
+            let modulus = BRr::MODULUS;
+            let mod_limbs = modulus.as_ref();
+            let mut q: u128 = 0;
+            let take_q = core::cmp::min(mod_limbs.len(), 2);
+            for i in 0..take_q {
+                q |= (mod_limbs[i] as u128) << (64 * i);
+            }
+            for i in take_q..mod_limbs.len() {
+                debug_assert_eq!(mod_limbs[i], 0, "unexpected large modulus limb");
+            }
+
+            // Map to balanced representative in (-q/2, q/2].
+            let half = q >> 1;
+            if v <= half {
+                v as i64
+            } else {
+                (v as i128 - q as i128) as i64
+            }
+        }
+
+        let xc = x.coeffs();
+        loop {
+            match self {
+                PackedDigitVec::I16 { coeffs, d, .. } => {
+                    debug_assert_eq!(xc.len(), *d);
+                    let base = j * *d;
+                    let mut ok = true;
+                    for k in 0..*d {
+                        let v = br_to_i64_balanced::<BR>(xc[k]);
+                        if v < i16::MIN as i64 || v > i16::MAX as i64 {
+                            ok = false;
+                            break;
+                        }
+                        coeffs[base + k] = v as i16;
+                    }
+                    if ok {
+                        return;
+                    }
+                    self.upgrade_to_i32();
+                }
+                PackedDigitVec::I32 { coeffs, d, .. } => {
+                    debug_assert_eq!(xc.len(), *d);
+                    let base = j * *d;
+                    for k in 0..*d {
+                        let v = br_to_i64_balanced::<BR>(xc[k]);
+                        if v < i32::MIN as i64 || v > i32::MAX as i64 {
+                            panic!("packed digit overflow: coefficient doesn't fit i32");
+                        }
+                        coeffs[base + k] = v as i32;
+                    }
+                    return;
+                }
+            }
+        }
+    }
+}
 
 #[inline]
 fn choose_t_low(nvars: usize) -> usize {
@@ -825,6 +992,475 @@ where
     R: Decompose + OverField,
     R::BaseRing: Zq,
 {
+    /// One-shot decomposition proof for the SP1/base regime.
+    ///
+    /// This is equivalent to `decompose_seeded_base`, but avoids materializing the second digit
+    /// vector `F1` as `Vec<R>`. Instead, we store `F1` in a packed coefficient form and decode
+    /// only when needed. This reduces peak RSS substantially and does not change the proof or
+    /// verifier transcript.
+    pub fn decompose_seeded_base_one_shot(
+        self,
+        scheme: &AjtaiCommitmentScheme<R>,
+        B: u128,
+    ) -> DecompProof<R>
+    where
+        R::BaseRing: PrimeField,
+        <R::BaseRing as PrimeField>::BigInt: BigInteger,
+    {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = Instant::now();
+        maybe_print_rss("decomp_seeded(one_shot): start");
+
+        let nvars = log2(scheme.width()) as usize;
+        let mut F0 = self.f;
+        let n = F0.len();
+        let d = R::dimension();
+
+        let use_i32 = B > (i16::MAX as u128);
+        let mut F1_packed: PackedDigitVec<R::BaseRing> = if use_i32 {
+            PackedDigitVec::I32 {
+                coeffs: vec![0i32; n * d],
+                d,
+                n,
+                _br: core::marker::PhantomData,
+            }
+        } else {
+            PackedDigitVec::new_i16(n, d)
+        };
+
+        #[cfg(feature = "parallel")]
+        {
+            const CHUNK: usize = 1 << 14;
+            match &mut F1_packed {
+                PackedDigitVec::I16 { coeffs, d: dd, .. } => {
+                    debug_assert_eq!(*dd, d);
+                    F0.par_chunks_mut(CHUNK)
+                        .zip(coeffs.par_chunks_mut(CHUNK * d))
+                        .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1_flat)| {
+                            for i in 0..c0.len() {
+                                let orig = std::mem::replace(&mut c0[i], R::ZERO);
+                                orig.decompose_to(B, tmp);
+                                c0[i] = tmp[0];
+                                let c1c = tmp[1].coeffs();
+                                let base = i * d;
+                                for k in 0..d {
+                                    let v = {
+                                        // Interpret coefficient as signed balanced integer.
+                                        let rep = c1c[k].into_bigint();
+                                        let limbs = rep.as_ref();
+                                        let mut vv: u128 = 0;
+                                        let take = core::cmp::min(limbs.len(), 2);
+                                        for t in 0..take {
+                                            vv |= (limbs[t] as u128) << (64 * t);
+                                        }
+                                        let modulus = <R::BaseRing as PrimeField>::MODULUS;
+                                        let mod_limbs = modulus.as_ref();
+                                        let mut q: u128 = 0;
+                                        let take_q = core::cmp::min(mod_limbs.len(), 2);
+                                        for t in 0..take_q {
+                                            q |= (mod_limbs[t] as u128) << (64 * t);
+                                        }
+                                        let half = q >> 1;
+                                        if vv <= half {
+                                            vv as i64
+                                        } else {
+                                            (vv as i128 - q as i128) as i64
+                                        }
+                                    };
+                                    debug_assert!(
+                                        v >= i16::MIN as i64 && v <= i16::MAX as i64,
+                                        "packed F1 coefficient out of i16 range"
+                                    );
+                                    c1_flat[base + k] = v as i16;
+                                }
+                            }
+                        });
+                }
+                PackedDigitVec::I32 { .. } => {
+                    // Rare case (very large B): fall back to the existing materialized implementation.
+                    // This preserves correctness/transcript but doesn't reduce memory.
+                    drop(F1_packed);
+                    let ((_linb0, _linb1), proof) = DecompBase { f: F0, r: self.r, M0: self.M0 }
+                        .decompose_seeded_base(scheme, B);
+                    return proof;
+                }
+            }
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let mut tmp = vec![R::ZERO; 2];
+            for i in 0..n {
+                let orig = std::mem::replace(&mut F0[i], R::ZERO);
+                orig.decompose_to(B, &mut tmp);
+                F0[i] = tmp[0];
+                F1_packed.set_coeffs_from_ring(i, &tmp[1]);
+            }
+        }
+        maybe_print_rss("decomp_seeded(one_shot): after decompose_to_packed");
+
+        let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
+        let r_b = self.r.iter().map(|rr| rr.1).collect::<Vec<_>>();
+
+        #[inline]
+        fn is_identity_matrix_base<BR: Ring>(m: &SparseMatrix<BR>) -> bool {
+            if m.nrows != m.ncols {
+                return false;
+            }
+            if m.coeffs.len() != m.nrows {
+                return false;
+            }
+            for (i, row) in m.coeffs.iter().enumerate() {
+                if row.len() != 1 {
+                    return false;
+                }
+                let (c, j) = row[0];
+                if j != i {
+                    return false;
+                }
+                if c != BR::ONE {
+                    return false;
+                }
+            }
+            true
+        }
+
+        #[inline]
+        fn eq_weights<Rr: PolyRing>(r: &[Rr]) -> Vec<Rr> {
+            let nvars = r.len();
+            let n = 1usize << nvars;
+            let mut cur = vec![Rr::ZERO; n];
+            let mut next = vec![Rr::ZERO; n];
+            cur[0] = Rr::ONE;
+            let mut len = 1usize;
+            let mut cur_is_cur = true;
+            for &rj in r.iter().rev() {
+                let om = Rr::ONE - rj;
+                let (src, dst) = if cur_is_cur {
+                    (&cur[..len], &mut next[..(2 * len)])
+                } else {
+                    (&next[..len], &mut cur[..(2 * len)])
+                };
+                for (i, &wi) in src.iter().enumerate() {
+                    dst[2 * i] = wi * om;
+                    dst[2 * i + 1] = wi * rj;
+                }
+                len <<= 1;
+                cur_is_cur = !cur_is_cur;
+            }
+            if cur_is_cur { cur } else { next }
+        }
+
+        #[inline]
+        fn is_const_coeff_ring<Rr: PolyRing>(x: &Rr) -> bool {
+            x.coeffs()
+                .iter()
+                .skip(1)
+                .all(|c| *c == <Rr as PolyRing>::BaseRing::ZERO)
+        }
+
+        #[inline]
+        fn dot_with_eq_ring<Rr: PolyRing>(f: &[Rr], eq: &[Rr]) -> Rr {
+            debug_assert_eq!(f.len(), eq.len());
+            #[cfg(feature = "parallel")]
+            {
+                f.par_iter()
+                    .zip(eq.par_iter())
+                    .map(|(&fx, &wx)| fx * wx)
+                    .reduce(|| Rr::ZERO, |a, b| a + b)
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                f.iter()
+                    .zip(eq.iter())
+                    .fold(Rr::ZERO, |acc, (&fx, &wx)| acc + fx * wx)
+            }
+        }
+
+        #[inline]
+        fn dot_with_eq_packed<Rr: PolyRing>(
+            f0: &[Rr],
+            f1_packed: &PackedDigitVec<Rr::BaseRing>,
+            eq: &[Rr],
+        ) -> Rr
+        where
+            Rr::BaseRing: Ring + Copy,
+        {
+            debug_assert_eq!(f0.len(), eq.len());
+            let mut acc = Rr::ZERO;
+            let mut tmp = Rr::ZERO;
+            for i in 0..f0.len() {
+                // f0 part not used here, but keep signature similar if we need both later.
+                let _ = &f0[i];
+                f1_packed.fill_ring_at(i, &mut tmp);
+                acc += tmp * eq[i];
+            }
+            acc
+        }
+
+        let vi_calc_pair = || {
+            let t_eq = Instant::now();
+            let (eq_a_ring, eq_b_ring, eq_plan_a, eq_plan_b) = if r_a
+                .iter()
+                .all(is_const_coeff_ring::<R>)
+                && r_b.iter().all(is_const_coeff_ring::<R>)
+            {
+                let r_a0 = r_a.iter().map(|x| x.coeffs()[0]).collect::<Vec<_>>();
+                let r_b0 = r_b.iter().map(|x| x.coeffs()[0]).collect::<Vec<_>>();
+
+                let one_minus_a0 =
+                    r_a0.iter().copied().map(|x| R::BaseRing::ONE - x).collect::<Vec<_>>();
+                let one_minus_b0 =
+                    r_b0.iter().copied().map(|x| R::BaseRing::ONE - x).collect::<Vec<_>>();
+                let t_low = choose_t_low(r_a0.len());
+
+                let low_a =
+                    build_eq_low_table_base::<R::BaseRing>(&r_a0[..t_low], &one_minus_a0[..t_low]);
+                let low_b =
+                    build_eq_low_table_base::<R::BaseRing>(&r_b0[..t_low], &one_minus_b0[..t_low]);
+                let low_mask = (1usize << t_low) - 1;
+                let scale_a = build_scale_high_base::<R::BaseRing>(&r_a0, &one_minus_a0, t_low);
+                let scale_b = build_scale_high_base::<R::BaseRing>(&r_b0, &one_minus_b0, t_low);
+
+                (
+                    None,
+                    None,
+                    Some((t_low, low_mask, low_a, scale_a)),
+                    Some((t_low, low_mask, low_b, scale_b)),
+                )
+            } else {
+                (Some(eq_weights::<R>(&r_a)), Some(eq_weights::<R>(&r_b)), None, None)
+            };
+            maybe_print_rss("decomp_seeded(one_shot): after eq_weights");
+            if profile {
+                println!(
+                    "[LF+ Decomp::decompose_seeded_base_one_shot] eq_weights: {:?} (nvars={})",
+                    t_eq.elapsed(),
+                    nvars
+                );
+            }
+
+            let t_fv = Instant::now();
+            let (fv0, fv1) = if let (
+                Some((t_low, low_mask, low_a, scale_a)),
+                Some((_, _, low_b, scale_b)),
+            ) = (eq_plan_a.as_ref(), eq_plan_b.as_ref())
+            {
+                let n = F0.len();
+                let eval_at = |idx: usize, low: &[R::BaseRing], scale: &[R::BaseRing]| -> R::BaseRing {
+                    eq_at_base::<R::BaseRing>(idx, low, scale, *low_mask, *t_low)
+                };
+                #[cfg(feature = "parallel")]
+                let (f0_a, f0_b, f1_a, f1_b) = (0..n)
+                    .into_par_iter()
+                    .fold(
+                        || (R::ZERO, R::ZERO, R::ZERO, R::ZERO),
+                        |(mut a0, mut b0, mut a1, mut b1), i| {
+                            let wa = eval_at(i, low_a, scale_a);
+                            let wb = eval_at(i, low_b, scale_b);
+                            a0 += F0[i] * wa;
+                            b0 += F0[i] * wb;
+                            F1_packed.mul_add_into_ring(&mut a1, i, wa);
+                            F1_packed.mul_add_into_ring(&mut b1, i, wb);
+                            (a0, b0, a1, b1)
+                        },
+                    )
+                    .reduce(
+                        || (R::ZERO, R::ZERO, R::ZERO, R::ZERO),
+                        |(a0, b0, a1, b1), (c0, d0, c1, d1)| (a0 + c0, b0 + d0, a1 + c1, b1 + d1),
+                    );
+                #[cfg(not(feature = "parallel"))]
+                let (f0_a, f0_b, f1_a, f1_b) = {
+                    let mut a0 = R::ZERO;
+                    let mut b0 = R::ZERO;
+                    let mut a1 = R::ZERO;
+                    let mut b1 = R::ZERO;
+                    for i in 0..n {
+                        let wa = eval_at(i, low_a, scale_a);
+                        let wb = eval_at(i, low_b, scale_b);
+                        a0 += F0[i] * wa;
+                        b0 += F0[i] * wb;
+                        F1_packed.mul_add_into_ring(&mut a1, i, wa);
+                        F1_packed.mul_add_into_ring(&mut b1, i, wb);
+                    }
+                    (a0, b0, a1, b1)
+                };
+                ((f0_a, f0_b), (f1_a, f1_b))
+            } else {
+                let ea = eq_a_ring.as_ref().unwrap();
+                let eb = eq_b_ring.as_ref().unwrap();
+                (
+                    (dot_with_eq_ring(&F0, ea), dot_with_eq_ring(&F0, eb)),
+                    (dot_with_eq_packed(&F0, &F1_packed, ea), dot_with_eq_packed(&F0, &F1_packed, eb)),
+                )
+            };
+            if profile {
+                println!(
+                    "[LF+ Decomp::decompose_seeded_base_one_shot] fv both: {:?}",
+                    t_fv.elapsed()
+                );
+            }
+
+            let t_mats = Instant::now();
+            let mut v0 = Vec::with_capacity(1 + self.M0.len());
+            let mut v1 = Vec::with_capacity(1 + self.M0.len());
+            v0.push(fv0);
+            v1.push(fv1);
+
+            for M_i in self.M0.iter().map(|x| x.as_ref()) {
+                if is_identity_matrix_base::<R::BaseRing>(M_i) {
+                    v0.push(fv0);
+                    v1.push(fv1);
+                    continue;
+                }
+                let (m0, m1) = if let (
+                    Some((t_low, low_mask, low_a, scale_a)),
+                    Some((_, _, low_b, scale_b)),
+                ) = (eq_plan_a.as_ref(), eq_plan_b.as_ref())
+                {
+                    let eval_at = |idx: usize, low: &[R::BaseRing], scale: &[R::BaseRing]| -> R::BaseRing {
+                        eq_at_base::<R::BaseRing>(idx, low, scale, *low_mask, *t_low)
+                    };
+                    #[cfg(feature = "parallel")]
+                    let (out0, out1) = M_i
+                        .coeffs
+                        .par_iter()
+                        .enumerate()
+                        .fold(
+                            || ((R::ZERO, R::ZERO), (R::ZERO, R::ZERO)),
+                            |(mut o0, mut o1), (row, terms)| {
+                                let wa0 = eval_at(row, low_a, scale_a);
+                                let wb0 = eval_at(row, low_b, scale_b);
+                                if wa0 == R::BaseRing::ZERO && wb0 == R::BaseRing::ZERO {
+                                    return (o0, o1);
+                                }
+                                let mut s0 = R::ZERO;
+                                let mut s1 = R::ZERO;
+                                for (c0, j) in terms {
+                                    s0 += F0[*j] * *c0;
+                                    F1_packed.mul_add_into_ring(&mut s1, *j, *c0);
+                                }
+                                o0.0 += s0 * wa0;
+                                o0.1 += s0 * wb0;
+                                o1.0 += s1 * wa0;
+                                o1.1 += s1 * wb0;
+                                (o0, o1)
+                            },
+                        )
+                        .reduce(
+                            || ((R::ZERO, R::ZERO), (R::ZERO, R::ZERO)),
+                            |(a0, a1), (b0, b1)| {
+                                ((a0.0 + b0.0, a0.1 + b0.1), (a1.0 + b1.0, a1.1 + b1.1))
+                            },
+                        );
+                    #[cfg(not(feature = "parallel"))]
+                    let (out0, out1) = {
+                        let mut out0 = (R::ZERO, R::ZERO);
+                        let mut out1 = (R::ZERO, R::ZERO);
+                        for (row, terms) in M_i.coeffs.iter().enumerate() {
+                            let wa0 = eval_at(row, low_a, scale_a);
+                            let wb0 = eval_at(row, low_b, scale_b);
+                            if wa0 == R::BaseRing::ZERO && wb0 == R::BaseRing::ZERO {
+                                continue;
+                            }
+                            let mut s0 = R::ZERO;
+                            let mut s1 = R::ZERO;
+                            for (c0, j) in terms {
+                                s0 += F0[*j] * *c0;
+                                F1_packed.mul_add_into_ring(&mut s1, *j, *c0);
+                            }
+                            out0.0 += s0 * wa0;
+                            out0.1 += s0 * wb0;
+                            out1.0 += s1 * wa0;
+                            out1.1 += s1 * wb0;
+                        }
+                        (out0, out1)
+                    };
+                    (out0, out1)
+                } else {
+                    let ea = eq_a_ring.as_ref().unwrap();
+                    let eb = eq_b_ring.as_ref().unwrap();
+                    // Same as `eval_sparse_mat0_two_vecs_at_two_points`, but with `F1` packed.
+                    let mut out0 = (R::ZERO, R::ZERO);
+                    let mut out1 = (R::ZERO, R::ZERO);
+                    for (row, terms) in M_i.coeffs.iter().enumerate() {
+                        let wa = ea[row];
+                        let wb = eb[row];
+                        if wa == R::ZERO && wb == R::ZERO {
+                            continue;
+                        }
+                        let mut s0 = R::ZERO;
+                        let mut s1 = R::ZERO;
+                        for (c0, j) in terms {
+                            s0 += F0[*j] * *c0;
+                            F1_packed.mul_add_into_ring(&mut s1, *j, *c0);
+                        }
+                        out0.0 += wa * s0;
+                        out0.1 += wb * s0;
+                        out1.0 += wa * s1;
+                        out1.1 += wb * s1;
+                    }
+                    (out0, out1)
+                };
+                v0.push(m0);
+                v1.push(m1);
+            }
+            if profile {
+                println!(
+                    "[LF+ Decomp::decompose_seeded_base_one_shot] mats: {:?} (Mlen={})",
+                    t_mats.elapsed(),
+                    self.M0.len()
+                );
+            }
+            maybe_print_rss("decomp_seeded(one_shot): after v0/v1 mats");
+            (v0, v1)
+        };
+
+        if profile {
+            println!(
+                "[LF+ Decomp::decompose_seeded_base_one_shot] setup+split: {:?} (nvars={}, Mlen={})",
+                t_total.elapsed(),
+                nvars,
+                self.M0.len()
+            );
+        }
+
+        let t = Instant::now();
+        let (v0, v1) = vi_calc_pair();
+        if profile {
+            println!(
+                "[LF+ Decomp::decompose_seeded_base_one_shot] compute v0/v1: {:?}",
+                t.elapsed()
+            );
+        }
+        maybe_print_rss("decomp_seeded(one_shot): after compute v0/v1");
+
+        let t = Instant::now();
+        let C0 = scheme.commit(&F0).unwrap().as_ref().to_vec();
+        let C1 = {
+            let mut out = scheme
+                .commit_many_with(n, 1, |j, vals| {
+                    let mut tmp = R::ZERO;
+                    F1_packed.fill_ring_at(j, &mut tmp);
+                    vals[0] = tmp;
+                })
+                .unwrap();
+            out.remove(0).as_ref().to_vec()
+        };
+        if profile {
+            println!(
+                "[LF+ Decomp::decompose_seeded_base_one_shot] commitments C0/C1: {:?}",
+                t.elapsed()
+            );
+            println!(
+                "[LF+ Decomp::decompose_seeded_base_one_shot] total: {:?}",
+                t_total.elapsed()
+            );
+        }
+        maybe_print_rss("decomp_seeded(one_shot): done");
+
+        DecompProof { C: (C0, C1), v: (v0, v1) }
+    }
+
     /// Same as [`Decomp::decompose_seeded`], but with external matrices represented over the base ring.
     pub fn decompose_seeded_base(
         self,
@@ -1424,5 +2060,86 @@ mod tests {
         let (_linb, proof) = decomp.decompose(&A, B);
 
         proof.verify(&linb2.x.cm_g, &linb2.x.vo, B);
+    }
+
+    #[test]
+    fn test_decomp_base_one_shot_matches_materialized() {
+        use ark_std::UniformRand;
+        let mut rng = ark_std::test_rng();
+        let kappa = 2;
+        let nvars = 12usize;
+        let n = 1usize << nvars;
+        let B = (R::dimension() / 2) as u128;
+
+        // Explicit Ajtai matrix (small test).
+        let A = Matrix::<R>::rand(&mut rng, kappa, n);
+        let scheme = AjtaiCommitmentScheme::new(A);
+
+        // Base-ring matrices (identity is enough to exercise the code).
+        let M0: Vec<Arc<SparseMatrix<<R as PolyRing>::BaseRing>>> =
+            vec![Arc::new(SparseMatrix::<<R as PolyRing>::BaseRing>::identity(n))];
+
+        // Random witness and transcript-derived r (const-coeff path).
+        let f = (0..n).map(|_| R::rand(&mut rng)).collect::<Vec<_>>();
+        let r = (0..nvars)
+            .map(|i| {
+                let x = R::from((i as u128) + 7);
+                (x, x)
+            })
+            .collect::<Vec<_>>();
+
+        let decomp_old = DecompBase {
+            f: f.clone(),
+            r: r.clone(),
+            M0: &M0,
+        };
+        let ((_linb0, _linb1), proof_old) = decomp_old.decompose_seeded_base(&scheme, B);
+
+        let decomp_new = DecompBase { f, r, M0: &M0 };
+        let proof_new = decomp_new.decompose_seeded_base_one_shot(&scheme, B);
+
+        assert_eq!(proof_old.C.0, proof_new.C.0);
+        assert_eq!(proof_old.C.1, proof_new.C.1);
+        assert_eq!(proof_old.v.0, proof_new.v.0);
+        assert_eq!(proof_old.v.1, proof_new.v.1);
+    }
+
+    #[test]
+    fn test_decomp_base_one_shot_matches_materialized_non_const_r() {
+        use ark_std::UniformRand;
+        let mut rng = ark_std::test_rng();
+        let kappa = 2;
+        let nvars = 10usize;
+        let n = 1usize << nvars;
+        let B = (R::dimension() / 2) as u128;
+
+        let A = Matrix::<R>::rand(&mut rng, kappa, n);
+        let scheme = AjtaiCommitmentScheme::new(A);
+        let M0: Vec<Arc<SparseMatrix<<R as PolyRing>::BaseRing>>> =
+            vec![Arc::new(SparseMatrix::<<R as PolyRing>::BaseRing>::identity(n))];
+
+        let f = (0..n).map(|_| R::rand(&mut rng)).collect::<Vec<_>>();
+        // Non-const ring challenges to force the ring-eq branch.
+        let r = (0..nvars)
+            .map(|_| {
+                let x = R::rand(&mut rng);
+                (x, x)
+            })
+            .collect::<Vec<_>>();
+
+        let decomp_old = DecompBase {
+            f: f.clone(),
+            r: r.clone(),
+            M0: &M0,
+        };
+        let ((_linb0, _linb1), proof_old) = decomp_old.decompose_seeded_base(&scheme, B);
+
+        let decomp_new = DecompBase { f, r, M0: &M0 };
+        let proof_new = decomp_new.decompose_seeded_base_one_shot(&scheme, B);
+
+        assert_eq!(proof_old.C.0, proof_new.C.0);
+        assert_eq!(proof_old.C.1, proof_new.C.1);
+        assert_eq!(proof_old.v.0, proof_new.v.0);
+        assert_eq!(proof_old.v.1, proof_new.v.1);
     }
 }
