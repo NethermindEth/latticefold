@@ -355,8 +355,9 @@ where
             StreamingMleEnum::DenseOwned { evals, num_vars } => {
                 let one_minus = R::ONE - r_ring;
                 for i in 0..half {
-                    let a = evals[i << 1];
-                    let b = evals[(i << 1) | 1];
+                    // Allow implicit zero-padding (table shorter than 2^num_vars).
+                    let a = evals.get(i << 1).copied().unwrap_or(R::ZERO);
+                    let b = evals.get((i << 1) | 1).copied().unwrap_or(R::ZERO);
                     evals[i] = one_minus * a + r_ring * b;
                 }
                 evals.truncate(half);
@@ -368,8 +369,12 @@ where
             }
             StreamingMleEnum::BaseScalarOwned { evals, num_vars } => {
                 for i in 0..half {
-                    let a = evals[i << 1];
-                    let b = evals[(i << 1) | 1];
+                    // Allow implicit zero-padding (table shorter than 2^num_vars).
+                    let a = evals.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
+                    let b = evals
+                        .get((i << 1) | 1)
+                        .copied()
+                        .unwrap_or(R::BaseRing::ZERO);
                     evals[i] = one_minus0 * a + r0 * b;
                 }
                 evals.truncate(half);
@@ -389,16 +394,24 @@ where
                 if *square {
                     // Vertex-wise squares: square BEFORE combining.
                     for i in 0..half {
-                        let mut a = owned[i << 1];
-                        let mut b = owned[(i << 1) | 1];
+                        // Allow implicit zero-padding (table shorter than 2^num_vars).
+                        let mut a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
+                        let mut b = owned
+                            .get((i << 1) | 1)
+                            .copied()
+                            .unwrap_or(R::BaseRing::ZERO);
                         a *= a;
                         b *= b;
                         owned[i] = one_minus0 * a + r0 * b;
                     }
                 } else {
                     for i in 0..half {
-                        let a = owned[i << 1];
-                        let b = owned[(i << 1) | 1];
+                        // Allow implicit zero-padding (table shorter than 2^num_vars).
+                        let a = owned.get(i << 1).copied().unwrap_or(R::BaseRing::ZERO);
+                        let b = owned
+                            .get((i << 1) | 1)
+                            .copied()
+                            .unwrap_or(R::BaseRing::ZERO);
                         owned[i] = one_minus0 * a + r0 * b;
                     }
                 }
