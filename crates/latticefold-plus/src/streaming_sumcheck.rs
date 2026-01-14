@@ -792,6 +792,19 @@ where
                 c
             }
             StreamingMleEnum::SparseMatVec { .. } => {
+                #[cfg(feature = "parallel")]
+                let new_evals: Vec<R> = {
+                    use rayon::prelude::*;
+                    (0..half)
+                        .into_par_iter()
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect()
+                };
+                #[cfg(not(feature = "parallel"))]
                 let new_evals: Vec<R> = (0..half)
                     .map(|i| {
                         let v0 = self.eval_at_index(i << 1);
@@ -837,6 +850,19 @@ where
             StreamingMleEnum::MonomialDigitsArc { .. } => {
                 // After fixing, the result is no longer guaranteed to be a pure monomial table,
                 // so we fall back to dense materialization.
+                #[cfg(feature = "parallel")]
+                let new_evals: Vec<R> = {
+                    use rayon::prelude::*;
+                    (0..half)
+                        .into_par_iter()
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect()
+                };
+                #[cfg(not(feature = "parallel"))]
                 let new_evals: Vec<R> = (0..half)
                     .map(|i| {
                         let v0 = self.eval_at_index(i << 1);
@@ -851,6 +877,19 @@ where
             }
             StreamingMleEnum::SparseMatVecMonomialDigits { .. } => {
                 // After fixing, the result is a general dense table.
+                #[cfg(feature = "parallel")]
+                let new_evals: Vec<R> = {
+                    use rayon::prelude::*;
+                    (0..half)
+                        .into_par_iter()
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect()
+                };
+                #[cfg(not(feature = "parallel"))]
                 let new_evals: Vec<R> = (0..half)
                     .map(|i| {
                         let v0 = self.eval_at_index(i << 1);
@@ -872,6 +911,19 @@ where
                     _ => unreachable!(),
                 };
                 let new_len = ((tensor_len + 1) >> 1).min(half_dom);
+                #[cfg(feature = "parallel")]
+                let new_evals: Vec<R> = {
+                    use rayon::prelude::*;
+                    (0..new_len)
+                        .into_par_iter()
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect()
+                };
+                #[cfg(not(feature = "parallel"))]
                 let new_evals: Vec<R> = (0..new_len)
                     .map(|i| {
                         let v0 = self.eval_at_index(i << 1);
