@@ -46,10 +46,53 @@ pub struct RgInstance<R: PolyRing> {
     /// Monomial matrices in compact digit form (k matrices, each n×d).
     pub M_f: Vec<Arc<DigitsMatrix<R>>>,
     pub tau: Arc<Vec<R::BaseRing>>, // n
-    pub m_tau: Arc<Vec<R>>,         // n, monomials
+    pub m_tau: MonomialVec<R>,      // n, monomials (compact)
     pub f: WitnessVec<R>,           // n
     pub comM_f: Vec<Matrix<R>>,
     pub fcoms: FComs<R>,
+}
+
+/// Compact representation for a monomial witness vector `m_tau`.
+///
+/// In LF+/SP1 regimes, `m_tau[i]` is a unit monomial, so storing a full `Vec<R>` is extremely
+/// memory-inefficient (O(n*d) coefficients). We store per-entry indices into a small `exp_table`
+/// instead (O(n) u16), and reconstruct `R` on demand where needed.
+#[derive(Clone, Debug)]
+pub enum MonomialVec<R: PolyRing> {
+    Dense(Arc<Vec<R>>),
+    Digits {
+        digits: Arc<Vec<u16>>,
+        exp_table: Arc<Vec<R>>,
+    },
+}
+
+impl<R: PolyRing> MonomialVec<R> {
+    #[inline]
+    pub fn len(&self) -> usize {
+        match self {
+            MonomialVec::Dense(v) => v.len(),
+            MonomialVec::Digits { digits, .. } => digits.len(),
+        }
+    }
+
+    #[inline]
+    pub fn get(&self, idx: usize) -> R {
+        match self {
+            MonomialVec::Dense(v) => v.get(idx).copied().unwrap_or(R::ZERO),
+            MonomialVec::Digits { digits, exp_table } => {
+                let di = digits.get(idx).copied().unwrap_or(0) as usize;
+                exp_table[di]
+            }
+        }
+    }
+
+    #[inline]
+    pub fn as_dense_arc(&self) -> Option<Arc<Vec<R>>> {
+        match self {
+            MonomialVec::Dense(v) => Some(v.clone()),
+            MonomialVec::Digits { .. } => None,
+        }
+    }
 }
 
 /// Witness vector representation used by the prover.
@@ -152,7 +195,12 @@ where
             });
         }
         for inst in &self.instances {
-            sets.push(MonomialSet::Vector(inst.m_tau.clone()));
+            sets.push(match &inst.m_tau {
+                MonomialVec::Dense(v) => MonomialSet::Vector(v.clone()),
+                MonomialVec::Digits { digits, exp_table } => {
+                    MonomialSet::VectorDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                }
+            });
         }
 
         let in_rel = In {
@@ -210,12 +258,23 @@ where
                         &out_rel.r,
                         &one_minus_r,
                     ));
-                    b.push(sparse_mat_vec_eval_ring_streaming::<R>(
-                        m,
-                        inst.m_tau.as_ref(),
-                        &out_rel.r,
-                        &one_minus_r,
-                    ));
+                    b.push(match &inst.m_tau {
+                        MonomialVec::Dense(v) => sparse_mat_vec_eval_ring_streaming::<R>(
+                            m,
+                            v.as_ref(),
+                            &out_rel.r,
+                            &one_minus_r,
+                        ),
+                        MonomialVec::Digits { digits, exp_table } => {
+                            sparse_mat_vec_eval_ring_streaming_monomial_digits::<R>(
+                                m,
+                                digits.as_ref(),
+                                exp_table.as_ref(),
+                                &out_rel.r,
+                                &one_minus_r,
+                            )
+                        }
+                    });
                     c.push(sparse_mat_vec_eval_ring_streaming_witness::<R>(
                         m,
                         &inst.f,
@@ -307,7 +366,12 @@ impl<R: PolyRing> RgInstance<R> {
         self.M_f
             .iter()
             .map(|m| MonomialSet::DigitsMatrix(m.clone()))
-            .chain(once(MonomialSet::Vector(self.m_tau.clone())))
+            .chain(once(match &self.m_tau {
+                MonomialVec::Dense(v) => MonomialSet::Vector(v.clone()),
+                MonomialVec::Digits { digits, exp_table } => {
+                    MonomialSet::VectorDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                }
+            }))
             .collect()
     }
 }
@@ -570,7 +634,7 @@ where
         Self {
             M_f,
             tau: Arc::new(tau),
-            m_tau: Arc::new(m_tau),
+            m_tau: MonomialVec::Dense(Arc::new(m_tau)),
             f: WitnessVec::Ring(Arc::new(f)),
             comM_f,
             fcoms,
@@ -807,7 +871,7 @@ where
         Self {
             M_f,
             tau: Arc::new(tau),
-            m_tau: Arc::new(m_tau),
+            m_tau: MonomialVec::Dense(Arc::new(m_tau)),
             f: WitnessVec::Ring(Arc::new(f)),
             comM_f,
             fcoms,
@@ -970,9 +1034,27 @@ where
         }
 
         let t = std::time::Instant::now();
-        let m_tau = tau.iter().map(|c| exp::<R>(*c).unwrap()).collect::<Vec<_>>();
+        // Build compact m_tau digits instead of materializing Vec<R> (saves ~70GiB at n=2^27,d=64).
+        let m_tau_digits: Arc<Vec<u16>> = {
+            #[cfg(feature = "parallel")]
+            {
+                use rayon::prelude::*;
+                Arc::new(
+                    tau.par_iter()
+                        .map(|&c| (map_digit_to_idx)(c))
+                        .collect::<Vec<u16>>(),
+                )
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                Arc::new(tau.iter().copied().map(|c| (map_digit_to_idx)(c)).collect::<Vec<u16>>())
+            }
+        };
         if profile {
-            println!("[LF+ RgInstance::from_f0_seeded] build m_tau via exp: {:?}", t.elapsed());
+            println!(
+                "[LF+ RgInstance::from_f0_seeded] build m_tau digits: {:?}",
+                t.elapsed()
+            );
         }
 
         let t = std::time::Instant::now();
@@ -990,7 +1072,17 @@ where
             .expect("commit_many_const_coeff_base_fast (f0,tau)");
         let cm_f = cm_pair[0].as_ref().to_vec();
         let C_Mf = cm_pair[1].as_ref().to_vec();
-        let cm_mtau = scheme.commit(&m_tau).expect("commit m_tau").as_ref().to_vec();
+        let cm_mtau = scheme
+            .commit_many_with(n, 1, {
+                let digits = m_tau_digits.clone();
+                let exp_table = exp_table.clone();
+                move |j, out| {
+                    out[0] = exp_table[digits[j] as usize];
+                }
+            })
+            .expect("commit m_tau (digits)")[0]
+            .as_ref()
+            .to_vec();
         if profile {
             println!("[LF+ RgInstance::from_f0_seeded] commit f/tau/m_tau: {:?}", t.elapsed());
             println!("[LF+ RgInstance::from_f0_seeded] total: {:?}", t_total.elapsed());
@@ -1000,7 +1092,7 @@ where
         Self {
             M_f,
             tau: Arc::new(tau),
-            m_tau: Arc::new(m_tau),
+            m_tau: MonomialVec::Digits { digits: m_tau_digits, exp_table: exp_table.clone() },
             f: WitnessVec::ConstCoeffBase {
                 values: f0,
                 domain_len: n,
@@ -1420,6 +1512,80 @@ where
                 for (coeff, col_idx) in row {
                     if *col_idx < witness.len() {
                         row_dot += *coeff * witness[*col_idx];
+                    }
+                }
+                acc += row_dot * w_row;
+            }
+        }
+        acc
+    }
+}
+
+fn sparse_mat_vec_eval_ring_streaming_monomial_digits<R>(
+    m: &SparseMatrix<R>,
+    digits: &[u16],
+    exp_table: &[R],
+    r: &[R::BaseRing],
+    one_minus_r: &[R::BaseRing],
+) -> R
+where
+    R: PolyRing + From<R::BaseRing>,
+    R::BaseRing: Ring,
+{
+    debug_assert_eq!(r.len(), one_minus_r.len());
+    let nvars = r.len();
+    let n = m.nrows;
+    let t = choose_t_low(nvars);
+    let low = build_eq_low_table::<R>(&r[..t], &one_minus_r[..t]);
+    let low_len = 1usize << t;
+    let high_bits = nvars - t;
+    let high_len = ((n + low_len - 1) / low_len).min(1usize << high_bits);
+    #[cfg(feature = "parallel")]
+    {
+        (0..high_len)
+            .into_par_iter()
+            .map(|h| {
+                let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+                let base = h * low_len;
+                let mut acc = R::ZERO;
+                for i in 0..low_len {
+                    let row_idx = base + i;
+                    if row_idx >= n {
+                        break;
+                    }
+                    let w_row = scale * low[i];
+                    let row = &m.coeffs[row_idx];
+                    let mut row_dot = R::ZERO;
+                    for (coeff, col_idx) in row {
+                        let cj = *col_idx;
+                        if cj < digits.len() {
+                            row_dot += *coeff * exp_table[digits[cj] as usize];
+                        }
+                    }
+                    acc += row_dot * R::from(w_row);
+                }
+                acc
+            })
+            .reduce(|| R::ZERO, |a, b| a + b)
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        let mut acc = R::ZERO;
+        for h in 0..high_len {
+            let scale = eq_scale_for_high_bits::<R>(h, r, one_minus_r, t);
+            let base = h * low_len;
+            for i in 0..low_len {
+                let row_idx = base + i;
+                if row_idx >= n {
+                    break;
+                }
+                let w_row = R::from(scale * low[i]);
+                let row = &m.coeffs[row_idx];
+                let mut row_dot = R::ZERO;
+                for (coeff, col_idx) in row {
+                    let cj = *col_idx;
+                    if cj < digits.len() {
+                        row_dot += *coeff * exp_table[digits[cj] as usize];
                     }
                 }
                 acc += row_dot * w_row;

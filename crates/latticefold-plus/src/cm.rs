@@ -281,11 +281,10 @@ where
         }
 
         // Share `M` matrices across both sumchecks (avoid cloning them twice).
-        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let t_m_arcs = Instant::now();
         // NOTE: `M` is already Arc-wrapped by the caller, so this is cheap (Arc refcount clones only).
         let m_arcs: Vec<Arc<SparseMatrix<R>>> = M.to_vec();
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ Cm::prove] build shared m_arcs: {:?} (Mlen={})",
                 t_m_arcs.elapsed(),
@@ -315,7 +314,7 @@ where
                 (0..n)
                     .map(|j| {
                         let r_tau = inst.tau[j];
-                        let r_mtau = inst.m_tau[j];
+                        let r_mtau = inst.m_tau.get(j);
                         let r_f = match &inst.f {
                             WitnessVec::Ring(vr) => vr[j],
                             WitnessVec::ConstCoeffBase { values: v0, .. } => {
@@ -362,7 +361,6 @@ where
         profile: bool,
     ) -> (Proof<R>, Vec<InstanceEvals<R>>, Vec<R>) {
         let t_sumcheck = Instant::now();
-        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let nvars = self.rg.nvars;
 
         let rc = transcript.get_challenge();
@@ -404,7 +402,9 @@ where
             // algebraically identical to using ring tables: BaseScalarArc evaluates to `R::from(scalar)`.
             let tau0_arc: Arc<Vec<R::BaseRing>> = inst.tau.clone();
             let mtau0_arc: Option<Arc<Vec<R::BaseRing>>> = if mats_const {
-                try_as_base_scalars::<R>(inst.m_tau.as_ref()).map(Arc::new)
+                inst.m_tau
+                    .as_dense_arc()
+                    .and_then(|v| try_as_base_scalars::<R>(v.as_ref()).map(Arc::new))
             } else {
                 None
             };
@@ -438,7 +438,7 @@ where
                 square: false,
             });
 
-            let m_tau_arc_ring: Arc<Vec<R>> = inst.m_tau.clone();
+            let m_tau_arc_ring: Option<Arc<Vec<R>>> = inst.m_tau.as_dense_arc();
             let f_arc_ring: Option<Arc<Vec<R>>> = inst.f.as_ring_arc();
             let h_arc_ring: Arc<Vec<R>> = Arc::new(h[i].clone());
 
@@ -449,10 +449,21 @@ where
                     square: false,
                 });
             } else {
-                mles.push(StreamingMleEnum::DenseArc {
-                    evals: m_tau_arc_ring.clone(),
-                    num_vars: nvars,
-                });
+                match &inst.m_tau {
+                    crate::rgchk::MonomialVec::Dense(v) => {
+                        mles.push(StreamingMleEnum::DenseArc {
+                            evals: v.clone(),
+                            num_vars: nvars,
+                        });
+                    }
+                    crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                        mles.push(StreamingMleEnum::MonomialDigitsArc {
+                            digits: digits.clone(),
+                            exp_table: exp_table.clone(),
+                            num_vars: nvars,
+                        });
+                    }
+                }
             }
             if f_cc {
                 mles.push(StreamingMleEnum::BaseScalarArc {
@@ -530,11 +541,23 @@ where
                         num_vars: nvars,
                     });
                 } else {
-                    mles.push(StreamingMleEnum::SparseMatVec {
-                        matrix: m.clone(),
-                        witness: m_tau_arc_ring.clone(),
-                        num_vars: nvars,
-                    });
+                    match &inst.m_tau {
+                        crate::rgchk::MonomialVec::Dense(v) => {
+                            mles.push(StreamingMleEnum::SparseMatVec {
+                                matrix: m.clone(),
+                                witness: v.clone(),
+                                num_vars: nvars,
+                            });
+                        }
+                        crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                            mles.push(StreamingMleEnum::SparseMatVecMonomialDigits {
+                                matrix: m.clone(),
+                                digits: digits.clone(),
+                                exp_table: exp_table.clone(),
+                                num_vars: nvars,
+                            });
+                        }
+                    }
                 }
 
                 if f_cc {
@@ -569,7 +592,7 @@ where
                 }
             }
         }
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ Cm::sumchecker_streaming] build mles: {:?} (mles={})",
                 t_build_mles.elapsed(),
@@ -603,7 +626,7 @@ where
         rcps.push(rcp); // t(0)
         rcp *= rc;
         rcps.push(rcp); // t(1)
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ Cm::sumchecker_streaming] build rc powers: {:?} (len={})",
                 t_rcps.elapsed(),
@@ -637,7 +660,7 @@ where
         let t_sc = Instant::now();
         let (sumcheck_proof, randomness, final_vals) =
             StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 2, comb_fn);
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ Cm::sumchecker_streaming] streaming sumcheck: {:?}",
                 t_sc.elapsed()
@@ -669,7 +692,7 @@ where
                 InstanceEvals(e)
             })
             .collect::<Vec<_>>();
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ Cm::sumchecker_streaming] build evals structs: {:?}",
                 t_evals.elapsed()
@@ -678,7 +701,7 @@ where
 
         let t_absorb = Instant::now();
         absorb_evaluations(&evals, transcript);
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ Cm::sumchecker_streaming] absorb evals: {:?}",
                 t_absorb.elapsed()

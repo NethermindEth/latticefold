@@ -54,6 +54,13 @@ pub enum MonomialSet<R: PolyRing> {
     DigitsMatrix(Arc<DigitsMatrix<R>>),
     /// Vector set of monomials (Arc-backed to avoid cloning large vectors).
     Vector(Arc<Vec<R>>),
+    /// Vector set of monomials stored compactly as indices into an `exp_table`.
+    ///
+    /// `digits[i]` indexes `exp_table` and the element is `exp_table[digits[i]]`.
+    VectorDigits {
+        digits: Arc<Vec<u16>>,
+        exp_table: Arc<Vec<R>>,
+    },
 }
 
 /// Compact monomial matrix backed by a digit table.
@@ -156,7 +163,6 @@ impl<R: OverField + PolyRing> In<R> {
     /// If k > 1, sumcheck batching is employed.
     pub fn set_check(&self, M: &[Arc<SparseMatrix<R>>], transcript: &mut impl Transcript<R>) -> Out<R> {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
-        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let t_total = Instant::now();
 
         let Ms_sparse: Vec<&SparseMatrix<R>> = self
@@ -183,11 +189,18 @@ impl<R: OverField + PolyRing> In<R> {
                 _ => None,
             })
             .collect();
-        let ms: Vec<&Vec<R>> = self
+        enum VecSet<Rr: PolyRing> {
+            Dense(Arc<Vec<Rr>>),
+            Digits { digits: Arc<Vec<u16>>, exp_table: Arc<Vec<Rr>> },
+        }
+        let ms: Vec<VecSet<R>> = self
             .sets
             .iter()
             .filter_map(|set| match set {
-                MonomialSet::Vector(v) => Some(v.as_ref()),
+                MonomialSet::Vector(v) => Some(VecSet::Dense(v.clone())),
+                MonomialSet::VectorDigits { digits, exp_table } => {
+                    Some(VecSet::Digits { digits: digits.clone(), exp_table: exp_table.clone() })
+                }
                 _ => None,
             })
             .collect();
@@ -361,7 +374,7 @@ impl<R: OverField + PolyRing> In<R> {
         }
 
         // vector sets
-        for (vi, m) in ms.iter().enumerate() {
+        for (vi, mset) in ms.iter().enumerate() {
             let t_vec = Instant::now();
             // Step 1
             let c0 = transcript.get_challenges(self.nvars);
@@ -369,10 +382,27 @@ impl<R: OverField + PolyRing> In<R> {
             let beta = transcript.get_challenge();
 
             let beta_pows = beta_pows::<R>(beta);
-            let mut v0 = vec![R::BaseRing::ZERO; m.len()];
-            for (i, r_i) in m.iter().enumerate() {
-                v0[i] = ev_fast::<R>(r_i, &beta_pows);
-            }
+            let (mut v0, m_len) = match mset {
+                VecSet::Dense(m) => {
+                    let mut v0 = vec![R::BaseRing::ZERO; m.len()];
+                    for (i, r_i) in m.iter().enumerate() {
+                        v0[i] = ev_fast::<R>(r_i, &beta_pows);
+                    }
+                    (v0, m.len())
+                }
+                VecSet::Digits { digits, exp_table } => {
+                    // Precompute ev(exp_table[d], beta) for the small digit alphabet, then map.
+                    let mut ev_tab = vec![R::BaseRing::ZERO; exp_table.len()];
+                    for (di, r_di) in exp_table.iter().enumerate() {
+                        ev_tab[di] = ev_fast::<R>(r_di, &beta_pows);
+                    }
+                    let mut v0 = vec![R::BaseRing::ZERO; digits.len()];
+                    for (i, &dix) in digits.iter().enumerate() {
+                        v0[i] = ev_tab[dix as usize];
+                    }
+                    (v0, digits.len())
+                }
+            };
             let tab = Arc::new(v0);
             mles.push(StreamingMleEnum::BaseScalarArc { evals: tab.clone(), num_vars: tnvars, square: false });
             mles.push(StreamingMleEnum::BaseScalarArc { evals: tab, num_vars: tnvars, square: true });
@@ -389,7 +419,7 @@ impl<R: OverField + PolyRing> In<R> {
                 println!(
                     "[LF+ setchk] vector_set[{vi}] build_table: {:?} (len={})",
                     t_vec.elapsed(),
-                    m.len()
+                    m_len
                 );
             }
         }
@@ -548,7 +578,7 @@ impl<R: OverField + PolyRing> In<R> {
                 )
             }
         };
-        if profile && profile_detail {
+        if profile {
             println!("[LF+ setchk] step3(y_mats): {:?}", t_y_mats.elapsed());
         }
 
@@ -821,7 +851,7 @@ impl<R: OverField + PolyRing> In<R> {
             }
             e
         };
-        if profile && profile_detail {
+        if profile {
             println!("[LF+ setchk] step3(e): {:?}", t_e.elapsed());
         }
 
@@ -829,10 +859,19 @@ impl<R: OverField + PolyRing> In<R> {
         #[cfg(feature = "parallel")]
         let b: Vec<R> = ms
             .par_iter()
-            .map(|m| {
+            .map(|mset| {
                 let mut acc = R::ZERO;
-                for (i, &mi) in m.iter().enumerate() {
-                    acc += mi * R::from(eq_at(i));
+                match mset {
+                    VecSet::Dense(m) => {
+                        for (i, &mi) in m.iter().enumerate() {
+                            acc += mi * R::from(eq_at(i));
+                        }
+                    }
+                    VecSet::Digits { digits, exp_table } => {
+                        for (i, &dix) in digits.iter().enumerate() {
+                            acc += exp_table[dix as usize] * R::from(eq_at(i));
+                        }
+                    }
                 }
                 acc
             })
@@ -840,23 +879,31 @@ impl<R: OverField + PolyRing> In<R> {
         #[cfg(not(feature = "parallel"))]
         let b: Vec<R> = ms
             .iter()
-            .map(|m| {
+            .map(|mset| {
                 let mut acc = R::ZERO;
-                for (i, &mi) in m.iter().enumerate() {
-                    acc += mi * R::from(eq_at(i));
+                match mset {
+                    VecSet::Dense(m) => {
+                        for (i, &mi) in m.iter().enumerate() {
+                            acc += mi * R::from(eq_at(i));
+                        }
+                    }
+                    VecSet::Digits { digits, exp_table } => {
+                        for (i, &dix) in digits.iter().enumerate() {
+                            acc += exp_table[dix as usize] * R::from(eq_at(i));
+                        }
+                    }
                 }
                 acc
             })
             .collect();
-        if profile && profile_detail {
+        if profile {
             println!("[LF+ setchk] step3(b): {:?}", t_b.elapsed());
         }
 
-        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let t_absorb = std::time::Instant::now();
         // Prover to Verifier messages
         absorb_evaluations(&e, &b, transcript);
-        if profile && profile_detail {
+        if profile {
             println!("[LF+ setchk] step3(absorb): {:?}", t_absorb.elapsed());
         }
 

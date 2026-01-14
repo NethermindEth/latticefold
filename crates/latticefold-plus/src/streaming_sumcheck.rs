@@ -93,6 +93,19 @@ where
         witness0: Arc<Vec<R::BaseRing>>,
         num_vars: usize,
     },
+    /// Monomial vector given by small digits into `exp_table` (e.g. m_tau).
+    MonomialDigitsArc {
+        digits: Arc<Vec<u16>>,
+        exp_table: Arc<Vec<R>>,
+        num_vars: usize,
+    },
+    /// Sparse mat-vec where witness is monomial digits (e.g. M * m_tau).
+    SparseMatVecMonomialDigits {
+        matrix: Arc<SparseMatrix<R>>,
+        digits: Arc<Vec<u16>>,
+        exp_table: Arc<Vec<R>>,
+        num_vars: usize,
+    },
     /// A padded 4-way tensor-product table:
     /// t = t1 ⊗ t2 ⊗ t3 ⊗ t4, then padded with zeros up to 2^num_vars.
     ///
@@ -129,6 +142,8 @@ where
             StreamingMleEnum::SparseMatVec { num_vars, .. } => *num_vars,
             StreamingMleEnum::SparseMatVecConstCoeff { num_vars, .. } => *num_vars,
             StreamingMleEnum::SparseMatVecConstCoeffBase { num_vars, .. } => *num_vars,
+            StreamingMleEnum::MonomialDigitsArc { num_vars, .. } => *num_vars,
+            StreamingMleEnum::SparseMatVecMonomialDigits { num_vars, .. } => *num_vars,
             StreamingMleEnum::Tensor4Padded { num_vars, .. } => *num_vars,
         }
     }
@@ -317,6 +332,23 @@ where
             }
             StreamingMleEnum::SparseMatVecConstCoeff { .. } => R::from(self.eval0_at_index(index)),
             StreamingMleEnum::SparseMatVecConstCoeffBase { .. } => R::from(self.eval0_at_index(index)),
+            StreamingMleEnum::MonomialDigitsArc { digits, exp_table, .. } => {
+                let di = digits.get(index).copied().unwrap_or(0) as usize;
+                exp_table[di]
+            }
+            StreamingMleEnum::SparseMatVecMonomialDigits { matrix, digits, exp_table, .. } => {
+                if index >= matrix.coeffs.len() {
+                    return R::ZERO;
+                }
+                let mut sum = R::ZERO;
+                for (coeff, col_idx) in &matrix.coeffs[index] {
+                    let cj = *col_idx;
+                    if cj < digits.len() {
+                        sum += *coeff * exp_table[digits[cj] as usize];
+                    }
+                }
+                sum
+            }
             StreamingMleEnum::Tensor4Padded {
                 t1,
                 t2,
@@ -498,6 +530,14 @@ where
                 one_minus_r.remove(0);
             }
             StreamingMleEnum::SparseMatVec { .. } => {
+                let next = self.fix_variable(r_ring);
+                *self = next;
+            }
+            StreamingMleEnum::MonomialDigitsArc { .. } => {
+                let next = self.fix_variable(r_ring);
+                *self = next;
+            }
+            StreamingMleEnum::SparseMatVecMonomialDigits { .. } => {
                 let next = self.fix_variable(r_ring);
                 *self = next;
             }
@@ -1038,7 +1078,6 @@ impl StreamingSumcheck {
         R::BaseRing: Ring,
     {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
-        let profile_detail = std::env::var("LF_PLUS_PROFILE_DETAIL").ok().as_deref() == Some("1");
         let t_total = std::time::Instant::now();
 
         transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
@@ -1046,7 +1085,7 @@ impl StreamingSumcheck {
 
         let t_init = std::time::Instant::now();
         let mut state = Self::prover_init(mles, nvars, degree);
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ streaming_sumcheck] init: {:?} (nvars={}, degree={}, mles={})",
                 t_init.elapsed(),
@@ -1082,7 +1121,7 @@ impl StreamingSumcheck {
             t_absorb_chal += t_ac.elapsed();
             v_msg = Some(r);
 
-            if profile && profile_detail && (round == 0 || round + 1 == nvars) {
+            if profile && (round == 0 || round + 1 == nvars) {
                 println!(
                     "[LF+ streaming_sumcheck] round {}/{} done",
                     round + 1,
@@ -1103,7 +1142,7 @@ impl StreamingSumcheck {
         let final_evals = state.final_evals();
         let t_final_elapsed = t_final.elapsed();
 
-        if profile && profile_detail {
+        if profile {
             println!(
                 "[LF+ streaming_sumcheck] totals: rounds={:?} absorb_msgs={:?} get_chal={:?} absorb_chal={:?} fix_last={:?} final_evals={:?} total={:?}",
                 t_rounds,
