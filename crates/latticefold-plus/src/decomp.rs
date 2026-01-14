@@ -2069,7 +2069,10 @@ mod tests {
         let kappa = 2;
         let nvars = 12usize;
         let n = 1usize << nvars;
-        let B = (R::dimension() / 2) as u128;
+        let B = (<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64)
+            .sqrt()
+            .ceil() as u128
+            + 1;
 
         // Explicit Ajtai matrix (small test).
         let A = Matrix::<R>::rand(&mut rng, kappa, n);
@@ -2111,7 +2114,10 @@ mod tests {
         let kappa = 2;
         let nvars = 10usize;
         let n = 1usize << nvars;
-        let B = (R::dimension() / 2) as u128;
+        let B = (<<R as PolyRing>::BaseRing>::MODULUS.0[0] as f64)
+            .sqrt()
+            .ceil() as u128
+            + 1;
 
         let A = Matrix::<R>::rand(&mut rng, kappa, n);
         let scheme = AjtaiCommitmentScheme::new(A);
