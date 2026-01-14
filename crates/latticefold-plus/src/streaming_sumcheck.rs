@@ -1250,38 +1250,6 @@ impl StreamingSumcheck {
 
         (Proof::new(msgs), state.randomness, final_evals)
     }
-
-    /// Sumcheck prover for the special case where the combined polynomial is identically zero
-    /// over the entire hypercube.
-    ///
-    /// Produces a `Proof<R>` with all-zero prover messages, while still sampling the verifier
-    /// challenges from the transcript using the standard schedule.
-    ///
-    /// This preserves the transcript schedule and proof format, while avoiding any MLE evaluation.
-    pub fn prove_as_subprotocol_zero<R: OverField + PolyRing, T: Transcript<R>>(
-        transcript: &mut T,
-        nvars: usize,
-        degree: usize,
-    ) -> (Proof<R>, Vec<R::BaseRing>)
-    where
-        R::BaseRing: Ring,
-    {
-        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
-        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
-
-        let msg = ProverMsg { evaluations: vec![R::ZERO; degree + 1] };
-        let mut msgs = Vec::with_capacity(nvars);
-        let mut randomness = Vec::with_capacity(nvars);
-
-        for _ in 0..nvars {
-            transcript.absorb_slice(&msg.evaluations);
-            msgs.push(msg.clone());
-            let r = transcript.get_challenge();
-            transcript.absorb_field_element(&r);
-            randomness.push(r);
-        }
-        (Proof::new(msgs), randomness)
-    }
 }
 
 #[cfg(test)]
