@@ -103,6 +103,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 if f.len() != *n {
                     return Err(CommitmentError::WrongWitnessLength(f.len(), *n));
                 }
+                // Speed: pre-hash the (domain, seed) prefix once, then only hash `col` per column.
+                // This preserves *exactly* the same `derive_col_seed` outputs.
+                let prefix_hasher = {
+                    let mut h = Sha256::new();
+                    h.update(b"AJTAI_COL_V1");
+                    h.update((domain.len() as u64).to_le_bytes());
+                    h.update(domain);
+                    h.update(seed);
+                    h
+                };
                 #[cfg(feature = "parallel")]
                 {
                     let kappa = *kappa;
@@ -110,40 +120,57 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                     let seed = *seed;
                     let acc = cfg_into_iter!(0..f.len())
                         .fold(
-                            || vec![R::ZERO; kappa],
-                            |mut local, j| {
+                            || (vec![R::ZERO; kappa], prefix_hasher.clone()),
+                            |(mut local, prefix), j| {
                                 let fj = f[j];
                                 if fj == R::ZERO {
-                                    return local;
+                                    return (local, prefix);
                                 }
-                                let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
+                                // Equivalent to `derive_col_seed(domain, &seed, col=j)`, but avoids
+                                // re-hashing the prefix for every column.
+                                let col_seed = {
+                                    let mut h = prefix.clone();
+                                    h.update((j as u64).to_le_bytes());
+                                    let out = h.finalize();
+                                    let mut s = [0u8; 32];
+                                    s.copy_from_slice(&out);
+                                    s
+                                };
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
                                 for i in 0..kappa {
                                     let aij = R::rand(&mut rng);
                                     local[i] += aij * fj;
                                 }
-                                local
+                                (local, prefix)
                             },
                         )
                         .reduce(
-                            || vec![R::ZERO; kappa],
-                            |mut a, b| {
+                            || (vec![R::ZERO; kappa], prefix_hasher.clone()),
+                            |(mut a, prefix_a), (b, _prefix_b)| {
                                 for i in 0..kappa {
                                     a[i] += b[i];
                                 }
-                                a
+                                (a, prefix_a)
                             },
                         );
-                    Ok(Commitment::from_vec_raw(acc))
+                    Ok(Commitment::from_vec_raw(acc.0))
                 }
                 #[cfg(not(feature = "parallel"))]
                 {
                     let mut acc = vec![R::ZERO; *kappa];
+                    let prefix = prefix_hasher;
                     for (j, fj) in f.iter().enumerate() {
                         if *fj == R::ZERO {
                             continue;
                         }
-                        let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
+                        let col_seed = {
+                            let mut h = prefix.clone();
+                            h.update((j as u64).to_le_bytes());
+                            let out = h.finalize();
+                            let mut s = [0u8; 32];
+                            s.copy_from_slice(&out);
+                            s
+                        };
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
                         for i in 0..*kappa {
                             let aij = R::rand(&mut rng);
@@ -197,6 +224,14 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 if n != *n_expected {
                     return Err(CommitmentError::WrongWitnessLength(n, *n_expected));
                 }
+                let prefix_hasher = {
+                    let mut h = Sha256::new();
+                    h.update(b"AJTAI_COL_V1");
+                    h.update((domain.len() as u64).to_le_bytes());
+                    h.update(domain);
+                    h.update(seed);
+                    h
+                };
                 #[cfg(feature = "parallel")]
                 {
                     let kappa = *kappa;
@@ -204,14 +239,21 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                     let seed = *seed;
                     let acc = cfg_into_iter!(0..n)
                         .fold(
-                            || (vec![vec![R::ZERO; kappa]; t], vec![R::ZERO; t]),
-                            |(mut local, mut scratch), j| {
+                            || (vec![vec![R::ZERO; kappa]; t], vec![R::ZERO; t], prefix_hasher.clone()),
+                            |(mut local, mut scratch, prefix), j| {
                                 scratch.fill(R::ZERO);
                                 fill_values_at(j, &mut scratch);
                                 if scratch.iter().all(|x| *x == R::ZERO) {
-                                    return (local, scratch);
+                                    return (local, scratch, prefix);
                                 }
-                                let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
+                                let col_seed = {
+                                    let mut h = prefix.clone();
+                                    h.update((j as u64).to_le_bytes());
+                                    let out = h.finalize();
+                                    let mut s = [0u8; 32];
+                                    s.copy_from_slice(&out);
+                                    s
+                                };
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
                                 for i in 0..kappa {
                                     let aij = R::rand(&mut rng);
@@ -222,18 +264,18 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                         }
                                     }
                                 }
-                                (local, scratch)
+                                (local, scratch, prefix)
                             },
                         )
                         .reduce(
-                            || (vec![vec![R::ZERO; kappa]; t], vec![R::ZERO; t]),
-                            |(mut a, scratch_a), (b, _scratch_b)| {
+                            || (vec![vec![R::ZERO; kappa]; t], vec![R::ZERO; t], prefix_hasher.clone()),
+                            |(mut a, scratch_a, prefix_a), (b, _scratch_b, _prefix_b)| {
                                 for which in 0..t {
                                     for i in 0..kappa {
                                         a[which][i] += b[which][i];
                                     }
                                 }
-                                (a, scratch_a)
+                                (a, scratch_a, prefix_a)
                             },
                         )
                         .0;
@@ -243,13 +285,21 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 {
                     let mut acc = vec![vec![R::ZERO; *kappa]; t];
                     let mut scratch = vec![R::ZERO; t];
+                    let prefix = prefix_hasher;
                     for j in 0..n {
                         scratch.fill(R::ZERO);
                         fill_values_at(j, &mut scratch);
                         if scratch.iter().all(|x| *x == R::ZERO) {
                             continue;
                         }
-                        let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
+                        let col_seed = {
+                            let mut h = prefix.clone();
+                            h.update((j as u64).to_le_bytes());
+                            let out = h.finalize();
+                            let mut s = [0u8; 32];
+                            s.copy_from_slice(&out);
+                            s
+                        };
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
                         for i in 0..*kappa {
                             let aij = R::rand(&mut rng);
