@@ -1048,21 +1048,17 @@ impl<R: OverField + PolyRing> In<R> {
         #[cfg(feature = "parallel")]
         let b: Vec<R> = ms
             .par_iter()
-            .map(|mset| {
-                let mut acc = R::ZERO;
-                match mset {
-                    VecSet::Dense(m) => {
-                        for (i, &mi) in m.iter().enumerate() {
-                            acc += mi * R::from(eq_at(i));
-                        }
-                    }
-                    VecSet::Digits { digits, exp_table } => {
-                        for (i, &dix) in digits.iter().enumerate() {
-                            acc += exp_table[dix as usize] * R::from(eq_at(i));
-                        }
-                    }
-                }
-                acc
+            .map(|mset| match mset {
+                // NOTE: `ms.len()` is often 1, so parallelizing over `ms` doesn't help.
+                // Parallelize over the vector length (nrows) instead.
+                VecSet::Dense(m) => (0..m.len())
+                    .into_par_iter()
+                    .map(|i| m[i] * R::from(eq_at(i)))
+                    .reduce(|| R::ZERO, |a, b| a + b),
+                VecSet::Digits { digits, exp_table } => (0..digits.len())
+                    .into_par_iter()
+                    .map(|i| exp_table[digits[i] as usize] * R::from(eq_at(i)))
+                    .reduce(|| R::ZERO, |a, b| a + b),
             })
             .collect();
         #[cfg(not(feature = "parallel"))]

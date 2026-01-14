@@ -679,8 +679,32 @@ where
                 };
             }
             StreamingMleEnum::Tensor4Padded { .. } => {
-                let next = self.fix_variable(r_ring);
-                *self = next;
+                // The tensor table is typically *tiny* (e.g. ~61k) and zero-padded to `2^num_vars`.
+                // Materializing a full half-table of length `2^(nv-1)` would be catastrophic.
+                //
+                // After fixing one variable, the resulting table is still zero outside indices
+                // i such that (2i) or (2i+1) was inside the original tensor_len. So the new support
+                // length is `ceil(tensor_len / 2)`, which remains tiny.
+                let nv0 = self.num_vars();
+                debug_assert!(nv0 > 0);
+                let half_dom = 1usize << (nv0 - 1);
+                if let StreamingMleEnum::Tensor4Padded { tensor_len, .. } = self {
+                    let new_len = ((*tensor_len) + 1) >> 1;
+                    let new_len = new_len.min(half_dom);
+                    let mut out = vec![R::ZERO; new_len];
+                    let one_minus = R::ONE - r_ring;
+                    for i in 0..new_len {
+                        let a = self.eval_at_index(i << 1);
+                        let b = self.eval_at_index((i << 1) | 1);
+                        out[i] = one_minus * a + r_ring * b;
+                    }
+                    *self = StreamingMleEnum::DenseOwned {
+                        evals: out,
+                        num_vars: nv0 - 1,
+                    };
+                } else {
+                    unreachable!();
+                }
             }
         }
     }
@@ -826,7 +850,15 @@ where
                 }
             }
             StreamingMleEnum::Tensor4Padded { .. } => {
-                let new_evals: Vec<R> = (0..half)
+                // Same idea as the in-place path: preserve sparsity of the padded tensor.
+                let nv0 = nv;
+                let half_dom = 1usize << (nv0 - 1);
+                let tensor_len = match self {
+                    StreamingMleEnum::Tensor4Padded { tensor_len, .. } => *tensor_len,
+                    _ => unreachable!(),
+                };
+                let new_len = ((tensor_len + 1) >> 1).min(half_dom);
+                let new_evals: Vec<R> = (0..new_len)
                     .map(|i| {
                         let v0 = self.eval_at_index(i << 1);
                         let v1 = self.eval_at_index((i << 1) | 1);
