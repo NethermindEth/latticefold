@@ -11,6 +11,7 @@ use stark_rings_linalg::{ops::Transpose, Matrix, SparseMatrix};
 use thiserror::Error;
 use std::sync::Arc;
 use std::time::Instant;
+use crate::utils::maybe_print_rss;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -164,6 +165,7 @@ impl<R: OverField + PolyRing> In<R> {
     pub fn set_check(&self, M: &[Arc<SparseMatrix<R>>], transcript: &mut impl Transcript<R>) -> Out<R> {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = Instant::now();
+        maybe_print_rss("setchk: start");
 
         let Ms_sparse: Vec<&SparseMatrix<R>> = self
             .sets
@@ -216,6 +218,7 @@ impl<R: OverField + PolyRing> In<R> {
         } else {
             (Ms_sparse[0].nrows, Ms_sparse[0].ncols)
         };
+        maybe_print_rss("setchk: classified sets");
         let tnvars = log2(nrows.next_power_of_two()) as usize;
         let MTs = Ms_sparse.iter().map(|M| (*M).transpose()).collect::<Vec<_>>();
 
@@ -450,6 +453,7 @@ impl<R: OverField + PolyRing> In<R> {
                 );
             }
         }
+        maybe_print_rss("setchk: after build mles");
 
         // random linear combinator, for batching
         let rc: Option<R::BaseRing> = (Ms_len > 1).then(|| transcript.get_challenge());
@@ -503,8 +507,10 @@ impl<R: OverField + PolyRing> In<R> {
         };
 
         let t_sc = Instant::now();
+        maybe_print_rss("setchk: before sumcheck");
         let (sumcheck_proof, r, _final_vals) =
             StreamingSumcheck::prove_as_subprotocol_base(transcript, mles, self.nvars, 3, comb_fn0);
+        maybe_print_rss("setchk: after sumcheck");
         if profile {
             println!(
                 "[LF+ setchk] sumcheck: {:?} (nvars={}, degree=3, ncols={}, Ms={}, ms={})",
@@ -518,6 +524,7 @@ impl<R: OverField + PolyRing> In<R> {
 
         // Step 3
         let t_step3 = Instant::now();
+        maybe_print_rss("setchk: step3 start");
         let t_y_mats = Instant::now();
         // Avoid materializing full length-2^n eq table: use (low-table + high-scale).
         let one_minus_r = r.iter().copied().map(|x| R::BaseRing::ONE - x).collect::<Vec<_>>();
@@ -1088,6 +1095,7 @@ impl<R: OverField + PolyRing> In<R> {
         if profile {
             println!("[LF+ setchk] step3(absorb): {:?}", t_absorb.elapsed());
         }
+        maybe_print_rss("setchk: step3 done");
 
         if profile {
             println!(

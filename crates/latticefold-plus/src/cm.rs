@@ -18,7 +18,7 @@ use std::time::Instant;
 use crate::{
     rgchk::{Dcom, Rg},
     streaming_sumcheck::{StreamingMleEnum, StreamingSumcheck},
-    utils::{short_challenge, tensor, tensor_product},
+    utils::{maybe_print_rss, short_challenge, tensor, tensor_product},
 };
 
 use crate::rgchk::WitnessVec;
@@ -100,6 +100,7 @@ where
     ) -> (Com<R>, CmProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = Instant::now();
+        maybe_print_rss("cm: prove start");
 
         let k = self.rg.dparams.k;
         let d = R::dimension();
@@ -130,6 +131,7 @@ where
         if profile {
             println!("[LF+ Cm::prove] range_check: {:?}", t.elapsed());
         }
+        maybe_print_rss("cm: after range_check");
 
         let s = (0..3)
             .map(|_| short_challenge(128, transcript))
@@ -145,12 +147,14 @@ where
         let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
 
         let t = Instant::now();
+        maybe_print_rss("cm: build_h start");
         let h: Vec<Vec<R>> = self
             .rg
             .instances
             .iter()
             .map(|inst| {
                 let n = 1 << self.rg.nvars;
+                maybe_print_rss("cm: build_h one inst start");
                 let h_vectors: Vec<Vec<R>> = inst
                     .M_f
                     .iter()
@@ -302,12 +306,14 @@ where
                         h[i] += *val;
                     }
                 }
+                maybe_print_rss("cm: build_h one inst done");
                 h
             })
             .collect();
         if profile {
             println!("[LF+ Cm::prove] build h: {:?}", t.elapsed());
         }
+        maybe_print_rss("cm: build_h done");
 
         let t = Instant::now();
         let comh: Vec<Vec<R>> = self

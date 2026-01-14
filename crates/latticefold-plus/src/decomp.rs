@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::lin::{LinB, LinBX};
 use crate::rgchk::WitnessVec;
+use crate::utils::maybe_print_rss;
 
 pub type RxR<R> = (R, R);
 
@@ -324,11 +325,13 @@ where
     ) -> ((LinB<R>, LinB<R>), DecompProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = Instant::now();
+        maybe_print_rss("decomp_seeded: start");
 
         let nvars = log2(scheme.width()) as usize;
         let mut F = self.f.decompose_to_vec(B, 2).transpose().into_iter();
         let F0 = F.next().unwrap();
         let F1 = F.next().unwrap();
+        maybe_print_rss("decomp_seeded: after decompose_to_vec");
 
         let r_a = self.r.iter().map(|rr| rr.0).collect::<Vec<_>>();
         let r_b = self.r.iter().map(|rr| rr.1).collect::<Vec<_>>();
@@ -438,6 +441,7 @@ where
             let t_eq = Instant::now();
             let eq_a = eq_weights::<R>(&r_a);
             let eq_b = eq_weights::<R>(&r_b);
+            maybe_print_rss("decomp_seeded: after eq_weights");
             if profile && detail {
                 println!(
                     "[LF+ Decomp::decompose_seeded] eq_weights: {:?} (nvars={})",
@@ -499,6 +503,7 @@ where
                     self.M.len()
                 );
             }
+            maybe_print_rss("decomp_seeded: after v0/v1 mats");
             (v0, v1)
         };
 
@@ -516,6 +521,7 @@ where
         if profile {
             println!("[LF+ Decomp::decompose_seeded] compute v0/v1: {:?}", t.elapsed());
         }
+        maybe_print_rss("decomp_seeded: after compute v0/v1");
 
         let t = Instant::now();
         let (C0, C1) = {
@@ -538,6 +544,7 @@ where
             println!("[LF+ Decomp::decompose_seeded] commitments C0/C1: {:?}", t.elapsed());
             println!("[LF+ Decomp::decompose_seeded] total: {:?}", t_total.elapsed());
         }
+        maybe_print_rss("decomp_seeded: done");
 
         let linb0 = LinB {
             x: LinBX {

@@ -11,6 +11,7 @@ use latticefold::utils::sumcheck::Proof;
 use stark_rings::{OverField, PolyRing, Ring};
 use stark_rings_linalg::{Matrix, SparseMatrix};
 use crate::setchk::DigitsMatrix;
+use crate::utils::maybe_print_rss;
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -1248,6 +1249,7 @@ impl StreamingSumcheck {
 
         transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
         transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
+        maybe_print_rss("streaming_sumcheck(base): start");
 
         let mut state = Self::prover_init(mles, nvars, degree);
         if profile {
@@ -1271,6 +1273,7 @@ impl StreamingSumcheck {
             let r = transcript.get_challenge();
             transcript.absorb_field_element(&r);
             v_msg = Some(r);
+            maybe_print_rss("streaming_sumcheck(base): round_done");
         }
 
         // Apply last sampled randomness (standard sumcheck schedule).
@@ -1285,6 +1288,7 @@ impl StreamingSumcheck {
                 t_total.elapsed()
             );
         }
+        maybe_print_rss("streaming_sumcheck(base): done");
 
         (Proof::new(msgs), state.randomness, final_evals)
     }
