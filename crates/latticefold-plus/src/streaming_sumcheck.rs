@@ -311,6 +311,31 @@ where
         }
         [acc0, acc1, acc2, acc3]
     }
+
+    /// If the selected witness is base-scalar, evaluate the mat-vec and return the base scalar.
+    #[inline]
+    pub fn eval0_at_row_if_base(&self, which: u8, row: usize) -> Option<R::BaseRing> {
+        if row >= self.matrix0.coeffs.len() {
+            return Some(R::BaseRing::ZERO);
+        }
+        let w = match which {
+            0 => &self.w0,
+            1 => &self.w1,
+            2 => &self.w2,
+            3 => &self.w3,
+            _ => return None,
+        };
+        let CmMatVecWitness::Base(w0) = w else {
+            return None;
+        };
+        let mut sum0 = R::BaseRing::ZERO;
+        for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+            if *col_idx < w0.len() {
+                sum0 += *coeff0 * w0[*col_idx];
+            }
+        }
+        Some(sum0)
+    }
 }
 
 impl<R: OverField + PolyRing> StreamingMleEnum<R>
@@ -1173,7 +1198,34 @@ where
                 self.fix_variable_in_place_base(r0);
             }
             StreamingMleEnum::CmMatVec4Part { .. } => {
-                // No dedicated in-place folding; fall back to materialization like other sparse mat-vec MLEs.
+                // Critical: if this part is constant-coefficient (base-scalar), keep it base-scalar
+                // after fixing (otherwise we allocate a gigantic Vec<R> and blow up RAM for d64).
+                let nv0 = self.num_vars();
+                let half = 1usize << (nv0 - 1);
+                let one_minus0 = R::BaseRing::ONE - r0;
+
+                // SAFETY: this arm is only entered when `self` is CmMatVec4Part.
+                let (shared, which) = match self {
+                    StreamingMleEnum::CmMatVec4Part { shared, which, .. } => (shared.clone(), *which),
+                    _ => unreachable!(),
+                };
+
+                if let Some(_) = shared.eval0_at_row_if_base(which, 0) {
+                    // Materialize into base scalars (same pattern as SparseMatVecConstCoeffBase).
+                    let mut out = vec![R::BaseRing::ZERO; half];
+                    for i in 0..half {
+                        let a0 = shared.eval0_at_row_if_base(which, i << 1).unwrap();
+                        let b0 = shared.eval0_at_row_if_base(which, (i << 1) | 1).unwrap();
+                        out[i] = one_minus0 * a0 + r0 * b0;
+                    }
+                    *self = StreamingMleEnum::BaseScalarOwned {
+                        evals: out,
+                        num_vars: nv0 - 1,
+                    };
+                    return;
+                }
+
+                // Non-const-coeff: fall back (and rely on LazyFixed to avoid early materialization).
                 let next = self.fix_variable(r_ring);
                 *self = next;
             }
@@ -1523,38 +1575,54 @@ where
                     num_vars: nv - 1,
                 }
             }
-            StreamingMleEnum::CmMatVec4Part { .. } => {
-                // After fixing, this becomes a general dense table (same as other sparse mat-vec MLEs).
-                #[cfg(feature = "parallel")]
-                let new_evals: Vec<R> = {
-                    use rayon::prelude::*;
-                    (0..half)
-                        .into_par_iter()
-                        .map(|i| {
-                            let v0 = self.eval_at_index(i << 1);
-                            let v1 = self.eval_at_index((i << 1) | 1);
-                            (R::ONE - r) * v0 + r * v1
-                        })
-                        .collect()
-                };
-                #[cfg(not(feature = "parallel"))]
-                let new_evals: Vec<R> = (0..half)
-                    .map(|i| {
-                        let v0 = self.eval_at_index(i << 1);
-                        let v1 = self.eval_at_index((i << 1) | 1);
-                        (R::ONE - r) * v0 + r * v1
-                    })
-                    .collect();
-                StreamingMleEnum::DenseOwned {
-                    evals: new_evals,
-                    num_vars: nv - 1,
-                }
-            }
             StreamingMleEnum::LazyFixed { .. } => {
                 // Use clone + in-place to keep logic centralized.
                 let mut c = self.clone();
                 c.fix_variable_in_place_base(r.coeffs()[0]);
                 c
+            }
+            StreamingMleEnum::CmMatVec4Part { shared, which, .. } => {
+                // Mirror the in-place logic: if this is base-scalar, keep it base-scalar after fixing.
+                let r0 = r.coeffs()[0];
+                let one_minus0 = R::BaseRing::ONE - r0;
+                if let Some(_) = shared.eval0_at_row_if_base(*which, 0) {
+                    let mut out = vec![R::BaseRing::ZERO; half];
+                    for i in 0..half {
+                        let a0 = shared.eval0_at_row_if_base(*which, i << 1).unwrap();
+                        let b0 = shared.eval0_at_row_if_base(*which, (i << 1) | 1).unwrap();
+                        out[i] = one_minus0 * a0 + r0 * b0;
+                    }
+                    StreamingMleEnum::BaseScalarOwned {
+                        evals: out,
+                        num_vars: nv - 1,
+                    }
+                } else {
+                    // General dense fallback.
+                    #[cfg(feature = "parallel")]
+                    let new_evals: Vec<R> = {
+                        use rayon::prelude::*;
+                        (0..half)
+                            .into_par_iter()
+                            .map(|i| {
+                                let v0 = self.eval_at_index(i << 1);
+                                let v1 = self.eval_at_index((i << 1) | 1);
+                                (R::ONE - r) * v0 + r * v1
+                            })
+                            .collect()
+                    };
+                    #[cfg(not(feature = "parallel"))]
+                    let new_evals: Vec<R> = (0..half)
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect();
+                    StreamingMleEnum::DenseOwned {
+                        evals: new_evals,
+                        num_vars: nv - 1,
+                    }
+                }
             }
         }
     }
