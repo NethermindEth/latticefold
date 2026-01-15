@@ -4053,7 +4053,7 @@ mod tests {
         use cyclotomic_rings::rings::FrogPoseidonConfig as PCF;
         use cyclotomic_rings::rings::GetPoseidonParams;
         use sha2::{Digest, Sha256};
-        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use cyclotomic_rings::rings::FrogRing64 as RR;
         use stark_rings::PolyRing;
 
         use crate::we_statement::{digest32_to_bits_field, we_statement_hash_lf_plus, LFP_WE_GATE_DIGEST_V1};
@@ -4088,32 +4088,27 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
         let dparams = DecompParameters { b, k, l: ell };
 
-        // Default Mlen=3 like earlier LF+ timings; allow override to inspect Mlen scaling.
-        let mlen: usize = std::env::var("LFP_TRACE_MLEN")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(3);
-        let M_one = std::sync::Arc::new(SparseMatrix::identity(n));
-        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![M_one; mlen];
-
-        type FSmall = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+        type BR = <RR as PolyRing>::BaseRing;
+        type FSmall = <BR as ark_ff::Field>::BasePrimeField;
         let sp1_digest_bits: Vec<FSmall> = {
             let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
             digest32_to_bits_field::<FSmall>(d)
         };
 
         let run_one = |label: &str, sp1_digest_bits: &[FSmall]| {
-            eprintln!("\n[test_large_trace] case={label} n=2^{n_pow} mlen={mlen}");
+            eprintln!("\n[test_large_trace] case={label} n=2^{n_pow} (sparse-base prover, FrogRing64)");
             #[cfg(feature = "parallel")]
             eprintln!("[test_large_trace] rayon_threads={}", current_num_threads());
             #[cfg(not(feature = "parallel"))]
             eprintln!("[test_large_trace] rayon_threads=DISABLED(feature=parallel)");
             let mut rng = ark_std::test_rng();
             use crate::lin::LinParameters;
-            use crate::plus::{PlusParameters, PlusProver};
-            use crate::r1cs::{r1cs_decomposed_square, ComR1CS};
+            use crate::plus::{PlusParameters, PlusProverSparseBase};
+            use crate::r1cs::ComR1CSBase;
             use crate::utils::estimate_bound;
             use latticefold::arith::r1cs::R1CS;
+            use latticefold::commitment::AjtaiCommitmentScheme;
+            use std::sync::Arc;
 
             // A minimal Π_lin component so the transcript prefix is exercised.
             // Use a conservative bound for gadget decomposition; this is a *bench harness*, not a tight bound.
@@ -4124,22 +4119,32 @@ mod tests {
             if b_bound % 2 == 1 {
                 b_bound += 1;
             }
-            let m = n / k;
-            let z: Vec<RR> = (0..m).map(|_| RR::from((rng.next_u64() & 1) as u128)).collect();
-            let r1cs0 = r1cs_decomposed_square(
-                R1CS::<RR> {
-                    l: 1,
-                    A: SparseMatrix::identity(m),
-                    B: SparseMatrix::identity(m),
-                    C: SparseMatrix::identity(m),
-                },
-                n,
-                b_bound,
-                k,
-            );
+            // Seeded Ajtai scheme (deterministic system parameter).
+            const AJTAI_SEED: [u8; 32] = [7u8; 32];
+            let scheme = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
 
-            let A = Matrix::<RR>::rand(&mut rng, kappa, n);
-            let cr1cs = ComR1CS::new(r1cs0, z, 1, b_bound, k, &A);
+            // Satisfiable const-coeff R1CS (base ring):
+            // Use identity A=B=C so constraints are z_i^2 - z_i = 0, satisfied by boolean witness.
+            let r1cs0 = R1CS::<BR> {
+                l: 0,
+                A: SparseMatrix::identity(n),
+                B: SparseMatrix::identity(n),
+                C: SparseMatrix::identity(n),
+            };
+            let f0: Arc<Vec<BR>> = Arc::new(
+                (0..n)
+                    .map(|i| {
+                        if i == 0 {
+                            BR::ONE
+                        } else {
+                            BR::from((rng.next_u64() & 1) as u64)
+                        }
+                    })
+                    .collect(),
+            );
+            let cr1cs = ComR1CSBase::<RR>::from_f0_seeded_base(r1cs0, f0, 0, &scheme);
+            let m0 = cr1cs.x.matrices_arc_base();
+
             let lin_params = LinParameters {
                 kappa,
                 decomp: dparams.clone(),
@@ -4148,11 +4153,17 @@ mod tests {
 
             let t0 = std::time::Instant::now();
             let transcript = crate::transcript::PoseidonTranscript::empty::<PCF>();
-            let mut prover = PlusProver::init(A.clone(), M.clone(), 1, pparams.clone(), transcript);
+            let mut prover = PlusProverSparseBase::init_seeded_base(
+                scheme.clone(),
+                m0.clone(),
+                1,
+                pparams.clone(),
+                transcript,
+            );
             for b in sp1_digest_bits {
                 prover.transcript.absorb_field_element(b);
             }
-            let proof = prover.prove(&[cr1cs]);
+            let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
             eprintln!("[test_large_trace] plus.prove: {:?}", t0.elapsed());
 
             let t1 = std::time::Instant::now();
@@ -4164,10 +4175,10 @@ mod tests {
             for lp in &proof.lproof {
                 lp.verify(&mut rec);
             }
-            proof.cmproof.verify(&M, &mut rec).expect("cm verify");
             proof
-                .dproof
-                .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, b_bound);
+                .cmproof
+                .verify_with_mlen(m0.len(), &mut rec)
+                .expect("cm verify");
             let trace = rec.trace().clone();
             eprintln!("[test_large_trace] plus.verify(record): {:?}", t1.elapsed());
 
@@ -4181,7 +4192,7 @@ mod tests {
                 decomp_b: b as u64,
                 k: k as u64,
                 l: ell as u64,
-                mlen: M.len() as u64,
+                mlen: m0.len() as u64,
             };
             let poseidon_cfg = PCF::get_poseidon_config();
 
@@ -4192,7 +4203,7 @@ mod tests {
                 &params,
                 sp1_digest_bits,
                 &proof,
-                M.len(),
+                m0.len(),
                 b_bound,
             )
             .expect("build we dr1cs");
@@ -4359,7 +4370,7 @@ mod tests {
 
         // Use the same ring type as the SP1 oneproof harness (`examples/lf_plus_sp1_oneproof.rs`)
         // to ensure Π_decomp (2-digit) assumptions match production.
-        use cyclotomic_rings::rings::FrogRingPoly as RR;
+        use cyclotomic_rings::rings::FrogRing64 as RR;
         use stark_rings::PolyRing;
         use stark_rings_linalg::SparseMatrix;
         use std::sync::Arc;
@@ -4379,7 +4390,7 @@ mod tests {
         // IMPORTANT: `rgchk` digit decomposition will panic if `k` is too small for the chosen base,
         // so we use the production-style choice `decomp_b = d/2` and pick ℓ = ceil(log_{d'} q).
         let kappa = 1usize;
-        let k = 2usize;
+        let k = 1usize;
         let d = RR::dimension();
         let d_prime = d / 2;
         let lnq = (BR::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
@@ -4390,7 +4401,7 @@ mod tests {
         let tau_unpadded_len = kappa * (k * d) * ell * d;
         let n = tau_unpadded_len.next_power_of_two();
         let nvars = ark_std::log2(n) as usize;
-        assert!(n <= (1 << 15), "keep this test small");
+        assert!(n <= (1 << 17), "keep this test small");
 
         // SP1-style public inputs: 256 digest bits.
         type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;

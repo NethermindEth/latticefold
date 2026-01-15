@@ -3204,7 +3204,7 @@ impl StreamingSumcheck {
 mod tests {
     use super::*;
     use rand::RngCore;
-    use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
+    use cyclotomic_rings::rings::FrogRing64 as R;
     use stark_rings::PolyRing;
     use stark_rings_linalg::SparseMatrix;
     use std::sync::Arc;
