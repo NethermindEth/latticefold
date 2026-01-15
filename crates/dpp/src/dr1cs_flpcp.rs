@@ -72,11 +72,22 @@ impl<F: PrimeField + FftField> RsDr1csFlpcp<F> {
         // Fast systematic RS extrapolation on consecutive points:
         // - we already have f(1..k) as y_*
         // - compute f(k+1..2k) in O(k log k) via one convolution
-        // The two extrapolations are independent and tend to dominate runtime; run concurrently.
-        let (y_a_tail, y_b_tail) = join(
-            || extrapolate_consecutive_next_block::<F>(&y_a),
-            || extrapolate_consecutive_next_block::<F>(&y_b),
-        );
+        //
+        // Memory note:
+        // Extrapolation uses large NTT buffers when k is huge; running multiple extrapolations
+        // concurrently can blow up RSS. For large sizes, compute tails sequentially.
+        let out_len = 2 * k - 1;
+        let size = out_len.next_power_of_two();
+        let (y_a_tail, y_b_tail) = if size >= (1 << 24) {
+            let ya = extrapolate_consecutive_next_block::<F>(&y_a);
+            let yb = extrapolate_consecutive_next_block::<F>(&y_b);
+            (ya, yb)
+        } else {
+            join(
+                || extrapolate_consecutive_next_block::<F>(&y_a),
+                || extrapolate_consecutive_next_block::<F>(&y_b),
+            )
+        };
         debug_assert_eq!(y_a_tail.len(), k);
         debug_assert_eq!(y_b_tail.len(), k);
 
@@ -407,14 +418,28 @@ impl<F: PrimeField + FftField> RsDr1csNpFlpcpSparse<F> {
                 || mat_vec_sparse_np(&self.inst.c, x, z_w, self.l),
             ),
         );
-        // Compute tails concurrently.
-        let (y_a_tail, (y_b_tail, y_c_tail)) = join(
-            || extrapolate_consecutive_next_block::<F>(&y_a),
-            || join(
-                || extrapolate_consecutive_next_block::<F>(&y_b),
-                || extrapolate_consecutive_next_block::<F>(&y_c),
-            ),
-        );
+        // Compute tails.
+        //
+        // Memory note:
+        // For huge k, each extrapolation allocates large NTT buffers. Running 3 extrapolations
+        // concurrently can easily exceed machine memory. For large sizes, compute tails sequentially.
+        let out_len = 2 * k - 1;
+        let size = out_len.next_power_of_two();
+        let (y_a_tail, y_b_tail, y_c_tail) = if size >= (1 << 24) {
+            let ya = extrapolate_consecutive_next_block::<F>(&y_a);
+            let yb = extrapolate_consecutive_next_block::<F>(&y_b);
+            let yc = extrapolate_consecutive_next_block::<F>(&y_c);
+            (ya, yb, yc)
+        } else {
+            let (ya, (yb, yc)) = join(
+                || extrapolate_consecutive_next_block::<F>(&y_a),
+                || join(
+                    || extrapolate_consecutive_next_block::<F>(&y_b),
+                    || extrapolate_consecutive_next_block::<F>(&y_c),
+                ),
+            );
+            (ya, yb, yc)
+        };
 
         // Build w (length 2k).
         let mut w = Vec::with_capacity(2 * k);
