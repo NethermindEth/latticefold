@@ -236,9 +236,16 @@ where
             .collect::<Vec<_>>();
         let h: Vec<Arc<Vec<R>>> = h_vecs.into_iter().map(Arc::new).collect();
 
-        let dpp = (0..l)
-            .map(|i| R::from(R::BaseRing::from(dp as u128).pow([i as u64])))
-            .collect::<Vec<_>>();
+        // Avoid pow(): compute dp^i iteratively.
+        let mut dpp = Vec::with_capacity(l);
+        {
+            let mut acc = R::BaseRing::ONE;
+            let base = R::BaseRing::from(dp as u128);
+            for _ in 0..l {
+                dpp.push(R::from(acc));
+                acc *= base;
+            }
+        }
         let xp = (0..d).map(|i| unit_monomial::<R>(i)).collect::<Vec<_>>();
 
         // Build *structured* tensor tables without materializing O(n) vectors.
@@ -698,9 +705,16 @@ where
             h_vecs.into_iter().map(Arc::new).collect()
         };
 
-        let dpp = (0..l)
-            .map(|i| R::from(R::BaseRing::from(dp as u128).pow([i as u64])))
-            .collect::<Vec<_>>();
+        // Avoid pow(): compute dp^i iteratively.
+        let mut dpp = Vec::with_capacity(l);
+        {
+            let mut acc = R::BaseRing::ONE;
+            let base = R::BaseRing::from(dp as u128);
+            for _ in 0..l {
+                dpp.push(R::from(acc));
+                acc *= base;
+            }
+        }
         let xp = (0..d).map(|i| unit_monomial::<R>(i)).collect::<Vec<_>>();
 
         let t = Instant::now();
@@ -2213,16 +2227,31 @@ where
 
         let dp = R::dimension() / 2;
         let l = self.dcom.dparams.l;
-        let dpp = (0..l)
-            .map(|i| R::from(R::BaseRing::from(dp as u128).pow([i as u64])))
-            .collect::<Vec<_>>();
+        // Avoid pow() even in verifier setup: compute dp^i iteratively.
+        let mut dpp = Vec::with_capacity(l);
+        {
+            let mut acc = R::BaseRing::ONE;
+            let base = R::BaseRing::from(dp as u128);
+            for _ in 0..l {
+                dpp.push(R::from(acc));
+                acc *= base;
+            }
+        }
         let xp = (0..d).map(|i| unit_monomial::<R>(i)).collect::<Vec<_>>();
 
         let mut verify_sumcheck =
             |sumcheck_proof: &Proof<R>, evals: &[InstanceEvals<R>]| -> Result<Vec<R>, ()> {
                 let rc: R = transcript.get_challenge().into();
-
                 let z_idx = L * (4 + 4 * mlen);
+                // Precompute rc^i for all indices used below.
+                let mut rc_pows = Vec::<R>::with_capacity(z_idx + 2);
+                {
+                    let mut acc = R::ONE;
+                    for _ in 0..(z_idx + 2) {
+                        rc_pows.push(acc);
+                        acc *= rc;
+                    }
+                }
 
                 let claimed_sum = self
                     .dcom
@@ -2232,21 +2261,21 @@ where
                     .map(|(l, eval)| {
                         let l_idx = l * (4 + 4 * mlen);
 
-                        R::from(eval.a[0]) * rc.pow([l_idx as u64])
-                            + eval.b[0] * rc.pow([l_idx as u64 + 1])
-                            + eval.c[0] * rc.pow([l_idx as u64 + 2])
-                            + u[l][0] * rc.pow([l_idx as u64 + 3])
+                        R::from(eval.a[0]) * rc_pows[l_idx]
+                            + eval.b[0] * rc_pows[l_idx + 1]
+                            + eval.c[0] * rc_pows[l_idx + 2]
+                            + u[l][0] * rc_pows[l_idx + 3]
                             + (0..mlen)
                                 .map(|i| {
                                     let idx = l_idx + 4 + i * 4;
-                                    R::from(eval.a[1 + i]) * rc.pow([idx as u64])
-                                        + eval.b[1 + i] * rc.pow([idx as u64 + 1])
-                                        + eval.c[1 + i] * rc.pow([idx as u64 + 2])
-                                        + u[l][1 + i] * rc.pow([idx as u64 + 3])
+                                    R::from(eval.a[1 + i]) * rc_pows[idx]
+                                        + eval.b[1 + i] * rc_pows[idx + 1]
+                                        + eval.c[1 + i] * rc_pows[idx + 2]
+                                        + u[l][1 + i] * rc_pows[idx + 3]
                                 })
                                 .sum::<R>()
-                            + tcch0[l] * rc.pow([z_idx as u64])
-                            + tcch1[l] * rc.pow([z_idx as u64 + 1])
+                            + tcch0[l] * rc_pows[z_idx]
+                            + tcch1[l] * rc_pows[z_idx + 1]
                     })
                     .sum::<R>();
 
@@ -2281,23 +2310,23 @@ where
                     .map(|(l, el)| {
                         let el = &el.0;
                         let l_idx = l * (4 + 4 * mlen);
-                        eq * (el[0][0] * rc.pow([l_idx as u64])
-                            + el[0][1] * rc.pow([l_idx as u64 + 1])
-                            + el[0][2] * rc.pow([l_idx as u64 + 2])
-                            + el[0][3] * rc.pow([l_idx as u64 + 3])
+                        eq * (el[0][0] * rc_pows[l_idx]
+                            + el[0][1] * rc_pows[l_idx + 1]
+                            + el[0][2] * rc_pows[l_idx + 2]
+                            + el[0][3] * rc_pows[l_idx + 3]
                             + (0..mlen)
                                 .map(|i| {
                                     // M_i
                                     let M_evals = el[i + 1];
                                     let idx = l_idx + 4 + i * 4;
-                                    M_evals[0] * rc.pow([idx as u64])
-                                        + M_evals[1] * rc.pow([idx as u64 + 1])
-                                        + M_evals[2] * rc.pow([idx as u64 + 2])
-                                        + M_evals[3] * rc.pow([idx as u64 + 3])
+                                    M_evals[0] * rc_pows[idx]
+                                        + M_evals[1] * rc_pows[idx + 1]
+                                        + M_evals[2] * rc_pows[idx + 2]
+                                        + M_evals[3] * rc_pows[idx + 3]
                                 })
                                 .sum::<R>())
-                            + (t0_ro * el[0][0]) * rc.pow([z_idx as u64])
-                            + (t1_ro * el[0][0]) * rc.pow([z_idx as u64 + 1])
+                            + (t0_ro * el[0][0]) * rc_pows[z_idx]
+                            + (t1_ro * el[0][0]) * rc_pows[z_idx + 1]
                     })
                     .sum::<R>();
 

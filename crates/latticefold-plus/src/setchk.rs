@@ -1437,21 +1437,34 @@ impl<R: OverField> Out<R> {
 
         use ark_std::One;
         let mut ver = R::zero();
+        // Avoid pow() in verification as well: use precomputed alpha powers and iterative rc powers.
+        let mut rc_pow: R::BaseRing = R::BaseRing::one();
         for (i, e) in self.e[0].iter().enumerate() {
             let c = &cba[i].0;
             let beta = &cba[i].1;
             let alpha = &cba[i].2;
             let eq = eq_eval(c, &r).unwrap();
+            let mut alpha_pows: Vec<R::BaseRing> = Vec::with_capacity(e.len());
+            {
+                let mut ap = R::BaseRing::one(); // alpha^0
+                for _ in 0..e.len() {
+                    alpha_pows.push(ap);
+                    ap *= *alpha;
+                }
+            }
             let e_sum = e
                 .iter()
                 .enumerate()
                 .map(|(j, e_j)| {
                     let ev1 = R::from(ev(e_j, *beta));
                     let ev2 = R::from(ev(e_j, *beta * beta));
-                    (ev1 * ev1 - ev2) * alpha.pow([j as u64])
+                    (ev1 * ev1 - ev2) * alpha_pows[j]
                 })
                 .sum::<R>();
-            ver += eq * e_sum * rc.as_ref().unwrap_or(&R::BaseRing::one()).pow([i as u64]);
+            ver += eq * e_sum * R::from(rc_pow);
+            if let Some(rc) = rc {
+                rc_pow *= rc;
+            }
         }
         for (i, b) in self.b.iter().enumerate() {
             let offset = self.e[0].len();
@@ -1464,12 +1477,10 @@ impl<R: OverField> Out<R> {
                 let ev2 = R::from(ev(b, *beta * *beta));
                 ev1 * ev1 - ev2
             };
-            ver += eq
-                * *alpha
-                * b_claim
-                * rc.as_ref()
-                    .unwrap_or(&R::BaseRing::one())
-                    .pow([(i + offset) as u64]);
+            ver += eq * *alpha * b_claim * R::from(rc_pow);
+            if let Some(rc) = rc {
+                rc_pow *= rc;
+            }
         }
 
         (ver == v)

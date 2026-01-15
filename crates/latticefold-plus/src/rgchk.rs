@@ -446,16 +446,18 @@ where
             let d = R::dimension();
             let base = self.dparams.b;
             for (ni, _) in self.out.e.iter().enumerate() {
+                let base_br = R::BaseRing::from(base);
+                let mut d_ppow = R::BaseRing::ONE;
                 let u_comb = self.out.e[ni]
                     .iter()
                     .skip(self.dparams.k * l)
                     .take(self.dparams.k)
-                    .enumerate()
-                    .fold(vec![R::zero(); d], |mut acc, (i, u_i)| {
-                        let d_ppow = R::BaseRing::from(base).pow([i as u64]);
+                    .fold(vec![R::zero(); d], |mut acc, u_i| {
+                        // Avoid pow() in verification: maintain `base^i` incrementally.
                         u_i.iter()
                             .zip(acc.iter_mut())
                             .for_each(|(u_ij, a_j)| *a_j += *u_ij * d_ppow);
+                        d_ppow *= base_br;
                         acc
                     });
 
