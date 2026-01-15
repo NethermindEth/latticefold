@@ -4,7 +4,6 @@
 //! so the existing verifier (`MLSumcheck::verify_as_subprotocol`) remains unchanged.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use latticefold::transcript::Transcript;
 use latticefold::utils::sumcheck::prover::ProverMsg;
@@ -14,14 +13,6 @@ use stark_rings_linalg::{Matrix, SparseMatrix};
 use crate::setchk::DigitsMatrix;
 use crate::utils::maybe_print_rss;
 use core::mem::MaybeUninit;
-
-// CM fused-matvec cache stats (only printed when LF_PLUS_PROFILE=1).
-static CM_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
-static CM_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
-static CM_LAZY_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
-static CM_LAZY_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
-static CM_HFROM_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
-static CM_HFROM_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct CmCacheStats {
@@ -2549,14 +2540,6 @@ impl StreamingSumcheck {
             (acc, s.cm_stats)
         };
 
-        if profile {
-            CM_CACHE_HITS.fetch_add(stats.cm_hit, Ordering::Relaxed);
-            CM_CACHE_MISSES.fetch_add(stats.cm_miss, Ordering::Relaxed);
-            CM_LAZY_CACHE_HITS.fetch_add(stats.lazy_hit, Ordering::Relaxed);
-            CM_LAZY_CACHE_MISSES.fetch_add(stats.lazy_miss, Ordering::Relaxed);
-            CM_HFROM_CACHE_HITS.fetch_add(stats.hfrom_hit, Ordering::Relaxed);
-            CM_HFROM_CACHE_MISSES.fetch_add(stats.hfrom_miss, Ordering::Relaxed);
-        }
 
         ProverMsg { evaluations: result }
     }
@@ -2802,14 +2785,6 @@ impl StreamingSumcheck {
             (acc, s.cm_stats)
         };
 
-        if profile {
-            CM_CACHE_HITS.fetch_add(stats.cm_hit, Ordering::Relaxed);
-            CM_CACHE_MISSES.fetch_add(stats.cm_miss, Ordering::Relaxed);
-            CM_LAZY_CACHE_HITS.fetch_add(stats.lazy_hit, Ordering::Relaxed);
-            CM_LAZY_CACHE_MISSES.fetch_add(stats.lazy_miss, Ordering::Relaxed);
-            CM_HFROM_CACHE_HITS.fetch_add(stats.hfrom_hit, Ordering::Relaxed);
-            CM_HFROM_CACHE_MISSES.fetch_add(stats.hfrom_miss, Ordering::Relaxed);
-        }
 
         ProverMsg {
             evaluations: vec![result[0], result[1], result[2]],
@@ -2963,15 +2938,6 @@ impl StreamingSumcheck {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = std::time::Instant::now();
 
-        if profile {
-            CM_CACHE_HITS.store(0, Ordering::Relaxed);
-            CM_CACHE_MISSES.store(0, Ordering::Relaxed);
-            CM_LAZY_CACHE_HITS.store(0, Ordering::Relaxed);
-            CM_LAZY_CACHE_MISSES.store(0, Ordering::Relaxed);
-            CM_HFROM_CACHE_HITS.store(0, Ordering::Relaxed);
-            CM_HFROM_CACHE_MISSES.store(0, Ordering::Relaxed);
-        }
-
         transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
         transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
 
@@ -3045,18 +3011,6 @@ impl StreamingSumcheck {
                 t_final_elapsed,
                 t_total.elapsed()
             );
-            let h = CM_CACHE_HITS.load(Ordering::Relaxed);
-            let m = CM_CACHE_MISSES.load(Ordering::Relaxed);
-            let lh = CM_LAZY_CACHE_HITS.load(Ordering::Relaxed);
-            let lm = CM_LAZY_CACHE_MISSES.load(Ordering::Relaxed);
-            let hh = CM_HFROM_CACHE_HITS.load(Ordering::Relaxed);
-            let hm = CM_HFROM_CACHE_MISSES.load(Ordering::Relaxed);
-            if (h + m + lh + lm) > 0 {
-                println!(
-                    "[LF+ streaming_sumcheck] cm_cache: hit={} miss={} lazy_hit={} lazy_miss={} hfrom_hit={} hfrom_miss={}",
-                    h, m, lh, lm, hh, hm
-                );
-            }
         }
 
         (Proof::new(msgs), state.randomness, final_evals)
@@ -3077,15 +3031,6 @@ impl StreamingSumcheck {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = std::time::Instant::now();
         let degree: usize = 2;
-
-        if profile {
-            CM_CACHE_HITS.store(0, Ordering::Relaxed);
-            CM_CACHE_MISSES.store(0, Ordering::Relaxed);
-            CM_LAZY_CACHE_HITS.store(0, Ordering::Relaxed);
-            CM_LAZY_CACHE_MISSES.store(0, Ordering::Relaxed);
-            CM_HFROM_CACHE_HITS.store(0, Ordering::Relaxed);
-            CM_HFROM_CACHE_MISSES.store(0, Ordering::Relaxed);
-        }
 
         transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
         transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
@@ -3158,18 +3103,6 @@ impl StreamingSumcheck {
                 t_final_elapsed,
                 t_total.elapsed()
             );
-            let h = CM_CACHE_HITS.load(Ordering::Relaxed);
-            let m = CM_CACHE_MISSES.load(Ordering::Relaxed);
-            let lh = CM_LAZY_CACHE_HITS.load(Ordering::Relaxed);
-            let lm = CM_LAZY_CACHE_MISSES.load(Ordering::Relaxed);
-            let hh = CM_HFROM_CACHE_HITS.load(Ordering::Relaxed);
-            let hm = CM_HFROM_CACHE_MISSES.load(Ordering::Relaxed);
-            if (h + m + lh + lm) > 0 {
-                println!(
-                    "[LF+ streaming_sumcheck] cm_cache: hit={} miss={} lazy_hit={} lazy_miss={} hfrom_hit={} hfrom_miss={}",
-                    h, m, lh, lm, hh, hm
-                );
-            }
         }
 
         (Proof::new(msgs), state.randomness, final_evals)
