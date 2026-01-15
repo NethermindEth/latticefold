@@ -185,18 +185,60 @@ impl core::ops::Mul for FrogRing64 {
         //
         // This is the cheapest "big win" we can add without introducing an NTT/CRT form.
         #[inline(always)]
-        fn mul16(a: &[Fq], b: &[Fq]) -> [Fq; 32] {
-            debug_assert_eq!(a.len(), 16);
-            debug_assert_eq!(b.len(), 16);
-            let mut out = [<Fq as Field>::ZERO; 32];
-            for i in 0..16 {
+        fn mul8(a: &[Fq], b: &[Fq]) -> [Fq; 16] {
+            debug_assert_eq!(a.len(), 8);
+            debug_assert_eq!(b.len(), 8);
+            let mut out = [<Fq as Field>::ZERO; 16];
+            for i in 0..8 {
                 let ai = a[i];
                 if ai == <Fq as Field>::ZERO {
                     continue;
                 }
-                for j in 0..16 {
+                for j in 0..8 {
                     out[i + j] += ai * b[j];
                 }
+            }
+            out
+        }
+
+        // Karatsuba 16x16 using 8x8 base multiplies:
+        // 3*(8*8)=192 muls vs 256 for schoolbook.
+        #[inline(always)]
+        fn mul16(a: &[Fq], b: &[Fq]) -> [Fq; 32] {
+            debug_assert_eq!(a.len(), 16);
+            debug_assert_eq!(b.len(), 16);
+            let (a0, a1) = a.split_at(8);
+            let (b0, b1) = b.split_at(8);
+
+            let p0 = mul8(a0, b0);
+            let p1 = mul8(a1, b1);
+            let mut a01 = [<Fq as Field>::ZERO; 8];
+            let mut b01 = [<Fq as Field>::ZERO; 8];
+            for i in 0..8 {
+                a01[i] = a0[i] + a1[i];
+                b01[i] = b0[i] + b1[i];
+            }
+            let p2 = mul8(&a01, &b01);
+
+            // cross = p2 - p0 - p1 (len 16)
+            let mut cross = [<Fq as Field>::ZERO; 16];
+            for i in 0..16 {
+                cross[i] = p2[i] - p0[i] - p1[i];
+            }
+
+            // Assemble 16x16 convolution:
+            // out[0..15] = p0 low
+            // out[8..23] += cross
+            // out[16..31] += p1
+            let mut out = [<Fq as Field>::ZERO; 32];
+            for i in 0..16 {
+                out[i] = p0[i];
+            }
+            for i in 0..16 {
+                out[8 + i] += cross[i];
+            }
+            for i in 0..16 {
+                out[16 + i] += p1[i];
             }
             out
         }
