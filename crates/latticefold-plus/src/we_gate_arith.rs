@@ -4155,7 +4155,7 @@ mod tests {
         use cyclotomic_rings::rings::FrogPoseidonConfig as PCF;
         use cyclotomic_rings::rings::GetPoseidonParams;
         use sha2::{Digest, Sha256};
-        use cyclotomic_rings::rings::FrogRing64 as RR;
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
         use stark_rings::PolyRing;
 
         use crate::we_statement::{digest32_to_bits_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};
