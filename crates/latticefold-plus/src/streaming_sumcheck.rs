@@ -217,6 +217,100 @@ where
         /// Maximum number of lazy fixed bits before materializing.
         max_lazy: usize,
     },
+
+    /// CM optimization: four sparse mat-vecs that share the same sparse matrix row structure.
+    ///
+    /// This is used to compute the four CM mat-vec MLEs per external matrix \(M_i\):
+    /// `M_i * tau`, `M_i * m_tau`, `M_i * f`, `M_i * h`.
+    ///
+    /// The **semantics** of each part are identical to the corresponding standalone MLE; the
+    /// only difference is that the sumcheck prover can cache the shared row scan and reuse it
+    /// across the four parts when evaluating at the same row index.
+    CmMatVec4Part {
+        shared: Arc<CmMatVec4Shared<R>>,
+        which: u8, // 0..4
+        num_vars: usize,
+    },
+}
+
+/// Shared data for [`StreamingMleEnum::CmMatVec4Part`].
+#[derive(Clone)]
+pub struct CmMatVec4Shared<R: OverField + PolyRing>
+where
+    R::BaseRing: Ring,
+{
+    pub matrix0: Arc<SparseMatrix<R::BaseRing>>,
+    pub w0: CmMatVecWitness<R>,
+    pub w1: CmMatVecWitness<R>,
+    pub w2: CmMatVecWitness<R>,
+    pub w3: CmMatVecWitness<R>,
+}
+
+/// Witness sources for CM fused sparse mat-vecs.
+#[derive(Clone)]
+pub enum CmMatVecWitness<R: OverField + PolyRing>
+where
+    R::BaseRing: Ring,
+{
+    Base(Arc<Vec<R::BaseRing>>),
+    Ring(Arc<Vec<R>>),
+    MonomialDigits {
+        digits: Arc<Vec<u16>>,
+        exp_table: Arc<Vec<R>>,
+    },
+    Mle(Arc<StreamingMleEnum<R>>),
+}
+
+impl<R: OverField + PolyRing> CmMatVec4Shared<R>
+where
+    R::BaseRing: Ring,
+{
+    #[inline]
+    fn eval_witness(w: &CmMatVecWitness<R>, col: usize) -> Option<R> {
+        match w {
+            CmMatVecWitness::Base(v) => v.get(col).copied().map(R::from),
+            CmMatVecWitness::Ring(v) => v.get(col).copied(),
+            CmMatVecWitness::MonomialDigits { digits, exp_table } => {
+                let cj = col;
+                if cj < digits.len() {
+                    Some(exp_table[digits[cj] as usize])
+                } else {
+                    None
+                }
+            }
+            CmMatVecWitness::Mle(m) => Some(m.eval_at_index(col)),
+        }
+    }
+
+    /// Evaluate all four mat-vec outputs at a given **row** index.
+    #[inline]
+    pub fn eval4_at_row(&self, row: usize) -> [R; 4] {
+        if row >= self.matrix0.coeffs.len() {
+            return [R::ZERO; 4];
+        }
+        let mut acc0 = R::ZERO;
+        let mut acc1 = R::ZERO;
+        let mut acc2 = R::ZERO;
+        let mut acc3 = R::ZERO;
+        for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+            let c0 = *coeff0;
+            let cj = *col_idx;
+
+            if let Some(v0) = Self::eval_witness(&self.w0, cj) {
+                acc0 += v0 * c0;
+            }
+            if let Some(v1) = Self::eval_witness(&self.w1, cj) {
+                acc1 += v1 * c0;
+            }
+            if let Some(v2) = Self::eval_witness(&self.w2, cj) {
+                acc2 += v2 * c0;
+            }
+            if let Some(v3) = Self::eval_witness(&self.w3, cj) {
+                acc3 += v3 * c0;
+            }
+        }
+        [acc0, acc1, acc2, acc3]
+    }
 }
 
 impl<R: OverField + PolyRing> StreamingMleEnum<R>
@@ -246,6 +340,7 @@ where
             StreamingMleEnum::HFromMfDigitsConstCol0 { num_vars, .. } => *num_vars,
             StreamingMleEnum::Tensor4Padded { num_vars, .. } => *num_vars,
             StreamingMleEnum::LazyFixed { num_vars, .. } => *num_vars,
+            StreamingMleEnum::CmMatVec4Part { num_vars, .. } => *num_vars,
         }
     }
 
@@ -359,6 +454,7 @@ where
             StreamingMleEnum::SparseMatVecBaseCoeffFromMle { .. } => self.eval_at_index(index).coeffs()[0],
             StreamingMleEnum::HFromMfDigitsConstCol0 { .. } => self.eval_at_index(index).coeffs()[0],
             StreamingMleEnum::LazyFixed { .. } => self.eval_at_index(index).coeffs()[0],
+            StreamingMleEnum::CmMatVec4Part { .. } => self.eval_at_index(index).coeffs()[0],
             // Fallback: compute full ring value then project constant term.
             _ => self.eval_at_index(index).coeffs()[0],
         }
@@ -578,6 +674,12 @@ where
                     acc += inner.eval_at_index(base | b) * w;
                 }
                 acc
+            }
+            StreamingMleEnum::CmMatVec4Part { shared, which, .. } => {
+                debug_assert!((*which as usize) < 4);
+                // NOTE: this computes all 4 outputs. The sumcheck prover will cache these row scans
+                // across the four parts in the hot loop; this fallback is correctness-only.
+                shared.eval4_at_row(index)[*which as usize]
             }
         }
     }
@@ -1070,6 +1172,11 @@ where
                 // Now apply this fix to the dense table in-place.
                 self.fix_variable_in_place_base(r0);
             }
+            StreamingMleEnum::CmMatVec4Part { .. } => {
+                // No dedicated in-place folding; fall back to materialization like other sparse mat-vec MLEs.
+                let next = self.fix_variable(r_ring);
+                *self = next;
+            }
         }
     }
 
@@ -1416,6 +1523,33 @@ where
                     num_vars: nv - 1,
                 }
             }
+            StreamingMleEnum::CmMatVec4Part { .. } => {
+                // After fixing, this becomes a general dense table (same as other sparse mat-vec MLEs).
+                #[cfg(feature = "parallel")]
+                let new_evals: Vec<R> = {
+                    use rayon::prelude::*;
+                    (0..half)
+                        .into_par_iter()
+                        .map(|i| {
+                            let v0 = self.eval_at_index(i << 1);
+                            let v1 = self.eval_at_index((i << 1) | 1);
+                            (R::ONE - r) * v0 + r * v1
+                        })
+                        .collect()
+                };
+                #[cfg(not(feature = "parallel"))]
+                let new_evals: Vec<R> = (0..half)
+                    .map(|i| {
+                        let v0 = self.eval_at_index(i << 1);
+                        let v1 = self.eval_at_index((i << 1) | 1);
+                        (R::ONE - r) * v0 + r * v1
+                    })
+                    .collect();
+                StreamingMleEnum::DenseOwned {
+                    evals: new_evals,
+                    num_vars: nv - 1,
+                }
+            }
             StreamingMleEnum::LazyFixed { .. } => {
                 // Use clone + in-place to keep logic centralized.
                 let mut c = self.clone();
@@ -1590,6 +1724,10 @@ impl StreamingSumcheck {
             vals1: Vec<Rr>,
             vals: Vec<Rr>,
             levals: Vec<Rr>,
+            // CM optimization: cache one fused mat-vec row scan for the "even" and "odd" indices
+            // within the current hypercube vertex pair.
+            cm_cache_even: Option<(usize, usize, [Rr; 4])>, // (shared_id, row, vals)
+            cm_cache_odd: Option<(usize, usize, [Rr; 4])>,
         }
 
         let scratch = || Scratch {
@@ -1599,15 +1737,50 @@ impl StreamingSumcheck {
             vals1: vec![R::ZERO; num_polys],
             vals: vec![R::ZERO; num_polys],
             levals: vec![R::ZERO; degree + 1],
+            cm_cache_even: None,
+            cm_cache_odd: None,
         };
+
+        #[inline]
+        fn eval_mle_with_cm_cache<R: OverField + PolyRing>(
+            mle: &StreamingMleEnum<R>,
+            index: usize,
+            cache: &mut Option<(usize, usize, [R; 4])>,
+        ) -> R
+        where
+            R::BaseRing: Ring,
+        {
+            // Peel the "identity" LazyFixed wrapper (fixed.len()==0) so CM can still hit the cache.
+            if let StreamingMleEnum::LazyFixed { inner, fixed, .. } = mle {
+                if fixed.is_empty() {
+                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache);
+                }
+            }
+            if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = mle {
+                let wid = *which as usize;
+                debug_assert!(wid < 4);
+                let sid = Arc::as_ptr(shared) as usize;
+                if let Some((csid, crow, vals)) = cache.as_ref() {
+                    if *csid == sid && *crow == index {
+                        return vals[wid];
+                    }
+                }
+                let vals = shared.eval4_at_row(index);
+                *cache = Some((sid, index, vals));
+                return vals[wid];
+            }
+            mle.eval_at_index(index)
+        }
 
         #[cfg(feature = "parallel")]
         let result = (0..domain_half)
             .into_par_iter()
             .fold(scratch, |mut s, b| {
+                let idx0 = b << 1;
+                let idx1 = (b << 1) | 1;
                 for (i, mle) in state.mles.iter().enumerate() {
-                    s.vals0[i] = mle.eval_at_index(b << 1);
-                    s.vals1[i] = mle.eval_at_index((b << 1) | 1);
+                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even);
+                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd);
                 }
                 s.levals[0] = comb_fn(&s.vals0);
                 s.levals[1] = comb_fn(&s.vals1);
@@ -1641,9 +1814,11 @@ impl StreamingSumcheck {
             let mut acc = vec![R::ZERO; degree + 1];
             let mut s = scratch();
             for b in 0..domain_half {
+                let idx0 = b << 1;
+                let idx1 = (b << 1) | 1;
                 for (i, mle) in state.mles.iter().enumerate() {
-                    s.vals0[i] = mle.eval_at_index(b << 1);
-                    s.vals1[i] = mle.eval_at_index((b << 1) | 1);
+                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even);
+                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd);
                 }
                 s.levals[0] = comb_fn(&s.vals0);
                 s.levals[1] = comb_fn(&s.vals1);

@@ -1407,7 +1407,7 @@ where
                 None
             };
 
-            let tau_cc = mats_const;
+            let _tau_cc = mats_const;
             let mtau_cc = mats_const && mtau0_arc.is_some();
             let f_cc = mats_const && f0_arc.is_some();
             let h_cc = false; // h is derived and not const-coeff in the SP1 regime
@@ -1512,80 +1512,52 @@ where
 
             // mat-vecs: for each external M
             for m0 in m_arcs0 {
-                // M * tau
-                if tau_cc {
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
-                        matrix: m0.clone(),
-                        witness0: tau0_arc.clone(),
-                        num_vars: nvars,
-                    });
-                } else {
-                    unreachable!("base path expects tau const-coeff");
-                }
+                // CM speed win: fuse the 4 mat-vec MLEs per M into a shared row scan.
+                use crate::streaming_sumcheck::{CmMatVec4Shared, CmMatVecWitness};
 
-                // M * m_tau
-                if mtau_cc {
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
-                        matrix: m0.clone(),
-                        witness0: mtau0_arc.as_ref().unwrap().clone(),
-                        num_vars: nvars,
-                    });
+                let w_tau = CmMatVecWitness::Base(tau0_arc.clone());
+
+                let w_mtau = if mtau_cc {
+                    CmMatVecWitness::Base(mtau0_arc.as_ref().unwrap().clone())
                 } else {
                     match &inst.m_tau {
-                        crate::rgchk::MonomialVec::Dense(v) => {
-                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
-                                matrix0: m0.clone(),
-                                witness: v.clone(),
-                                num_vars: nvars,
-                            };
-                            if cm_lazy > 0 {
-                                mles.push(StreamingMleEnum::LazyFixed {
-                                    inner: Box::new(mle),
-                                    num_vars: nvars,
-                                    fixed: Vec::new(),
-                                    weights: vec![R::BaseRing::ONE],
-                                    max_lazy: cm_lazy,
-                                });
-                            } else {
-                                mles.push(mle);
-                            }
-                        }
+                        crate::rgchk::MonomialVec::Dense(v) => CmMatVecWitness::Ring(v.clone()),
                         crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits {
-                                matrix0: m0.clone(),
-                                digits: digits.clone(),
-                                exp_table: exp_table.clone(),
-                                num_vars: nvars,
-                            };
-                            if cm_lazy > 0 {
-                                mles.push(StreamingMleEnum::LazyFixed {
-                                    inner: Box::new(mle),
-                                    num_vars: nvars,
-                                    fixed: Vec::new(),
-                                    weights: vec![R::BaseRing::ONE],
-                                    max_lazy: cm_lazy,
-                                });
-                            } else {
-                                mles.push(mle);
-                            }
+                            CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
                         }
                     }
-                }
+                };
 
-                // M * f
-                if f_cc {
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
-                        matrix: m0.clone(),
-                        witness0: f0_arc.as_ref().unwrap().clone(),
-                        num_vars: nvars,
-                    });
+                let w_f = if f_cc {
+                    CmMatVecWitness::Base(f0_arc.as_ref().unwrap().clone())
                 } else {
-                    let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
-                        matrix0: m0.clone(),
-                        witness: f_arc_ring.clone().unwrap(),
-                        num_vars: nvars,
-                    };
-                    if cm_lazy > 0 {
+                    CmMatVecWitness::Ring(f_arc_ring.clone().unwrap())
+                };
+
+                let w_h = CmMatVecWitness::Mle(h_mles_full[i].clone());
+
+                let shared = std::sync::Arc::new(CmMatVec4Shared {
+                    matrix0: m0.clone(),
+                    w0: w_tau,
+                    w1: w_mtau,
+                    w2: w_f,
+                    w3: w_h,
+                });
+
+                // Keep exact MLE order: [M*tau, M*m_tau, M*f, M*h].
+                let mk_part = |which: u8| StreamingMleEnum::CmMatVec4Part {
+                    shared: shared.clone(),
+                    which,
+                    num_vars: nvars,
+                };
+
+                // M * tau (was never LazyFixed)
+                mles.push(mk_part(0));
+
+                // M * m_tau (preserve LazyFixed usage)
+                {
+                    let mle = mk_part(1);
+                    if !mtau_cc && cm_lazy > 0 {
                         mles.push(StreamingMleEnum::LazyFixed {
                             inner: Box::new(mle),
                             num_vars: nvars,
@@ -1598,22 +1570,36 @@ where
                     }
                 }
 
-                // M * h (h is another MLE)
-                let mle = StreamingMleEnum::SparseMatVecBaseCoeffFromMle {
-                    matrix0: m0.clone(),
-                    witness_mle: h_mles_full[i].clone(),
-                    num_vars: nvars,
-                };
-                if cm_lazy > 0 {
-                    mles.push(StreamingMleEnum::LazyFixed {
-                        inner: Box::new(mle),
-                        num_vars: nvars,
-                        fixed: Vec::new(),
-                        weights: vec![R::BaseRing::ONE],
-                        max_lazy: cm_lazy,
-                    });
-                } else {
-                    mles.push(mle);
+                // M * f (preserve LazyFixed usage)
+                {
+                    let mle = mk_part(2);
+                    if !f_cc && cm_lazy > 0 {
+                        mles.push(StreamingMleEnum::LazyFixed {
+                            inner: Box::new(mle),
+                            num_vars: nvars,
+                            fixed: Vec::new(),
+                            weights: vec![R::BaseRing::ONE],
+                            max_lazy: cm_lazy,
+                        });
+                    } else {
+                        mles.push(mle);
+                    }
+                }
+
+                // M * h (was always LazyFixed when enabled)
+                {
+                    let mle = mk_part(3);
+                    if cm_lazy > 0 {
+                        mles.push(StreamingMleEnum::LazyFixed {
+                            inner: Box::new(mle),
+                            num_vars: nvars,
+                            fixed: Vec::new(),
+                            weights: vec![R::BaseRing::ONE],
+                            max_lazy: cm_lazy,
+                        });
+                    } else {
+                        mles.push(mle);
+                    }
                 }
             }
         }
@@ -1911,95 +1897,77 @@ where
             }
 
             for m0 in m_arcs0 {
-                // M * tau : base mat + base witness => base-scalar output
-                mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
-                    matrix: m0.clone(),
-                    witness0: tau0_arc.clone(),
-                    num_vars: nvars,
-                });
+                // CM speed win: fuse the 4 mat-vec MLEs per M into a shared row scan.
+                use crate::streaming_sumcheck::{CmMatVec4Shared, CmMatVecWitness};
 
-                // M * m_tau
-                if mtau_cc {
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
-                        matrix: m0.clone(),
-                        witness0: mtau0_arc.as_ref().unwrap().clone(),
-                        num_vars: nvars,
-                    });
+                let w_tau = CmMatVecWitness::Base(tau0_arc.clone());
+                let w_mtau = if mtau_cc {
+                    CmMatVecWitness::Base(mtau0_arc.as_ref().unwrap().clone())
                 } else {
                     match &inst.m_tau {
-                        crate::rgchk::MonomialVec::Dense(v) => {
-                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
-                                matrix0: m0.clone(),
-                                witness: v.clone(),
-                                num_vars: nvars,
-                            };
-                            if cm_lazy > 0 {
-                                mles.push(StreamingMleEnum::LazyFixed {
-                                    inner: Box::new(mle),
-                                    num_vars: nvars,
-                                    fixed: Vec::new(),
-                                    weights: vec![R::BaseRing::ONE],
-                                    max_lazy: cm_lazy,
-                                });
-                            } else {
-                                mles.push(mle);
-                            }
-                        }
+                        crate::rgchk::MonomialVec::Dense(v) => CmMatVecWitness::Ring(v.clone()),
                         crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                            let mle = StreamingMleEnum::SparseMatVecBaseCoeffMonomialDigits {
-                                matrix0: m0.clone(),
-                                digits: digits.clone(),
-                                exp_table: exp_table.clone(),
-                                num_vars: nvars,
-                            };
-                            if cm_lazy > 0 {
-                                mles.push(StreamingMleEnum::LazyFixed {
-                                    inner: Box::new(mle),
-                                    num_vars: nvars,
-                                    fixed: Vec::new(),
-                                    weights: vec![R::BaseRing::ONE],
-                                    max_lazy: cm_lazy,
-                                });
-                            } else {
-                                mles.push(mle);
-                            }
+                            CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
                         }
                     }
-                }
-
-                // M * f
-                if f_cc {
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
-                        matrix: m0.clone(),
-                        witness0: f0_arc.as_ref().unwrap().clone(),
-                        num_vars: nvars,
-                    });
+                };
+                let w_f = if f_cc {
+                    CmMatVecWitness::Base(f0_arc.as_ref().unwrap().clone())
                 } else {
-                    let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
-                        matrix0: m0.clone(),
-                        witness: f_arc_ring
+                    CmMatVecWitness::Ring(
+                        f_arc_ring
                             .as_ref()
                             .expect("Ring witness required when f_cc is false")
                             .clone(),
-                        num_vars: nvars,
-                    };
+                    )
+                };
+                let w_h = if h_cc {
+                    CmMatVecWitness::Base(h0_arc.as_ref().unwrap().clone())
+                } else {
+                    CmMatVecWitness::Ring(h_arc_ring.clone())
+                };
+
+                let shared = std::sync::Arc::new(CmMatVec4Shared {
+                    matrix0: m0.clone(),
+                    w0: w_tau,
+                    w1: w_mtau,
+                    w2: w_f,
+                    w3: w_h,
+                });
+
+                let mk_part = |which: u8| StreamingMleEnum::CmMatVec4Part {
+                    shared: shared.clone(),
+                    which,
+                    num_vars: nvars,
+                };
+
+                // Keep exact MLE order: [M*tau, M*m_tau, M*f, M*h], preserving prior LazyFixed choices.
+                mles.push(mk_part(0));
+
+                {
+                    let mle = mk_part(1);
+                    if !mtau_cc && cm_lazy > 0 {
+                        mles.push(StreamingMleEnum::LazyFixed {
+                            inner: Box::new(mle),
+                            num_vars: nvars,
+                            fixed: Vec::new(),
+                            weights: vec![R::BaseRing::ONE],
+                            max_lazy: cm_lazy,
+                        });
+                    } else {
+                        mles.push(mle);
+                    }
+                }
+
+                {
+                    let mle = mk_part(2);
+                    // In the old code, non-const f was NOT LazyFixed in this base path.
                     mles.push(mle);
                 }
 
-                // M * h
-                if h_cc {
-                    mles.push(StreamingMleEnum::SparseMatVecConstCoeffBase {
-                        matrix: m0.clone(),
-                        witness0: h0_arc.as_ref().unwrap().clone(),
-                        num_vars: nvars,
-                    });
-                } else {
-                    let mle = StreamingMleEnum::SparseMatVecBaseCoeffRing {
-                        matrix0: m0.clone(),
-                        witness: h_arc_ring.clone(),
-                        num_vars: nvars,
-                    };
-                    if cm_lazy > 0 {
+                {
+                    let mle = mk_part(3);
+                    if !h_cc && cm_lazy > 0 {
                         mles.push(StreamingMleEnum::LazyFixed {
                             inner: Box::new(mle),
                             num_vars: nvars,
