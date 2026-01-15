@@ -4165,6 +4165,8 @@ mod tests {
         use latticefold::arith::r1cs::R1CS;
         use latticefold::commitment::AjtaiCommitmentScheme;
 
+        type BR = <RR as PolyRing>::BaseRing;
+
         // Choose parameters so the internal range-check/CM tau tables fit comfortably in `n=2^9`.
         let kappa = 1usize;
         let k = 1usize;
@@ -4187,16 +4189,16 @@ mod tests {
         let ajtai = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
 
         // Trivial satisfiable R1CS: A=B=C=0, so (Az)*(Bz) - Cz = 0 for any witness.
-        let zero_rows: Vec<Vec<(RR::BaseRing, usize)>> = vec![Vec::new(); n];
-        let a = SparseMatrix::<RR::BaseRing> { nrows: n, ncols: n, coeffs: zero_rows.clone() };
-        let b = SparseMatrix::<RR::BaseRing> { nrows: n, ncols: n, coeffs: zero_rows.clone() };
-        let c = SparseMatrix::<RR::BaseRing> { nrows: n, ncols: n, coeffs: zero_rows };
-        let r1cs = R1CS::<RR::BaseRing> { l: 0, A: a, B: b, C: c };
+        let zero_rows: Vec<Vec<(BR, usize)>> = vec![Vec::new(); n];
+        let a = SparseMatrix::<BR> { nrows: n, ncols: n, coeffs: zero_rows.clone() };
+        let b = SparseMatrix::<BR> { nrows: n, ncols: n, coeffs: zero_rows.clone() };
+        let c = SparseMatrix::<BR> { nrows: n, ncols: n, coeffs: zero_rows };
+        let r1cs = R1CS::<BR> { l: 0, A: a, B: b, C: c };
 
         // Constant-coeff witness prefix. Keep values tiny; the protocol is still well-defined.
-        let f0: Arc<Vec<RR::BaseRing>> = Arc::new(
+        let f0: Arc<Vec<BR>> = Arc::new(
             (0..n)
-                .map(|i| if i == 0 { RR::BaseRing::ONE } else { RR::BaseRing::ZERO })
+                .map(|i| if i == 0 { BR::ONE } else { BR::ZERO })
                 .collect(),
         );
 
@@ -4222,7 +4224,7 @@ mod tests {
             let p = 128 - (x - 1).leading_zeros() as u32;
             1u128 << p
         }
-        let q_u128: u128 = <RR::BaseRing as ark_ff::PrimeField>::MODULUS.0[0] as u128;
+        let q_u128: u128 = <BR as ark_ff::PrimeField>::MODULUS.0[0] as u128;
         let mut b_decomp: u128 = next_pow2_u128(isqrt_u128(q_u128) + 1);
         if b_decomp % 2 == 1 { b_decomp += 1; }
 
