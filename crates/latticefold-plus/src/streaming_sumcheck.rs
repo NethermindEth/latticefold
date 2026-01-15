@@ -85,9 +85,33 @@ pub struct HCol0Precomp<Rr: PolyRing> {
 #[derive(Clone)]
 pub struct HFromGroup<Rr: PolyRing> {
     pub base: usize,
+    /// Minimum length across `cols` (used to skip per-column bounds checks on the hot path).
+    pub len: usize,
     pub cols: Arc<Vec<Arc<Vec<u16>>>>,
     pub zero_idx: Arc<Vec<u16>>,
     pub table: Arc<Vec<Rr>>,
+}
+
+impl<Rr: PolyRing> HFromGroup<Rr> {
+    #[inline]
+    fn packed_at(&self, idx: usize) -> usize {
+        let base = self.base;
+        let mut packed: usize = 0;
+        if idx < self.len {
+            // Fast path: `idx` is in-bounds for all `cols` by construction (`len` is the min length).
+            for col0 in self.cols.iter() {
+                let d = unsafe { *col0.get_unchecked(idx) as usize };
+                packed = packed * base + d;
+            }
+        } else {
+            // Fallback: preserve the old "short table => implicit zero_idx padding" semantics.
+            for (col0, &z) in self.cols.iter().zip(self.zero_idx.iter()) {
+                let d = col0.get(idx).copied().unwrap_or(z) as usize;
+                packed = packed * base + d;
+            }
+        }
+        packed
+    }
 }
 
 #[cfg(feature = "parallel")]
@@ -494,13 +518,7 @@ where
                                 .get_or_compute(cj, || {
                                     let mut hv = (*rest_sum).clone();
                                     for g in groups.iter() {
-                                        let base = g.base;
-                                        let mut packed: usize = 0;
-                                        for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
-                                            let d = col0.get(cj).copied().unwrap_or(z) as usize;
-                                            packed = packed * base + d;
-                                        }
-                                        hv += &g.table[packed];
+                                        hv += &g.table[g.packed_at(cj)];
                                     }
                                     hv
                                 });
@@ -590,13 +608,7 @@ where
                                 .get_or_compute(cj, || {
                                     let mut hv = (*rest_sum).clone();
                                     for g in groups.iter() {
-                                        let base = g.base;
-                                        let mut packed: usize = 0;
-                                        for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
-                                            let d = col0.get(cj).copied().unwrap_or(z) as usize;
-                                            packed = packed * base + d;
-                                        }
-                                        hv += &g.table[packed];
+                                        hv += &g.table[g.packed_at(cj)];
                                     }
                                     hv
                                 });
@@ -681,13 +693,7 @@ where
                                 .get_or_compute(cj, || {
                                     let mut hv = (*rest_sum).clone();
                                     for g in groups.iter() {
-                                        let base = g.base;
-                                        let mut packed: usize = 0;
-                                        for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
-                                            let d = col0.get(cj).copied().unwrap_or(z) as usize;
-                                            packed = packed * base + d;
-                                        }
-                                        hv += &g.table[packed];
+                                        hv += &g.table[g.packed_at(cj)];
                                     }
                                     hv
                                 });
@@ -1152,13 +1158,7 @@ where
             StreamingMleEnum::HFromMfDigitsConstCol0 { groups, rest_sum, .. } => {
                 let mut acc = rest_sum.clone();
                 for g in groups.iter() {
-                    let base = g.base;
-                    let mut packed: usize = 0;
-                    for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
-                        let d = col0.get(index).copied().unwrap_or(z) as usize;
-                        packed = packed * base + d;
-                    }
-                    acc += &g.table[packed];
+                    acc += &g.table[g.packed_at(index)];
                 }
                 acc
             }
@@ -2256,8 +2256,6 @@ impl StreamingSumcheck {
     where
         R::BaseRing: Ring,
     {
-        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
-
         if let Some(r) = v_msg {
             assert!(state.round > 0);
             state.randomness.push(r);
@@ -2510,7 +2508,6 @@ impl StreamingSumcheck {
     where
         R::BaseRing: Ring,
     {
-        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         assert_eq!(
             state.max_degree, 2,
             "prove_round_deg2_pairs expects degree=2"
@@ -3077,7 +3074,6 @@ impl StreamingSumcheck {
             let r = transcript.get_challenge();
             transcript.absorb_field_element(&r);
             v_msg = Some(r);
-            maybe_print_rss("streaming_sumcheck(base): round_done");
         }
 
         // Apply last sampled randomness (standard sumcheck schedule).

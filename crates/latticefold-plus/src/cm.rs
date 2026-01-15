@@ -584,6 +584,11 @@ where
                         let table_len = pow_usize(base, g);
                         let cols = chunk.iter().map(|p| p.col0.clone()).collect::<Vec<_>>();
                         let zix = chunk.iter().map(|p| p.zero_idx).collect::<Vec<_>>();
+                        let len = cols
+                            .iter()
+                            .map(|c| c.len())
+                            .min()
+                            .unwrap_or(0);
                         let mut table = Vec::<R>::with_capacity(table_len);
                         for k0 in 0..table_len {
                             let mut k = k0;
@@ -601,6 +606,7 @@ where
                         }
                         out.push(HFromGroup {
                             base,
+                            len,
                             cols: std::sync::Arc::new(cols),
                             zero_idx: std::sync::Arc::new(zix),
                             table: std::sync::Arc::new(table),
