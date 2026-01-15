@@ -1498,6 +1498,40 @@ where
         let L = self.rg.instances.len();
         let Mlen = m_arcs0.len();
 
+        // Probe whether the external matrices share the same row sparsity pattern.
+        // If they do (common in some constructions), we can fuse across Mlen and cut row scans ~3x.
+        if profile && Mlen == 3 {
+            let m0 = &m_arcs0[0];
+            let m1 = &m_arcs0[1];
+            let m2 = &m_arcs0[2];
+            let nrows = m0.coeffs.len();
+            let nsamp = 2048usize.min(nrows);
+            let mut same01 = 0usize;
+            let mut same02 = 0usize;
+            let mut same12 = 0usize;
+            let mut same_all = 0usize;
+            // Deterministic pseudo-random row selection (no RNG dependency).
+            let mut x: u64 = 0x9e3779b97f4a7c15;
+            for _ in 0..nsamp {
+                x = x.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let row = (x as usize) & (nrows.saturating_sub(1));
+                let r0 = &m0.coeffs[row];
+                let r1 = &m1.coeffs[row];
+                let r2 = &m2.coeffs[row];
+                let eq01 = r0.len() == r1.len() && r0.iter().zip(r1.iter()).all(|((_, a), (_, b))| a == b);
+                let eq02 = r0.len() == r2.len() && r0.iter().zip(r2.iter()).all(|((_, a), (_, b))| a == b);
+                let eq12 = r1.len() == r2.len() && r1.iter().zip(r2.iter()).all(|((_, a), (_, b))| a == b);
+                if eq01 { same01 += 1; }
+                if eq02 { same02 += 1; }
+                if eq12 { same12 += 1; }
+                if eq01 && eq02 { same_all += 1; }
+            }
+            println!(
+                "[LF+ Cm::sumchecker_streaming] M-pattern probe: rows={} samples={} same01={} same02={} same12={} same_all={}",
+                nrows, nsamp, same01, same02, same12, same_all
+            );
+        }
+
         let mut mles = Vec::with_capacity(1 + L * (4 + 4 * Mlen) + 2);
 
         let r0 = dcom.out.r.clone();
