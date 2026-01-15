@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::{
     cm::CmProof,
-    decomp::DecompProof,
+    decomp::{Decomp, DecompProof},
     lin::{LinParameters, Linearize, LinearizedVerify},
     mlin::{LinB2X, Mlin},
     utils::maybe_print_rss,
