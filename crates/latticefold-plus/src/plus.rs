@@ -60,6 +60,70 @@ pub struct PlusParameters {
     pub B: u128,
 }
 
+
+impl<R, TS> PlusProver<R, TS>
+where
+    R::BaseRing: ConvertibleRing + Decompose + Zq,
+    R: CoeffRing + Decompose,
+    TS: Transcript<R>,
+{
+    /// Initialize
+    pub fn init(
+        A: Matrix<R>,
+        M: Vec<Arc<SparseMatrix<R>>>,
+        ncomp: usize,
+        params: PlusParameters,
+        transcript: TS,
+    ) -> Self {
+        let mlin = Mlin {
+            lins: Vec::with_capacity(2 + ncomp),
+            params: params.lin.clone(),
+        };
+
+        PlusProver {
+            acc: mlin,
+            A,
+            M,
+            transcript,
+            params,
+        }
+    }
+
+    /// Prove
+    pub fn prove<L>(&mut self, comp: &[L]) -> PlusProof<R, L::Proof>
+    where
+        L: Linearize<R>,
+    {
+        let mut lproof = Vec::with_capacity(comp.len());
+        comp.iter().for_each(|compi| {
+            let (linb, lp) = compi.linearize(&mut self.transcript);
+            lproof.push(lp);
+            self.acc.lins.push(linb);
+        });
+        let (linb2, cmproof) = self.acc.mlin(&self.A, &self.M, &mut self.transcript);
+        let decomp = Decomp {
+            f: linb2.g,
+            r: linb2.x.ro.clone(),
+            M: &self.M,
+        };
+        let (linb, dproof) = decomp.decompose(&self.A, self.params.B);
+
+        let proof = PlusProof {
+            linb2x: linb2.x,
+            lproof,
+            cmproof,
+            dproof,
+        };
+
+        // Keep only accumulated instance
+        self.acc.lins.clear();
+        self.acc.lins.push(linb.0);
+        self.acc.lins.push(linb.1);
+
+        proof
+    }
+}
+
 impl<R, TS> PlusProverSparseBase<R, TS>
 where
     R::BaseRing: ConvertibleRing + Decompose + Zq,
