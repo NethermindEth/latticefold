@@ -179,6 +179,70 @@ impl core::ops::Mul for FrogRing64 {
         debug_assert_eq!(a.len(), 64);
         debug_assert_eq!(b.len(), 64);
 
+        // Two-level Karatsuba-style dense multiply (split 32 then 16) to reduce base-field muls:
+        // - schoolbook: 64*64 = 4096 muls
+        // - 2-level Karatsuba: 9*(16*16) = 2304 muls (plus additions/subtractions)
+        //
+        // This is the cheapest "big win" we can add without introducing an NTT/CRT form.
+        #[inline(always)]
+        fn mul16(a: &[Fq], b: &[Fq]) -> [Fq; 32] {
+            debug_assert_eq!(a.len(), 16);
+            debug_assert_eq!(b.len(), 16);
+            let mut out = [<Fq as Field>::ZERO; 32];
+            for i in 0..16 {
+                let ai = a[i];
+                if ai == <Fq as Field>::ZERO {
+                    continue;
+                }
+                for j in 0..16 {
+                    out[i + j] += ai * b[j];
+                }
+            }
+            out
+        }
+
+        #[inline(always)]
+        fn mul32(a: &[Fq], b: &[Fq]) -> [Fq; 64] {
+            debug_assert_eq!(a.len(), 32);
+            debug_assert_eq!(b.len(), 32);
+            let (a0, a1) = a.split_at(16);
+            let (b0, b1) = b.split_at(16);
+
+            let p0 = mul16(a0, b0);
+            let p1 = mul16(a1, b1);
+            let mut a01 = [<Fq as Field>::ZERO; 16];
+            let mut b01 = [<Fq as Field>::ZERO; 16];
+            for i in 0..16 {
+                a01[i] = a0[i] + a1[i];
+                b01[i] = b0[i] + b1[i];
+            }
+            let p2 = mul16(&a01, &b01);
+
+            // cross = p2 - p0 - p1 (len 32)
+            let mut cross = [<Fq as Field>::ZERO; 32];
+            for i in 0..32 {
+                cross[i] = p2[i] - p0[i] - p1[i];
+            }
+
+            // Assemble full 32x32 convolution (no reduction at 32):
+            // out[0..31] = p0 + (cross << 16) low half
+            // out[32..63] = p1 shifted by 32 plus (cross << 16) high half
+            let mut out = [<Fq as Field>::ZERO; 64];
+            // p0
+            for i in 0..32 {
+                out[i] = p0[i];
+            }
+            // add cross shifted by 16
+            for i in 0..32 {
+                out[16 + i] += cross[i];
+            }
+            // add p1 shifted by 32
+            for i in 0..32 {
+                out[32 + i] += p1[i];
+            }
+            out
+        }
+
         #[inline]
         fn is_const_coeff(v: &[Fq]) -> Option<Fq> {
             debug_assert_eq!(v.len(), 64);
@@ -261,24 +325,45 @@ impl core::ops::Mul for FrogRing64 {
             return r;
         }
 
-        let mut out = [<Fq as Field>::ZERO; 64];
+        // Dense path: use 2-level Karatsuba and fold (X^64 = -1).
+        let (a0, a1) = a.split_at(32);
+        let (b0, b1) = b.split_at(32);
+
+        let p0 = mul32(a0, b0);
+        let p1 = mul32(a1, b1);
+        let mut a01 = [<Fq as Field>::ZERO; 32];
+        let mut b01 = [<Fq as Field>::ZERO; 32];
+        for i in 0..32 {
+            a01[i] = a0[i] + a1[i];
+            b01[i] = b0[i] + b1[i];
+        }
+        let p2 = mul32(&a01, &b01);
+
+        // cross = p2 - p0 - p1
+        let mut cross = [<Fq as Field>::ZERO; 64];
         for i in 0..64 {
-            let ai = a[i];
-            if ai == <Fq as Field>::ZERO {
-                continue;
-            }
-            for j in 0..64 {
-                // NOTE: do NOT branch on `b[j]==0` here.
-                // For dense operands (the common case in CM sumcheck), that branch is almost always
-                // false and adds significant overhead to this hottest loop.
-                let prod = ai * b[j];
-                let k = i + j;
-                if k < 64 {
-                    out[k] += prod;
-                } else {
-                    out[k - 64] -= prod;
-                }
-            }
+            cross[i] = p2[i] - p0[i] - p1[i];
+        }
+
+        // We want: conv = p0 + x^32*cross + x^64*p1, then fold mod (x^64+1):
+        // out[k] = conv[k] - conv[k+64].
+        //
+        // - start with out = p0
+        // - add cross into indices 32..63
+        // - subtract cross[32..63] (which live in conv[64..95]) into out[0..31]
+        // - subtract p1 (which lives in conv[64..127]) into out[0..63]
+        let mut out = p0;
+        // add cross shifted by 32 (low half goes into out[32..63])
+        for i in 0..32 {
+            out[32 + i] += cross[i];
+        }
+        // subtract the part of cross that spills past 64
+        for i in 0..32 {
+            out[i] -= cross[32 + i];
+        }
+        // fold x^64 term: subtract p1
+        for i in 0..64 {
+            out[i] -= p1[i];
         }
 
         let mut r = FrogRing64::ZERO;
