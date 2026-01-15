@@ -2850,7 +2850,7 @@ where
              -> Result<(), String> {
                 match trace.ops.get(*op_idx) {
                     Some(Op::SqueezeField(v)) if v.len() == expected_len => {
-                        *op_idx += 2;
+                        *op_idx += 1;
                         *squeezed_field_elems += v.len();
                         Ok(())
                     }
