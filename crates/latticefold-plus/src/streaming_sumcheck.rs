@@ -20,6 +20,68 @@ static CM_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static CM_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 static CM_LAZY_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static CM_LAZY_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
+static CM_HFROM_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
+static CM_HFROM_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone, Copy, Default)]
+struct CmCacheStats {
+    cm_hit: u64,
+    cm_miss: u64,
+    lazy_hit: u64,
+    lazy_miss: u64,
+    hfrom_hit: u64,
+    hfrom_miss: u64,
+}
+
+// A small per-thread direct-mapped cache for streaming-h evaluations `h[idx]` when
+// `h` is represented as `HFromMfDigitsConstCol0`. This targets repeated column indices
+// across sparse mat-vec scans without materializing full `h`.
+const CM_HFROM_CACHE_SIZE: usize = 1 << 13; // 8192 entries (~1 MiB/thread for d=16)
+
+struct HFromIndexCache<R: OverField + PolyRing>
+where
+    R::BaseRing: Ring,
+{
+    id: usize,          // identifies the underlying precomps Arc
+    mask: usize,        // size - 1
+    keys: Vec<usize>,   // cached index
+    vals: Vec<R>,       // cached h[idx]
+}
+
+impl<R: OverField + PolyRing> HFromIndexCache<R>
+where
+    R::BaseRing: Ring,
+{
+    #[inline]
+    fn new(id: usize) -> Self {
+        Self {
+            id,
+            mask: CM_HFROM_CACHE_SIZE - 1,
+            keys: vec![usize::MAX; CM_HFROM_CACHE_SIZE],
+            vals: vec![R::ZERO; CM_HFROM_CACHE_SIZE],
+        }
+    }
+
+    #[inline]
+    fn get_or_compute(
+        &mut self,
+        idx: usize,
+        stats: &mut CmCacheStats,
+        profile: bool,
+        compute: impl FnOnce() -> R,
+    ) -> R {
+        let slot = idx & self.mask;
+        if self.keys[slot] == idx {
+            if profile { stats.hfrom_hit += 1; }
+            return self.vals[slot];
+        }
+        if profile { stats.hfrom_miss += 1; }
+        let v = compute();
+        self.keys[slot] = idx;
+        self.vals[slot] = v;
+        v
+    }
+}
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -324,7 +386,13 @@ where
 
     /// Evaluate all four mat-vec outputs at a given **row** index.
     #[inline]
-    pub fn eval4_at_row(&self, row: usize) -> [R; 4] {
+    pub fn eval4_at_row(
+        &self,
+        row: usize,
+        hfrom_cache: &mut Option<HFromIndexCache<R>>,
+        stats: &mut CmCacheStats,
+        profile: bool,
+    ) -> [R; 4] {
         if row >= self.matrix0.coeffs.len() {
             return [R::ZERO; 4];
         }
@@ -359,6 +427,7 @@ where
                     HFrom {
                         precomps: &'a [HCol0Precomp<Rr>],
                         rest_sum: Rr,
+                        h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
                 }
@@ -371,7 +440,11 @@ where
                         for p in pcs {
                             rest_sum += p.term_rest;
                         }
-                        W3Fast::HFrom { precomps: pcs, rest_sum }
+                        W3Fast::HFrom {
+                            precomps: pcs,
+                            rest_sum,
+                            h_id: Arc::as_ptr(precomps) as usize,
+                        }
                     }
                     _ => W3Fast::Other(w3m),
                 };
@@ -398,12 +471,25 @@ where
                     // `w3` is an MLE; fast-path the common variants to avoid per-nonzero dispatch overhead.
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom { precomps, rest_sum } => {
-                            let mut hv = *rest_sum;
-                            for p in precomps.iter() {
-                                let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                hv += p.term0_tab[dix];
+                        W3Fast::HFrom {
+                            precomps,
+                            rest_sum,
+                            h_id,
+                        } => {
+                            if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
+                                *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
+                            let hv = hfrom_cache
+                                .as_mut()
+                                .unwrap()
+                                .get_or_compute(cj, stats, profile, || {
+                                    let mut hv = *rest_sum;
+                                    for p in precomps.iter() {
+                                        let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
+                                        hv += p.term0_tab[dix];
+                                    }
+                                    hv
+                                });
                             hv * c0
                         }
                         W3Fast::Other(m) => m.eval_at_index(cj) * c0,
@@ -438,6 +524,7 @@ where
                     HFrom {
                         precomps: &'a [HCol0Precomp<Rr>],
                         rest_sum: Rr,
+                        h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
                 }
@@ -450,7 +537,11 @@ where
                         for p in pcs {
                             rest_sum += p.term_rest;
                         }
-                        W3Fast::HFrom { precomps: pcs, rest_sum }
+                        W3Fast::HFrom {
+                            precomps: pcs,
+                            rest_sum,
+                            h_id: Arc::as_ptr(precomps) as usize,
+                        }
                     }
                     _ => W3Fast::Other(w3m),
                 };
@@ -473,12 +564,25 @@ where
                     }
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom { precomps, rest_sum } => {
-                            let mut hv = *rest_sum;
-                            for p in precomps.iter() {
-                                let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                hv += p.term0_tab[dix];
+                        W3Fast::HFrom {
+                            precomps,
+                            rest_sum,
+                            h_id,
+                        } => {
+                            if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
+                                *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
+                            let hv = hfrom_cache
+                                .as_mut()
+                                .unwrap()
+                                .get_or_compute(cj, stats, profile, || {
+                                    let mut hv = *rest_sum;
+                                    for p in precomps.iter() {
+                                        let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
+                                        hv += p.term0_tab[dix];
+                                    }
+                                    hv
+                                });
                             hv * c0
                         }
                         W3Fast::Other(m) => m.eval_at_index(cj) * c0,
@@ -508,6 +612,7 @@ where
                     HFrom {
                         precomps: &'a [HCol0Precomp<Rr>],
                         rest_sum: Rr,
+                        h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
                 }
@@ -520,7 +625,11 @@ where
                         for p in pcs {
                             rest_sum += p.term_rest;
                         }
-                        W3Fast::HFrom { precomps: pcs, rest_sum }
+                        W3Fast::HFrom {
+                            precomps: pcs,
+                            rest_sum,
+                            h_id: Arc::as_ptr(precomps) as usize,
+                        }
                     }
                     _ => W3Fast::Other(w3m),
                 };
@@ -543,12 +652,25 @@ where
                     }
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom { precomps, rest_sum } => {
-                            let mut hv = *rest_sum;
-                            for p in precomps.iter() {
-                                let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                hv += p.term0_tab[dix];
+                        W3Fast::HFrom {
+                            precomps,
+                            rest_sum,
+                            h_id,
+                        } => {
+                            if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
+                                *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
+                            let hv = hfrom_cache
+                                .as_mut()
+                                .unwrap()
+                                .get_or_compute(cj, stats, profile, || {
+                                    let mut hv = *rest_sum;
+                                    for p in precomps.iter() {
+                                        let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
+                                        hv += p.term0_tab[dix];
+                                    }
+                                    hv
+                                });
                             hv * c0
                         }
                         W3Fast::Other(m) => m.eval_at_index(cj) * c0,
@@ -2147,15 +2269,10 @@ impl StreamingSumcheck {
         let domain_half = 1usize << (nv - 1);
         let num_polys = state.mles.len();
 
-        #[derive(Clone, Copy, Default)]
-        struct CmCacheStats {
-            cm_hit: u64,
-            cm_miss: u64,
-            lazy_hit: u64,
-            lazy_miss: u64,
-        }
-
-        struct Scratch<Rr> {
+        struct Scratch<Rr: OverField + PolyRing>
+        where
+            Rr::BaseRing: Ring,
+        {
             evals: Vec<Rr>,
             steps: Vec<Rr>,
             vals0: Vec<Rr>,
@@ -2163,6 +2280,7 @@ impl StreamingSumcheck {
             vals: Vec<Rr>,
             levals: Vec<Rr>,
             cm_stats: CmCacheStats,
+            hfrom_cache: Option<HFromIndexCache<Rr>>,
             // CM optimization: cache one fused mat-vec row scan for the "even" and "odd" indices
             // within the current hypercube vertex pair.
             cm_cache_even: Option<(usize, usize, [Rr; 4])>, // (shared_id, row, vals)
@@ -2184,6 +2302,7 @@ impl StreamingSumcheck {
             vals: vec![R::ZERO; num_polys],
             levals: vec![R::ZERO; degree + 1],
             cm_stats: CmCacheStats::default(),
+            hfrom_cache: None,
             cm_cache_even: None,
             cm_cache_odd: None,
             cm_lazy_cache_even: None,
@@ -2197,6 +2316,7 @@ impl StreamingSumcheck {
             cache: &mut Option<(usize, usize, [R; 4])>,
             lazy_cache: &mut Option<(usize, usize, usize, [R; 4])>,
             stats: &mut CmCacheStats,
+            hfrom_cache: &mut Option<HFromIndexCache<R>>,
             profile: bool,
         ) -> R
         where
@@ -2207,7 +2327,15 @@ impl StreamingSumcheck {
             // - if inner is CmMatVec4Part and fixed.len()>0, compute the lazy-combined value for all 4 parts once
             if let StreamingMleEnum::LazyFixed { inner, fixed, weights, .. } = mle {
                 if fixed.is_empty() {
-                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache, lazy_cache, stats, profile);
+                    return eval_mle_with_cm_cache::<R>(
+                        inner.as_ref(),
+                        index,
+                        cache,
+                        lazy_cache,
+                        stats,
+                        hfrom_cache,
+                        profile,
+                    );
                 }
                 if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = inner.as_ref() {
                     let k = fixed.len();
@@ -2234,7 +2362,7 @@ impl StreamingSumcheck {
                         if w == R::BaseRing::ZERO {
                             continue;
                         }
-                        let v = shared.eval4_at_row(base | b);
+                        let v = shared.eval4_at_row(base | b, hfrom_cache, stats, profile);
                         acc[0] += v[0] * w;
                         acc[1] += v[1] * w;
                         acc[2] += v[2] * w;
@@ -2259,7 +2387,7 @@ impl StreamingSumcheck {
                 if profile {
                     stats.cm_miss += 1;
                 }
-                let vals = shared.eval4_at_row(index);
+                let vals = shared.eval4_at_row(index, hfrom_cache, stats, profile);
                 *cache = Some((sid, index, vals));
                 return vals[wid];
             }
@@ -2279,6 +2407,7 @@ impl StreamingSumcheck {
                         &mut s.cm_cache_even,
                         &mut s.cm_lazy_cache_even,
                         &mut s.cm_stats,
+                        &mut s.hfrom_cache,
                         profile,
                     );
                     s.vals1[i] = eval_mle_with_cm_cache(
@@ -2287,6 +2416,7 @@ impl StreamingSumcheck {
                         &mut s.cm_cache_odd,
                         &mut s.cm_lazy_cache_odd,
                         &mut s.cm_stats,
+                        &mut s.hfrom_cache,
                         profile,
                     );
                 }
@@ -2335,6 +2465,7 @@ impl StreamingSumcheck {
                         &mut s.cm_cache_even,
                         &mut s.cm_lazy_cache_even,
                         &mut s.cm_stats,
+                        &mut s.hfrom_cache,
                         profile,
                     );
                     s.vals1[i] = eval_mle_with_cm_cache(
@@ -2343,6 +2474,7 @@ impl StreamingSumcheck {
                         &mut s.cm_cache_odd,
                         &mut s.cm_lazy_cache_odd,
                         &mut s.cm_stats,
+                        &mut s.hfrom_cache,
                         profile,
                     );
                 }
@@ -2370,6 +2502,8 @@ impl StreamingSumcheck {
             CM_CACHE_MISSES.fetch_add(stats.cm_miss, Ordering::Relaxed);
             CM_LAZY_CACHE_HITS.fetch_add(stats.lazy_hit, Ordering::Relaxed);
             CM_LAZY_CACHE_MISSES.fetch_add(stats.lazy_miss, Ordering::Relaxed);
+            CM_HFROM_CACHE_HITS.fetch_add(stats.hfrom_hit, Ordering::Relaxed);
+            CM_HFROM_CACHE_MISSES.fetch_add(stats.hfrom_miss, Ordering::Relaxed);
         }
 
         ProverMsg { evaluations: result }
@@ -2527,6 +2661,8 @@ impl StreamingSumcheck {
             CM_CACHE_MISSES.store(0, Ordering::Relaxed);
             CM_LAZY_CACHE_HITS.store(0, Ordering::Relaxed);
             CM_LAZY_CACHE_MISSES.store(0, Ordering::Relaxed);
+            CM_HFROM_CACHE_HITS.store(0, Ordering::Relaxed);
+            CM_HFROM_CACHE_MISSES.store(0, Ordering::Relaxed);
         }
 
         transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
@@ -2606,10 +2742,12 @@ impl StreamingSumcheck {
             let m = CM_CACHE_MISSES.load(Ordering::Relaxed);
             let lh = CM_LAZY_CACHE_HITS.load(Ordering::Relaxed);
             let lm = CM_LAZY_CACHE_MISSES.load(Ordering::Relaxed);
+            let hh = CM_HFROM_CACHE_HITS.load(Ordering::Relaxed);
+            let hm = CM_HFROM_CACHE_MISSES.load(Ordering::Relaxed);
             if (h + m + lh + lm) > 0 {
                 println!(
-                    "[LF+ streaming_sumcheck] cm_cache: hit={} miss={} lazy_hit={} lazy_miss={}",
-                    h, m, lh, lm
+                    "[LF+ streaming_sumcheck] cm_cache: hit={} miss={} lazy_hit={} lazy_miss={} hfrom_hit={} hfrom_miss={}",
+                    h, m, lh, lm, hh, hm
                 );
             }
         }
