@@ -387,6 +387,7 @@ fn cm_challenge_op_wiring<R>(
     k: usize,
     log_kappa: usize,
     nvars: usize,
+    ops_offset: usize,
 ) -> Result<CmChallengeOpWiring, String>
 where
     R: PolyRing,
@@ -396,33 +397,54 @@ where
     let need_short = 3 + k * d;
     let need_field = 2 * log_kappa + 2 + 2 * nvars;
 
-    let mut squeeze_bytes_ops = Vec::with_capacity(need_short);
-    let mut squeeze_field_ops = Vec::with_capacity(need_field);
+    if ops_offset > trace.ops.len() {
+        return Err("cm_challenge_op_wiring: ops_offset out of range".to_string());
+    }
 
-    let mut seen_first_bytes = false;
+    // We index SqueezeBytes/SqueezeField ops in the same global order as Poseidon wiring.
+    // Start the counters at the number of such ops strictly before `ops_offset`, then scan the CM
+    // segment starting at `ops_offset`.
     let mut bytes_op_idx = 0usize;
     let mut field_op_idx = 0usize;
-
-    for op in &trace.ops {
+    for op in &trace.ops[..ops_offset] {
         match op {
-            LfPoseidonTraceOp::SqueezeBytes { .. } => {
-                if !seen_first_bytes {
-                    seen_first_bytes = true;
-                }
-                if seen_first_bytes && squeeze_bytes_ops.len() < need_short {
+            LfPoseidonTraceOp::SqueezeBytes { .. } => bytes_op_idx += 1,
+            LfPoseidonTraceOp::SqueezeField(_) => field_op_idx += 1,
+            _ => {}
+        }
+    }
+
+    let mut squeeze_bytes_ops = Vec::with_capacity(need_short);
+    let mut squeeze_field_ops = Vec::with_capacity(need_field);
+    let mut collecting_field = false;
+
+    for op in trace.ops.iter().skip(ops_offset) {
+        match op {
+            LfPoseidonTraceOp::SqueezeBytes { n, .. } => {
+                if *n == d && squeeze_bytes_ops.len() < need_short {
                     squeeze_bytes_ops.push(bytes_op_idx);
+                    if squeeze_bytes_ops.len() == need_short {
+                        collecting_field = true;
+                    }
                 }
                 bytes_op_idx += 1;
             }
-            LfPoseidonTraceOp::SqueezeField(_) => {
-                // Only start collecting field ops after we've collected all short challenges,
-                // since `c0/c1/rc/...` come after `short_challenge` calls in CmProof::verify.
-                if seen_first_bytes && squeeze_bytes_ops.len() == need_short && squeeze_field_ops.len() < need_field {
+            LfPoseidonTraceOp::SqueezeField(v) => {
+                if collecting_field && squeeze_field_ops.len() < need_field {
+                    // Current WE gate code assumes base-field squeezes (len=1) for CM challenges.
+                    if v.len() != 1 {
+                        return Err(
+                            "cm_challenge_op_wiring: expected base-field squeeze len=1".to_string(),
+                        );
+                    }
                     squeeze_field_ops.push(field_op_idx);
                 }
                 field_op_idx += 1;
             }
             _ => {}
+        }
+        if squeeze_bytes_ops.len() == need_short && squeeze_field_ops.len() == need_field {
+            break;
         }
     }
 
@@ -665,6 +687,7 @@ fn cm_verifier_math_dr1cs<R>(
     log_kappa: usize,
     nvars: usize,
     mlen_mats: usize,
+    ops_offset: usize,
 ) -> Result<
     (
         SparseDr1csInstance<BF<R>>,
@@ -700,7 +723,10 @@ where
     let mut field_vals: Vec<BF<R>> = Vec::with_capacity(need_field);
     let mut seen_bytes_ops = 0usize;
     let mut seen_first_bytes = false;
-    for op in &trace.ops {
+    if ops_offset > trace.ops.len() {
+        return Err("cm_verifier_math_dr1cs: ops_offset out of range".to_string());
+    }
+    for op in trace.ops.iter().skip(ops_offset) {
         match op {
             LfPoseidonTraceOp::SqueezeBytes { out, .. } => {
                 if !seen_first_bytes {
@@ -863,6 +889,9 @@ where
         }
         u_vars.push(u_l);
     }
+    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
+        eprintln!("[we_cm_diag] after u_vars: constraints={}", b.rows.len());
+    }
 
     // --- tensor(c0/c1) and tcch0/tcch1 ---
     let tensor_c0 = tensor_scalar_vars::<BF<R>>(&mut b, &field_wiring.c0);
@@ -887,6 +916,9 @@ where
         tcch0.push(acc0);
         tcch1.push(acc1);
     }
+    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
+        eprintln!("[we_cm_diag] after tcch: constraints={}", b.rows.len());
+    }
 
     // --- Precompute constants for eval_t_z_optimized ---
     // dpp = [dp^i] as scalar ring elements (length ℓ = dparams.l)
@@ -903,6 +935,9 @@ where
     for i in 0..d {
         let mi = stark_rings::unit_monomial::<R>(i);
         xp.push(ring_to_ringvars::<R>(&mut b, &mi));
+    }
+    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
+        eprintln!("[we_cm_diag] after dpp/xp: constraints={}", b.rows.len());
     }
 
     // --- Verify the two degree-2 sumchecks + recombination equality ---
@@ -957,6 +992,7 @@ where
     // - subclaim_eval via sumcheck_verify_degree2
     // - eval via recombination
     // and enforce equality.
+    let cm_diag = std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1");
     let do_one = |_which: usize,
                   b: &mut Dr1csBuilder<BF<R>>,
                   absorb_flat: &mut Vec<usize>,
@@ -966,6 +1002,11 @@ where
                   evals: &[Vec<[RingVars; 4]>],
                   tcch0: &[RingVars],
                   tcch1: &[RingVars]| -> Result<(), String> {
+        let diag0 = if cm_diag && _which == 0 {
+            Some(b.rows.len())
+        } else {
+            None
+        };
         // Sumcheck parameter block absorbed by the transcript.
         // NOTE: we assume base field (extension_degree=1), matching our Poseidon wiring usage.
         let v_nvars = const_var(b, BF::<R>::from(nvars as u64));
@@ -1028,6 +1069,12 @@ where
         }
 
         let subclaim_eval = sumcheck_verify_degree2::<BF<R>>(b, claimed_sum, msgs, r_sc)?;
+        if let Some(start) = diag0 {
+            eprintln!(
+                "[we_cm_diag] do_one(0): after sumcheck_verify_degree2 added {} constraints",
+                b.rows.len().saturating_sub(start)
+            );
+        }
 
         // t(z) eval at ro (independent of l)
         let t0 = eval_t_z_optimized_ring::<R>(
@@ -1102,7 +1149,34 @@ where
             eval_acc = ring_add::<BF<R>>(b, &eval_acc, &t1e_s);
         }
 
-        ring_eq::<BF<R>>(b, &subclaim_eval, &eval_acc);
+        if std::env::var("LFP_WE_CM_SKIP_SC_EQ").ok().as_deref() != Some("1") {
+            if std::env::var("LFP_WE_CM_EQ_DUMP").ok().as_deref() == Some("1") && _which == 0 {
+                // Dump coefficient-wise mismatch before enforcing equality.
+                let d = subclaim_eval.d();
+                let mut any = false;
+                for i in 0..d {
+                    let a = b.assignment[subclaim_eval.coeffs[i]];
+                    let e = b.assignment[eval_acc.coeffs[i]];
+                    if a != e {
+                        any = true;
+                        eprintln!(
+                            "[we_cm_eq_dump] coeff[{i}] subclaim_eval - eval_acc = {:?}",
+                            (a - e).into_bigint()
+                        );
+                    }
+                }
+                if !any {
+                    eprintln!("[we_cm_eq_dump] no coeff mismatch (unexpected if failing)");
+                }
+            }
+            ring_eq::<BF<R>>(b, &subclaim_eval, &eval_acc);
+        }
+        if let Some(start) = diag0 {
+            eprintln!(
+                "[we_cm_diag] do_one(0): total constraints added in do_one = {}",
+                b.rows.len().saturating_sub(start)
+            );
+        }
 
         // After sumcheck verification, Cm verifier absorbs the per-instance eval tables.
         // (`absorb_evaluations(evals, transcript)`).
@@ -1118,6 +1192,15 @@ where
         Ok(())
     };
 
+    if std::env::var("LFP_WE_CM_SKIP_SC0").ok().as_deref() == Some("1") {
+        let (inst, asg) = b.into_instance();
+        return Ok((
+            inst,
+            asg,
+            CmMathWiring { short: short_wiring, field: field_wiring, absorb_flat },
+        ));
+    }
+
     do_one(
         0,
         &mut b,
@@ -1129,6 +1212,17 @@ where
         &tcch0,
         &tcch1,
     )?;
+    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
+        eprintln!("[we_cm_diag] after do_one(0): constraints={}", b.rows.len());
+    }
+    if std::env::var("LFP_WE_CM_SKIP_SC1").ok().as_deref() == Some("1") {
+        let (inst, asg) = b.into_instance();
+        return Ok((
+            inst,
+            asg,
+            CmMathWiring { short: short_wiring, field: field_wiring, absorb_flat },
+        ));
+    }
     do_one(
         1,
         &mut b,
@@ -1140,6 +1234,9 @@ where
         &tcch0,
         &tcch1,
     )?;
+    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
+        eprintln!("[we_cm_diag] after do_one(1): constraints={}", b.rows.len());
+    }
 
     let (inst, asg) = b.into_instance();
     Ok((
@@ -1162,6 +1259,7 @@ where
 fn cm_short_challenges_dr1cs<R>(
     trace: &PoseidonTranscriptTrace<BF<R>>,
     k: usize,
+    ops_offset: usize,
 ) -> Result<(SparseDr1csInstance<BF<R>>, Vec<BF<R>>, CmShortChallengeWiring), String>
 where
     R: PolyRing,
@@ -1175,20 +1273,36 @@ where
     // - s_prime: k*d
     let need = 3 + k * d;
     let need_bytes = need * d;
-    if trace.squeezed_bytes.len() < need_bytes {
+    if ops_offset > trace.ops.len() {
+        return Err("cm_short_challenges_dr1cs: ops_offset out of range".to_string());
+    }
+    // Extract the first `need` CM-style `short_challenge(128)` byte blocks (each of length `d`)
+    // *after* `ops_offset`.
+    let mut short_bytes_vals: Vec<u8> = Vec::with_capacity(need_bytes);
+    let mut seen = 0usize;
+    for op in trace.ops.iter().skip(ops_offset) {
+        if let LfPoseidonTraceOp::SqueezeBytes { n, out } = op {
+            if *n == d && seen < need {
+                short_bytes_vals.extend_from_slice(out);
+                seen += 1;
+            }
+        }
+    }
+    if short_bytes_vals.len() < need_bytes {
         return Err(format!(
-            "cm_short_challenges_dr1cs: not enough squeezed bytes: need {}, got {}",
+            "cm_short_challenges_dr1cs: not enough cm short-challenge bytes: need {}, got {}",
             need_bytes,
-            trace.squeezed_bytes.len()
+            short_bytes_vals.len()
         ));
     }
+    short_bytes_vals.truncate(need_bytes);
 
     let mut b = Dr1csBuilder::<BF<R>>::new();
     b.enforce_var_eq_const(b.one(), BF::<R>::ONE);
 
     // Allocate byte vars (as field elements) for the needed bytes.
     let mut byte_vars = Vec::with_capacity(need_bytes);
-    for &by in trace.squeezed_bytes.iter().take(need_bytes) {
+    for &by in short_bytes_vals.iter() {
         let v = const_var(&mut b, BF::<R>::from(by as u64));
         byte_vars.push(v);
     }
@@ -1956,7 +2070,7 @@ where
     let (params_inst, params_asg) = b_params.into_instance();
 
     // Short-challenge reconstruction part (allocates its own byte vars; we glue them).
-    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
+    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k, 0)?;
 
     // Glue all squeezed bytes in order.
     if byte_wiring.squeeze_byte_vars.len() < coin_wiring.byte_vars.len() {
@@ -2009,8 +2123,8 @@ where
     let (params_inst, params_asg) = b_params.into_instance();
 
     // Short challenges part (bytes -> ring coeffs).
-    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
-    let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
+    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k, 0)?;
+    let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars, 0)?;
     let (pose_byte_vars, pose_field_vars) =
         cm_poseidon_challenge_vars::<R>(&pose_wiring, &byte_wiring, &op_wiring)?;
 
@@ -2186,14 +2300,14 @@ where
         };
         let coin_build = || {
             let t = std::time::Instant::now();
-    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
-    let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
+    let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k, 0)?;
+    let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars, 0)?;
             Ok::<_, String>((coin_inst, coin_asg, coin_wiring, op_wiring, t.elapsed()))
         };
         let cm_build = || {
             let t = std::time::Instant::now();
             let (cm_inst, cm_asg, cm_wiring) =
-                cm_verifier_math_dr1cs::<R>(trace, proof, k, log_kappa, nvars, mlen_mats)?;
+                cm_verifier_math_dr1cs::<R>(trace, proof, k, log_kappa, nvars, mlen_mats, 0)?;
             Ok::<_, String>((cm_inst, cm_asg, cm_wiring, t.elapsed()))
         };
 
@@ -2696,41 +2810,86 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
-    // Hygiene: compute the Cm segment offsets from the full trace + proof, so callers do not
-    // have to reproduce the “record until Cm starts” procedure (easy to mis-wire).
+    // Hygiene + soundness: bind the trace to the verifier *program*.
+    //
+    // We deterministically consume the transcript op sequence induced by:
+    // - statement absorbs (public inputs)
+    // - all Π_lin verifications
+    // - full CM verification (including Dcom/SetChk prefix)
+    //
+    // and reject if the provided trace deviates or has extra ops.
     use crate::recording_transcript::PoseidonTraceOp as Op;
     let (cm_ops_offset, cm_absorb_op_offset, cm_squeezed_field_offset) = {
         let mut op_idx = 0usize;
         let mut absorb_ops = 0usize;
         let mut squeezed_field_elems = 0usize;
+        let d = R::dimension();
 
-        let expect_absorb = |op_idx: &mut usize, absorb_ops: &mut usize| -> Result<(), String> {
-            match trace.ops.get(*op_idx) {
-                Some(Op::Absorb(_)) => {
-                    *op_idx += 1;
-                    *absorb_ops += 1;
-                    Ok(())
-                }
-                other => Err(format!("offsets: expected Absorb at op {}, got {:?}", *op_idx, other)),
-            }
-        };
-        let expect_squeeze_field =
-            |op_idx: &mut usize, squeezed_field_elems: &mut usize| -> Result<(), String> {
+        let expect_absorb_len =
+            |expected_len: usize,
+             op_idx: &mut usize,
+             absorb_ops: &mut usize|
+             -> Result<(), String> {
                 match trace.ops.get(*op_idx) {
-                    Some(Op::SqueezeField(v)) => {
+                    Some(Op::Absorb(v)) if v.len() == expected_len => {
+                        *op_idx += 1;
+                        *absorb_ops += 1;
+                        Ok(())
+                    }
+                    other => Err(format!(
+                        "offsets: expected Absorb(len={}) at op {}, got {:?}",
+                        expected_len, *op_idx, other
+                    )),
+                }
+            };
+
+        let expect_squeeze_field_len =
+            |expected_len: usize,
+             op_idx: &mut usize,
+             squeezed_field_elems: &mut usize|
+             -> Result<(), String> {
+                match trace.ops.get(*op_idx) {
+                    Some(Op::SqueezeField(v)) if v.len() == expected_len => {
                         *op_idx += 1;
                         *squeezed_field_elems += v.len();
                         Ok(())
                     }
                     other => Err(format!(
-                        "offsets: expected SqueezeField at op {}, got {:?}",
-                        *op_idx, other
+                        "offsets: expected SqueezeField(len={}) at op {}, got {:?}",
+                        expected_len, *op_idx, other
+                    )),
+                }
+            };
+
+        let expect_get_challenge =
+            |op_idx: &mut usize,
+             absorb_ops: &mut usize,
+             squeezed_field_elems: &mut usize|
+             -> Result<(), String> {
+                // TracePoseidonTranscript::get_challenge records:
+                //   SqueezeField(extdeg=1), then Absorb(extdeg=1) (re-absorb).
+                expect_squeeze_field_len(1, op_idx, squeezed_field_elems)?;
+                expect_absorb_len(1, op_idx, absorb_ops)?;
+                Ok(())
+            };
+
+        let expect_squeeze_bytes =
+            |expected_n: usize, op_idx: &mut usize| -> Result<(), String> {
+                match trace.ops.get(*op_idx) {
+                    Some(Op::SqueezeBytes { n, out }) if *n == expected_n && out.len() == expected_n => {
+                        *op_idx += 1;
+                        Ok(())
+                    }
+                    other => Err(format!(
+                        "offsets: expected SqueezeBytes(n={}) at op {}, got {:?}",
+                        expected_n, *op_idx, other
                     )),
                 }
             };
 
         for _ in 0..public_inputs.len() {
-            expect_absorb(&mut op_idx, &mut absorb_ops)?;
+            // Public inputs are absorbed as base-field scalars (len=1).
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
         }
         for lp in &proof.lproof {
             let nvars = lp.nvars;
@@ -2738,24 +2897,141 @@ where
                 return Err("offsets: ComR1CSProof sumcheck proof length mismatch".to_string());
             }
             for _ in 0..nvars {
-                expect_squeeze_field(&mut op_idx, &mut squeezed_field_elems)?;
-                expect_absorb(&mut op_idx, &mut absorb_ops)?;
+                expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
             }
-            expect_absorb(&mut op_idx, &mut absorb_ops)?;
-            expect_absorb(&mut op_idx, &mut absorb_ops)?;
+            // absorb (nvars, degree=3) as scalars
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
             for _ in 0..nvars {
                 for _ in 0..4 {
-                    expect_absorb(&mut op_idx, &mut absorb_ops)?;
+                    // 4 ring evaluations per round (len=d each)
+                    expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
                 }
-                expect_squeeze_field(&mut op_idx, &mut squeezed_field_elems)?;
-                expect_absorb(&mut op_idx, &mut absorb_ops)?;
-                expect_absorb(&mut op_idx, &mut absorb_ops)?;
+                // verifier challenge + (reabsorb + explicit absorb)
+                expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+                expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
             }
             for _ in 0..4 {
-                expect_absorb(&mut op_idx, &mut absorb_ops)?;
+                // absorb (v,va,vb,vc) (ring, len=d each)
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
             }
         }
-        (op_idx, absorb_ops, squeezed_field_elems)
+
+        // Record CM segment offsets (start of CmProof::verify, before Dcom.verify).
+        let cm_ops_offset = op_idx;
+        let cm_absorb_op_offset = absorb_ops;
+        let cm_squeezed_field_offset = squeezed_field_elems;
+
+        // --------------------------------------------------------------------
+        // Consume full CmProof::verify transcript schedule (Dcom + CM proper)
+        // --------------------------------------------------------------------
+        let dcom = &proof.cmproof.dcom;
+        let out = &dcom.out;
+
+        // Out::verify (SetChk) transcript coins.
+        let nclaims = out.e[0].len() + out.b.len();
+        for _ in 0..nclaims {
+            for _ in 0..out.nvars {
+                expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+            }
+            // beta, alpha
+            expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+            expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+        }
+        // Optional rc
+        if out.e[0].len() > 1 {
+            expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+        }
+        // MLSumcheck::verify_as_subprotocol for SetChk (nvars, degree=3, claimed_sum=0)
+        expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?; // nvars
+        expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?; // degree=3
+        for _ in 0..out.nvars {
+            // 4 ring evals
+            for _ in 0..4 {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+            // r_i + (reabsorb + explicit absorb)
+            expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+        }
+        // absorb_evaluations(&out.e, &out.b)
+        for ek in &out.e {
+            for ej in ek {
+                for _ in 0..ej.len() {
+                    expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+                }
+            }
+        }
+        for _ in 0..out.b.len() {
+            expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+        }
+
+        // rgchk::absorb_evaluations(&dcom.evals): absorb eval.a (as const-coeff rings), then eval.c
+        for ev in &dcom.evals {
+            for _ in 0..ev.a.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+            for _ in 0..ev.c.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+        }
+
+        // CM short challenges: s (3) + s_prime (k*d) => need_short squeezes of n=d bytes.
+        let need_short = 3 + (params.k as usize) * d;
+        for _ in 0..need_short {
+            expect_squeeze_bytes(d, &mut op_idx)?;
+        }
+
+        // absorb_comh: L × κ ring elements.
+        let l_instances = proof.cmproof.evals.0.len();
+        let kappa = proof.cmproof.comh[0].len();
+        for _ in 0..(l_instances * kappa) {
+            expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+        }
+
+        // c0/c1 = get_challenges(log_kappa) twice.
+        let log_kappa = ark_std::log2((params.kappa as usize).next_power_of_two()) as usize;
+        for _ in 0..(2 * log_kappa) {
+            expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+        }
+
+        // Two CM sumchecks (degree=2) + eval table absorbs.
+        let nvars_cm = params.nvars_cm as usize;
+        for which_sc in 0..2 {
+            // rc = get_challenge
+            expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+            // MLSumcheck::verify_as_subprotocol header (nvars, degree=2)
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+            // rounds: 3 evals + get_challenge (reabsorb) + explicit absorb
+            for _ in 0..nvars_cm {
+                for _ in 0..3 {
+                    expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+                }
+                expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
+                expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+            }
+            // absorb_evaluations(evals)
+            let evals = if which_sc == 0 { &proof.cmproof.evals.0 } else { &proof.cmproof.evals.1 };
+            for ieval in evals {
+                for _row in ieval.rows() {
+                    // Each row is [R;4]
+                    for _ in 0..4 {
+                        expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+                    }
+                }
+            }
+        }
+
+        if op_idx != trace.ops.len() {
+            return Err(format!(
+                "offsets: trace has extra ops: consumed {} of {}",
+                op_idx,
+                trace.ops.len()
+            ));
+        }
+
+        (cm_ops_offset, cm_absorb_op_offset, cm_squeezed_field_offset)
     };
 
     // Convert trace ops once; many sub-builders share it (Poseidon part + glue scans).
@@ -2838,43 +3114,40 @@ where
         };
 
         let coin_build = || {
-            let (coin_inst, coin_asg, coin_wiring) = cm_short_challenges_dr1cs::<R>(trace, k)?;
-            let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars)?;
+            let (coin_inst, coin_asg, coin_wiring) =
+                cm_short_challenges_dr1cs::<R>(trace, k, cm_ops_offset)?;
+            let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars, cm_ops_offset)?;
             Ok::<_, String>((coin_inst, coin_asg, coin_wiring, op_wiring))
         };
 
         let field_build = || {
-            // Extract the matching field values from the trace by scanning SqueezeField ops after short challenges.
+            // Extract the matching field values from the trace using the canonical op wiring.
+            // This avoids subtle bugs where we collect the right *count* of squeezes but slice them
+            // differently than the Poseidon wiring/glue expects.
+            let op_wiring = cm_challenge_op_wiring::<R>(trace, k, log_kappa, nvars, cm_ops_offset)?;
             let need_field = 2 * log_kappa + 2 + 2 * nvars;
-            let mut squeezed_field_vals = Vec::with_capacity(need_field);
-            let mut seen_first_bytes = false;
-            let mut bytes_seen = 0usize;
+            if op_wiring.squeeze_field_ops.len() != need_field {
+                return Err("field_build: squeeze_field op wiring length mismatch".to_string());
+            }
+
+            // Collect all SqueezeField scalars (base field only) in trace order.
+            let mut all_squeezed_field: Vec<BF<R>> = Vec::new();
             for op in &trace.ops {
-                match op {
-                    crate::recording_transcript::PoseidonTraceOp::SqueezeBytes { .. } => {
-                        if !seen_first_bytes {
-                            seen_first_bytes = true;
-                        }
-                        if seen_first_bytes && bytes_seen < (3 + k * R::dimension()) {
-                            bytes_seen += 1;
-                        }
+                if let crate::recording_transcript::PoseidonTraceOp::SqueezeField(v) = op {
+                    if v.len() != 1 {
+                        return Err("expected base-field squeeze len=1".to_string());
                     }
-                    crate::recording_transcript::PoseidonTraceOp::SqueezeField(v) => {
-                        if seen_first_bytes
-                            && bytes_seen == (3 + k * R::dimension())
-                            && squeezed_field_vals.len() < need_field
-                        {
-                            if v.len() != 1 {
-                                return Err("expected base-field squeeze len=1".to_string());
-                            }
-                            squeezed_field_vals.push(v[0]);
-                        }
-                    }
-                    _ => {}
+                    all_squeezed_field.push(v[0]);
                 }
             }
-            if squeezed_field_vals.len() != need_field {
-                return Err("could not extract enough squeeze_field values for cm".to_string());
+
+            // Select the exact squeeze-field values used by the Cm verifier.
+            let mut squeezed_field_vals = Vec::with_capacity(need_field);
+            for &idx in &op_wiring.squeeze_field_ops {
+                let v = *all_squeezed_field
+                    .get(idx)
+                    .ok_or("field_build: squeeze_field op idx out of range")?;
+                squeezed_field_vals.push(v);
             }
 
             let mut b_fields = Dr1csBuilder::<BF<R>>::new();
@@ -2910,8 +3183,17 @@ where
             Ok::<_, String>((field_inst, field_asg, field_wiring_local))
         };
 
-        let cm_build =
-            || cm_verifier_math_dr1cs::<R>(trace, &proof.cmproof, k, log_kappa, nvars, mlen_mats);
+        let cm_build = || {
+            cm_verifier_math_dr1cs::<R>(
+                trace,
+                &proof.cmproof,
+                k,
+                log_kappa,
+                nvars,
+                mlen_mats,
+                cm_ops_offset,
+            )
+        };
 
         let decomp_build = || {
             decomp_verifier_math_dr1cs::<R>(
@@ -3275,6 +3557,25 @@ where
         (cm_inst, cm_asg),         // 7
         (decomp_inst, decomp_asg), // 8
     ];
+    if std::env::var("LFP_WE_BUILD_DIAG").ok().as_deref() == Some("1") {
+        let names = [
+            "poseidon", "params", "lin", "stmt", "dcom", "coin", "field", "cm", "decomp",
+        ];
+        let mut start = 0usize;
+        eprintln!("[we_build_diag] constraint ranges (start..end):");
+        for (name, (inst, _asg)) in names.iter().zip(parts.iter()) {
+            let len = inst.constraints.len();
+            eprintln!("  - {name}: {start}..{}", start + len);
+            start += len;
+        }
+        eprintln!("  - glue: {start}..{}", start + glue.len());
+        eprintln!(
+            "[we_build_diag] totals: base={} glue={} total={}",
+            start,
+            glue.len(),
+            start + glue.len()
+        );
+    }
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
     let public_len = 1 + 10 + public_inputs.len();
@@ -4281,6 +4582,56 @@ mod tests {
             .expect("cm verify (record)");
         let trace = rec.trace().clone();
 
+        // Optional isolate: check the Cm verifier-math dR1CS part alone.
+        // This helps localize regressions to the Cm arithmetization vs glue/merge.
+        if std::env::var("LFP_WE_FAIL_DUMP").ok().as_deref() == Some("1") {
+            let log_kappa = ark_std::log2((kappa as usize).next_power_of_two()) as usize;
+            let (cm_inst, cm_asg, _cm_wiring) =
+                cm_verifier_math_dr1cs::<RR>(&trace, &proof.cmproof, k, log_kappa, nvars, m0.len(), 0)
+                    .expect("cm_verifier_math_dr1cs");
+            if let Err(e) = cm_inst.check(&cm_asg) {
+                eprintln!("[we_fail_dump] cm_inst alone fails: {e}");
+                let parse_idx = |s: &str| -> Option<usize> {
+                    let pfx = "constraint ";
+                    let s = s.strip_prefix(pfx)?;
+                    let (num, _rest) = s.split_once(' ').unwrap_or((s, ""));
+                    num.parse::<usize>().ok()
+                };
+                if let Some(i) = parse_idx(&e) {
+                    let row = cm_inst.constraints.get(i).expect("cm constraint index oob");
+                    let eval_lc = |lc: &[(BF0, usize)]| -> BF0 {
+                        lc.iter()
+                            .fold(BF0::ZERO, |acc, (c, idx)| acc + (*c * cm_asg[*idx]))
+                    };
+                    let a = eval_lc(&row.a);
+                    let b = eval_lc(&row.b);
+                    let c = eval_lc(&row.c);
+                    eprintln!(
+                        "[we_fail_dump] cm idx={} a_terms={} b_terms={} c_terms={}",
+                        i,
+                        row.a.len(),
+                        row.b.len(),
+                        row.c.len()
+                    );
+                    eprintln!("[we_fail_dump] cm a*b-c = {:?}", a * b - c);
+                    eprintln!(
+                        "[we_fail_dump] cm a_lc_first={:?}",
+                        row.a.iter().take(8).collect::<Vec<_>>()
+                    );
+                    eprintln!(
+                        "[we_fail_dump] cm b_lc_first={:?}",
+                        row.b.iter().take(8).collect::<Vec<_>>()
+                    );
+                    eprintln!(
+                        "[we_fail_dump] cm c_lc_first={:?}",
+                        row.c.iter().take(8).collect::<Vec<_>>()
+                    );
+                }
+            } else {
+                eprintln!("[we_fail_dump] cm_inst alone OK");
+            }
+        }
+
         let params = WeParams {
             nvars_setchk: nvars as u64,
             degree_setchk: 3,
@@ -4304,7 +4655,55 @@ mod tests {
             b_decomp,
         )
         .expect("build_we_dr1cs_for_plus_proof");
-        out.inst.check(&out.assignment).expect("we gate dr1cs satisfied");
+        if let Err(e) = out.inst.check(&out.assignment) {
+            // Optional debug: dump the failing constraint shape/value.
+            if std::env::var("LFP_WE_FAIL_DUMP").ok().as_deref() == Some("1") {
+                let parse_idx = |s: &str| -> Option<usize> {
+                    let pfx = "constraint ";
+                    let s = s.strip_prefix(pfx)?;
+                    let (num, _rest) = s.split_once(' ').unwrap_or((s, ""));
+                    num.parse::<usize>().ok()
+                };
+                if let Some(i) = parse_idx(&e) {
+                    let row = out
+                        .inst
+                        .constraints
+                        .get(i)
+                        .expect("constraint index oob");
+                    let eval_lc = |lc: &[(BF0, usize)]| -> BF0 {
+                        lc.iter()
+                            .fold(BF0::ZERO, |acc, (c, idx)| acc + (*c * out.assignment[*idx]))
+                    };
+                    let a = eval_lc(&row.a);
+                    let b = eval_lc(&row.b);
+                    let c = eval_lc(&row.c);
+                    eprintln!(
+                        "[we_fail_dump] idx={} a_terms={} b_terms={} c_terms={}",
+                        i,
+                        row.a.len(),
+                        row.b.len(),
+                        row.c.len()
+                    );
+                    eprintln!(
+                        "[we_fail_dump] a*b-c = {:?}",
+                        a * b - c
+                    );
+                    eprintln!(
+                        "[we_fail_dump] a_lc_first={:?}",
+                        row.a.iter().take(8).collect::<Vec<_>>()
+                    );
+                    eprintln!(
+                        "[we_fail_dump] b_lc_first={:?}",
+                        row.b.iter().take(8).collect::<Vec<_>>()
+                    );
+                    eprintln!(
+                        "[we_fail_dump] c_lc_first={:?}",
+                        row.c.iter().take(8).collect::<Vec<_>>()
+                    );
+                }
+            }
+            panic!("we gate dr1cs satisfied: {e:?}");
+        }
     }
 }
 

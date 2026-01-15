@@ -45,16 +45,33 @@ impl<F: PrimeField> SparseDr1csInstance<F> {
                 assignment.len()
             ));
         }
-        
-        let failed = self.constraints.par_iter().enumerate().find_any(|(_, row)| {
-            let a = Self::eval_lc(&row.a, assignment);
-            let b = Self::eval_lc(&row.b, assignment);
-            let c = Self::eval_lc(&row.c, assignment);
-            a * b != c
-        });
-        
+
+        // Debug/reproducibility mode: force deterministic first-failure index.
+        if std::env::var("LFP_DR1CS_CHECK_SEQ").ok().as_deref() == Some("1") {
+            for (i, row) in self.constraints.iter().enumerate() {
+                let a = Self::eval_lc(&row.a, assignment);
+                let b = Self::eval_lc(&row.b, assignment);
+                let c = Self::eval_lc(&row.c, assignment);
+                if a * b != c {
+                    return Err(format!("constraint {i} failed"));
+                }
+            }
+            return Ok(());
+        }
+
+        let failed = self
+            .constraints
+            .par_iter()
+            .enumerate()
+            .find_any(|(_, row)| {
+                let a = Self::eval_lc(&row.a, assignment);
+                let b = Self::eval_lc(&row.b, assignment);
+                let c = Self::eval_lc(&row.c, assignment);
+                a * b != c
+            });
+
         if let Some((i, _)) = failed {
-                return Err(format!("constraint {i} failed"));
+            return Err(format!("constraint {i} failed"));
         }
         Ok(())
     }
