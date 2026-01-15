@@ -1607,106 +1607,121 @@ where
                 }
             }
 
-            // mat-vecs: for each external M
-            for m0 in m_arcs0 {
-                // CM speed win: fuse the 4 mat-vec MLEs per M into a shared row scan.
-                use crate::streaming_sumcheck::{CmMatVec4Shared, CmMatVecWitness};
+            // Build the m_tau witness once per instance (reused across all M).
+            // This is where `MonomialDigitsSparse4` can be selected.
+            use crate::streaming_sumcheck::CmMatVecWitness;
+            let (w_mtau_template, mtau_kind): (CmMatVecWitness<R>, &'static str) = if mtau_cc {
+                (CmMatVecWitness::Base(mtau0_arc.as_ref().unwrap().clone()), "BaseScalar")
+            } else {
+                match &inst.m_tau {
+                    crate::rgchk::MonomialVec::Dense(v) => (CmMatVecWitness::Ring(v.clone()), "RingDense"),
+                    crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                        // Fast paths for digit-backed witnesses (important for d64):
+                        // 1) monomial-like (<=1 nonzero coeff): update 1 coefficient directly
+                        // 2) sparse-support (<=4 nonzero coeffs): update up to 4 coefficients directly
+                        // Otherwise fall back to full ring elements.
+                        let table_len = exp_table.len();
 
-                let w_tau = CmMatVecWitness::Base(tau0_arc.clone());
-
-                let w_mtau = if mtau_cc {
-                    CmMatVecWitness::Base(mtau0_arc.as_ref().unwrap().clone())
-                } else {
-                    match &inst.m_tau {
-                        crate::rgchk::MonomialVec::Dense(v) => CmMatVecWitness::Ring(v.clone()),
-                        crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                            // Fast paths for digit-backed witnesses (important for d64):
-                            // 1) monomial-like (<=1 nonzero coeff): update 1 coefficient directly
-                            // 2) sparse-support (<=4 nonzero coeffs): update up to 4 coefficients directly
-                            //
-                            // Otherwise fall back to full ring elements.
-                            let table_len = exp_table.len();
-
-                            // Try monomial-like first.
-                            let mut mono_idx = Vec::<u16>::with_capacity(table_len);
-                            let mut mono_coeff = Vec::<R::BaseRing>::with_capacity(table_len);
-                            let mut mono_ok = true;
-                            for r in exp_table.iter() {
-                                let mut found: Option<(usize, R::BaseRing)> = None;
-                                for (i, &ci) in r.coeffs().iter().enumerate() {
-                                    if ci != R::BaseRing::ZERO {
-                                        if found.is_some() {
-                                            mono_ok = false;
-                                            break;
-                                        }
-                                        found = Some((i, ci));
+                        // Try monomial-like first.
+                        let mut mono_idx = Vec::<u16>::with_capacity(table_len);
+                        let mut mono_coeff = Vec::<R::BaseRing>::with_capacity(table_len);
+                        let mut mono_ok = true;
+                        for r in exp_table.iter() {
+                            let mut found: Option<(usize, R::BaseRing)> = None;
+                            for (i, &ci) in r.coeffs().iter().enumerate() {
+                                if ci != R::BaseRing::ZERO {
+                                    if found.is_some() {
+                                        mono_ok = false;
+                                        break;
                                     }
-                                }
-                                if !mono_ok {
-                                    break;
-                                }
-                                match found {
-                                    None => {
-                                        mono_idx.push(0u16);
-                                        mono_coeff.push(R::BaseRing::ZERO);
-                                    }
-                                    Some((i, c)) => {
-                                        mono_idx.push(i as u16);
-                                        mono_coeff.push(c);
-                                    }
+                                    found = Some((i, ci));
                                 }
                             }
-                            if mono_ok {
+                            if !mono_ok {
+                                break;
+                            }
+                            match found {
+                                None => {
+                                    mono_idx.push(0u16);
+                                    mono_coeff.push(R::BaseRing::ZERO);
+                                }
+                                Some((i, c)) => {
+                                    mono_idx.push(i as u16);
+                                    mono_coeff.push(c);
+                                }
+                            }
+                        }
+                        if mono_ok {
+                            (
                                 CmMatVecWitness::MonomialDigitsMonomial {
                                     digits: digits.clone(),
                                     mono_idx: std::sync::Arc::new(mono_idx),
                                     mono_coeff: std::sync::Arc::new(mono_coeff),
-                                }
-                            } else {
-                                // Try sparse-support <= 4.
-                                let mut nnz = Vec::<u8>::with_capacity(table_len);
-                                let mut idx = Vec::<[u16; 4]>::with_capacity(table_len);
-                                let mut coeff = Vec::<[R::BaseRing; 4]>::with_capacity(table_len);
-                                let mut ok = true;
-                                for r in exp_table.iter() {
-                                    let mut t: usize = 0;
-                                    let mut id = [0u16; 4];
-                                    let mut cd = [R::BaseRing::ZERO; 4];
-                                    for (i, &ci) in r.coeffs().iter().enumerate() {
-                                        if ci != R::BaseRing::ZERO {
-                                            if t >= 4 {
-                                                ok = false;
-                                                break;
-                                            }
-                                            id[t] = i as u16;
-                                            cd[t] = ci;
-                                            t += 1;
+                                },
+                                "DigitsMonomial",
+                            )
+                        } else {
+                            // Try sparse-support <= 4.
+                            let mut nnz = Vec::<u8>::with_capacity(table_len);
+                            let mut idx = Vec::<[u16; 4]>::with_capacity(table_len);
+                            let mut coeff = Vec::<[R::BaseRing; 4]>::with_capacity(table_len);
+                            let mut ok = true;
+                            for r in exp_table.iter() {
+                                let mut t: usize = 0;
+                                let mut id = [0u16; 4];
+                                let mut cd = [R::BaseRing::ZERO; 4];
+                                for (i, &ci) in r.coeffs().iter().enumerate() {
+                                    if ci != R::BaseRing::ZERO {
+                                        if t >= 4 {
+                                            ok = false;
+                                            break;
                                         }
+                                        id[t] = i as u16;
+                                        cd[t] = ci;
+                                        t += 1;
                                     }
-                                    if !ok {
-                                        break;
-                                    }
-                                    nnz.push(t as u8);
-                                    idx.push(id);
-                                    coeff.push(cd);
                                 }
-                                if ok {
+                                if !ok {
+                                    break;
+                                }
+                                nnz.push(t as u8);
+                                idx.push(id);
+                                coeff.push(cd);
+                            }
+                            if ok {
+                                (
                                     CmMatVecWitness::MonomialDigitsSparse4 {
                                         digits: digits.clone(),
                                         nnz: std::sync::Arc::new(nnz),
                                         idx: std::sync::Arc::new(idx),
                                         coeff: std::sync::Arc::new(coeff),
-                                    }
-                                } else {
+                                    },
+                                    "DigitsSparse4",
+                                )
+                            } else {
+                                (
                                     CmMatVecWitness::MonomialDigits {
                                         digits: digits.clone(),
                                         exp_table: exp_table.clone(),
-                                    }
-                                }
+                                    },
+                                    "DigitsFull",
+                                )
                             }
                         }
                     }
-                };
+                }
+            };
+            if profile {
+                println!("[LF+ Cm::sumchecker_streaming] mtau witness: {mtau_kind}");
+            }
+
+            // mat-vecs: for each external M
+            for m0 in m_arcs0 {
+                // CM speed win: fuse the 4 mat-vec MLEs per M into a shared row scan.
+                use crate::streaming_sumcheck::CmMatVec4Shared;
+
+                let w_tau = CmMatVecWitness::Base(tau0_arc.clone());
+                let w_mtau = w_mtau_template.clone();
 
                 let w_f = if f_cc {
                     CmMatVecWitness::Base(f0_arc.as_ref().unwrap().clone())
@@ -2096,58 +2111,115 @@ where
                 );
             }
 
-            for m0 in m_arcs0 {
-                // CM speed win: fuse the 4 mat-vec MLEs per M into a shared row scan.
-                use crate::streaming_sumcheck::{CmMatVec4Shared, CmMatVecWitness};
+            // Build the m_tau witness once per instance (reused across all M).
+            use crate::streaming_sumcheck::CmMatVecWitness;
+            let (w_mtau_template, mtau_kind): (CmMatVecWitness<R>, &'static str) = if mtau_cc {
+                (CmMatVecWitness::Base(mtau0_arc.as_ref().unwrap().clone()), "BaseScalar")
+            } else {
+                match &inst.m_tau {
+                    crate::rgchk::MonomialVec::Dense(v) => (CmMatVecWitness::Ring(v.clone()), "RingDense"),
+                    crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
+                        // Same selection logic as the hmle path:
+                        // monomial-like (<=1 nnz) -> sparse-support (<=4 nnz) -> full ring.
+                        let table_len = exp_table.len();
 
-                let w_tau = CmMatVecWitness::Base(tau0_arc.clone());
-                let w_mtau = if mtau_cc {
-                    CmMatVecWitness::Base(mtau0_arc.as_ref().unwrap().clone())
-                } else {
-                    match &inst.m_tau {
-                        crate::rgchk::MonomialVec::Dense(v) => CmMatVecWitness::Ring(v.clone()),
-                        crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                            // Fast path: if exp_table entries are monomial-like, store their (idx, coeff) form.
-                            let mut mono_idx = Vec::<u16>::with_capacity(exp_table.len());
-                            let mut mono_coeff = Vec::<R::BaseRing>::with_capacity(exp_table.len());
+                        let mut mono_idx = Vec::<u16>::with_capacity(table_len);
+                        let mut mono_coeff = Vec::<R::BaseRing>::with_capacity(table_len);
+                        let mut mono_ok = true;
+                        for r in exp_table.iter() {
+                            let mut found: Option<(usize, R::BaseRing)> = None;
+                            for (i, &ci) in r.coeffs().iter().enumerate() {
+                                if ci != R::BaseRing::ZERO {
+                                    if found.is_some() {
+                                        mono_ok = false;
+                                        break;
+                                    }
+                                    found = Some((i, ci));
+                                }
+                            }
+                            if !mono_ok {
+                                break;
+                            }
+                            match found {
+                                None => {
+                                    mono_idx.push(0u16);
+                                    mono_coeff.push(R::BaseRing::ZERO);
+                                }
+                                Some((i, c)) => {
+                                    mono_idx.push(i as u16);
+                                    mono_coeff.push(c);
+                                }
+                            }
+                        }
+                        if mono_ok {
+                            (
+                                CmMatVecWitness::MonomialDigitsMonomial {
+                                    digits: digits.clone(),
+                                    mono_idx: std::sync::Arc::new(mono_idx),
+                                    mono_coeff: std::sync::Arc::new(mono_coeff),
+                                },
+                                "DigitsMonomial",
+                            )
+                        } else {
+                            let mut nnz = Vec::<u8>::with_capacity(table_len);
+                            let mut idx = Vec::<[u16; 4]>::with_capacity(table_len);
+                            let mut coeff = Vec::<[R::BaseRing; 4]>::with_capacity(table_len);
                             let mut ok = true;
                             for r in exp_table.iter() {
-                                let mut found: Option<(usize, R::BaseRing)> = None;
+                                let mut t: usize = 0;
+                                let mut id = [0u16; 4];
+                                let mut cd = [R::BaseRing::ZERO; 4];
                                 for (i, &ci) in r.coeffs().iter().enumerate() {
                                     if ci != R::BaseRing::ZERO {
-                                        if found.is_some() {
+                                        if t >= 4 {
                                             ok = false;
                                             break;
                                         }
-                                        found = Some((i, ci));
+                                        id[t] = i as u16;
+                                        cd[t] = ci;
+                                        t += 1;
                                     }
                                 }
                                 if !ok {
                                     break;
                                 }
-                                match found {
-                                    None => {
-                                        mono_idx.push(0u16);
-                                        mono_coeff.push(R::BaseRing::ZERO);
-                                    }
-                                    Some((i, c)) => {
-                                        mono_idx.push(i as u16);
-                                        mono_coeff.push(c);
-                                    }
-                                }
+                                nnz.push(t as u8);
+                                idx.push(id);
+                                coeff.push(cd);
                             }
-                        if ok {
-                                CmMatVecWitness::MonomialDigitsMonomial {
-                                    digits: digits.clone(),
-                                    mono_idx: std::sync::Arc::new(mono_idx),
-                                    mono_coeff: std::sync::Arc::new(mono_coeff),
-                                }
+                            if ok {
+                                (
+                                    CmMatVecWitness::MonomialDigitsSparse4 {
+                                        digits: digits.clone(),
+                                        nnz: std::sync::Arc::new(nnz),
+                                        idx: std::sync::Arc::new(idx),
+                                        coeff: std::sync::Arc::new(coeff),
+                                    },
+                                    "DigitsSparse4",
+                                )
                             } else {
-                                CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                                (
+                                    CmMatVecWitness::MonomialDigits {
+                                        digits: digits.clone(),
+                                        exp_table: exp_table.clone(),
+                                    },
+                                    "DigitsFull",
+                                )
                             }
                         }
                     }
-                };
+                }
+            };
+            if profile {
+                println!("[LF+ Cm::sumchecker_streaming] mtau witness: {mtau_kind}");
+            }
+
+            for m0 in m_arcs0 {
+                // CM speed win: fuse the 4 mat-vec MLEs per M into a shared row scan.
+                use crate::streaming_sumcheck::{CmMatVec4Shared, CmMatVecWitness};
+
+                let w_tau = CmMatVecWitness::Base(tau0_arc.clone());
+                let w_mtau = w_mtau_template.clone();
                 let w_f = if f_cc {
                     CmMatVecWitness::Base(f0_arc.as_ref().unwrap().clone())
                 } else {
