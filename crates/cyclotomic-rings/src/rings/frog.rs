@@ -689,17 +689,26 @@ impl MulUnchecked for FrogRing64 {
 
 impl Decompose for FrogRing64 {
     fn decompose_to(&self, b: u128, out: &mut [Self]) {
-        // Delegate to the underlying cyclotomic coefficient-form implementation **without**
-        // allocating a temporary buffer.
-        //
-        // SAFETY:
-        // - `FrogRing64` is `#[repr(transparent)]` over the inner `CyclotomicPolyRingGeneral`,
-        //   so `[FrogRing64]` has the same layout and alignment as `[Inner]`.
-        // - We only pass the slice to `decompose_to` for in-place writes; no aliasing with `self.0`.
         type Inner = stark_rings::cyclotomic_ring::CyclotomicPolyRingGeneral<Frog64Config, 1, 64>;
-        let out_inner: &mut [Inner] =
-            unsafe { core::slice::from_raw_parts_mut(out.as_mut_ptr() as *mut Inner, out.len()) };
-        self.0.decompose_to(b, out_inner);
+
+        // Avoid per-call heap allocations: reuse a per-thread scratch buffer.
+        //
+        // NOTE: `cyclotomic-rings` forbids unsafe code, so we cannot transmute `[FrogRing64]` into `[Inner]`.
+        // Instead we decompose into a thread-local `Vec<Inner>` and copy out.
+        use std::cell::RefCell;
+        thread_local! {
+            static SCRATCH: RefCell<Vec<Inner>> = const { RefCell::new(Vec::new()) };
+        }
+        SCRATCH.with(|cell| {
+            let mut buf = cell.borrow_mut();
+            if buf.len() != out.len() {
+                buf.resize(out.len(), Inner::ZERO);
+            }
+            self.0.decompose_to(b, &mut buf[..]);
+            for (o, t) in out.iter_mut().zip(buf.iter()) {
+                *o = FrogRing64(t.clone());
+            }
+        });
     }
 }
 
@@ -734,6 +743,7 @@ impl LatticefoldChallengeSet<FrogRing64> for Frog64ChallengeSet {
 mod frog64_tests {
     use super::*;
     use ark_std::{test_rng, UniformRand, Zero};
+    use rand::RngCore;
 
     type Inner = stark_rings::cyclotomic_ring::CyclotomicPolyRingGeneral<Frog64Config, 1, 64>;
 
