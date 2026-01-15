@@ -22,7 +22,21 @@ use core::mem::MaybeUninit;
 // The access pattern can have many conflict misses with a naive `idx & (size-1)` mapping, so we:
 // - use a somewhat larger table, and
 // - apply a multiplicative hash before masking.
-const CM_HFROM_CACHE_SIZE: usize = 1 << 15; // 32768 entries (~4 MiB/thread for d=16)
+//
+// IMPORTANT (d-scaling):
+// `vals` stores full ring elements, so its footprint scales linearly with `R::dimension()`.
+// We size it to target ~4 MiB/thread for the *values* across different rings (e.g. Frog d=16 vs d=64)
+// to avoid a 4x memory jump when switching to d=64.
+const CM_HFROM_TARGET_VAL_BYTES: usize = 4 * 1024 * 1024;
+
+#[inline]
+fn cm_hfrom_cache_size_for<R: OverField + PolyRing>() -> usize {
+    // Size by the stored ring element type (compile-time constant).
+    let elem = core::mem::size_of::<R>().max(1);
+    // Clamp to keep the table reasonably sized even for very small/large rings.
+    let raw = (CM_HFROM_TARGET_VAL_BYTES / elem).clamp(1024, 1 << 15);
+    raw.next_power_of_two()
+}
 
 pub(crate) struct HFromIndexCache<R: OverField + PolyRing>
 where
@@ -40,11 +54,12 @@ where
 {
     #[inline]
     fn new(id: usize) -> Self {
+        let size = cm_hfrom_cache_size_for::<R>();
         Self {
             id,
-            mask: CM_HFROM_CACHE_SIZE - 1,
-            keys: vec![usize::MAX; CM_HFROM_CACHE_SIZE],
-            vals: vec![R::ZERO; CM_HFROM_CACHE_SIZE],
+            mask: size - 1,
+            keys: vec![usize::MAX; size],
+            vals: vec![R::ZERO; size],
         }
     }
 
