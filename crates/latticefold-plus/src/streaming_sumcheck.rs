@@ -282,6 +282,17 @@ where
         }
     }
 
+    #[inline]
+    fn witness_ref<'a>(&'a self, which: u8) -> Option<&'a CmMatVecWitness<R>> {
+        match which {
+            0 => Some(&self.w0),
+            1 => Some(&self.w1),
+            2 => Some(&self.w2),
+            3 => Some(&self.w3),
+            _ => None,
+        }
+    }
+
     /// Evaluate all four mat-vec outputs at a given **row** index.
     #[inline]
     pub fn eval4_at_row(&self, row: usize) -> [R; 4] {
@@ -310,6 +321,42 @@ where
             }
         }
         [acc0, acc1, acc2, acc3]
+    }
+
+    /// Evaluate a single mat-vec output at a given **row** index.
+    ///
+    /// This is used as a correctness-only fallback when the sumcheck prover's cache is not active
+    /// (e.g. inside `LazyFixed` evaluation with non-empty fixed bits). It avoids the 4× overhead
+    /// of computing all parts when only one is needed.
+    #[inline]
+    pub fn eval_part_at_row(&self, which: u8, row: usize) -> R {
+        if row >= self.matrix0.coeffs.len() {
+            return R::ZERO;
+        }
+        let Some(w) = self.witness_ref(which) else {
+            return R::ZERO;
+        };
+
+        // If base-scalar, stay in base ring for the accumulation.
+        if let CmMatVecWitness::Base(w0) = w {
+            let mut sum0 = R::BaseRing::ZERO;
+            for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+                if *col_idx < w0.len() {
+                    sum0 += *coeff0 * w0[*col_idx];
+                }
+            }
+            return R::from(sum0);
+        }
+
+        let mut acc = R::ZERO;
+        for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+            let c0 = *coeff0;
+            let cj = *col_idx;
+            if let Some(v) = Self::eval_witness(w, cj) {
+                acc += v * c0;
+            }
+        }
+        acc
     }
 
     /// If the selected witness is base-scalar, evaluate the mat-vec and return the base scalar.
@@ -702,9 +749,10 @@ where
             }
             StreamingMleEnum::CmMatVec4Part { shared, which, .. } => {
                 debug_assert!((*which as usize) < 4);
-                // NOTE: this computes all 4 outputs. The sumcheck prover will cache these row scans
-                // across the four parts in the hot loop; this fallback is correctness-only.
-                shared.eval4_at_row(index)[*which as usize]
+                // NOTE: in the sumcheck hot loop we use a cache to compute all 4 at once and reuse.
+                // This fallback must be efficient when the cache is not active (e.g. inside LazyFixed),
+                // so it computes only the requested part.
+                shared.eval_part_at_row(*which, index)
             }
         }
     }
