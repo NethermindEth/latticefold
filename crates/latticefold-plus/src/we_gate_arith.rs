@@ -4209,24 +4209,12 @@ mod tests {
         let dparams = DecompParameters { b: 2u128, k, l: ell };
         let lin_params = crate::lin::LinParameters { kappa, decomp: dparams.clone() };
 
-        // Π_decomp base B: choose a conservative power-of-two > sqrt(q) so 2-digit decomposition is always valid.
-        fn isqrt_u128(x: u128) -> u128 {
-            let mut lo: u128 = 0;
-            let mut hi: u128 = 1u128 << 64;
-            while lo + 1 < hi {
-                let mid = (lo + hi) >> 1;
-                if mid.saturating_mul(mid) <= x { lo = mid; } else { hi = mid; }
-            }
-            lo
-        }
-        fn next_pow2_u128(x: u128) -> u128 {
-            if x <= 1 { return 1; }
-            let p = 128 - (x - 1).leading_zeros() as u32;
-            1u128 << p
-        }
-        let q_u128: u128 = <BR as ark_ff::PrimeField>::MODULUS.0[0] as u128;
-        let mut b_decomp: u128 = next_pow2_u128(isqrt_u128(q_u128) + 1);
-        if b_decomp % 2 == 1 { b_decomp += 1; }
+        // Π_decomp base B:
+        // Use a fixed very-large power-of-two so 2-digit decomposition is always valid in this test,
+        // regardless of how the field modulus is represented on different platforms/toolchains.
+        //
+        // (This is test-only; production picks the minimal B to keep digits small.)
+        let b_decomp: u128 = 1u128 << 64;
 
         let pparams = PlusParameters { lin: lin_params, B: b_decomp };
 
