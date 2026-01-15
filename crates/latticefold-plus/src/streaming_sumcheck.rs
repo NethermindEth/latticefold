@@ -101,6 +101,18 @@ pub struct HCol0Precomp<Rr: PolyRing> {
     pub term_rest: Rr,
 }
 
+/// Grouped lookup for fast streamed-`h` evaluation.
+///
+/// For a group of `g` digit streams (each digit in `[0, base)`), we precompute a table
+/// of length `base^g` containing the sum of the corresponding `term0_tab[d]` ring elements.
+#[derive(Clone)]
+pub struct HFromGroup<Rr: PolyRing> {
+    pub base: usize,
+    pub cols: Arc<Vec<Arc<Vec<u16>>>>,
+    pub zero_idx: Arc<Vec<u16>>,
+    pub table: Arc<Vec<Rr>>,
+}
+
 #[cfg(feature = "parallel")]
 #[inline]
 fn alloc_init_par<T: Send + Sync>(len: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
@@ -250,8 +262,12 @@ where
     ///
     /// This avoids materializing the full length-2^n `h: Vec<R>` at all.
     HFromMfDigitsConstCol0 {
-        /// Per `M_f` matrix: col0 digits (length nrows) and precomputed terms.
-        precomps: Arc<Vec<HCol0Precomp<R>>>,
+        /// Grouped digit streams and precomputed group tables for fast lookup.
+        ///
+        /// This turns `h[idx] = rest_sum + Σ_i term0_tab_i[d_i(idx)]` into:
+        /// `h[idx] = rest_sum + Σ_groups table_group[pack_digits(idx)]`,
+        /// reducing the number of dense ring additions per evaluation from `O(#precomps)` to `O(#groups)`.
+        groups: Arc<Vec<HFromGroup<R>>>,
         /// Precomputed sum of `term_rest` across all `precomps` (dense ring element in SP1).
         ///
         /// This is a *huge* win because CM sumcheck evaluates `h[cj]` extremely often; without
@@ -436,8 +452,8 @@ where
                 {
                     Dense(&'a [Rr]),
                     HFrom {
-                        precomps: &'a [HCol0Precomp<Rr>],
                         rest_sum: &'a Rr,
+                        groups: &'a [HFromGroup<Rr>],
                         h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
@@ -445,11 +461,11 @@ where
                 let w3fast = match w3m {
                     StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
                     StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
-                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { groups, rest_sum, .. } => {
                         W3Fast::HFrom {
-                            precomps: precomps.as_ref(),
                             rest_sum,
-                            h_id: Arc::as_ptr(precomps) as usize,
+                            groups: groups.as_ref(),
+                            h_id: Arc::as_ptr(groups) as usize,
                         }
                     }
                     _ => W3Fast::Other(w3m),
@@ -477,7 +493,7 @@ where
                     // `w3` is an MLE; fast-path the common variants to avoid per-nonzero dispatch overhead.
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom { precomps, rest_sum, h_id } => {
+                        W3Fast::HFrom { groups, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
@@ -486,9 +502,14 @@ where
                                 .unwrap()
                                 .get_or_compute(cj, stats, profile, || {
                                     let mut hv = (*rest_sum).clone();
-                                    for p in precomps.iter() {
-                                        let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                        hv += p.term0_tab[dix].clone();
+                                    for g in groups.iter() {
+                                        let base = g.base;
+                                        let mut packed: usize = 0;
+                                        for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
+                                            let d = col0.get(cj).copied().unwrap_or(z) as usize;
+                                            packed = packed * base + d;
+                                        }
+                                        hv += g.table[packed].clone();
                                     }
                                     hv
                                 });
@@ -524,8 +545,8 @@ where
                 {
                     Dense(&'a [Rr]),
                     HFrom {
-                        precomps: &'a [HCol0Precomp<Rr>],
                         rest_sum: &'a Rr,
+                        groups: &'a [HFromGroup<Rr>],
                         h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
@@ -533,11 +554,11 @@ where
                 let w3fast = match w3m {
                     StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
                     StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
-                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { groups, rest_sum, .. } => {
                         W3Fast::HFrom {
-                            precomps: precomps.as_ref(),
                             rest_sum,
-                            h_id: Arc::as_ptr(precomps) as usize,
+                            groups: groups.as_ref(),
+                            h_id: Arc::as_ptr(groups) as usize,
                         }
                     }
                     _ => W3Fast::Other(w3m),
@@ -561,7 +582,7 @@ where
                     }
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom { precomps, rest_sum, h_id } => {
+                        W3Fast::HFrom { groups, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
@@ -570,9 +591,14 @@ where
                                 .unwrap()
                                 .get_or_compute(cj, stats, profile, || {
                                     let mut hv = (*rest_sum).clone();
-                                    for p in precomps.iter() {
-                                        let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                        hv += p.term0_tab[dix].clone();
+                                    for g in groups.iter() {
+                                        let base = g.base;
+                                        let mut packed: usize = 0;
+                                        for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
+                                            let d = col0.get(cj).copied().unwrap_or(z) as usize;
+                                            packed = packed * base + d;
+                                        }
+                                        hv += g.table[packed].clone();
                                     }
                                     hv
                                 });
@@ -603,8 +629,8 @@ where
                 {
                     Dense(&'a [Rr]),
                     HFrom {
-                        precomps: &'a [HCol0Precomp<Rr>],
                         rest_sum: &'a Rr,
+                        groups: &'a [HFromGroup<Rr>],
                         h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
@@ -612,11 +638,11 @@ where
                 let w3fast = match w3m {
                     StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
                     StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
-                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { groups, rest_sum, .. } => {
                         W3Fast::HFrom {
-                            precomps: precomps.as_ref(),
                             rest_sum,
-                            h_id: Arc::as_ptr(precomps) as usize,
+                            groups: groups.as_ref(),
+                            h_id: Arc::as_ptr(groups) as usize,
                         }
                     }
                     _ => W3Fast::Other(w3m),
@@ -640,7 +666,7 @@ where
                     }
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom { precomps, rest_sum, h_id } => {
+                        W3Fast::HFrom { groups, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
@@ -649,9 +675,14 @@ where
                                 .unwrap()
                                 .get_or_compute(cj, stats, profile, || {
                                     let mut hv = (*rest_sum).clone();
-                                    for p in precomps.iter() {
-                                        let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                        hv += p.term0_tab[dix].clone();
+                                    for g in groups.iter() {
+                                        let base = g.base;
+                                        let mut packed: usize = 0;
+                                        for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
+                                            let d = col0.get(cj).copied().unwrap_or(z) as usize;
+                                            packed = packed * base + d;
+                                        }
+                                        hv += g.table[packed].clone();
                                     }
                                     hv
                                 });
@@ -1110,12 +1141,16 @@ where
                 }
                 sum
             }
-            StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
-                // Implicit zero-padding: if some col0 vectors are prefixes, treat missing as zero_idx.
+            StreamingMleEnum::HFromMfDigitsConstCol0 { groups, rest_sum, .. } => {
                 let mut acc = rest_sum.clone();
-                for p in precomps.iter() {
-                    let dix = p.col0.get(index).copied().unwrap_or(p.zero_idx) as usize;
-                    acc += p.term0_tab[dix].clone();
+                for g in groups.iter() {
+                    let base = g.base;
+                    let mut packed: usize = 0;
+                    for (col0, &z) in g.cols.iter().zip(g.zero_idx.iter()) {
+                        let d = col0.get(index).copied().unwrap_or(z) as usize;
+                        packed = packed * base + d;
+                    }
+                    acc += g.table[packed].clone();
                 }
                 acc
             }

@@ -575,13 +575,75 @@ where
                     can_stream = false;
                     break;
                 }
+                // Build grouped lookup tables for fast streamed-h evaluation.
+                //
+                // In SP1, `base = 17` and `len(precomps) ~ 11`. Grouping into chunks of 4 gives:
+                // - base^4 = 83,521 table entries (~10-20MB depending on ring element size),
+                // so total tables are on the order of a few tens of MB per instance, far less than
+                // materializing `h` but fast enough to avoid per-eval dense sums.
                 let precomps = Arc::new(precomps);
+                let base = precomps
+                    .first()
+                    .map(|p| p.term0_tab.len())
+                    .unwrap_or(0);
+                assert!(base > 0, "stream_h expects non-empty exp_table/term0_tab");
+                debug_assert!(precomps.iter().all(|p| p.term0_tab.len() == base));
+
                 let mut rest_sum = R::ZERO;
                 for p in precomps.iter() {
                     rest_sum += p.term_rest.clone();
                 }
+
+                // Choose group size (default 4); if base^4 is too large, fall back to smaller groups.
+                fn pow_usize(mut a: usize, mut e: usize) -> usize {
+                    let mut out = 1usize;
+                    while e > 0 {
+                        if e & 1 == 1 {
+                            out = out.saturating_mul(a);
+                        }
+                        e >>= 1;
+                        a = a.saturating_mul(a);
+                    }
+                    out
+                }
+                let mut gsize = 4usize;
+                while gsize > 1 && pow_usize(base, gsize) > 200_000 {
+                    gsize -= 1;
+                }
+                let groups = {
+                    use crate::streaming_sumcheck::HFromGroup;
+                    let mut out = Vec::<HFromGroup<R>>::new();
+                    for chunk in precomps.chunks(gsize) {
+                        let g = chunk.len();
+                        let table_len = pow_usize(base, g);
+                        let cols = chunk.iter().map(|p| p.col0.clone()).collect::<Vec<_>>();
+                        let zix = chunk.iter().map(|p| p.zero_idx).collect::<Vec<_>>();
+                        let mut table = Vec::<R>::with_capacity(table_len);
+                        for k0 in 0..table_len {
+                            let mut k = k0;
+                            let mut acc = R::ZERO;
+                            // Decode base-`base` digits for this combination.
+                            // Order must match the packing loop used at eval time.
+                            // We pack as: packed = packed*base + d (left-to-right), so decoding here is reverse.
+                            for (j, p) in chunk.iter().enumerate().rev() {
+                                let d = (k % base) as usize;
+                                k /= base;
+                                let _ = j; // (kept for clarity; no use)
+                                acc += p.term0_tab[d].clone();
+                            }
+                            table.push(acc);
+                        }
+                        out.push(HFromGroup {
+                            base,
+                            cols: std::sync::Arc::new(cols),
+                            zero_idx: std::sync::Arc::new(zix),
+                            table: std::sync::Arc::new(table),
+                        });
+                    }
+                    std::sync::Arc::new(out)
+                };
                 let mle = StreamingMleEnum::HFromMfDigitsConstCol0 {
-                    precomps,
+                    groups,
                     rest_sum,
                     num_vars: self.rg.nvars,
                 };
