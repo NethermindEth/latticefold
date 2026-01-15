@@ -179,24 +179,67 @@ impl core::ops::Mul for FrogRing64 {
         debug_assert_eq!(a.len(), 64);
         debug_assert_eq!(b.len(), 64);
 
-        // Two-level Karatsuba-style dense multiply (split 32 then 16) to reduce base-field muls:
+        // Karatsuba-style dense multiply (split 32 -> 16 -> 8 -> 4) to reduce base-field muls:
         // - schoolbook: 64*64 = 4096 muls
-        // - 2-level Karatsuba: 9*(16*16) = 2304 muls (plus additions/subtractions)
+        // - 4-level Karatsuba: 3^4 * (4*4) = 1296 muls (plus additions/subtractions)
         //
         // This is the cheapest "big win" we can add without introducing an NTT/CRT form.
         #[inline(always)]
         fn mul8(a: &[Fq], b: &[Fq]) -> [Fq; 16] {
             debug_assert_eq!(a.len(), 8);
             debug_assert_eq!(b.len(), 8);
+
+            #[inline(always)]
+            fn mul4(a: &[Fq], b: &[Fq]) -> [Fq; 8] {
+                debug_assert_eq!(a.len(), 4);
+                debug_assert_eq!(b.len(), 4);
+                let mut out = [<Fq as Field>::ZERO; 8];
+                for i in 0..4 {
+                    let ai = a[i];
+                    if ai == <Fq as Field>::ZERO {
+                        continue;
+                    }
+                    for j in 0..4 {
+                        out[i + j] += ai * b[j];
+                    }
+                }
+                out
+            }
+
+            // Karatsuba 8x8 using 4x4 base multiplies:
+            // 3*(4*4)=48 muls vs 64 for schoolbook.
+            let (a0, a1) = a.split_at(4);
+            let (b0, b1) = b.split_at(4);
+
+            let p0 = mul4(a0, b0);
+            let p1 = mul4(a1, b1);
+            let mut a01 = [<Fq as Field>::ZERO; 4];
+            let mut b01 = [<Fq as Field>::ZERO; 4];
+            for i in 0..4 {
+                a01[i] = a0[i] + a1[i];
+                b01[i] = b0[i] + b1[i];
+            }
+            let p2 = mul4(&a01, &b01);
+
+            // cross = p2 - p0 - p1 (len 8)
+            let mut cross = [<Fq as Field>::ZERO; 8];
+            for i in 0..8 {
+                cross[i] = p2[i] - p0[i] - p1[i];
+            }
+
+            // Assemble 8x8 convolution:
+            // out[0..7] = p0 low
+            // out[4..11] += cross
+            // out[8..15] += p1
             let mut out = [<Fq as Field>::ZERO; 16];
             for i in 0..8 {
-                let ai = a[i];
-                if ai == <Fq as Field>::ZERO {
-                    continue;
-                }
-                for j in 0..8 {
-                    out[i + j] += ai * b[j];
-                }
+                out[i] = p0[i];
+            }
+            for i in 0..8 {
+                out[4 + i] += cross[i];
+            }
+            for i in 0..8 {
+                out[8 + i] += p1[i];
             }
             out
         }
