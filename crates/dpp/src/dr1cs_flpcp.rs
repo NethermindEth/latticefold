@@ -76,8 +76,6 @@ impl<F: PrimeField + FftField> RsDr1csFlpcp<F> {
         // Memory note:
         // Extrapolation uses large NTT buffers when k is huge; running multiple extrapolations
         // concurrently can blow up RSS. For large sizes, compute tails sequentially.
-        let out_len = 2 * k - 1;
-        let size = out_len.next_power_of_two();
         // Two extrapolations is usually an acceptable memory multiplier; keep them parallel.
         let (y_a_tail, y_b_tail) = join(
             || extrapolate_consecutive_next_block::<F>(&y_a),
@@ -418,8 +416,6 @@ impl<F: PrimeField + FftField> RsDr1csNpFlpcpSparse<F> {
         // Memory note:
         // For huge k, each extrapolation allocates large NTT buffers. Running 3 extrapolations
         // concurrently can easily exceed machine memory. For large sizes, compute tails sequentially.
-        let out_len = 2 * k - 1;
-        let size = out_len.next_power_of_two();
         // Memory note:
         // Running 3 huge extrapolations concurrently can explode RSS. Keep bounded parallelism:
         // compute 2 in parallel, then the third.
