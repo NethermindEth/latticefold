@@ -257,8 +257,8 @@ impl<R: OverField + PolyRing> In<R> {
         let mut mat_is_constcol0: Vec<bool> = Vec::with_capacity(Ms_len);
 
         // matrix sets (dense path)
-        for (mi, Md) in Ms_dense.iter().enumerate() {
-            let t_mat = Instant::now();
+        for (_mi, Md) in Ms_dense.iter().enumerate() {
+            let _t_mat = Instant::now();
             // Step 1
             let c0 = transcript.get_challenges(self.nvars);
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
@@ -299,20 +299,11 @@ impl<R: OverField + PolyRing> In<R> {
             let alpha = transcript.get_challenge();
             alphas.push(alpha);
             mat_is_constcol0.push(false);
-
-            if profile {
-                println!(
-                    "[LF+ setchk] matrix_set[{mi}] build_tables: {:?} (nrows={}, ncols={})",
-                    t_mat.elapsed(),
-                    nrows,
-                    ncols
-                );
-            }
         }
 
         // matrix sets (digit/oracle path)
-        for (mi, Md) in Ms_digits.iter().enumerate() {
-            let t_mat = Instant::now();
+        for (_mi, Md) in Ms_digits.iter().enumerate() {
+            let _t_mat = Instant::now();
             // Step 1
             let c0 = transcript.get_challenges(self.nvars);
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
@@ -368,20 +359,11 @@ impl<R: OverField + PolyRing> In<R> {
             let alpha = transcript.get_challenge();
             alphas.push(alpha);
             mat_is_constcol0.push(is_constcol0);
-
-            if profile {
-                println!(
-                    "[LF+ setchk] matrix_set_digits[{mi}] build_tables: {:?} (nrows={}, ncols={})",
-                    t_mat.elapsed(),
-                    nrows,
-                    ncols
-                );
-            }
         }
 
         // matrix sets (legacy sparse path)
-        for (mi, M) in Ms_sparse.iter().enumerate() {
-            let t_mat = Instant::now();
+        for (_mi, M) in Ms_sparse.iter().enumerate() {
+            let _t_mat = Instant::now();
             let c0 = transcript.get_challenges(self.nvars);
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
             let beta = transcript.get_challenge();
@@ -414,15 +396,6 @@ impl<R: OverField + PolyRing> In<R> {
             let alpha = transcript.get_challenge();
             alphas.push(alpha);
             mat_is_constcol0.push(false);
-
-            if profile {
-                println!(
-                    "[LF+ setchk] matrix_set_sparse[{mi}] build_tables: {:?} (nrows={}, ncols={})",
-                    t_mat.elapsed(),
-                    M.nrows,
-                    ncols
-                );
-            }
         }
 
         // vector sets
