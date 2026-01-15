@@ -36,7 +36,12 @@ pub(crate) struct CmCacheStats {
 // A small per-thread direct-mapped cache for streaming-h evaluations `h[idx]` when
 // `h` is represented as `HFromMfDigitsConstCol0`. This targets repeated column indices
 // across sparse mat-vec scans without materializing full `h`.
-const CM_HFROM_CACHE_SIZE: usize = 1 << 13; // 8192 entries (~1 MiB/thread for d=16)
+//
+// NOTE: This cache is performance-critical when streaming-h is active and `h` is dense in the ring.
+// The access pattern can have many conflict misses with a naive `idx & (size-1)` mapping, so we:
+// - use a somewhat larger table, and
+// - apply a multiplicative hash before masking.
+const CM_HFROM_CACHE_SIZE: usize = 1 << 15; // 32768 entries (~4 MiB/thread for d=16)
 
 pub(crate) struct HFromIndexCache<R: OverField + PolyRing>
 where
@@ -70,7 +75,8 @@ where
         profile: bool,
         compute: impl FnOnce() -> R,
     ) -> R {
-        let slot = idx & self.mask;
+        // Multiplicative hashing to reduce conflict misses for structured index patterns.
+        let slot = idx.wrapping_mul(11400714819323198485usize) & self.mask;
         if self.keys[slot] == idx {
             if profile { stats.hfrom_hit += 1; }
             return self.vals[slot];
