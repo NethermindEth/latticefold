@@ -1627,12 +1627,14 @@ impl StreamingSumcheck {
                 s
             })
             .map(|s| s.evals)
-            .reduce(|| vec![R::ZERO; degree + 1], |mut acc, evals| {
+            // `reduce_with` avoids repeatedly allocating an identity vector in rayon's reduction tree.
+            .reduce_with(|mut acc, evals| {
                 for (a, e) in acc.iter_mut().zip(evals) {
                     *a += e;
                 }
                 acc
-            });
+            })
+            .unwrap_or_else(|| vec![R::ZERO; degree + 1]);
 
         #[cfg(not(feature = "parallel"))]
         let result = {
@@ -1749,12 +1751,14 @@ impl StreamingSumcheck {
                     }
                     s
                 })
-                .reduce(mk_scratch, |mut a, b| {
+                // `reduce_with` avoids repeatedly allocating an identity scratch in rayon's reduction tree.
+                .reduce_with(|mut a, b| {
                     for d in 0..=degree {
                         a.acc[d] += b.acc[d];
                     }
                     a
                 })
+                .unwrap_or_else(mk_scratch)
                 .acc
         };
 

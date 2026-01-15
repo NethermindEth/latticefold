@@ -720,15 +720,14 @@ impl<R: OverField + PolyRing> In<R> {
                             acc
                         },
                     )
-                    .reduce(
-                        || vec![R::ZERO; ncols],
-                        |mut a, b| {
-                            for col in 0..ncols {
-                                a[col] += b[col];
-                            }
-                            a
-                        },
-                    );
+                    // `reduce_with` avoids repeatedly allocating an identity vector.
+                    .reduce_with(|mut a, b| {
+                        for col in 0..ncols {
+                            a[col] += b[col];
+                        }
+                        a
+                    })
+                    .unwrap_or_else(|| vec![R::ZERO; ncols]);
                 #[cfg(not(feature = "parallel"))]
                 let v = (0..ncols)
                     .map(|col| {
@@ -779,15 +778,14 @@ impl<R: OverField + PolyRing> In<R> {
                                 accs
                             },
                         )
-                        .reduce(
-                            || vec![R::ZERO; md_count],
-                            |mut a, b| {
-                                for k in 0..md_count {
-                                    a[k] += b[k];
-                                }
-                                a
-                            },
-                        )
+                        // `reduce_with` avoids repeatedly allocating an identity vector.
+                        .reduce_with(|mut a, b| {
+                            for k in 0..md_count {
+                                a[k] += b[k];
+                            }
+                            a
+                        })
+                        .unwrap_or_else(|| vec![R::ZERO; md_count])
                 };
                 #[cfg(not(feature = "parallel"))]
                 let acc0s: Vec<R> = {
@@ -875,15 +873,14 @@ impl<R: OverField + PolyRing> In<R> {
                                             acc
                                         },
                                     )
-                                    .reduce(
-                                        || vec![R::ZERO; ncols],
-                                        |mut a, b| {
-                                            for col in 0..ncols {
-                                                a[col] += b[col];
-                                            }
-                                            a
-                                        },
-                                    )
+                                    // `reduce_with` avoids repeatedly allocating an identity vector.
+                                    .reduce_with(|mut a, b| {
+                                        for col in 0..ncols {
+                                            a[col] += b[col];
+                                        }
+                                        a
+                                    })
+                                    .unwrap_or_else(|| vec![R::ZERO; ncols])
                             }
                             #[cfg(not(feature = "parallel"))]
                             {
@@ -966,15 +963,14 @@ impl<R: OverField + PolyRing> In<R> {
                                 acc
                             },
                         )
-                        .reduce(
-                            || vec![R::ZERO; ncols],
-                            |mut a, b| {
-                                for col in 0..ncols {
-                                    a[col] += b[col];
-                                }
-                                a
-                            },
-                        );
+                        // `reduce_with` avoids repeatedly allocating an identity vector.
+                        .reduce_with(|mut a, b| {
+                            for col in 0..ncols {
+                                a[col] += b[col];
+                            }
+                            a
+                        })
+                        .unwrap_or_else(|| vec![R::ZERO; ncols]);
                     #[cfg(not(feature = "parallel"))]
                     let v = (0..ncols)
                         .map(|col| {
@@ -1095,15 +1091,14 @@ impl<R: OverField + PolyRing> In<R> {
                                             acc
                                         },
                                     )
-                                    .reduce(
-                                        || vec![R::ZERO; ncols],
-                                        |mut a, b| {
-                                            for col in 0..ncols {
-                                                a[col] += b[col];
-                                            }
-                                            a
-                                        },
-                                    )
+                                    // `reduce_with` avoids repeatedly allocating an identity vector.
+                                    .reduce_with(|mut a, b| {
+                                        for col in 0..ncols {
+                                            a[col] += b[col];
+                                        }
+                                        a
+                                    })
+                                    .unwrap_or_else(|| vec![R::ZERO; ncols])
                             }
                             #[cfg(not(feature = "parallel"))]
                             {
