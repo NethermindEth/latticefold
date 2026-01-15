@@ -382,8 +382,13 @@ fn convolution_crt_ntt<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: us
     let b_u = b.par_iter().map(to_u64).collect::<Vec<_>>();
 
     // For each modulus, reduce inputs and convolve.
+    //
+    // IMPORTANT (memory):
+    // Each convolution allocates O(size) NTT buffers; parallelizing across moduli can easily
+    // explode RSS for large sizes (e.g. 2^27, 2^28). We keep NTT *internally* parallel and
+    // run moduli sequentially to cap memory.
     let residues_vec: Vec<Vec<u32>> = (0..k)
-        .into_par_iter()
+        .into_iter()
         .map(|i| {
             let modulus = mods[i];
             let root = roots[i];
@@ -652,9 +657,37 @@ fn ntt_moduli_for_size_u64(size: usize, target_count: usize) -> Vec<u64> {
     out
 }
 
+/// Deterministically synthesize `target_count` 64-bit primes p such that `p ≡ 1 (mod size)`,
+/// along with a size-th root of unity for each prime.
+///
+/// This is used as a fallback when there are too few 32-bit NTT primes for large `size` (e.g. 2^28).
+fn ntt_moduli_roots_for_size_u64(size: usize, target_count: usize) -> (Vec<u64>, Vec<u64>) {
+    assert!(size.is_power_of_two(), "NTT size must be power-of-two");
+    assert!(size >= 2, "NTT size too small");
+
+    // Cache per (size,target_count) so RS extrapolation doesn't repeatedly search primes/roots.
+    static CACHE: OnceLock<Mutex<HashMap<(usize, usize), (Vec<u64>, Vec<u64>)>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(v) = cache
+        .lock()
+        .ok()
+        .and_then(|m| m.get(&(size, target_count)).cloned())
+    {
+        return v;
+    }
+
+    let mods = ntt_moduli_for_size_u64(size, target_count);
+    let roots_n: Vec<u64> = mods.iter().map(|&m| root_of_unity_u64(m, size)).collect();
+    let out = (mods, roots_n);
+    if let Ok(mut m) = cache.lock() {
+        m.insert((size, target_count), out.clone());
+    }
+    out
+}
+
 fn convolution_crt_ntt_u64<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: usize) -> Vec<F> {
     // Pick 3 large 64-bit NTT primes (product ~192 bits) to cover large convolution coefficient bounds.
-    let mods = ntt_moduli_for_size_u64(size, /*target_count=*/ 3);
+    let (mods, roots_n) = ntt_moduli_roots_for_size_u64(size, /*target_count=*/ 3);
     let k = mods.len();
     assert!(
         k >= 3,
@@ -681,9 +714,9 @@ fn convolution_crt_ntt_u64<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size
     let b_u = b.par_iter().map(to_u64).collect::<Vec<_>>();
 
     // Compute roots and convolve under each modulus.
-    let roots_n: Vec<u64> = mods.iter().map(|&m| root_of_unity_u64(m, size)).collect();
+    // Same memory concern as the u32 CRT+NTT path: do not parallelize across moduli.
     let residues_vec: Vec<Vec<u64>> = (0..k)
-        .into_par_iter()
+        .into_iter()
         .map(|i| {
             let modulus = mods[i];
             let root_n = roots_n[i];
