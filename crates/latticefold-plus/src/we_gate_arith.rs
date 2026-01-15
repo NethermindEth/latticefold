@@ -4152,7 +4152,9 @@ mod tests {
         use cyclotomic_rings::rings::GetPoseidonParams;
         use sha2::{Digest, Sha256};
 
-        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        // Use the same ring type as the SP1 oneproof harness (`examples/lf_plus_sp1_oneproof.rs`)
+        // to ensure Π_decomp (2-digit) assumptions match production.
+        use cyclotomic_rings::rings::FrogRingPoly as RR;
         use stark_rings::PolyRing;
         use stark_rings_linalg::SparseMatrix;
         use std::sync::Arc;
