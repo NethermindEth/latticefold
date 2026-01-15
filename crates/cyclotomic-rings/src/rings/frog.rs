@@ -179,6 +179,88 @@ impl core::ops::Mul for FrogRing64 {
         debug_assert_eq!(a.len(), 64);
         debug_assert_eq!(b.len(), 64);
 
+        #[inline]
+        fn is_const_coeff(v: &[Fq]) -> Option<Fq> {
+            debug_assert_eq!(v.len(), 64);
+            for &ci in &v[1..] {
+                if ci != <Fq as Field>::ZERO {
+                    return None;
+                }
+            }
+            Some(v[0])
+        }
+
+        #[inline]
+        fn monomial(v: &[Fq]) -> Option<(usize, Fq)> {
+            debug_assert_eq!(v.len(), 64);
+            let mut idx: Option<usize> = None;
+            let mut coeff = <Fq as Field>::ZERO;
+            for (i, &ci) in v.iter().enumerate() {
+                if ci != <Fq as Field>::ZERO {
+                    if idx.is_some() {
+                        return None;
+                    }
+                    idx = Some(i);
+                    coeff = ci;
+                }
+            }
+            idx.map(|i| (i, coeff))
+        }
+
+        // Fast paths:
+        // - const-coeff (scalar) multiply: O(d)
+        // - monomial multiply: O(d)
+        //
+        // These matter a lot in LF+ where many ring elements are structurally simple.
+        if let Some(c) = is_const_coeff(b) {
+            // a(X) * c
+            return self * c;
+        }
+        if let Some(c) = is_const_coeff(a) {
+            // c * b(X)
+            return rhs * c;
+        }
+        if let Some((j, cj)) = monomial(b) {
+            // a(X) * (cj * X^j)  (mod X^64+1)
+            let mut out = [<Fq as Field>::ZERO; 64];
+            for i in 0..64 {
+                let ai = a[i];
+                if ai == <Fq as Field>::ZERO {
+                    continue;
+                }
+                let prod = ai * cj;
+                let k = i + j;
+                if k < 64 {
+                    out[k] += prod;
+                } else {
+                    out[k - 64] -= prod;
+                }
+            }
+            let mut r = FrogRing64::ZERO;
+            r.coeffs_mut().copy_from_slice(&out);
+            return r;
+        }
+        if let Some((i, ci)) = monomial(a) {
+            // (ci * X^i) * b(X)
+            let mut out = [<Fq as Field>::ZERO; 64];
+            for j in 0..64 {
+                let bj = b[j];
+                if bj == <Fq as Field>::ZERO {
+                    continue;
+                }
+                let prod = ci * bj;
+                let k = i + j;
+                if k < 64 {
+                    out[k] += prod;
+                } else {
+                    out[k - 64] -= prod;
+                }
+            }
+            let mut r = FrogRing64::ZERO;
+            r.coeffs_mut().copy_from_slice(&out);
+            return r;
+        }
+
         let mut out = [<Fq as Field>::ZERO; 64];
         for i in 0..64 {
             let ai = a[i];
@@ -186,7 +268,11 @@ impl core::ops::Mul for FrogRing64 {
                 continue;
             }
             for j in 0..64 {
-                let prod = ai * b[j];
+                let bj = b[j];
+                if bj == <Fq as Field>::ZERO {
+                    continue;
+                }
+                let prod = ai * bj;
                 let k = i + j;
                 if k < 64 {
                     out[k] += prod;
