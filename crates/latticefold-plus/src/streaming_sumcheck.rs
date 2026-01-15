@@ -299,80 +299,175 @@ where
         if row >= self.matrix0.coeffs.len() {
             return [R::ZERO; 4];
         }
-        // Critical: if the witness is base-scalar, stay in the base ring for accumulation and lift once.
-        // This keeps CM mat-vec evaluation effectively d-independent (especially important for d64).
-        let (mut b0, mut r0) = if matches!(&self.w0, CmMatVecWitness::Base(_)) {
-            (Some(R::BaseRing::ZERO), R::ZERO)
-        } else {
-            (None, R::ZERO)
-        };
-        let (mut b1, mut r1) = if matches!(&self.w1, CmMatVecWitness::Base(_)) {
-            (Some(R::BaseRing::ZERO), R::ZERO)
-        } else {
-            (None, R::ZERO)
-        };
-        let (mut b2, mut r2) = if matches!(&self.w2, CmMatVecWitness::Base(_)) {
-            (Some(R::BaseRing::ZERO), R::ZERO)
-        } else {
-            (None, R::ZERO)
-        };
-        let (mut b3, mut r3) = if matches!(&self.w3, CmMatVecWitness::Base(_)) {
-            (Some(R::BaseRing::ZERO), R::ZERO)
-        } else {
-            (None, R::ZERO)
-        };
+        // Specialize common CM patterns to avoid per-nonzero enum branching.
+        match (&self.w0, &self.w1, &self.w2, &self.w3) {
+            (
+                CmMatVecWitness::Base(w0),
+                CmMatVecWitness::MonomialDigits { digits, exp_table },
+                CmMatVecWitness::Base(w2),
+                CmMatVecWitness::Mle(w3),
+            ) => {
+                let w0s: &[R::BaseRing] = w0.as_ref();
+                let w2s: &[R::BaseRing] = w2.as_ref();
+                let digs: &[u16] = digits.as_ref();
+                let exps: &[R] = exp_table.as_ref();
+                let w3m: &StreamingMleEnum<R> = w3.as_ref();
 
-        for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
-            let c0 = *coeff0;
-            let cj = *col_idx;
-
-            if let Some(acc) = b0.as_mut() {
-                if let CmMatVecWitness::Base(w) = &self.w0 {
-                    if cj < w.len() {
-                        *acc += c0 * w[cj];
+                let mut acc0 = R::BaseRing::ZERO;
+                let mut acc2 = R::BaseRing::ZERO;
+                let mut acc1 = R::ZERO;
+                let mut acc3 = R::ZERO;
+                for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+                    let c0 = *coeff0;
+                    let cj = *col_idx;
+                    if cj < w0s.len() {
+                        acc0 += c0 * w0s[cj];
                     }
+                    if cj < w2s.len() {
+                        acc2 += c0 * w2s[cj];
+                    }
+                    if cj < digs.len() {
+                        acc1 += exps[digs[cj] as usize] * c0;
+                    }
+                    // `w3` is an MLE; evaluate on demand (can be dense, LazyFixed, etc.)
+                    acc3 += w3m.eval_at_index(cj) * c0;
                 }
-            } else if let Some(v) = Self::eval_witness(&self.w0, cj) {
-                r0 += v * c0;
+                [R::from(acc0), acc1, R::from(acc2), acc3]
             }
+            (
+                CmMatVecWitness::Base(w0),
+                CmMatVecWitness::Ring(w1),
+                CmMatVecWitness::Base(w2),
+                CmMatVecWitness::Mle(w3),
+            ) => {
+                let w0s: &[R::BaseRing] = w0.as_ref();
+                let w1s: &[R] = w1.as_ref();
+                let w2s: &[R::BaseRing] = w2.as_ref();
+                let w3m: &StreamingMleEnum<R> = w3.as_ref();
 
-            if let Some(acc) = b1.as_mut() {
-                if let CmMatVecWitness::Base(w) = &self.w1 {
-                    if cj < w.len() {
-                        *acc += c0 * w[cj];
+                let mut acc0 = R::BaseRing::ZERO;
+                let mut acc2 = R::BaseRing::ZERO;
+                let mut acc1 = R::ZERO;
+                let mut acc3 = R::ZERO;
+                for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+                    let c0 = *coeff0;
+                    let cj = *col_idx;
+                    if cj < w0s.len() {
+                        acc0 += c0 * w0s[cj];
                     }
+                    if cj < w2s.len() {
+                        acc2 += c0 * w2s[cj];
+                    }
+                    if cj < w1s.len() {
+                        acc1 += w1s[cj] * c0;
+                    }
+                    acc3 += w3m.eval_at_index(cj) * c0;
                 }
-            } else if let Some(v) = Self::eval_witness(&self.w1, cj) {
-                r1 += v * c0;
+                [R::from(acc0), acc1, R::from(acc2), acc3]
             }
+            (CmMatVecWitness::Base(w0), CmMatVecWitness::Base(w1), CmMatVecWitness::Base(w2), CmMatVecWitness::Mle(w3)) => {
+                let w0s: &[R::BaseRing] = w0.as_ref();
+                let w1s: &[R::BaseRing] = w1.as_ref();
+                let w2s: &[R::BaseRing] = w2.as_ref();
+                let w3m: &StreamingMleEnum<R> = w3.as_ref();
 
-            if let Some(acc) = b2.as_mut() {
-                if let CmMatVecWitness::Base(w) = &self.w2 {
-                    if cj < w.len() {
-                        *acc += c0 * w[cj];
+                let mut acc0 = R::BaseRing::ZERO;
+                let mut acc1 = R::BaseRing::ZERO;
+                let mut acc2 = R::BaseRing::ZERO;
+                let mut acc3 = R::ZERO;
+                for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+                    let c0 = *coeff0;
+                    let cj = *col_idx;
+                    if cj < w0s.len() {
+                        acc0 += c0 * w0s[cj];
                     }
+                    if cj < w1s.len() {
+                        acc1 += c0 * w1s[cj];
+                    }
+                    if cj < w2s.len() {
+                        acc2 += c0 * w2s[cj];
+                    }
+                    acc3 += w3m.eval_at_index(cj) * c0;
                 }
-            } else if let Some(v) = Self::eval_witness(&self.w2, cj) {
-                r2 += v * c0;
+                [R::from(acc0), R::from(acc1), R::from(acc2), acc3]
             }
+            _ => {
+                // Generic fallback (slower): still keeps base witnesses in base ring.
+                // Critical: if the witness is base-scalar, stay in the base ring for accumulation and lift once.
+                let (mut b0, mut r0) = if matches!(&self.w0, CmMatVecWitness::Base(_)) {
+                    (Some(R::BaseRing::ZERO), R::ZERO)
+                } else {
+                    (None, R::ZERO)
+                };
+                let (mut b1, mut r1) = if matches!(&self.w1, CmMatVecWitness::Base(_)) {
+                    (Some(R::BaseRing::ZERO), R::ZERO)
+                } else {
+                    (None, R::ZERO)
+                };
+                let (mut b2, mut r2) = if matches!(&self.w2, CmMatVecWitness::Base(_)) {
+                    (Some(R::BaseRing::ZERO), R::ZERO)
+                } else {
+                    (None, R::ZERO)
+                };
+                let (mut b3, mut r3) = if matches!(&self.w3, CmMatVecWitness::Base(_)) {
+                    (Some(R::BaseRing::ZERO), R::ZERO)
+                } else {
+                    (None, R::ZERO)
+                };
 
-            if let Some(acc) = b3.as_mut() {
-                if let CmMatVecWitness::Base(w) = &self.w3 {
-                    if cj < w.len() {
-                        *acc += c0 * w[cj];
+                for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+                    let c0 = *coeff0;
+                    let cj = *col_idx;
+
+                    if let Some(acc) = b0.as_mut() {
+                        if let CmMatVecWitness::Base(w) = &self.w0 {
+                            if cj < w.len() {
+                                *acc += c0 * w[cj];
+                            }
+                        }
+                    } else if let Some(v) = Self::eval_witness(&self.w0, cj) {
+                        r0 += v * c0;
+                    }
+
+                    if let Some(acc) = b1.as_mut() {
+                        if let CmMatVecWitness::Base(w) = &self.w1 {
+                            if cj < w.len() {
+                                *acc += c0 * w[cj];
+                            }
+                        }
+                    } else if let Some(v) = Self::eval_witness(&self.w1, cj) {
+                        r1 += v * c0;
+                    }
+
+                    if let Some(acc) = b2.as_mut() {
+                        if let CmMatVecWitness::Base(w) = &self.w2 {
+                            if cj < w.len() {
+                                *acc += c0 * w[cj];
+                            }
+                        }
+                    } else if let Some(v) = Self::eval_witness(&self.w2, cj) {
+                        r2 += v * c0;
+                    }
+
+                    if let Some(acc) = b3.as_mut() {
+                        if let CmMatVecWitness::Base(w) = &self.w3 {
+                            if cj < w.len() {
+                                *acc += c0 * w[cj];
+                            }
+                        }
+                    } else if let Some(v) = Self::eval_witness(&self.w3, cj) {
+                        r3 += v * c0;
                     }
                 }
-            } else if let Some(v) = Self::eval_witness(&self.w3, cj) {
-                r3 += v * c0;
+
+                [
+                    b0.map(R::from).unwrap_or(r0),
+                    b1.map(R::from).unwrap_or(r1),
+                    b2.map(R::from).unwrap_or(r2),
+                    b3.map(R::from).unwrap_or(r3),
+                ]
             }
         }
-
-        [
-            b0.map(R::from).unwrap_or(r0),
-            b1.map(R::from).unwrap_or(r1),
-            b2.map(R::from).unwrap_or(r2),
-            b3.map(R::from).unwrap_or(r3),
-        ]
     }
 
     /// Evaluate a single mat-vec output at a given **row** index.
