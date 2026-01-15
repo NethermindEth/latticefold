@@ -68,6 +68,17 @@ fn babybear_u64_to_centered_host(x: u64, p_bb: u64) -> F {
 }
 
 fn main() {
+    // FrogRing64 (d=64) can require deeper/larger stack frames in Rayon workers than the default.
+    // Build a global thread pool with an explicit stack size before any parallel work starts.
+    #[cfg(feature = "parallel")]
+    {
+        // 32 MiB/worker is conservative and avoids stack overflows in practice.
+        // If the global pool is already initialized (e.g. by another crate), this will just no-op.
+        let _ = rayon::ThreadPoolBuilder::new()
+            .stack_size(32 * 1024 * 1024)
+            .build_global();
+    }
+
     let r1lf_path = std::env::var("SP1_R1LF").expect("Set SP1_R1LF=/path/to/shrink.r1lf");
     let witness_path =
         std::env::var("SP1_WITNESS").expect("Set SP1_WITNESS=/path/to/shrink_verifier.witness.u64le");
