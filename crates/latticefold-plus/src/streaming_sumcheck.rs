@@ -24,7 +24,7 @@ static CM_HFROM_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
 static CM_HFROM_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Copy, Default)]
-struct CmCacheStats {
+pub(crate) struct CmCacheStats {
     cm_hit: u64,
     cm_miss: u64,
     lazy_hit: u64,
@@ -38,7 +38,7 @@ struct CmCacheStats {
 // across sparse mat-vec scans without materializing full `h`.
 const CM_HFROM_CACHE_SIZE: usize = 1 << 13; // 8192 entries (~1 MiB/thread for d=16)
 
-struct HFromIndexCache<R: OverField + PolyRing>
+pub(crate) struct HFromIndexCache<R: OverField + PolyRing>
 where
     R::BaseRing: Ring,
 {
@@ -246,6 +246,11 @@ where
     HFromMfDigitsConstCol0 {
         /// Per `M_f` matrix: col0 digits (length nrows) and precomputed terms.
         precomps: Arc<Vec<HCol0Precomp<R>>>,
+        /// Precomputed sum of `term_rest` across all `precomps` (dense ring element in SP1).
+        ///
+        /// This is a *huge* win because CM sumcheck evaluates `h[cj]` extremely often; without
+        /// this, we'd re-sum dense `term_rest` values at every evaluation site.
+        rest_sum: R,
         num_vars: usize,
     },
     /// A padded 4-way tensor-product table:
@@ -386,7 +391,7 @@ where
 
     /// Evaluate all four mat-vec outputs at a given **row** index.
     #[inline]
-    pub fn eval4_at_row(
+    pub(crate) fn eval4_at_row(
         &self,
         row: usize,
         hfrom_cache: &mut Option<HFromIndexCache<R>>,
@@ -426,7 +431,7 @@ where
                     Dense(&'a [Rr]),
                     HFrom {
                         precomps: &'a [HCol0Precomp<Rr>],
-                        rest_sum: Rr,
+                        rest_sum: &'a Rr,
                         h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
@@ -434,14 +439,9 @@ where
                 let w3fast = match w3m {
                     StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
                     StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
-                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, .. } => {
-                        let pcs: &[HCol0Precomp<R>] = precomps.as_ref();
-                        let mut rest_sum = R::ZERO;
-                        for p in pcs {
-                            rest_sum += p.term_rest;
-                        }
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
                         W3Fast::HFrom {
-                            precomps: pcs,
+                            precomps: precomps.as_ref(),
                             rest_sum,
                             h_id: Arc::as_ptr(precomps) as usize,
                         }
@@ -471,11 +471,7 @@ where
                     // `w3` is an MLE; fast-path the common variants to avoid per-nonzero dispatch overhead.
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom {
-                            precomps,
-                            rest_sum,
-                            h_id,
-                        } => {
+                        W3Fast::HFrom { precomps, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
@@ -483,10 +479,10 @@ where
                                 .as_mut()
                                 .unwrap()
                                 .get_or_compute(cj, stats, profile, || {
-                                    let mut hv = *rest_sum;
+                                    let mut hv = (*rest_sum).clone();
                                     for p in precomps.iter() {
                                         let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                        hv += p.term0_tab[dix];
+                                        hv += p.term0_tab[dix].clone();
                                     }
                                     hv
                                 });
@@ -523,7 +519,7 @@ where
                     Dense(&'a [Rr]),
                     HFrom {
                         precomps: &'a [HCol0Precomp<Rr>],
-                        rest_sum: Rr,
+                        rest_sum: &'a Rr,
                         h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
@@ -531,14 +527,9 @@ where
                 let w3fast = match w3m {
                     StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
                     StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
-                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, .. } => {
-                        let pcs: &[HCol0Precomp<R>] = precomps.as_ref();
-                        let mut rest_sum = R::ZERO;
-                        for p in pcs {
-                            rest_sum += p.term_rest;
-                        }
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
                         W3Fast::HFrom {
-                            precomps: pcs,
+                            precomps: precomps.as_ref(),
                             rest_sum,
                             h_id: Arc::as_ptr(precomps) as usize,
                         }
@@ -564,11 +555,7 @@ where
                     }
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom {
-                            precomps,
-                            rest_sum,
-                            h_id,
-                        } => {
+                        W3Fast::HFrom { precomps, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
@@ -576,10 +563,10 @@ where
                                 .as_mut()
                                 .unwrap()
                                 .get_or_compute(cj, stats, profile, || {
-                                    let mut hv = *rest_sum;
+                                    let mut hv = (*rest_sum).clone();
                                     for p in precomps.iter() {
                                         let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                        hv += p.term0_tab[dix];
+                                        hv += p.term0_tab[dix].clone();
                                     }
                                     hv
                                 });
@@ -611,7 +598,7 @@ where
                     Dense(&'a [Rr]),
                     HFrom {
                         precomps: &'a [HCol0Precomp<Rr>],
-                        rest_sum: Rr,
+                        rest_sum: &'a Rr,
                         h_id: usize,
                     },
                     Other(&'a StreamingMleEnum<Rr>),
@@ -619,14 +606,9 @@ where
                 let w3fast = match w3m {
                     StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
                     StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
-                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, .. } => {
-                        let pcs: &[HCol0Precomp<R>] = precomps.as_ref();
-                        let mut rest_sum = R::ZERO;
-                        for p in pcs {
-                            rest_sum += p.term_rest;
-                        }
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
                         W3Fast::HFrom {
-                            precomps: pcs,
+                            precomps: precomps.as_ref(),
                             rest_sum,
                             h_id: Arc::as_ptr(precomps) as usize,
                         }
@@ -652,11 +634,7 @@ where
                     }
                     acc3 += match &w3fast {
                         W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
-                        W3Fast::HFrom {
-                            precomps,
-                            rest_sum,
-                            h_id,
-                        } => {
+                        W3Fast::HFrom { precomps, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
                             }
@@ -664,10 +642,10 @@ where
                                 .as_mut()
                                 .unwrap()
                                 .get_or_compute(cj, stats, profile, || {
-                                    let mut hv = *rest_sum;
+                                    let mut hv = (*rest_sum).clone();
                                     for p in precomps.iter() {
                                         let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
-                                        hv += p.term0_tab[dix];
+                                        hv += p.term0_tab[dix].clone();
                                     }
                                     hv
                                 });
@@ -1126,12 +1104,12 @@ where
                 }
                 sum
             }
-            StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, .. } => {
+            StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, rest_sum, .. } => {
                 // Implicit zero-padding: if some col0 vectors are prefixes, treat missing as zero_idx.
-                let mut acc = R::ZERO;
+                let mut acc = rest_sum.clone();
                 for p in precomps.iter() {
                     let dix = p.col0.get(index).copied().unwrap_or(p.zero_idx) as usize;
-                    acc += p.term0_tab[dix] + p.term_rest;
+                    acc += p.term0_tab[dix].clone();
                 }
                 acc
             }

@@ -575,8 +575,14 @@ where
                     can_stream = false;
                     break;
                 }
+                let precomps = Arc::new(precomps);
+                let mut rest_sum = R::ZERO;
+                for p in precomps.iter() {
+                    rest_sum += p.term_rest.clone();
+                }
                 let mle = StreamingMleEnum::HFromMfDigitsConstCol0 {
-                    precomps: Arc::new(precomps),
+                    precomps,
+                    rest_sum,
                     num_vars: self.rg.nvars,
                 };
                 hm.push(Arc::new(mle));
