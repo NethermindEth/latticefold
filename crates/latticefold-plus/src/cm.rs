@@ -1308,38 +1308,55 @@ where
             );
         }
 
-        // Hot path: this combiner runs ~3*(2^nvars-1) times for degree=2.
-        // Avoid iterator chains and nested `sum()` to reduce overhead.
-        let comb_fn = move |vals: &[R]| -> R {
-            debug_assert_eq!(vals.len(), 1 + L * (4 + 4 * Mlen) + 2);
-            let eq = vals[0];
-            let n = vals.len();
-            let t0 = vals[n - 2];
-            let t1 = vals[n - 1];
+        let comb_fn2 = move |v0: &[R], v1: &[R]| -> [R; 3] {
+            debug_assert_eq!(v0.len(), v1.len());
+            let n = v0.len();
+            debug_assert_eq!(n, 1 + L * (4 + 4 * Mlen) + 2);
             let w_t0 = rcps[n - 3];
             let w_t1 = rcps[n - 2];
             let stride = 4 + 4 * Mlen;
 
-            let mut out = R::ZERO;
-            for l in 0..L {
-                let l_idx = 1 + l * stride;
-                let tau = vals[l_idx];
-
-                let mut lin = R::ZERO;
-                for j in l_idx..(l_idx + stride) {
-                    lin += vals[j] * rcps[j - 1];
-                }
-                out += eq * lin;
-                // NOTE: the `tau * t(z)` terms are NOT multiplied by `eq` in this protocol.
-                out += (tau * t0) * w_t0;
-                out += (tau * t1) * w_t1;
+            #[inline]
+            fn at2<Rr: OverField + PolyRing>(v0: &[Rr], v1: &[Rr], idx: usize) -> Rr
+            where
+                Rr::BaseRing: Ring,
+            {
+                v1[idx] + (v1[idx] - v0[idx])
             }
-            out
+
+            let eval_at = |which: u8, idx: usize| -> R {
+                match which {
+                    0 => v0[idx],
+                    1 => v1[idx],
+                    2 => at2::<R>(v0, v1, idx),
+                    _ => unreachable!(),
+                }
+            };
+
+            let eval_point = |which: u8| -> R {
+                let eq = eval_at(which, 0);
+                let t0 = eval_at(which, n - 2);
+                let t1 = eval_at(which, n - 1);
+                let mut out = R::ZERO;
+                for l in 0..L {
+                    let l_idx = 1 + l * stride;
+                    let tau = eval_at(which, l_idx);
+                    let mut lin = R::ZERO;
+                    for j in l_idx..(l_idx + stride) {
+                        lin += eval_at(which, j) * rcps[j - 1];
+                    }
+                    out += eq * lin;
+                    out += (tau * t0) * w_t0;
+                    out += (tau * t1) * w_t1;
+                }
+                out
+            };
+            [eval_point(0), eval_point(1), eval_point(2)]
         };
 
         let t_sc = Instant::now();
         let (sumcheck_proof, randomness, final_vals) =
-            StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 2, comb_fn);
+            StreamingSumcheck::prove_as_subprotocol_deg2_pairs(transcript, mles, nvars, comb_fn2);
         if profile {
             println!(
                 "[LF+ Cm::sumchecker_streaming] streaming sumcheck: {:?}",
@@ -1769,34 +1786,55 @@ where
             );
         }
 
-        let comb_fn = move |vals: &[R]| -> R {
-            debug_assert_eq!(vals.len(), 1 + L * (4 + 4 * Mlen) + 2);
-            let eq = vals[0];
-            let n = vals.len();
-            let t0 = vals[n - 2];
-            let t1 = vals[n - 1];
+        let comb_fn2 = move |v0: &[R], v1: &[R]| -> [R; 3] {
+            debug_assert_eq!(v0.len(), v1.len());
+            let n = v0.len();
+            debug_assert_eq!(n, 1 + L * (4 + 4 * Mlen) + 2);
             let w_t0 = rcps[n - 3];
             let w_t1 = rcps[n - 2];
             let stride = 4 + 4 * Mlen;
 
-            let mut out = R::ZERO;
-            for l in 0..L {
-                let l_idx = 1 + l * stride;
-                let tau = vals[l_idx];
-                let mut lin = R::ZERO;
-                for j in l_idx..(l_idx + stride) {
-                    lin += vals[j] * rcps[j - 1];
-                }
-                out += eq * lin;
-                out += (tau * t0) * w_t0;
-                out += (tau * t1) * w_t1;
+            #[inline]
+            fn at2<Rr: OverField + PolyRing>(v0: &[Rr], v1: &[Rr], idx: usize) -> Rr
+            where
+                Rr::BaseRing: Ring,
+            {
+                v1[idx] + (v1[idx] - v0[idx])
             }
-            out
+
+            let eval_at = |which: u8, idx: usize| -> R {
+                match which {
+                    0 => v0[idx],
+                    1 => v1[idx],
+                    2 => at2::<R>(v0, v1, idx),
+                    _ => unreachable!(),
+                }
+            };
+
+            let eval_point = |which: u8| -> R {
+                let eq = eval_at(which, 0);
+                let t0 = eval_at(which, n - 2);
+                let t1 = eval_at(which, n - 1);
+                let mut out = R::ZERO;
+                for l in 0..L {
+                    let l_idx = 1 + l * stride;
+                    let tau = eval_at(which, l_idx);
+                    let mut lin = R::ZERO;
+                    for j in l_idx..(l_idx + stride) {
+                        lin += eval_at(which, j) * rcps[j - 1];
+                    }
+                    out += eq * lin;
+                    out += (tau * t0) * w_t0;
+                    out += (tau * t1) * w_t1;
+                }
+                out
+            };
+            [eval_point(0), eval_point(1), eval_point(2)]
         };
 
         let t_sc = Instant::now();
         let (sumcheck_proof, randomness, final_vals) =
-            StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 2, comb_fn);
+            StreamingSumcheck::prove_as_subprotocol_deg2_pairs(transcript, mles, nvars, comb_fn2);
         if profile {
             println!(
                 "[LF+ Cm::sumchecker_streaming] streaming sumcheck: {:?}",
@@ -2196,33 +2234,54 @@ where
 
         // MUST match `sumchecker_streaming` combiner exactly (including the `tau * t(z)` terms),
         // otherwise the verifier's sumcheck will fail.
-        let comb_fn = move |vals: &[R]| -> R {
-            debug_assert_eq!(vals.len(), 1 + L * (4 + 4 * Mlen) + 2);
-            let eq = vals[0];
-            let n = vals.len();
-            let t0 = vals[n - 2];
-            let t1 = vals[n - 1];
+        let comb_fn2 = move |v0: &[R], v1: &[R]| -> [R; 3] {
+            debug_assert_eq!(v0.len(), v1.len());
+            let n = v0.len();
+            debug_assert_eq!(n, 1 + L * (4 + 4 * Mlen) + 2);
             let w_t0 = rcps[n - 3];
             let w_t1 = rcps[n - 2];
             let stride = 4 + 4 * Mlen;
 
-            let mut out = R::ZERO;
-            for l in 0..L {
-                let l_idx = 1 + l * stride;
-                let tau = vals[l_idx];
-                let mut lin = R::ZERO;
-                for j in l_idx..(l_idx + stride) {
-                    lin += vals[j] * rcps[j - 1];
-                }
-                out += eq * lin;
-                out += (tau * t0) * w_t0;
-                out += (tau * t1) * w_t1;
+            #[inline]
+            fn at2<Rr: OverField + PolyRing>(v0: &[Rr], v1: &[Rr], idx: usize) -> Rr
+            where
+                Rr::BaseRing: Ring,
+            {
+                v1[idx] + (v1[idx] - v0[idx])
             }
-            out
+
+            let eval_at = |which: u8, idx: usize| -> R {
+                match which {
+                    0 => v0[idx],
+                    1 => v1[idx],
+                    2 => at2::<R>(v0, v1, idx),
+                    _ => unreachable!(),
+                }
+            };
+
+            let eval_point = |which: u8| -> R {
+                let eq = eval_at(which, 0);
+                let t0 = eval_at(which, n - 2);
+                let t1 = eval_at(which, n - 1);
+                let mut out = R::ZERO;
+                for l in 0..L {
+                    let l_idx = 1 + l * stride;
+                    let tau = eval_at(which, l_idx);
+                    let mut lin = R::ZERO;
+                    for j in l_idx..(l_idx + stride) {
+                        lin += eval_at(which, j) * rcps[j - 1];
+                    }
+                    out += eq * lin;
+                    out += (tau * t0) * w_t0;
+                    out += (tau * t1) * w_t1;
+                }
+                out
+            };
+            [eval_point(0), eval_point(1), eval_point(2)]
         };
 
         let (sumcheck_proof, randomness, final_vals) =
-            StreamingSumcheck::prove_as_subprotocol(transcript, mles, nvars, 2, comb_fn);
+            StreamingSumcheck::prove_as_subprotocol_deg2_pairs(transcript, mles, nvars, comb_fn2);
 
         let ro = randomness.into_iter().map(|x| x.into()).collect::<Vec<R>>();
 

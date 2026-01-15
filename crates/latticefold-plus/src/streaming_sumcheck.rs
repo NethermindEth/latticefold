@@ -2487,6 +2487,261 @@ impl StreamingSumcheck {
         ProverMsg { evaluations: result }
     }
 
+    /// Degree-2 specialized round prover that avoids materializing `vals` for x=2.
+    ///
+    /// The caller supplies a combiner that can compute `[g(0), g(1), g(2)]` from the paired
+    /// MLE evaluations at x=0 and x=1 for the current variable.
+    pub fn prove_round_deg2_pairs<R: OverField + PolyRing>(
+        state: &mut StreamingSumcheckState<R>,
+        v_msg: Option<R::BaseRing>,
+        comb_fn2: &(dyn Fn(&[R], &[R]) -> [R; 3] + Sync + Send),
+    ) -> ProverMsg<R>
+    where
+        R::BaseRing: Ring,
+    {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        assert_eq!(
+            state.max_degree, 2,
+            "prove_round_deg2_pairs expects degree=2"
+        );
+
+        if let Some(r) = v_msg {
+            assert!(state.round > 0);
+            state.randomness.push(r);
+            if state.round == 1 {
+                crate::utils::maybe_print_rss("streaming_sumcheck: fix(start)");
+            }
+            #[cfg(feature = "parallel")]
+            {
+                state
+                    .mles
+                    .par_iter_mut()
+                    .for_each(|m| m.fix_variable_in_place_base(r));
+            }
+            #[cfg(not(feature = "parallel"))]
+            {
+                for m in state.mles.iter_mut() {
+                    m.fix_variable_in_place_base(r);
+                }
+            }
+            if state.round == 1 {
+                crate::utils::maybe_print_rss("streaming_sumcheck: fix(done)");
+            }
+        } else {
+            assert!(state.round == 0);
+        }
+
+        state.round += 1;
+        assert!(state.round <= state.num_vars);
+
+        let nv = state.mles[0].num_vars();
+        let domain_half = 1usize << (nv - 1);
+        let num_polys = state.mles.len();
+
+        struct Scratch<Rr: OverField + PolyRing>
+        where
+            Rr::BaseRing: Ring,
+        {
+            evals: [Rr; 3],
+            vals0: Vec<Rr>,
+            vals1: Vec<Rr>,
+            cm_stats: CmCacheStats,
+            hfrom_cache: Option<HFromIndexCache<Rr>>,
+            cm_cache_even: Option<(usize, usize, [Rr; 4])>,
+            cm_cache_odd: Option<(usize, usize, [Rr; 4])>,
+            cm_lazy_cache_even: Option<(usize, usize, usize, [Rr; 4])>,
+            cm_lazy_cache_odd: Option<(usize, usize, usize, [Rr; 4])>,
+        }
+
+        let scratch = || Scratch {
+            evals: [R::ZERO; 3],
+            vals0: vec![R::ZERO; num_polys],
+            vals1: vec![R::ZERO; num_polys],
+            cm_stats: CmCacheStats::default(),
+            hfrom_cache: None,
+            cm_cache_even: None,
+            cm_cache_odd: None,
+            cm_lazy_cache_even: None,
+            cm_lazy_cache_odd: None,
+        };
+
+        #[inline]
+        fn eval_mle_with_cm_cache<R: OverField + PolyRing>(
+            mle: &StreamingMleEnum<R>,
+            index: usize,
+            cache: &mut Option<(usize, usize, [R; 4])>,
+            lazy_cache: &mut Option<(usize, usize, usize, [R; 4])>,
+            stats: &mut CmCacheStats,
+            hfrom_cache: &mut Option<HFromIndexCache<R>>,
+            profile: bool,
+        ) -> R
+        where
+            R::BaseRing: Ring,
+        {
+            if let StreamingMleEnum::LazyFixed { inner, fixed, weights, .. } = mle {
+                if fixed.is_empty() {
+                    return eval_mle_with_cm_cache::<R>(
+                        inner.as_ref(),
+                        index,
+                        cache,
+                        lazy_cache,
+                        stats,
+                        hfrom_cache,
+                        profile,
+                    );
+                }
+                if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = inner.as_ref() {
+                    let k = fixed.len();
+                    let wid = *which as usize;
+                    debug_assert!(wid < 4);
+                    let sid = Arc::as_ptr(shared) as usize;
+                    let base = index << k;
+
+                    if let Some((csid, cbase, ck, vals)) = lazy_cache.as_ref() {
+                        if *csid == sid && *cbase == base && *ck == k {
+                            if profile {
+                                stats.lazy_hit += 1;
+                            }
+                            return vals[wid];
+                        }
+                    }
+                    if profile {
+                        stats.lazy_miss += 1;
+                    }
+
+                    let mut acc = [R::ZERO; 4];
+                    for (b, &w) in weights.iter().enumerate() {
+                        if w == R::BaseRing::ZERO {
+                            continue;
+                        }
+                        let v = shared.eval4_at_row(base | b, hfrom_cache, stats, profile);
+                        acc[0] += v[0] * w;
+                        acc[1] += v[1] * w;
+                        acc[2] += v[2] * w;
+                        acc[3] += v[3] * w;
+                    }
+                    *lazy_cache = Some((sid, base, k, acc));
+                    return acc[wid];
+                }
+            }
+            if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = mle {
+                let wid = *which as usize;
+                debug_assert!(wid < 4);
+                let sid = Arc::as_ptr(shared) as usize;
+                if let Some((csid, crow, vals)) = cache.as_ref() {
+                    if *csid == sid && *crow == index {
+                        if profile {
+                            stats.cm_hit += 1;
+                        }
+                        return vals[wid];
+                    }
+                }
+                if profile {
+                    stats.cm_miss += 1;
+                }
+                let vals = shared.eval4_at_row(index, hfrom_cache, stats, profile);
+                *cache = Some((sid, index, vals));
+                return vals[wid];
+            }
+            mle.eval_at_index(index)
+        }
+
+        #[cfg(feature = "parallel")]
+        let (result, stats) = (0..domain_half)
+            .into_par_iter()
+            .fold(scratch, |mut s, b| {
+                let idx0 = b << 1;
+                let idx1 = (b << 1) | 1;
+                for (i, mle) in state.mles.iter().enumerate() {
+                    s.vals0[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx0,
+                        &mut s.cm_cache_even,
+                        &mut s.cm_lazy_cache_even,
+                        &mut s.cm_stats,
+                        &mut s.hfrom_cache,
+                        profile,
+                    );
+                    s.vals1[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx1,
+                        &mut s.cm_cache_odd,
+                        &mut s.cm_lazy_cache_odd,
+                        &mut s.cm_stats,
+                        &mut s.hfrom_cache,
+                        profile,
+                    );
+                }
+                let le = comb_fn2(&s.vals0, &s.vals1);
+                s.evals[0] += le[0];
+                s.evals[1] += le[1];
+                s.evals[2] += le[2];
+                s
+            })
+            .map(|s| (s.evals, s.cm_stats))
+            .reduce_with(|mut acc, (evals, stats)| {
+                acc.0[0] += evals[0];
+                acc.0[1] += evals[1];
+                acc.0[2] += evals[2];
+                acc.1.cm_hit += stats.cm_hit;
+                acc.1.cm_miss += stats.cm_miss;
+                acc.1.lazy_hit += stats.lazy_hit;
+                acc.1.lazy_miss += stats.lazy_miss;
+                acc.1.hfrom_hit += stats.hfrom_hit;
+                acc.1.hfrom_miss += stats.hfrom_miss;
+                acc
+            })
+            .unwrap_or_else(|| ([R::ZERO; 3], CmCacheStats::default()));
+
+        #[cfg(not(feature = "parallel"))]
+        let (result, stats) = {
+            let mut acc = [R::ZERO; 3];
+            let mut s = scratch();
+            for b in 0..domain_half {
+                let idx0 = b << 1;
+                let idx1 = (b << 1) | 1;
+                for (i, mle) in state.mles.iter().enumerate() {
+                    s.vals0[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx0,
+                        &mut s.cm_cache_even,
+                        &mut s.cm_lazy_cache_even,
+                        &mut s.cm_stats,
+                        &mut s.hfrom_cache,
+                        profile,
+                    );
+                    s.vals1[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx1,
+                        &mut s.cm_cache_odd,
+                        &mut s.cm_lazy_cache_odd,
+                        &mut s.cm_stats,
+                        &mut s.hfrom_cache,
+                        profile,
+                    );
+                }
+                let le = comb_fn2(&s.vals0, &s.vals1);
+                acc[0] += le[0];
+                acc[1] += le[1];
+                acc[2] += le[2];
+            }
+            (acc, s.cm_stats)
+        };
+
+        if profile {
+            CM_CACHE_HITS.fetch_add(stats.cm_hit, Ordering::Relaxed);
+            CM_CACHE_MISSES.fetch_add(stats.cm_miss, Ordering::Relaxed);
+            CM_LAZY_CACHE_HITS.fetch_add(stats.lazy_hit, Ordering::Relaxed);
+            CM_LAZY_CACHE_MISSES.fetch_add(stats.lazy_miss, Ordering::Relaxed);
+            CM_HFROM_CACHE_HITS.fetch_add(stats.hfrom_hit, Ordering::Relaxed);
+            CM_HFROM_CACHE_MISSES.fetch_add(stats.hfrom_miss, Ordering::Relaxed);
+        }
+
+        ProverMsg {
+            evaluations: vec![result[0], result[1], result[2]],
+        }
+    }
+
     /// Base-ring optimized variant of `prove_round` for the case where the entire computation is
     /// constant-coeff (i.e., all MLE values and the combination function live in `R::BaseRing`).
     ///
@@ -2695,6 +2950,119 @@ impl StreamingSumcheck {
 
         // IMPORTANT: last sampled randomness is not yet applied inside the `nvars` rounds,
         // due to the standard sumcheck schedule (applied at the start of the next round).
+        let last_r = v_msg.expect("nvars>0");
+        state.randomness.push(last_r);
+        let t_fix = std::time::Instant::now();
+        state.fix_last_variable(last_r);
+        let t_fix_elapsed = t_fix.elapsed();
+
+        let t_final = std::time::Instant::now();
+        let final_evals = state.final_evals();
+        let t_final_elapsed = t_final.elapsed();
+
+        if profile {
+            println!(
+                "[LF+ streaming_sumcheck] totals: rounds={:?} absorb_msgs={:?} get_chal={:?} absorb_chal={:?} fix_last={:?} final_evals={:?} total={:?}",
+                t_rounds,
+                t_absorb_msgs,
+                t_get_chal,
+                t_absorb_chal,
+                t_fix_elapsed,
+                t_final_elapsed,
+                t_total.elapsed()
+            );
+            let h = CM_CACHE_HITS.load(Ordering::Relaxed);
+            let m = CM_CACHE_MISSES.load(Ordering::Relaxed);
+            let lh = CM_LAZY_CACHE_HITS.load(Ordering::Relaxed);
+            let lm = CM_LAZY_CACHE_MISSES.load(Ordering::Relaxed);
+            let hh = CM_HFROM_CACHE_HITS.load(Ordering::Relaxed);
+            let hm = CM_HFROM_CACHE_MISSES.load(Ordering::Relaxed);
+            if (h + m + lh + lm) > 0 {
+                println!(
+                    "[LF+ streaming_sumcheck] cm_cache: hit={} miss={} lazy_hit={} lazy_miss={} hfrom_hit={} hfrom_miss={}",
+                    h, m, lh, lm, hh, hm
+                );
+            }
+        }
+
+        (Proof::new(msgs), state.randomness, final_evals)
+    }
+
+    /// Degree-2 specialization of `prove_as_subprotocol` that avoids building `vals(x=2)` vectors.
+    ///
+    /// The transcript schedule and proof format are identical; only prover-side computation changes.
+    pub fn prove_as_subprotocol_deg2_pairs<R: OverField + PolyRing, T: Transcript<R>>(
+        transcript: &mut T,
+        mles: Vec<StreamingMleEnum<R>>,
+        nvars: usize,
+        comb_fn2: impl Fn(&[R], &[R]) -> [R; 3] + Sync + Send,
+    ) -> (Proof<R>, Vec<R::BaseRing>, Vec<R>)
+    where
+        R::BaseRing: Ring,
+    {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        let t_total = std::time::Instant::now();
+        let degree: usize = 2;
+
+        if profile {
+            CM_CACHE_HITS.store(0, Ordering::Relaxed);
+            CM_CACHE_MISSES.store(0, Ordering::Relaxed);
+            CM_LAZY_CACHE_HITS.store(0, Ordering::Relaxed);
+            CM_LAZY_CACHE_MISSES.store(0, Ordering::Relaxed);
+            CM_HFROM_CACHE_HITS.store(0, Ordering::Relaxed);
+            CM_HFROM_CACHE_MISSES.store(0, Ordering::Relaxed);
+        }
+
+        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
+
+        let t_init = std::time::Instant::now();
+        let mut state = Self::prover_init(mles, nvars, degree);
+        if profile {
+            println!(
+                "[LF+ streaming_sumcheck] init: {:?} (nvars={}, degree={}, mles={})",
+                t_init.elapsed(),
+                nvars,
+                degree,
+                state.mles.len()
+            );
+        }
+        let mut msgs = Vec::with_capacity(nvars);
+        let mut v_msg: Option<R::BaseRing> = None;
+
+        let mut t_rounds = std::time::Duration::from_secs(0);
+        let mut t_absorb_msgs = std::time::Duration::from_secs(0);
+        let mut t_get_chal = std::time::Duration::from_secs(0);
+        let mut t_absorb_chal = std::time::Duration::from_secs(0);
+
+        for round in 0..nvars {
+            let t_r = std::time::Instant::now();
+            let pm = Self::prove_round_deg2_pairs(&mut state, v_msg, &comb_fn2);
+            t_rounds += t_r.elapsed();
+
+            let t_a = std::time::Instant::now();
+            transcript.absorb_slice(&pm.evaluations);
+            t_absorb_msgs += t_a.elapsed();
+            msgs.push(pm);
+
+            let t_c = std::time::Instant::now();
+            let r = transcript.get_challenge();
+            t_get_chal += t_c.elapsed();
+
+            let t_ac = std::time::Instant::now();
+            transcript.absorb_field_element(&r);
+            t_absorb_chal += t_ac.elapsed();
+            v_msg = Some(r);
+
+            if profile && (round == 0 || round + 1 == nvars) {
+                println!(
+                    "[LF+ streaming_sumcheck] round {}/{} done",
+                    round + 1,
+                    nvars
+                );
+            }
+        }
+
         let last_r = v_msg.expect("nvars>0");
         state.randomness.push(last_r);
         let t_fix = std::time::Instant::now();
