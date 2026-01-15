@@ -342,11 +342,36 @@ where
                 let mono_idx: &[u16] = mono_idx.as_ref();
                 let mono_coeff: &[R::BaseRing] = mono_coeff.as_ref();
                 let w3m: &StreamingMleEnum<R> = w3.as_ref();
+                enum W3Fast<'a, Rr: OverField + PolyRing>
+                where
+                    Rr::BaseRing: Ring,
+                {
+                    Dense(&'a [Rr]),
+                    HFrom {
+                        precomps: &'a [HCol0Precomp<Rr>],
+                        rest_sum: Rr,
+                    },
+                    Other(&'a StreamingMleEnum<Rr>),
+                }
+                let w3fast = match w3m {
+                    StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, .. } => {
+                        let pcs: &[HCol0Precomp<R>] = precomps.as_ref();
+                        let mut rest_sum = R::ZERO;
+                        for p in pcs {
+                            rest_sum += p.term_rest;
+                        }
+                        W3Fast::HFrom { precomps: pcs, rest_sum }
+                    }
+                    _ => W3Fast::Other(w3m),
+                };
 
                 let mut acc0 = R::BaseRing::ZERO;
                 let mut acc2 = R::BaseRing::ZERO;
                 let mut acc1 = R::ZERO;
                 let mut acc3 = R::ZERO;
+                let acc1_coeffs = acc1.coeffs_mut();
                 for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
                     let c0 = *coeff0;
                     let cj = *col_idx;
@@ -359,10 +384,21 @@ where
                     if cj < digs.len() {
                         let d = digs[cj] as usize;
                         // exp_table[d] is monomial-like: add into that coefficient directly.
-                        acc1.coeffs_mut()[mono_idx[d] as usize] += mono_coeff[d] * c0;
+                        acc1_coeffs[mono_idx[d] as usize] += mono_coeff[d] * c0;
                     }
-                    // `w3` is an MLE; evaluate on demand (can be dense, LazyFixed, etc.)
-                    acc3 += w3m.eval_at_index(cj) * c0;
+                    // `w3` is an MLE; fast-path the common variants to avoid per-nonzero dispatch overhead.
+                    acc3 += match &w3fast {
+                        W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
+                        W3Fast::HFrom { precomps, rest_sum } => {
+                            let mut hv = *rest_sum;
+                            for p in precomps.iter() {
+                                let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
+                                hv += p.term0_tab[dix];
+                            }
+                            hv * c0
+                        }
+                        W3Fast::Other(m) => m.eval_at_index(cj) * c0,
+                    };
                 }
                 [R::from(acc0), acc1, R::from(acc2), acc3]
             }
@@ -376,6 +412,30 @@ where
                 let w1s: &[R] = w1.as_ref();
                 let w2s: &[R::BaseRing] = w2.as_ref();
                 let w3m: &StreamingMleEnum<R> = w3.as_ref();
+                enum W3Fast<'a, Rr: OverField + PolyRing>
+                where
+                    Rr::BaseRing: Ring,
+                {
+                    Dense(&'a [Rr]),
+                    HFrom {
+                        precomps: &'a [HCol0Precomp<Rr>],
+                        rest_sum: Rr,
+                    },
+                    Other(&'a StreamingMleEnum<Rr>),
+                }
+                let w3fast = match w3m {
+                    StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, .. } => {
+                        let pcs: &[HCol0Precomp<R>] = precomps.as_ref();
+                        let mut rest_sum = R::ZERO;
+                        for p in pcs {
+                            rest_sum += p.term_rest;
+                        }
+                        W3Fast::HFrom { precomps: pcs, rest_sum }
+                    }
+                    _ => W3Fast::Other(w3m),
+                };
 
                 let mut acc0 = R::BaseRing::ZERO;
                 let mut acc2 = R::BaseRing::ZERO;
@@ -393,7 +453,18 @@ where
                     if cj < w1s.len() {
                         acc1 += w1s[cj] * c0;
                     }
-                    acc3 += w3m.eval_at_index(cj) * c0;
+                    acc3 += match &w3fast {
+                        W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
+                        W3Fast::HFrom { precomps, rest_sum } => {
+                            let mut hv = *rest_sum;
+                            for p in precomps.iter() {
+                                let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
+                                hv += p.term0_tab[dix];
+                            }
+                            hv * c0
+                        }
+                        W3Fast::Other(m) => m.eval_at_index(cj) * c0,
+                    };
                 }
                 [R::from(acc0), acc1, R::from(acc2), acc3]
             }
@@ -402,6 +473,30 @@ where
                 let w1s: &[R::BaseRing] = w1.as_ref();
                 let w2s: &[R::BaseRing] = w2.as_ref();
                 let w3m: &StreamingMleEnum<R> = w3.as_ref();
+                enum W3Fast<'a, Rr: OverField + PolyRing>
+                where
+                    Rr::BaseRing: Ring,
+                {
+                    Dense(&'a [Rr]),
+                    HFrom {
+                        precomps: &'a [HCol0Precomp<Rr>],
+                        rest_sum: Rr,
+                    },
+                    Other(&'a StreamingMleEnum<Rr>),
+                }
+                let w3fast = match w3m {
+                    StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { precomps, .. } => {
+                        let pcs: &[HCol0Precomp<R>] = precomps.as_ref();
+                        let mut rest_sum = R::ZERO;
+                        for p in pcs {
+                            rest_sum += p.term_rest;
+                        }
+                        W3Fast::HFrom { precomps: pcs, rest_sum }
+                    }
+                    _ => W3Fast::Other(w3m),
+                };
 
                 let mut acc0 = R::BaseRing::ZERO;
                 let mut acc1 = R::BaseRing::ZERO;
@@ -419,7 +514,18 @@ where
                     if cj < w2s.len() {
                         acc2 += c0 * w2s[cj];
                     }
-                    acc3 += w3m.eval_at_index(cj) * c0;
+                    acc3 += match &w3fast {
+                        W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
+                        W3Fast::HFrom { precomps, rest_sum } => {
+                            let mut hv = *rest_sum;
+                            for p in precomps.iter() {
+                                let dix = p.col0.get(cj).copied().unwrap_or(p.zero_idx) as usize;
+                                hv += p.term0_tab[dix];
+                            }
+                            hv * c0
+                        }
+                        W3Fast::Other(m) => m.eval_at_index(cj) * c0,
+                    };
                 }
                 [R::from(acc0), R::from(acc1), R::from(acc2), acc3]
             }
