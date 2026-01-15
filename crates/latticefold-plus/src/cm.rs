@@ -1553,12 +1553,24 @@ where
                                 }
                             }
                             if ok {
+                            if profile {
+                                println!(
+                                    "[LF+ Cm::sumchecker_streaming] mtau witness: MonomialDigitsMonomial (table_len={})",
+                                    exp_table.len()
+                                );
+                            }
                                 CmMatVecWitness::MonomialDigitsMonomial {
                                     digits: digits.clone(),
                                     mono_idx: std::sync::Arc::new(mono_idx),
                                     mono_coeff: std::sync::Arc::new(mono_coeff),
                                 }
                             } else {
+                            if profile {
+                                println!(
+                                    "[LF+ Cm::sumchecker_streaming] mtau witness: MonomialDigits (table_len={})",
+                                    exp_table.len()
+                                );
+                            }
                                 CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
                             }
                         }
@@ -1974,12 +1986,24 @@ where
                                 }
                             }
                             if ok {
+                            if profile {
+                                println!(
+                                    "[LF+ Cm::sumchecker_streaming(base)] mtau witness: MonomialDigitsMonomial (table_len={})",
+                                    exp_table.len()
+                                );
+                            }
                                 CmMatVecWitness::MonomialDigitsMonomial {
                                     digits: digits.clone(),
                                     mono_idx: std::sync::Arc::new(mono_idx),
                                     mono_coeff: std::sync::Arc::new(mono_coeff),
                                 }
                             } else {
+                            if profile {
+                                println!(
+                                    "[LF+ Cm::sumchecker_streaming(base)] mtau witness: MonomialDigits (table_len={})",
+                                    exp_table.len()
+                                );
+                            }
                                 CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
                             }
                         }

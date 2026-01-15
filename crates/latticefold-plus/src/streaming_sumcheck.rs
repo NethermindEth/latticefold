@@ -4,6 +4,7 @@
 //! so the existing verifier (`MLSumcheck::verify_as_subprotocol`) remains unchanged.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use latticefold::transcript::Transcript;
 use latticefold::utils::sumcheck::prover::ProverMsg;
@@ -13,6 +14,12 @@ use stark_rings_linalg::{Matrix, SparseMatrix};
 use crate::setchk::DigitsMatrix;
 use crate::utils::maybe_print_rss;
 use core::mem::MaybeUninit;
+
+// CM fused-matvec cache stats (only printed when LF_PLUS_PROFILE=1).
+static CM_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
+static CM_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
+static CM_LAZY_CACHE_HITS: AtomicU64 = AtomicU64::new(0);
+static CM_LAZY_CACHE_MISSES: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
@@ -1967,6 +1974,8 @@ impl StreamingSumcheck {
     where
         R::BaseRing: Ring,
     {
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+
         if let Some(r) = v_msg {
             assert!(state.round > 0);
             state.randomness.push(r);
@@ -2044,6 +2053,7 @@ impl StreamingSumcheck {
             index: usize,
             cache: &mut Option<(usize, usize, [R; 4])>,
             lazy_cache: &mut Option<(usize, usize, usize, [R; 4])>,
+            profile: bool,
         ) -> R
         where
             R::BaseRing: Ring,
@@ -2053,7 +2063,7 @@ impl StreamingSumcheck {
             // - if inner is CmMatVec4Part and fixed.len()>0, compute the lazy-combined value for all 4 parts once
             if let StreamingMleEnum::LazyFixed { inner, fixed, weights, .. } = mle {
                 if fixed.is_empty() {
-                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache, lazy_cache);
+                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache, lazy_cache, profile);
                 }
                 if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = inner.as_ref() {
                     let k = fixed.len();
@@ -2064,8 +2074,14 @@ impl StreamingSumcheck {
 
                     if let Some((csid, cbase, ck, vals)) = lazy_cache.as_ref() {
                         if *csid == sid && *cbase == base && *ck == k {
+                            if profile {
+                                CM_LAZY_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+                            }
                             return vals[wid];
                         }
+                    }
+                    if profile {
+                        CM_LAZY_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
                     }
 
                     // Compute all 4 parts at once: Σ_b weights[b] * shared.eval4_at_row(base|b).
@@ -2090,8 +2106,14 @@ impl StreamingSumcheck {
                 let sid = Arc::as_ptr(shared) as usize;
                 if let Some((csid, crow, vals)) = cache.as_ref() {
                     if *csid == sid && *crow == index {
+                        if profile {
+                            CM_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+                        }
                         return vals[wid];
                     }
+                }
+                if profile {
+                    CM_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
                 }
                 let vals = shared.eval4_at_row(index);
                 *cache = Some((sid, index, vals));
@@ -2107,8 +2129,20 @@ impl StreamingSumcheck {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
                 for (i, mle) in state.mles.iter().enumerate() {
-                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even, &mut s.cm_lazy_cache_even);
-                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd, &mut s.cm_lazy_cache_odd);
+                    s.vals0[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx0,
+                        &mut s.cm_cache_even,
+                        &mut s.cm_lazy_cache_even,
+                        profile,
+                    );
+                    s.vals1[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx1,
+                        &mut s.cm_cache_odd,
+                        &mut s.cm_lazy_cache_odd,
+                        profile,
+                    );
                 }
                 s.levals[0] = comb_fn(&s.vals0);
                 s.levals[1] = comb_fn(&s.vals1);
@@ -2145,8 +2179,20 @@ impl StreamingSumcheck {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
                 for (i, mle) in state.mles.iter().enumerate() {
-                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even, &mut s.cm_lazy_cache_even);
-                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd, &mut s.cm_lazy_cache_odd);
+                    s.vals0[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx0,
+                        &mut s.cm_cache_even,
+                        &mut s.cm_lazy_cache_even,
+                        profile,
+                    );
+                    s.vals1[i] = eval_mle_with_cm_cache(
+                        mle,
+                        idx1,
+                        &mut s.cm_cache_odd,
+                        &mut s.cm_lazy_cache_odd,
+                        profile,
+                    );
                 }
                 s.levals[0] = comb_fn(&s.vals0);
                 s.levals[1] = comb_fn(&s.vals1);
@@ -2317,6 +2363,13 @@ impl StreamingSumcheck {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         let t_total = std::time::Instant::now();
 
+        if profile {
+            CM_CACHE_HITS.store(0, Ordering::Relaxed);
+            CM_CACHE_MISSES.store(0, Ordering::Relaxed);
+            CM_LAZY_CACHE_HITS.store(0, Ordering::Relaxed);
+            CM_LAZY_CACHE_MISSES.store(0, Ordering::Relaxed);
+        }
+
         transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
         transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
 
@@ -2390,6 +2443,16 @@ impl StreamingSumcheck {
                 t_final_elapsed,
                 t_total.elapsed()
             );
+            let h = CM_CACHE_HITS.load(Ordering::Relaxed);
+            let m = CM_CACHE_MISSES.load(Ordering::Relaxed);
+            let lh = CM_LAZY_CACHE_HITS.load(Ordering::Relaxed);
+            let lm = CM_LAZY_CACHE_MISSES.load(Ordering::Relaxed);
+            if (h + m + lh + lm) > 0 {
+                println!(
+                    "[LF+ streaming_sumcheck] cm_cache: hit={} miss={} lazy_hit={} lazy_miss={}",
+                    h, m, lh, lm
+                );
+            }
         }
 
         (Proof::new(msgs), state.randomness, final_evals)
