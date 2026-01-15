@@ -279,10 +279,38 @@ fn ntt(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
             pow_mod_u32(root, (n / len) as u32, modulus)
         };
         // Precompute twiddles for this stage: tw[j] = wlen^j.
-        twiddles.resize(len / 2, 0u32);
-        twiddles[0] = 1u32;
-        for j in 1..(len / 2) {
-            twiddles[j] = mul_mod_u32(twiddles[j - 1], wlen, modulus);
+        //
+        // NOTE: for late stages `len/2` is huge (tens of millions) and a naive sequential fill
+        // becomes a bottleneck (visible as ~1–2 cores used). We generate twiddles in parallel
+        // by splitting into blocks and computing each block's starting power via exponentiation.
+        let half = len / 2;
+        twiddles.resize(half, 0u32);
+        if half > 0 {
+            twiddles[0] = 1u32;
+        }
+        if use_par && half >= (1 << 20) {
+            // 4096 gives good locality and low pow() overhead per block.
+            const BLOCK: usize = 4096;
+            let base = wlen;
+            twiddles
+                .par_chunks_mut(BLOCK)
+                .enumerate()
+                .for_each(|(bi, chunk)| {
+                    let start = bi * BLOCK;
+                    let mut cur = if start == 0 {
+                        1u32
+                    } else {
+                        pow_mod_u32(base, start as u32, modulus)
+                    };
+                    for slot in chunk.iter_mut() {
+                        *slot = cur;
+                        cur = mul_mod_u32(cur, base, modulus);
+                    }
+                });
+        } else {
+            for j in 1..half {
+                twiddles[j] = mul_mod_u32(twiddles[j - 1], wlen, modulus);
+            }
         }
 
         if use_par && len >= PAR_NTT_MIN_LEN {
@@ -580,10 +608,33 @@ fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
         } else {
             pow_mod_u64_wide(root, (n / len) as u64, modulus)
         };
-        twiddles.resize(len / 2, 0u64);
-        twiddles[0] = 1;
-        for j in 1..(len / 2) {
-            twiddles[j] = mul_mod_u64(twiddles[j - 1], wlen, modulus);
+        let half = len / 2;
+        twiddles.resize(half, 0u64);
+        if half > 0 {
+            twiddles[0] = 1;
+        }
+        if use_par && half >= (1 << 20) {
+            const BLOCK: usize = 4096;
+            let base = wlen;
+            twiddles
+                .par_chunks_mut(BLOCK)
+                .enumerate()
+                .for_each(|(bi, chunk)| {
+                    let start = bi * BLOCK;
+                    let mut cur = if start == 0 {
+                        1u64
+                    } else {
+                        pow_mod_u64_wide(base, start as u64, modulus)
+                    };
+                    for slot in chunk.iter_mut() {
+                        *slot = cur;
+                        cur = mul_mod_u64(cur, base, modulus);
+                    }
+                });
+        } else {
+            for j in 1..half {
+                twiddles[j] = mul_mod_u64(twiddles[j - 1], wlen, modulus);
+            }
         }
 
         if use_par && len >= PAR_NTT_MIN_LEN {
