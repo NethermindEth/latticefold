@@ -353,10 +353,12 @@ fn convolution_crt_ntt<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: us
     // an ad-hoc modulus list.
     let (mods, roots) = ntt_moduli_for_size(size, /*target_count=*/ 8);
     let k = mods.len();
-    assert!(
-        k >= 4,
-        "CRT+NTT requires several NTT primes; got {k} for size={size}"
-    );
+    if k < 4 {
+        // For very large power-of-two sizes (e.g. 2^28), there may be too few 32-bit primes p ≡ 1 (mod size).
+        // Fall back to a 64-bit CRT+NTT path which has many more valid primes and needs fewer moduli
+        // to reach the required reconstruction bitwidth.
+        return convolution_crt_ntt_u64::<F>(a, b, out_len, size);
+    }
 
     // Extract modulus of F as u64 (Frog prime fits in u64).
     let p_bytes = F::MODULUS.to_bytes_le();
@@ -445,6 +447,291 @@ fn convolution_crt_ntt<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: us
         .collect();
 
     out
+}
+
+// ---------------- CRT+NTT convolution for 64-bit NTT primes (fallback for huge sizes) ----------------
+
+#[inline]
+fn mul_mod_u64(a: u64, b: u64, m: u64) -> u64 {
+    ((a as u128 * b as u128) % (m as u128)) as u64
+}
+
+#[inline]
+fn add_mod_u64(a: u64, b: u64, m: u64) -> u64 {
+    let s = a as u128 + b as u128;
+    (if s >= m as u128 { s - m as u128 } else { s }) as u64
+}
+
+#[inline]
+fn sub_mod_u64(a: u64, b: u64, m: u64) -> u64 {
+    if a >= b { a - b } else { a + m - b }
+}
+
+fn pow_mod_u64_wide(mut a: u64, mut e: u64, m: u64) -> u64 {
+    let mut r: u64 = 1;
+    while e > 0 {
+        if (e & 1) == 1 {
+            r = mul_mod_u64(r, a, m);
+        }
+        a = mul_mod_u64(a, a, m);
+        e >>= 1;
+    }
+    r
+}
+
+fn inv_mod_u64(a: u64, m: u64) -> u64 {
+    // m is prime
+    pow_mod_u64_wide(a, m - 2, m)
+}
+
+fn bit_reverse_permute_u64(a: &mut [u64]) {
+    let n = a.len();
+    let mut j = 0usize;
+    for i in 1..n {
+        let mut bit = n >> 1;
+        while j & bit != 0 {
+            j ^= bit;
+            bit >>= 1;
+        }
+        j ^= bit;
+        if i < j {
+            a.swap(i, j);
+        }
+    }
+}
+
+/// Find an n-th primitive root of unity in F_p for power-of-two n dividing (p-1).
+fn root_of_unity_u64(p: u64, n: usize) -> u64 {
+    debug_assert!(n.is_power_of_two());
+    debug_assert!(((p - 1) as usize) % n == 0);
+    let exp = (p - 1) / (n as u64);
+    let half = n >> 1;
+    for g in 2u64.. {
+        let w = pow_mod_u64_wide(g, exp, p);
+        if w == 1 {
+            continue;
+        }
+        // Since n is a power-of-two, w has order n iff w^(n/2) != 1.
+        if pow_mod_u64_wide(w, half as u64, p) != 1 {
+            return w;
+        }
+    }
+    unreachable!("failed to find root of unity for p={p} n={n}");
+}
+
+fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
+    let n = a.len();
+    bit_reverse_permute_u64(a);
+
+    let root = root_n;
+    let root_inv = inv_mod_u64(root, modulus);
+
+    const PAR_NTT_MIN_N: usize = 1 << 18;
+    const PAR_NTT_MIN_LEN: usize = 1 << 10;
+    let use_par = n >= PAR_NTT_MIN_N && rayon::current_num_threads() > 1;
+
+    let mut twiddles: Vec<u64> = Vec::new();
+
+    let mut len = 2usize;
+    while len <= n {
+        let wlen = if invert {
+            pow_mod_u64_wide(root_inv, (n / len) as u64, modulus)
+        } else {
+            pow_mod_u64_wide(root, (n / len) as u64, modulus)
+        };
+        twiddles.resize(len / 2, 0u64);
+        twiddles[0] = 1;
+        for j in 1..(len / 2) {
+            twiddles[j] = mul_mod_u64(twiddles[j - 1], wlen, modulus);
+        }
+
+        if use_par && len >= PAR_NTT_MIN_LEN {
+            a.par_chunks_mut(len).for_each(|chunk| {
+                for j in 0..(len / 2) {
+                    let u = chunk[j];
+                    let v = mul_mod_u64(chunk[j + len / 2], twiddles[j], modulus);
+                    chunk[j] = add_mod_u64(u, v, modulus);
+                    chunk[j + len / 2] = sub_mod_u64(u, v, modulus);
+                }
+            });
+        } else {
+            for i in (0..n).step_by(len) {
+                for j in 0..(len / 2) {
+                    let u = a[i + j];
+                    let v = mul_mod_u64(a[i + j + len / 2], twiddles[j], modulus);
+                    a[i + j] = add_mod_u64(u, v, modulus);
+                    a[i + j + len / 2] = sub_mod_u64(u, v, modulus);
+                }
+            }
+        }
+        len <<= 1;
+    }
+
+    if invert {
+        let n_inv = inv_mod_u64(n as u64, modulus);
+        if use_par {
+            a.par_iter_mut().for_each(|x| *x = mul_mod_u64(*x, n_inv, modulus));
+        } else {
+            for x in a.iter_mut() {
+                *x = mul_mod_u64(*x, n_inv, modulus);
+            }
+        }
+    }
+}
+
+fn convolution_ntt_mod_u64(a: &[u64], b: &[u64], out_len: usize, size: usize, modulus: u64, root_n: u64) -> Vec<u64> {
+    let mut fa = vec![0u64; size];
+    let mut fb = vec![0u64; size];
+    fa[..a.len()].copy_from_slice(a);
+    fb[..b.len()].copy_from_slice(b);
+
+    ntt_u64(&mut fa, false, modulus, root_n);
+    ntt_u64(&mut fb, false, modulus, root_n);
+    for i in 0..size {
+        fa[i] = mul_mod_u64(fa[i], fb[i], modulus);
+    }
+    ntt_u64(&mut fa, true, modulus, root_n);
+    fa.truncate(out_len);
+    fa
+}
+
+fn is_prime_u64(n: u64) -> bool {
+    if n < 2 {
+        return false;
+    }
+    if n % 2 == 0 {
+        return n == 2;
+    }
+    // Deterministic Miller-Rabin for u64.
+    // See https://miller-rabin.appspot.com/ : these bases are sufficient for < 2^64.
+    const BASES: [u64; 7] = [2, 325, 9375, 28178, 450775, 9780504, 1795265022];
+    let d = n - 1;
+    let s = d.trailing_zeros();
+    let d_odd = d >> s;
+    'outer: for &a in &BASES {
+        let a = a % n;
+        if a == 0 {
+            continue;
+        }
+        let mut x = pow_mod_u64_wide(a, d_odd, n);
+        if x == 1 || x == n - 1 {
+            continue;
+        }
+        for _ in 1..s {
+            x = mul_mod_u64(x, x, n);
+            if x == n - 1 {
+                continue 'outer;
+            }
+        }
+        return false;
+    }
+    true
+}
+
+fn ntt_moduli_for_size_u64(size: usize, target_count: usize) -> Vec<u64> {
+    assert!(size.is_power_of_two());
+    // Search primes of form p = m*size + 1 in the 64-bit range.
+    // Start at a multiplier that makes p ~ 2^63 so we get large primes (better CRT bitwidth).
+    let min_p: u128 = 1u128 << 63;
+    let mut m: u128 = (min_p.saturating_sub(1) / (size as u128)) + 1;
+    if m == 0 {
+        m = 1;
+    }
+    let mut out = Vec::new();
+    while out.len() < target_count {
+        let p = m.saturating_mul(size as u128).saturating_add(1);
+        if p >= (u64::MAX as u128) {
+            break;
+        }
+        let p64 = p as u64;
+        if is_prime_u64(p64) {
+            out.push(p64);
+        }
+        m += 1;
+    }
+    out
+}
+
+fn convolution_crt_ntt_u64<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: usize) -> Vec<F> {
+    // Pick 3 large 64-bit NTT primes (product ~192 bits) to cover large convolution coefficient bounds.
+    let mods = ntt_moduli_for_size_u64(size, /*target_count=*/ 3);
+    let k = mods.len();
+    assert!(
+        k >= 3,
+        "CRT+NTT(u64) requires at least 3 NTT primes; got {k} for size={size}"
+    );
+
+    // Extract modulus of F as u64 (Frog/BabyBear-in-Frog fits in u64).
+    let p_bytes = F::MODULUS.to_bytes_le();
+    let mut p_u64: u64 = 0;
+    for (i, byte) in p_bytes.iter().enumerate().take(8) {
+        p_u64 |= (*byte as u64) << (8 * i);
+    }
+    assert!(p_u64 > 1, "expected small (<=64-bit) prime modulus");
+
+    let to_u64 = |x: &F| -> u64 {
+        let xb = x.into_bigint().to_bytes_le();
+        let mut v: u64 = 0;
+        for (i, byte) in xb.iter().enumerate().take(8) {
+            v |= (*byte as u64) << (8 * i);
+        }
+        v % p_u64
+    };
+    let a_u = a.par_iter().map(to_u64).collect::<Vec<_>>();
+    let b_u = b.par_iter().map(to_u64).collect::<Vec<_>>();
+
+    // Compute roots and convolve under each modulus.
+    let roots_n: Vec<u64> = mods.iter().map(|&m| root_of_unity_u64(m, size)).collect();
+    let residues_vec: Vec<Vec<u64>> = (0..k)
+        .into_par_iter()
+        .map(|i| {
+            let modulus = mods[i];
+            let root_n = roots_n[i];
+            let aa = a_u.iter().map(|&v| v % modulus).collect::<Vec<_>>();
+            let bb = b_u.iter().map(|&v| v % modulus).collect::<Vec<_>>();
+            convolution_ntt_mod_u64(&aa, &bb, out_len, size, modulus, root_n)
+        })
+        .collect();
+
+    // Garner reconstruction mod p using 3 moduli.
+    let m0 = mods[0];
+    let m1 = mods[1];
+    let m2 = mods[2];
+    let m0_mod_m1 = (m0 % m1) as u64;
+    let inv_m0_m1 = inv_mod_u64(m0_mod_m1, m1);
+    let m01_mod_m2 = ((m0 as u128 * m1 as u128) % (m2 as u128)) as u64;
+    let inv_m01_m2 = inv_mod_u64(m01_mod_m2, m2);
+
+    let m0_mod_p = (m0 as u128 % (p_u64 as u128)) as u64;
+    let m01_mod_p = ((m0 as u128 * m1 as u128) % (p_u64 as u128)) as u64;
+
+    (0..out_len)
+        .into_par_iter()
+        .map(|idx| {
+            let r0 = residues_vec[0][idx];
+            let r1 = residues_vec[1][idx];
+            let r2 = residues_vec[2][idx];
+
+            // c0 = r0
+            let c0 = r0;
+            // c1 = (r1 - c0) * inv(m0) mod m1
+            let t1 = sub_mod_u64(r1, c0 % m1, m1);
+            let c1 = mul_mod_u64(t1, inv_m0_m1, m1);
+            // x01 = c0 + m0*c1  (mod m2)
+            let x01_mod_m2 = (c0 as u128 + (m0 as u128 * c1 as u128)) % (m2 as u128);
+            let t2 = sub_mod_u64(r2, x01_mod_m2 as u64, m2);
+            let c2 = mul_mod_u64(t2, inv_m01_m2, m2);
+
+            // x mod p = c0 + m0*c1 + m0*m1*c2  (mod p)
+            let mut x_mod_p: u64 = (c0 % p_u64) as u64;
+            let add1 = ((m0_mod_p as u128) * (c1 as u128) % (p_u64 as u128)) as u64;
+            x_mod_p = (((x_mod_p as u128) + (add1 as u128)) % (p_u64 as u128)) as u64;
+            let add2 = ((m01_mod_p as u128) * (c2 as u128) % (p_u64 as u128)) as u64;
+            x_mod_p = (((x_mod_p as u128) + (add2 as u128)) % (p_u64 as u128)) as u64;
+
+            F::from_le_bytes_mod_order(&x_mod_p.to_le_bytes())
+        })
+        .collect()
 }
 
 /// Deterministically synthesize `target_count` 32-bit primes p such that `p ≡ 1 (mod size)`,
