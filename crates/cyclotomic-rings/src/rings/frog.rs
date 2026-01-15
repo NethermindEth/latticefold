@@ -196,9 +196,6 @@ impl core::ops::Mul for FrogRing64 {
                 let mut out = [<Fq as Field>::ZERO; 8];
                 for i in 0..4 {
                     let ai = a[i];
-                    if ai == <Fq as Field>::ZERO {
-                        continue;
-                    }
                     for j in 0..4 {
                         out[i + j] += ai * b[j];
                     }
