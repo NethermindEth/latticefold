@@ -4137,5 +4137,149 @@ mod tests {
 
         run_one("sha256->bits", &sp1_digest_bits);
     }
+
+    #[test]
+    fn test_we_plus_prover_sparse_base_small_mock_sat() {
+        // A small end-to-end test for the **production** SP1-style path:
+        // - ComR1CSBase (A/B/C over base ring + const-coeff witness)
+        // - PlusProverSparseBase::prove_sparse_base
+        // - record verifier trace
+        // - build WE dR1CS for the PlusProof and check satisfaction
+        //
+        // This is intended to reproduce any "WE gate dr1cs satisfied: constraint ... failed"
+        // regressions at a tiny scale (seconds, not minutes).
+        type PCF = cyclotomic_rings::rings::FrogPoseidonConfig;
+        use cyclotomic_rings::rings::GetPoseidonParams;
+        use sha2::{Digest, Sha256};
+
+        use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
+        use stark_rings::PolyRing;
+        use stark_rings_linalg::SparseMatrix;
+        use std::sync::Arc;
+
+        use crate::plus::{PlusParameters, PlusProverSparseBase};
+        use crate::r1cs::ComR1CSBase;
+        use crate::rgchk::DecompParameters;
+        use crate::transcript::PoseidonTranscript;
+        use crate::we_statement::digest32_to_bits_field;
+        use latticefold::arith::r1cs::R1CS;
+        use latticefold::commitment::AjtaiCommitmentScheme;
+
+        // Choose parameters so the internal range-check/CM tau tables fit comfortably in `n=2^9`.
+        let kappa = 1usize;
+        let k = 1usize;
+        let ell = 2usize;
+        let d = RR::dimension();
+        let tau_unpadded_len = kappa * (k * d) * ell * d;
+        let n = tau_unpadded_len.next_power_of_two();
+        let nvars = ark_std::log2(n) as usize;
+        assert!(n <= (1 << 12), "keep this test small");
+
+        // SP1-style public inputs: 256 digest bits.
+        type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+        let public_inputs: Vec<BF0> = {
+            let d: [u8; 32] = Sha256::digest(b"LFP_WE_PLUS_SPARSE_BASE_SMALL_V1").into();
+            digest32_to_bits_field::<BF0>(d)
+        };
+
+        // Seeded Ajtai scheme (deterministic system parameter).
+        const AJTAI_SEED: [u8; 32] = *b"LFP_TEST_AJTAI_SEED_V1_000000000000";
+        let ajtai = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
+
+        // Trivial satisfiable R1CS: A=B=C=0, so (Az)*(Bz) - Cz = 0 for any witness.
+        let zero_rows: Vec<Vec<(RR::BaseRing, usize)>> = vec![Vec::new(); n];
+        let a = SparseMatrix::<RR::BaseRing> { nrows: n, ncols: n, coeffs: zero_rows.clone() };
+        let b = SparseMatrix::<RR::BaseRing> { nrows: n, ncols: n, coeffs: zero_rows.clone() };
+        let c = SparseMatrix::<RR::BaseRing> { nrows: n, ncols: n, coeffs: zero_rows };
+        let r1cs = R1CS::<RR::BaseRing> { l: 0, A: a, B: b, C: c };
+
+        // Constant-coeff witness prefix. Keep values tiny; the protocol is still well-defined.
+        let f0: Arc<Vec<RR::BaseRing>> = Arc::new(
+            (0..n)
+                .map(|i| if i == 0 { RR::BaseRing::ONE } else { RR::BaseRing::ZERO })
+                .collect(),
+        );
+
+        let cr1cs = ComR1CSBase::<RR>::from_f0_seeded_base(r1cs, f0, 0, &ajtai);
+        let m0 = cr1cs.x.matrices_arc_base();
+
+        // Range-check decomposition parameters (used inside CM/RG machinery).
+        let dparams = DecompParameters { b: 2u128, k, l: ell };
+        let lin_params = crate::lin::LinParameters { kappa, decomp: dparams.clone() };
+
+        // Π_decomp base B: choose a conservative power-of-two > sqrt(q) so 2-digit decomposition is always valid.
+        fn isqrt_u128(x: u128) -> u128 {
+            let mut lo: u128 = 0;
+            let mut hi: u128 = 1u128 << 64;
+            while lo + 1 < hi {
+                let mid = (lo + hi) >> 1;
+                if mid.saturating_mul(mid) <= x { lo = mid; } else { hi = mid; }
+            }
+            lo
+        }
+        fn next_pow2_u128(x: u128) -> u128 {
+            if x <= 1 { return 1; }
+            let p = 128 - (x - 1).leading_zeros() as u32;
+            1u128 << p
+        }
+        let q_u128: u128 = <RR::BaseRing as ark_ff::PrimeField>::MODULUS.0[0] as u128;
+        let mut b_decomp: u128 = next_pow2_u128(isqrt_u128(q_u128) + 1);
+        if b_decomp % 2 == 1 { b_decomp += 1; }
+
+        let pparams = PlusParameters { lin: lin_params, B: b_decomp };
+
+        // Prove (SP1-style: absorb public inputs before proving).
+        let mut prover = PlusProverSparseBase::init_seeded_base(
+            ajtai.clone(),
+            m0.clone(),
+            1,
+            pparams.clone(),
+            PoseidonTranscript::empty::<PCF>(),
+        );
+        for b in &public_inputs {
+            prover.transcript.absorb_field_element(b);
+        }
+        let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
+
+        // Record verifier trace (mirror the SP1 oneproof harness).
+        let poseidon_cfg = PCF::get_poseidon_config();
+        let mut rec = crate::recording_transcript::TracePoseidonTranscript::<RR>::empty::<PCF>();
+        for b in &public_inputs {
+            rec.absorb_field_element(b);
+        }
+        for lp in &proof.lproof {
+            lp.verify(&mut rec);
+        }
+        proof
+            .cmproof
+            .verify_with_mlen(m0.len(), &mut rec)
+            .expect("cm verify (record)");
+        let trace = rec.trace().clone();
+
+        let params = WeParams {
+            nvars_setchk: nvars as u64,
+            degree_setchk: 3,
+            nvars_cm: nvars as u64,
+            degree_cm: 2,
+            kappa: kappa as u64,
+            ring_dim_d: RR::dimension() as u64,
+            decomp_b: dparams.b as u64,
+            k: dparams.k as u64,
+            l: dparams.l as u64,
+            mlen: m0.len() as u64,
+        };
+
+        let out = build_we_dr1cs_for_plus_proof::<RR>(
+            &poseidon_cfg,
+            &trace,
+            &params,
+            &public_inputs,
+            &proof,
+            m0.len(),
+            b_decomp,
+        )
+        .expect("build_we_dr1cs_for_plus_proof");
+        out.inst.check(&out.assignment).expect("we gate dr1cs satisfied");
+    }
 }
 
