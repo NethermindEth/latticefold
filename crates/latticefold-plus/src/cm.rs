@@ -524,6 +524,40 @@ where
                             } else {
                                 mul_negacyclic_by_monomial::<R>(&rest_sum, shift0, scale0)
                             };
+                            if profile {
+                                // Diagnostic: how sparse is the streamed-h representation?
+                                // If `term0_tab` entries and `term_rest` are monomial-like, we can update `acc3`
+                                // in O(1) coeff ops inside the sparse matvec scan (big win for d64).
+                                fn nnz0<Rr: OverField + PolyRing>(x: &Rr) -> usize
+                                where
+                                    Rr::BaseRing: Ring,
+                                {
+                                    x.coeffs().iter().filter(|&&c| c != Rr::BaseRing::ZERO).count()
+                                }
+                                let mut mono = 0usize;
+                                let mut max_nnz = 0usize;
+                                let mut sum_nnz = 0usize;
+                                for r in term0_tab.iter() {
+                                    let k = nnz0::<R>(r);
+                                    if k <= 1 {
+                                        mono += 1;
+                                    }
+                                    if k > max_nnz {
+                                        max_nnz = k;
+                                    }
+                                    sum_nnz += k;
+                                }
+                                let rest_nnz = nnz0::<R>(&term_rest);
+                                let avg = (sum_nnz as f64) / (term0_tab.len().max(1) as f64);
+                                println!(
+                                    "[LF+ Cm::prove_base] stream_h stats: term0_tab_len={} mono_like={} avg_nnz={:.2} max_nnz={} term_rest_nnz={}",
+                                    term0_tab.len(),
+                                    mono,
+                                    avg,
+                                    max_nnz,
+                                    rest_nnz
+                                );
+                            }
                             precomps.push(HCol0Precomp {
                                 col0: col0.clone(),
                                 zero_idx: *zero_idx,
