@@ -20,30 +20,64 @@ use rayon::prelude::*;
 
 /// Packed representation for a length-`n` ring vector's coefficients.
 ///
-/// Layout: `coeffs[j * d + k]` stores the `k`-th base coefficient (balanced, signed) for entry `j`.
+/// For the SP1/const-coeff regime, most ring elements are **constant-coefficient** (only coeff0
+/// can be nonzero). Storing all `d` coefficients wastes huge memory for large rings (e.g. d=64).
+/// We therefore support a compact `ConstCoeff0` mode.
+///
 /// This is specialized to `i32` so production and tests exercise the same code path.
 #[derive(Clone, Debug)]
-struct PackedDigitVec<BR: Ring> {
-    coeffs: Vec<i32>,
-    d: usize,
-    n: usize,
-    _br: core::marker::PhantomData<BR>,
+enum PackedDigitVec<BR: Ring> {
+    /// Store only coefficient 0 (balanced, signed) for each entry. Other coefficients are 0.
+    ConstCoeff0 {
+        coeffs0: Vec<i32>,
+        d: usize,
+        n: usize,
+        _br: core::marker::PhantomData<BR>,
+    },
+    /// Store all coefficients: `coeffs[j * d + k]` holds coefficient `k` for entry `j`.
+    Full {
+        coeffs: Vec<i32>,
+        d: usize,
+        n: usize,
+        _br: core::marker::PhantomData<BR>,
+    },
 }
 
 impl<BR: Ring> PackedDigitVec<BR> {
     #[inline]
-    fn new_i32(n: usize, d: usize) -> Self {
-        Self { coeffs: vec![0i32; n * d], d, n, _br: core::marker::PhantomData }
+    fn new_i32_full(n: usize, d: usize) -> Self {
+        Self::Full { coeffs: vec![0i32; n * d], d, n, _br: core::marker::PhantomData }
     }
 
     #[inline]
-    fn dims(&self) -> (usize, usize) {
-        (self.d, self.n)
+    fn new_i32_const0(n: usize, d: usize) -> Self {
+        Self::ConstCoeff0 { coeffs0: vec![0i32; n], d, n, _br: core::marker::PhantomData }
+    }
+
+    #[inline]
+    fn d(&self) -> usize {
+        match self {
+            PackedDigitVec::ConstCoeff0 { d, .. } => *d,
+            PackedDigitVec::Full { d, .. } => *d,
+        }
+    }
+
+    #[inline]
+    fn n(&self) -> usize {
+        match self {
+            PackedDigitVec::ConstCoeff0 { n, .. } => *n,
+            PackedDigitVec::Full { n, .. } => *n,
+        }
     }
 
     #[inline]
     fn get_i64(&self, j: usize, k: usize) -> i64 {
-        self.coeffs[j * self.d + k] as i64
+        match self {
+            PackedDigitVec::ConstCoeff0 { coeffs0, .. } => {
+                if k == 0 { coeffs0[j] as i64 } else { 0 }
+            }
+            PackedDigitVec::Full { coeffs, d, .. } => coeffs[j * *d + k] as i64,
+        }
     }
 
     #[inline]
@@ -54,15 +88,30 @@ impl<BR: Ring> PackedDigitVec<BR> {
     {
         let oc = out.coeffs_mut();
         let d = oc.len();
-        let (_, n) = self.dims();
-        debug_assert!(j < n);
-        debug_assert_eq!(d, self.dims().0);
-        for k in 0..d {
-            let v = self.get_i64(j, k);
-            if v >= 0 {
-                oc[k] = BR::from(v as u128);
-            } else {
-                oc[k] = -BR::from((-v) as u128);
+        debug_assert!(j < self.n());
+        debug_assert_eq!(d, self.d());
+        match self {
+            PackedDigitVec::ConstCoeff0 { coeffs0, .. } => {
+                // Ensure we fully overwrite `out` since callers reuse a `tmp` buffer.
+                for k in 0..d {
+                    oc[k] = BR::ZERO;
+                }
+                let v0 = coeffs0[j] as i64;
+                oc[0] = if v0 >= 0 {
+                    BR::from(v0 as u128)
+                } else {
+                    -BR::from((-v0) as u128)
+                };
+            }
+            PackedDigitVec::Full { .. } => {
+                for k in 0..d {
+                    let v = self.get_i64(j, k);
+                    oc[k] = if v >= 0 {
+                        BR::from(v as u128)
+                    } else {
+                        -BR::from((-v) as u128)
+                    };
+                }
             }
         }
     }
@@ -79,13 +128,25 @@ impl<BR: Ring> PackedDigitVec<BR> {
         }
         let dc = dst.coeffs_mut();
         let d = dc.len();
-        debug_assert_eq!(d, self.dims().0);
-        for k in 0..d {
-            let v = self.get_i64(j, k);
-            if v >= 0 {
-                dc[k] += BR::from(v as u128) * scale;
-            } else {
-                dc[k] -= BR::from((-v) as u128) * scale;
+        debug_assert_eq!(d, self.d());
+        match self {
+            PackedDigitVec::ConstCoeff0 { coeffs0, .. } => {
+                let v0 = coeffs0[j] as i64;
+                if v0 >= 0 {
+                    dc[0] += BR::from(v0 as u128) * scale;
+                } else {
+                    dc[0] -= BR::from((-v0) as u128) * scale;
+                }
+            }
+            PackedDigitVec::Full { .. } => {
+                for k in 0..d {
+                    let v = self.get_i64(j, k);
+                    if v >= 0 {
+                        dc[k] += BR::from(v as u128) * scale;
+                    } else {
+                        dc[k] -= BR::from((-v) as u128) * scale;
+                    }
+                }
             }
         }
     }
@@ -924,54 +985,92 @@ where
         let n = F0.len();
         let d = R::dimension();
 
-        // Always use i32 so production/tests share the same code path.
-        let mut F1_packed: PackedDigitVec<R::BaseRing> = PackedDigitVec::new_i32(n, d);
+        // Packed F1 representation:
+        // In the SP1/base regime, `g` is constant-coefficient by construction, so `F1` is also
+        // constant-coefficient. Exploit that to avoid an O(n*d) packed table for large d (e.g. 64).
+        //
+        // We do a tiny sample check to guard against accidental non-const-coeff inputs.
+        let assume_const0 = F0
+            .iter()
+            .take(4096)
+            .all(|x| x.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
+        let mut F1_packed: PackedDigitVec<R::BaseRing> = if assume_const0 {
+            PackedDigitVec::new_i32_const0(n, d)
+        } else {
+            PackedDigitVec::new_i32_full(n, d)
+        };
 
         #[cfg(feature = "parallel")]
         {
             const CHUNK: usize = 1 << 14;
-            let (coeffs, dd, _nn) = (&mut F1_packed.coeffs, F1_packed.d, F1_packed.n);
-            debug_assert_eq!(dd, d);
-            F0.par_chunks_mut(CHUNK)
-                .zip(coeffs.par_chunks_mut(CHUNK * d))
-                .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1_flat)| {
-                    for i in 0..c0.len() {
-                        let orig = std::mem::replace(&mut c0[i], R::ZERO);
-                        orig.decompose_to(B, tmp);
-                        c0[i] = tmp[0];
-                        let c1c = tmp[1].coeffs();
-                        let base = i * d;
-                        for k in 0..d {
-                            let v = {
-                                let rep = c1c[k].into_bigint();
-                                let limbs = rep.as_ref();
-                                let mut vv: u128 = 0;
-                                let take = core::cmp::min(limbs.len(), 2);
-                                for t in 0..take {
-                                    vv |= (limbs[t] as u128) << (64 * t);
+            // Helper: convert base field element to balanced i64 (within 128-bit limb window).
+            #[inline]
+            fn br_to_i64<BR: PrimeField>(x: BR) -> i64 {
+                let rep = x.into_bigint();
+                let limbs = rep.as_ref();
+                let mut vv: u128 = 0;
+                let take = core::cmp::min(limbs.len(), 2);
+                for t in 0..take {
+                    vv |= (limbs[t] as u128) << (64 * t);
+                }
+                let modulus = BR::MODULUS;
+                let mod_limbs = modulus.as_ref();
+                let mut q: u128 = 0;
+                let take_q = core::cmp::min(mod_limbs.len(), 2);
+                for t in 0..take_q {
+                    q |= (mod_limbs[t] as u128) << (64 * t);
+                }
+                let half = q >> 1;
+                if vv <= half { vv as i64 } else { (vv as i128 - q as i128) as i64 }
+            }
+
+            match &mut F1_packed {
+                PackedDigitVec::ConstCoeff0 { coeffs0, .. } => {
+                    F0.par_chunks_mut(CHUNK)
+                        .zip(coeffs0.par_chunks_mut(CHUNK))
+                        .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1_0)| {
+                            for i in 0..c0.len() {
+                                let orig = std::mem::replace(&mut c0[i], R::ZERO);
+                                orig.decompose_to(B, tmp);
+                                c0[i] = tmp[0];
+                                let c1c = tmp[1].coeffs();
+                                // In const-coeff mode, we expect only coeff[0] can be nonzero.
+                                debug_assert!(
+                                    c1c.iter().skip(1).all(|c| *c == R::BaseRing::ZERO),
+                                    "PackedDigitVec::ConstCoeff0: non-const coefficient encountered"
+                                );
+                                let v0 = br_to_i64::<R::BaseRing>(c1c[0]);
+                                debug_assert!(
+                                    v0 >= i32::MIN as i64 && v0 <= i32::MAX as i64,
+                                    "packed F1 coeff0 out of i32 range"
+                                );
+                                c1_0[i] = v0 as i32;
+                            }
+                        });
+                }
+                PackedDigitVec::Full { coeffs, .. } => {
+                    debug_assert_eq!(coeffs.len(), n * d);
+                    F0.par_chunks_mut(CHUNK)
+                        .zip(coeffs.par_chunks_mut(CHUNK * d))
+                        .for_each_init(|| vec![R::ZERO; 2], |tmp, (c0, c1_flat)| {
+                            for i in 0..c0.len() {
+                                let orig = std::mem::replace(&mut c0[i], R::ZERO);
+                                orig.decompose_to(B, tmp);
+                                c0[i] = tmp[0];
+                                let c1c = tmp[1].coeffs();
+                                let base = i * d;
+                                for k in 0..d {
+                                    let v = br_to_i64::<R::BaseRing>(c1c[k]);
+                                    debug_assert!(
+                                        v >= i32::MIN as i64 && v <= i32::MAX as i64,
+                                        "packed F1 coefficient out of i32 range"
+                                    );
+                                    c1_flat[base + k] = v as i32;
                                 }
-                                let modulus = <R::BaseRing as PrimeField>::MODULUS;
-                                let mod_limbs = modulus.as_ref();
-                                let mut q: u128 = 0;
-                                let take_q = core::cmp::min(mod_limbs.len(), 2);
-                                for t in 0..take_q {
-                                    q |= (mod_limbs[t] as u128) << (64 * t);
-                                }
-                                let half = q >> 1;
-                                if vv <= half {
-                                    vv as i64
-                                } else {
-                                    (vv as i128 - q as i128) as i64
-                                }
-                            };
-                            debug_assert!(
-                                v >= i32::MIN as i64 && v <= i32::MAX as i64,
-                                "packed F1 coefficient out of i32 range"
-                            );
-                            c1_flat[base + k] = v as i32;
-                        }
-                    }
-                });
+                            }
+                        });
+                }
+            }
         }
         #[cfg(not(feature = "parallel"))]
         {
@@ -980,7 +1079,61 @@ where
                 let orig = std::mem::replace(&mut F0[i], R::ZERO);
                 orig.decompose_to(B, &mut tmp);
                 F0[i] = tmp[0];
-                F1_packed.set_coeffs_from_ring(i, &tmp[1]);
+                // Store packed coefficients for tmp[1].
+                match &mut F1_packed {
+                    PackedDigitVec::ConstCoeff0 { coeffs0, .. } => {
+                        let c1c = tmp[1].coeffs();
+                        debug_assert!(c1c.iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
+                        // Balanced i32 for coeff0.
+                        let rep = c1c[0].into_bigint();
+                        let limbs = rep.as_ref();
+                        let mut vv: u128 = 0;
+                        let take = core::cmp::min(limbs.len(), 2);
+                        for t in 0..take {
+                            vv |= (limbs[t] as u128) << (64 * t);
+                        }
+                        let modulus = <R::BaseRing as PrimeField>::MODULUS;
+                        let mod_limbs = modulus.as_ref();
+                        let mut q: u128 = 0;
+                        let take_q = core::cmp::min(mod_limbs.len(), 2);
+                        for t in 0..take_q {
+                            q |= (mod_limbs[t] as u128) << (64 * t);
+                        }
+                        let half = q >> 1;
+                        let v0: i64 = if vv <= half { vv as i64 } else { (vv as i128 - q as i128) as i64 };
+                        debug_assert!(v0 >= i32::MIN as i64 && v0 <= i32::MAX as i64);
+                        coeffs0[i] = v0 as i32;
+                    }
+                    PackedDigitVec::Full { .. } => {
+                        // Fallback: reuse the existing full write path.
+                        // (We keep this for non-const-coeff rings / tests.)
+                        // NOTE: this uses `get_i64` and will traverse all coefficients.
+                        let c1c = tmp[1].coeffs();
+                        for k in 0..d {
+                            let rep = c1c[k].into_bigint();
+                            let limbs = rep.as_ref();
+                            let mut vv: u128 = 0;
+                            let take = core::cmp::min(limbs.len(), 2);
+                            for t in 0..take {
+                                vv |= (limbs[t] as u128) << (64 * t);
+                            }
+                            let modulus = <R::BaseRing as PrimeField>::MODULUS;
+                            let mod_limbs = modulus.as_ref();
+                            let mut q: u128 = 0;
+                            let take_q = core::cmp::min(mod_limbs.len(), 2);
+                            for t in 0..take_q {
+                                q |= (mod_limbs[t] as u128) << (64 * t);
+                            }
+                            let half = q >> 1;
+                            let v: i64 = if vv <= half { vv as i64 } else { (vv as i128 - q as i128) as i64 };
+                            debug_assert!(v >= i32::MIN as i64 && v <= i32::MAX as i64);
+                            // Store into flat (j*d+k).
+                            if let PackedDigitVec::Full { coeffs, .. } = &mut F1_packed {
+                                coeffs[i * d + k] = v as i32;
+                            }
+                        }
+                    }
+                }
             }
         }
         maybe_print_rss("decomp_seeded(one_shot): after decompose_to_packed");
