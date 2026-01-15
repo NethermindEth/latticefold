@@ -1351,41 +1351,72 @@ where
             let stride = 4 + 4 * Mlen;
 
             #[inline]
-            fn at2<Rr: OverField + PolyRing>(v0: &[Rr], v1: &[Rr], idx: usize) -> Rr
+            fn at2<Rr: OverField + PolyRing>(a0: Rr, a1: Rr) -> Rr
             where
                 Rr::BaseRing: Ring,
             {
-                v1[idx] + (v1[idx] - v0[idx])
+                a1 + (a1 - a0)
             }
 
-            let eval_at = |which: u8, idx: usize| -> R {
-                match which {
-                    0 => v0[idx],
-                    1 => v1[idx],
-                    2 => at2::<R>(v0, v1, idx),
-                    _ => unreachable!(),
-                }
-            };
+            // `eq` is always constant-coeff: produced by `StreamingMleEnum::EqBase` as `R::from(base)`.
+            let eq0 = v0[0];
+            let eq1 = v1[0];
+            let eq2 = at2::<R>(eq0, eq1);
+            let eq0s = eq0.coeffs()[0];
+            let eq1s = eq1.coeffs()[0];
+            let eq2s = eq2.coeffs()[0];
 
-            let eval_point = |which: u8| -> R {
-                let eq = eval_at(which, 0);
-                let t0 = eval_at(which, n - 2);
-                let t1 = eval_at(which, n - 1);
-                let mut out = R::ZERO;
-                for l in 0..L {
-                    let l_idx = 1 + l * stride;
-                    let tau = eval_at(which, l_idx);
-                    let mut lin = R::ZERO;
-                    for j in l_idx..(l_idx + stride) {
-                        lin += eval_at(which, j) * rcps[j - 1];
-                    }
-                    out += eq * lin;
-                    out += (tau * t0) * w_t0;
-                    out += (tau * t1) * w_t1;
+            // `t0`, `t1` are the last two entries.
+            let t0_0 = v0[n - 2];
+            let t0_1 = v1[n - 2];
+            let t0_2 = at2::<R>(t0_0, t0_1);
+            let t1_0 = v0[n - 1];
+            let t1_1 = v1[n - 1];
+            let t1_2 = at2::<R>(t1_0, t1_1);
+
+            let mut out0 = R::ZERO;
+            let mut out1 = R::ZERO;
+            let mut out2 = R::ZERO;
+
+            for l in 0..L {
+                let l_idx = 1 + l * stride;
+
+                // `tau` here is the per-instance direct table (BaseScalarArc), hence constant-coeff.
+                let tau0 = v0[l_idx];
+                let tau1 = v1[l_idx];
+                let tau2 = at2::<R>(tau0, tau1);
+                let tau0s = tau0.coeffs()[0];
+                let tau1s = tau1.coeffs()[0];
+                let tau2s = tau2.coeffs()[0];
+
+                let mut lin0 = R::ZERO;
+                let mut lin1 = R::ZERO;
+                let mut lin2 = R::ZERO;
+                for j in l_idx..(l_idx + stride) {
+                    let w = rcps[j - 1];
+                    let a0 = v0[j];
+                    let a1 = v1[j];
+                    let a2 = at2::<R>(a0, a1);
+                    lin0 += a0 * w;
+                    lin1 += a1 * w;
+                    lin2 += a2 * w;
                 }
-                out
-            };
-            [eval_point(0), eval_point(1), eval_point(2)]
+
+                // Since `eq` is constant-coeff, `eq * lin` is a base-scalar multiply (not a ring multiply).
+                out0 += lin0 * eq0s;
+                out1 += lin1 * eq1s;
+                out2 += lin2 * eq2s;
+
+                // Since `tau` is constant-coeff, `(tau * t) * w` is `t * (tau0 * w)` (base-scalar multiply).
+                out0 += t0_0 * (tau0s * w_t0);
+                out0 += t1_0 * (tau0s * w_t1);
+                out1 += t0_1 * (tau1s * w_t0);
+                out1 += t1_1 * (tau1s * w_t1);
+                out2 += t0_2 * (tau2s * w_t0);
+                out2 += t1_2 * (tau2s * w_t1);
+            }
+
+            [out0, out1, out2]
         };
 
         let t_sc = Instant::now();
@@ -1787,41 +1818,67 @@ where
             let stride = 4 + 4 * Mlen;
 
             #[inline]
-            fn at2<Rr: OverField + PolyRing>(v0: &[Rr], v1: &[Rr], idx: usize) -> Rr
+            fn at2<Rr: OverField + PolyRing>(a0: Rr, a1: Rr) -> Rr
             where
                 Rr::BaseRing: Ring,
             {
-                v1[idx] + (v1[idx] - v0[idx])
+                a1 + (a1 - a0)
             }
 
-            let eval_at = |which: u8, idx: usize| -> R {
-                match which {
-                    0 => v0[idx],
-                    1 => v1[idx],
-                    2 => at2::<R>(v0, v1, idx),
-                    _ => unreachable!(),
-                }
-            };
+            let eq0 = v0[0];
+            let eq1 = v1[0];
+            let eq2 = at2::<R>(eq0, eq1);
+            let eq0s = eq0.coeffs()[0];
+            let eq1s = eq1.coeffs()[0];
+            let eq2s = eq2.coeffs()[0];
 
-            let eval_point = |which: u8| -> R {
-                let eq = eval_at(which, 0);
-                let t0 = eval_at(which, n - 2);
-                let t1 = eval_at(which, n - 1);
-                let mut out = R::ZERO;
-                for l in 0..L {
-                    let l_idx = 1 + l * stride;
-                    let tau = eval_at(which, l_idx);
-                    let mut lin = R::ZERO;
-                    for j in l_idx..(l_idx + stride) {
-                        lin += eval_at(which, j) * rcps[j - 1];
-                    }
-                    out += eq * lin;
-                    out += (tau * t0) * w_t0;
-                    out += (tau * t1) * w_t1;
+            let t0_0 = v0[n - 2];
+            let t0_1 = v1[n - 2];
+            let t0_2 = at2::<R>(t0_0, t0_1);
+            let t1_0 = v0[n - 1];
+            let t1_1 = v1[n - 1];
+            let t1_2 = at2::<R>(t1_0, t1_1);
+
+            let mut out0 = R::ZERO;
+            let mut out1 = R::ZERO;
+            let mut out2 = R::ZERO;
+
+            for l in 0..L {
+                let l_idx = 1 + l * stride;
+
+                let tau0 = v0[l_idx];
+                let tau1 = v1[l_idx];
+                let tau2 = at2::<R>(tau0, tau1);
+                let tau0s = tau0.coeffs()[0];
+                let tau1s = tau1.coeffs()[0];
+                let tau2s = tau2.coeffs()[0];
+
+                let mut lin0 = R::ZERO;
+                let mut lin1 = R::ZERO;
+                let mut lin2 = R::ZERO;
+                for j in l_idx..(l_idx + stride) {
+                    let w = rcps[j - 1];
+                    let a0 = v0[j];
+                    let a1 = v1[j];
+                    let a2 = at2::<R>(a0, a1);
+                    lin0 += a0 * w;
+                    lin1 += a1 * w;
+                    lin2 += a2 * w;
                 }
-                out
-            };
-            [eval_point(0), eval_point(1), eval_point(2)]
+
+                out0 += lin0 * eq0s;
+                out1 += lin1 * eq1s;
+                out2 += lin2 * eq2s;
+
+                out0 += t0_0 * (tau0s * w_t0);
+                out0 += t1_0 * (tau0s * w_t1);
+                out1 += t0_1 * (tau1s * w_t0);
+                out1 += t1_1 * (tau1s * w_t1);
+                out2 += t0_2 * (tau2s * w_t0);
+                out2 += t1_2 * (tau2s * w_t1);
+            }
+
+            [out0, out1, out2]
         };
 
         let t_sc = Instant::now();
@@ -2223,41 +2280,67 @@ where
             let stride = 4 + 4 * Mlen;
 
             #[inline]
-            fn at2<Rr: OverField + PolyRing>(v0: &[Rr], v1: &[Rr], idx: usize) -> Rr
+            fn at2<Rr: OverField + PolyRing>(a0: Rr, a1: Rr) -> Rr
             where
                 Rr::BaseRing: Ring,
             {
-                v1[idx] + (v1[idx] - v0[idx])
+                a1 + (a1 - a0)
             }
 
-            let eval_at = |which: u8, idx: usize| -> R {
-                match which {
-                    0 => v0[idx],
-                    1 => v1[idx],
-                    2 => at2::<R>(v0, v1, idx),
-                    _ => unreachable!(),
-                }
-            };
+            let eq0 = v0[0];
+            let eq1 = v1[0];
+            let eq2 = at2::<R>(eq0, eq1);
+            let eq0s = eq0.coeffs()[0];
+            let eq1s = eq1.coeffs()[0];
+            let eq2s = eq2.coeffs()[0];
 
-            let eval_point = |which: u8| -> R {
-                let eq = eval_at(which, 0);
-                let t0 = eval_at(which, n - 2);
-                let t1 = eval_at(which, n - 1);
-                let mut out = R::ZERO;
-                for l in 0..L {
-                    let l_idx = 1 + l * stride;
-                    let tau = eval_at(which, l_idx);
-                    let mut lin = R::ZERO;
-                    for j in l_idx..(l_idx + stride) {
-                        lin += eval_at(which, j) * rcps[j - 1];
-                    }
-                    out += eq * lin;
-                    out += (tau * t0) * w_t0;
-                    out += (tau * t1) * w_t1;
+            let t0_0 = v0[n - 2];
+            let t0_1 = v1[n - 2];
+            let t0_2 = at2::<R>(t0_0, t0_1);
+            let t1_0 = v0[n - 1];
+            let t1_1 = v1[n - 1];
+            let t1_2 = at2::<R>(t1_0, t1_1);
+
+            let mut out0 = R::ZERO;
+            let mut out1 = R::ZERO;
+            let mut out2 = R::ZERO;
+
+            for l in 0..L {
+                let l_idx = 1 + l * stride;
+
+                let tau0 = v0[l_idx];
+                let tau1 = v1[l_idx];
+                let tau2 = at2::<R>(tau0, tau1);
+                let tau0s = tau0.coeffs()[0];
+                let tau1s = tau1.coeffs()[0];
+                let tau2s = tau2.coeffs()[0];
+
+                let mut lin0 = R::ZERO;
+                let mut lin1 = R::ZERO;
+                let mut lin2 = R::ZERO;
+                for j in l_idx..(l_idx + stride) {
+                    let w = rcps[j - 1];
+                    let a0 = v0[j];
+                    let a1 = v1[j];
+                    let a2 = at2::<R>(a0, a1);
+                    lin0 += a0 * w;
+                    lin1 += a1 * w;
+                    lin2 += a2 * w;
                 }
-                out
-            };
-            [eval_point(0), eval_point(1), eval_point(2)]
+
+                out0 += lin0 * eq0s;
+                out1 += lin1 * eq1s;
+                out2 += lin2 * eq2s;
+
+                out0 += t0_0 * (tau0s * w_t0);
+                out0 += t1_0 * (tau0s * w_t1);
+                out1 += t0_1 * (tau1s * w_t0);
+                out1 += t1_1 * (tau1s * w_t1);
+                out2 += t0_2 * (tau2s * w_t0);
+                out2 += t1_2 * (tau2s * w_t1);
+            }
+
+            [out0, out1, out2]
         };
 
         let (sumcheck_proof, randomness, final_vals) =
