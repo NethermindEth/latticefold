@@ -370,6 +370,18 @@ impl<R: OverField + PolyRing> CmMatVec4Shared<R>
 where
     R::BaseRing: Ring,
 {
+    #[inline(always)]
+    fn add_scaled(acc: &mut R, v: &R, c0: R::BaseRing) {
+        // Fused multiply-add into the accumulator to avoid creating temporaries like `v * c0`.
+        // This is hot for dense `h` and ring-valued `m_tau`.
+        let ac = acc.coeffs_mut();
+        let vc = v.coeffs();
+        debug_assert_eq!(ac.len(), vc.len());
+        for i in 0..ac.len() {
+            ac[i] += vc[i] * c0;
+        }
+    }
+
     #[inline]
     fn eval_witness(w: &CmMatVecWitness<R>, col: usize) -> Option<R> {
         match w {
@@ -490,9 +502,13 @@ where
                         // exp_table[d] is monomial-like: add into that coefficient directly.
                         acc1_coeffs[mono_idx[d] as usize] += mono_coeff[d] * c0;
                     }
-                    // `w3` is an MLE; fast-path the common variants to avoid per-nonzero dispatch overhead.
-                    acc3 += match &w3fast {
-                        W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
+                    // `w3` is an MLE; avoid creating temporaries `hv * c0` in the hot loop.
+                    match &w3fast {
+                        W3Fast::Dense(v) => {
+                            if let Some(hv) = v.get(cj) {
+                                Self::add_scaled(&mut acc3, hv, c0);
+                            }
+                        }
                         W3Fast::HFrom { groups, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
@@ -513,10 +529,13 @@ where
                                     }
                                     hv
                                 });
-                            hv * c0
+                            Self::add_scaled(&mut acc3, &hv, c0);
                         }
-                        W3Fast::Other(m) => m.eval_at_index(cj) * c0,
-                    };
+                        W3Fast::Other(m) => {
+                            let hv = m.eval_at_index(cj);
+                            Self::add_scaled(&mut acc3, &hv, c0);
+                        }
+                    }
                 }
                 [R::from(acc0), acc1, R::from(acc2), acc3]
             }
@@ -577,11 +596,15 @@ where
                     if cj < w2s.len() {
                         acc2 += c0 * w2s[cj];
                     }
-                    if cj < w1s.len() {
-                        acc1 += w1s[cj] * c0;
+                    if let Some(v1) = w1s.get(cj) {
+                        Self::add_scaled(&mut acc1, v1, c0);
                     }
-                    acc3 += match &w3fast {
-                        W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
+                    match &w3fast {
+                        W3Fast::Dense(v) => {
+                            if let Some(hv) = v.get(cj) {
+                                Self::add_scaled(&mut acc3, hv, c0);
+                            }
+                        }
                         W3Fast::HFrom { groups, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
@@ -602,10 +625,13 @@ where
                                     }
                                     hv
                                 });
-                            hv * c0
+                            Self::add_scaled(&mut acc3, &hv, c0);
                         }
-                        W3Fast::Other(m) => m.eval_at_index(cj) * c0,
-                    };
+                        W3Fast::Other(m) => {
+                            let hv = m.eval_at_index(cj);
+                            Self::add_scaled(&mut acc3, &hv, c0);
+                        }
+                    }
                 }
                 [R::from(acc0), acc1, R::from(acc2), acc3]
             }
@@ -664,8 +690,12 @@ where
                     if cj < w2s.len() {
                         acc2 += c0 * w2s[cj];
                     }
-                    acc3 += match &w3fast {
-                        W3Fast::Dense(v) => v.get(cj).copied().unwrap_or(R::ZERO) * c0,
+                    match &w3fast {
+                        W3Fast::Dense(v) => {
+                            if let Some(hv) = v.get(cj) {
+                                Self::add_scaled(&mut acc3, hv, c0);
+                            }
+                        }
                         W3Fast::HFrom { groups, rest_sum, h_id } => {
                             if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
                                 *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
@@ -686,10 +716,13 @@ where
                                     }
                                     hv
                                 });
-                            hv * c0
+                            Self::add_scaled(&mut acc3, &hv, c0);
                         }
-                        W3Fast::Other(m) => m.eval_at_index(cj) * c0,
-                    };
+                        W3Fast::Other(m) => {
+                            let hv = m.eval_at_index(cj);
+                            Self::add_scaled(&mut acc3, &hv, c0);
+                        }
+                    }
                 }
                 [R::from(acc0), R::from(acc1), R::from(acc2), acc3]
             }
