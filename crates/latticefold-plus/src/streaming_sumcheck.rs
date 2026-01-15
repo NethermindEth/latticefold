@@ -525,7 +525,7 @@ where
                                             let d = col0.get(cj).copied().unwrap_or(z) as usize;
                                             packed = packed * base + d;
                                         }
-                                        hv += g.table[packed].clone();
+                                        hv += &g.table[packed];
                                     }
                                     hv
                                 });
@@ -621,7 +621,7 @@ where
                                             let d = col0.get(cj).copied().unwrap_or(z) as usize;
                                             packed = packed * base + d;
                                         }
-                                        hv += g.table[packed].clone();
+                                        hv += &g.table[packed];
                                     }
                                     hv
                                 });
@@ -712,7 +712,7 @@ where
                                             let d = col0.get(cj).copied().unwrap_or(z) as usize;
                                             packed = packed * base + d;
                                         }
-                                        hv += g.table[packed].clone();
+                                        hv += &g.table[packed];
                                     }
                                     hv
                                 });
@@ -1183,7 +1183,7 @@ where
                         let d = col0.get(index).copied().unwrap_or(z) as usize;
                         packed = packed * base + d;
                     }
-                    acc += g.table[packed].clone();
+                    acc += &g.table[packed];
                 }
                 acc
             }
