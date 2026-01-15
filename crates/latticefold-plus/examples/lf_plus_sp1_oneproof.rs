@@ -15,9 +15,11 @@
 //!     cargo run -p latticefold-plus --example lf_plus_sp1_oneproof --features we_gate --release
 
 #![cfg(feature = "we_gate")]
+#![allow(non_local_definitions)]
 
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use cyclotomic_rings::rings::GetPoseidonParams;
+use ark_ff::{BigInteger, Fp384, MontBackend, MontConfig, PrimeField};
 use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
@@ -31,7 +33,27 @@ use std::time::Instant;
 use sha2::{Digest, Sha256};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
+use dpp::BoundedFlpcpSparse;
+use dpp::dr1cs_flpcp::{Dr1csInstanceSparse as DppInst, RsDr1csNpFlpcpSparse};
+use dpp::packing::{
+    centered_bigint_to_field, field_to_centered_bigint, sample_packing_weights, FlpcpPredicate,
+    PackedDppQuerySparse,
+};
+use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
+use dpp::sparse::SparseVec;
+
+// Big field for Rev2 embedding (same as `test_large_trace` / `benches/we_dpp.rs`).
+#[derive(MontConfig)]
+#[modulus = "39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
+#[generator = "2"]
+pub struct Secp384r1Config;
+type FBig = Fp384<MontBackend<Secp384r1Config, 6>>;
+
 type F = <R as PolyRing>::BaseRing;
+
+fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
+    FBig::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
+}
 
 #[inline]
 fn babybear_u64_to_centered_host(x: u64, p_bb: u64) -> F {
@@ -261,9 +283,6 @@ fn main() {
         h.finalize().into()
     };
     println!("  lock_coin_seed={:02x?}... (j={lock_j})", &coin_seed[..8]);
-    let mut _coin_rng = StdRng::from_seed(coin_seed);
-    // Consume one word so it’s clear the RNG is “live” (not just printed).
-    let _ = _coin_rng.next_u64();
 
     let mut prover = latticefold_plus::plus::PlusProverSparseBase::init_seeded_base(
         ajtai.clone(),
@@ -318,6 +337,91 @@ fn main() {
     out.inst.check(&out.assignment).expect("we gate dr1cs satisfied");
     println!("  WE gate dr1cs sat check: {:?}", t_sat.elapsed());
     maybe_print_rss("after WE sat check");
+
+    // -------------------------------------------------------------------------
+    // Armer-side randomness: match `test_large_trace` coin sampling.
+    // -------------------------------------------------------------------------
+    let t_arm = Instant::now();
+    let (inst, assignment, public_len) = (out.inst, out.assignment, out.public_len);
+    let n = inst.nvars;
+    let mut a = Vec::with_capacity(inst.constraints.len());
+    let mut b = Vec::with_capacity(inst.constraints.len());
+    let mut c = Vec::with_capacity(inst.constraints.len());
+    for mut row in inst.constraints {
+        a.push(SparseVec::new(std::mem::take(&mut row.a)));
+        b.push(SparseVec::new(std::mem::take(&mut row.b)));
+        c.push(SparseVec::new(std::mem::take(&mut row.c)));
+    }
+    let inst_sparse = DppInst::<BFSmall> { n, a, b, c };
+    let k_rows = inst_sparse.k();
+    let ell_rs = 2 * k_rows;
+    let flpcp = RsDr1csNpFlpcpSparse::<BFSmall>::new(inst_sparse, public_len, ell_rs);
+
+    // Produce codewords once so we can answer the RS-FLPCP query in coin form
+    // (matching `test_large_trace`).
+    let x_small = assignment[..public_len].to_vec();
+    let z_w_small = assignment[public_len..].to_vec();
+    let (_pi_field, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
+
+    let dppv = build_rev2_dpp_sparse_boolean_auto::<BFSmall, FBig, _>(
+        flpcp,
+        dpp::EmbeddingParams {
+            gamma: 2,
+            assume_boolean_proof: true,
+            k_prime: 0,
+        },
+    )
+    .expect("build dpp");
+
+    // Sample coins exactly like `test_large_trace`:
+    // - packing weights first
+    // - then idx and lambda
+    let mut rng = StdRng::from_seed(coin_seed);
+    let bnds = dppv.flpcp.bounds_b();
+    let w = sample_packing_weights::<FBig>(&mut rng, dppv.params.ell, &bnds)
+        .expect("sample_packing_weights");
+    let idx = (rng.next_u64() as usize) % ell_rs;
+    let lambda_small = BFSmall::from(rng.next_u64());
+
+    // Coin-form RS-FLPCP answers (exactly like `test_large_trace`).
+    let (a_small, b_small, c_small) = if idx < k_rows {
+        let a0 = cw.y_a[idx];
+        let b0 = cw.y_b[idx];
+        let wv = cw.w[idx];
+        let cx_minus = cw.y_c[idx] - wv;
+        let c0 = wv + lambda_small * cx_minus;
+        (a0, b0, c0)
+    } else {
+        let j = idx - k_rows;
+        let a0 = cw.y_a_tail[j];
+        let b0 = cw.y_b_tail[j];
+        let wv = cw.w[idx];
+        // Tail-half: the C-part is unused in q3; answer is just w(α)=a*b.
+        (a0, b0, wv)
+    };
+
+    // Pack into one big-field element and verify the accepting predicate.
+    let ans_field: [FBig; 3] = [lift_to_big(a_small), lift_to_big(b_small), lift_to_big(c_small)];
+    let mut a_int = num_bigint::BigInt::from(0);
+    for (wi, ai) in w.iter().zip(ans_field.iter()) {
+        let ai_int = field_to_centered_bigint::<FBig>(ai);
+        a_int += wi * ai_int;
+    }
+    let a_big = centered_bigint_to_field::<FBig>(&a_int);
+    let pred = FlpcpPredicate::MulEqModP {
+        p_small: num_bigint::BigInt::from_bytes_le(
+            num_bigint::Sign::Plus,
+            &BFSmall::MODULUS.to_bytes_le(),
+        ),
+    };
+    let q_meta = PackedDppQuerySparse::<FBig> { q: dpp::sparse::SparseVec::default(), w, b: bnds, pred };
+    let ok = dppv.verify_packed_answer(&a_big, &q_meta).expect("verify_packed_answer");
+
+    println!(
+        "  armer/decap: idx={idx} ell_rs={ell_rs} lambda_small={:?} ok={ok} (arm_time={:?})",
+        lambda_small,
+        t_arm.elapsed()
+    );
 
     // Non-transcript (local) consistency check for Π_decomp.
     // This does not affect the recorded verifier trace; WE gate enforces Π_decomp separately.
