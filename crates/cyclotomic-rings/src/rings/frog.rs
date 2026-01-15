@@ -268,11 +268,10 @@ impl core::ops::Mul for FrogRing64 {
                 continue;
             }
             for j in 0..64 {
-                let bj = b[j];
-                if bj == <Fq as Field>::ZERO {
-                    continue;
-                }
-                let prod = ai * bj;
+                // NOTE: do NOT branch on `b[j]==0` here.
+                // For dense operands (the common case in CM sumcheck), that branch is almost always
+                // false and adds significant overhead to this hottest loop.
+                let prod = ai * b[j];
                 let k = i + j;
                 if k < 64 {
                     out[k] += prod;
