@@ -2014,6 +2014,14 @@ impl StreamingSumcheck {
         let domain_half = 1usize << (nv - 1);
         let num_polys = state.mles.len();
 
+        #[derive(Clone, Copy, Default)]
+        struct CmCacheStats {
+            cm_hit: u64,
+            cm_miss: u64,
+            lazy_hit: u64,
+            lazy_miss: u64,
+        }
+
         struct Scratch<Rr> {
             evals: Vec<Rr>,
             steps: Vec<Rr>,
@@ -2021,6 +2029,7 @@ impl StreamingSumcheck {
             vals1: Vec<Rr>,
             vals: Vec<Rr>,
             levals: Vec<Rr>,
+            cm_stats: CmCacheStats,
             // CM optimization: cache one fused mat-vec row scan for the "even" and "odd" indices
             // within the current hypercube vertex pair.
             cm_cache_even: Option<(usize, usize, [Rr; 4])>, // (shared_id, row, vals)
@@ -2041,6 +2050,7 @@ impl StreamingSumcheck {
             vals1: vec![R::ZERO; num_polys],
             vals: vec![R::ZERO; num_polys],
             levals: vec![R::ZERO; degree + 1],
+            cm_stats: CmCacheStats::default(),
             cm_cache_even: None,
             cm_cache_odd: None,
             cm_lazy_cache_even: None,
@@ -2053,6 +2063,7 @@ impl StreamingSumcheck {
             index: usize,
             cache: &mut Option<(usize, usize, [R; 4])>,
             lazy_cache: &mut Option<(usize, usize, usize, [R; 4])>,
+            stats: &mut CmCacheStats,
             profile: bool,
         ) -> R
         where
@@ -2063,7 +2074,7 @@ impl StreamingSumcheck {
             // - if inner is CmMatVec4Part and fixed.len()>0, compute the lazy-combined value for all 4 parts once
             if let StreamingMleEnum::LazyFixed { inner, fixed, weights, .. } = mle {
                 if fixed.is_empty() {
-                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache, lazy_cache, profile);
+                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache, lazy_cache, stats, profile);
                 }
                 if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = inner.as_ref() {
                     let k = fixed.len();
@@ -2075,13 +2086,13 @@ impl StreamingSumcheck {
                     if let Some((csid, cbase, ck, vals)) = lazy_cache.as_ref() {
                         if *csid == sid && *cbase == base && *ck == k {
                             if profile {
-                                CM_LAZY_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+                                stats.lazy_hit += 1;
                             }
                             return vals[wid];
                         }
                     }
                     if profile {
-                        CM_LAZY_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
+                        stats.lazy_miss += 1;
                     }
 
                     // Compute all 4 parts at once: Σ_b weights[b] * shared.eval4_at_row(base|b).
@@ -2107,13 +2118,13 @@ impl StreamingSumcheck {
                 if let Some((csid, crow, vals)) = cache.as_ref() {
                     if *csid == sid && *crow == index {
                         if profile {
-                            CM_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+                            stats.cm_hit += 1;
                         }
                         return vals[wid];
                     }
                 }
                 if profile {
-                    CM_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
+                    stats.cm_miss += 1;
                 }
                 let vals = shared.eval4_at_row(index);
                 *cache = Some((sid, index, vals));
@@ -2123,7 +2134,7 @@ impl StreamingSumcheck {
         }
 
         #[cfg(feature = "parallel")]
-        let result = (0..domain_half)
+        let (result, stats) = (0..domain_half)
             .into_par_iter()
             .fold(scratch, |mut s, b| {
                 let idx0 = b << 1;
@@ -2134,6 +2145,7 @@ impl StreamingSumcheck {
                         idx0,
                         &mut s.cm_cache_even,
                         &mut s.cm_lazy_cache_even,
+                        &mut s.cm_stats,
                         profile,
                     );
                     s.vals1[i] = eval_mle_with_cm_cache(
@@ -2141,6 +2153,7 @@ impl StreamingSumcheck {
                         idx1,
                         &mut s.cm_cache_odd,
                         &mut s.cm_lazy_cache_odd,
+                        &mut s.cm_stats,
                         profile,
                     );
                 }
@@ -2161,18 +2174,22 @@ impl StreamingSumcheck {
                 }
                 s
             })
-            .map(|s| s.evals)
+            .map(|s| (s.evals, s.cm_stats))
             // `reduce_with` avoids repeatedly allocating an identity vector in rayon's reduction tree.
-            .reduce_with(|mut acc, evals| {
-                for (a, e) in acc.iter_mut().zip(evals) {
+            .reduce_with(|mut acc, (evals, stats)| {
+                for (a, e) in acc.0.iter_mut().zip(evals) {
                     *a += e;
                 }
+                acc.1.cm_hit += stats.cm_hit;
+                acc.1.cm_miss += stats.cm_miss;
+                acc.1.lazy_hit += stats.lazy_hit;
+                acc.1.lazy_miss += stats.lazy_miss;
                 acc
             })
-            .unwrap_or_else(|| vec![R::ZERO; degree + 1]);
+            .unwrap_or_else(|| (vec![R::ZERO; degree + 1], CmCacheStats::default()));
 
         #[cfg(not(feature = "parallel"))]
-        let result = {
+        let (result, stats) = {
             let mut acc = vec![R::ZERO; degree + 1];
             let mut s = scratch();
             for b in 0..domain_half {
@@ -2184,6 +2201,7 @@ impl StreamingSumcheck {
                         idx0,
                         &mut s.cm_cache_even,
                         &mut s.cm_lazy_cache_even,
+                        &mut s.cm_stats,
                         profile,
                     );
                     s.vals1[i] = eval_mle_with_cm_cache(
@@ -2191,6 +2209,7 @@ impl StreamingSumcheck {
                         idx1,
                         &mut s.cm_cache_odd,
                         &mut s.cm_lazy_cache_odd,
+                        &mut s.cm_stats,
                         profile,
                     );
                 }
@@ -2210,8 +2229,15 @@ impl StreamingSumcheck {
                     *a += *l;
                 }
             }
-            acc
+            (acc, s.cm_stats)
         };
+
+        if profile {
+            CM_CACHE_HITS.fetch_add(stats.cm_hit, Ordering::Relaxed);
+            CM_CACHE_MISSES.fetch_add(stats.cm_miss, Ordering::Relaxed);
+            CM_LAZY_CACHE_HITS.fetch_add(stats.lazy_hit, Ordering::Relaxed);
+            CM_LAZY_CACHE_MISSES.fetch_add(stats.lazy_miss, Ordering::Relaxed);
+        }
 
         ProverMsg { evaluations: result }
     }
