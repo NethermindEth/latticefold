@@ -321,11 +321,21 @@ fn ntt(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
     }
 }
 
-fn convolution_ntt_mod(a: &[u32], b: &[u32], out_len: usize, size: usize, modulus: u32, primitive_root: u32) -> Vec<u32> {
+#[inline]
+fn convolution_ntt_mod_from_u64(a: &[u64], b: &[u64], out_len: usize, size: usize, modulus: u32, primitive_root: u32) -> Vec<u32> {
     let mut fa = vec![0u32; size];
     let mut fb = vec![0u32; size];
-    fa[..a.len()].copy_from_slice(a);
-    fb[..b.len()].copy_from_slice(b);
+    let m = modulus as u64;
+
+    // Fill (parallel) without allocating intermediate aa/bb vectors.
+    fa[..a.len()]
+        .par_iter_mut()
+        .zip(a.par_iter())
+        .for_each(|(dst, &v)| *dst = (v % m) as u32);
+    fb[..b.len()]
+        .par_iter_mut()
+        .zip(b.par_iter())
+        .for_each(|(dst, &v)| *dst = (v % m) as u32);
 
     ntt(&mut fa, false, modulus, primitive_root);
     ntt(&mut fb, false, modulus, primitive_root);
@@ -396,9 +406,7 @@ fn convolution_crt_ntt<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: us
                 ((modulus - 1) as usize) % size == 0,
                 "internal: synthesized NTT modulus does not support size {size}"
             );
-            let aa = a_u.iter().map(|&v| (v % (modulus as u64)) as u32).collect::<Vec<_>>();
-            let bb = b_u.iter().map(|&v| (v % (modulus as u64)) as u32).collect::<Vec<_>>();
-            convolution_ntt_mod(&aa, &bb, out_len, size, modulus, root)
+            convolution_ntt_mod_from_u64(&a_u, &b_u, out_len, size, modulus, root)
         })
         .collect();
 
@@ -584,11 +592,20 @@ fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
     }
 }
 
-fn convolution_ntt_mod_u64(a: &[u64], b: &[u64], out_len: usize, size: usize, modulus: u64, root_n: u64) -> Vec<u64> {
+#[inline]
+fn convolution_ntt_mod_u64_from_u64(a: &[u64], b: &[u64], out_len: usize, size: usize, modulus: u64, root_n: u64) -> Vec<u64> {
     let mut fa = vec![0u64; size];
     let mut fb = vec![0u64; size];
-    fa[..a.len()].copy_from_slice(a);
-    fb[..b.len()].copy_from_slice(b);
+
+    // Fill (parallel) without allocating intermediate aa/bb vectors.
+    fa[..a.len()]
+        .par_iter_mut()
+        .zip(a.par_iter())
+        .for_each(|(dst, &v)| *dst = v % modulus);
+    fb[..b.len()]
+        .par_iter_mut()
+        .zip(b.par_iter())
+        .for_each(|(dst, &v)| *dst = v % modulus);
 
     ntt_u64(&mut fa, false, modulus, root_n);
     ntt_u64(&mut fb, false, modulus, root_n);
@@ -720,9 +737,7 @@ fn convolution_crt_ntt_u64<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size
         .map(|i| {
             let modulus = mods[i];
             let root_n = roots_n[i];
-            let aa = a_u.iter().map(|&v| v % modulus).collect::<Vec<_>>();
-            let bb = b_u.iter().map(|&v| v % modulus).collect::<Vec<_>>();
-            convolution_ntt_mod_u64(&aa, &bb, out_len, size, modulus, root_n)
+            convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, modulus, root_n)
         })
         .collect();
 

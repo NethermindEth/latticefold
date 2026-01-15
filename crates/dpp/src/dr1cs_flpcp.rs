@@ -78,16 +78,11 @@ impl<F: PrimeField + FftField> RsDr1csFlpcp<F> {
         // concurrently can blow up RSS. For large sizes, compute tails sequentially.
         let out_len = 2 * k - 1;
         let size = out_len.next_power_of_two();
-        let (y_a_tail, y_b_tail) = if size >= (1 << 24) {
-            let ya = extrapolate_consecutive_next_block::<F>(&y_a);
-            let yb = extrapolate_consecutive_next_block::<F>(&y_b);
-            (ya, yb)
-        } else {
-            join(
-                || extrapolate_consecutive_next_block::<F>(&y_a),
-                || extrapolate_consecutive_next_block::<F>(&y_b),
-            )
-        };
+        // Two extrapolations is usually an acceptable memory multiplier; keep them parallel.
+        let (y_a_tail, y_b_tail) = join(
+            || extrapolate_consecutive_next_block::<F>(&y_a),
+            || extrapolate_consecutive_next_block::<F>(&y_b),
+        );
         debug_assert_eq!(y_a_tail.len(), k);
         debug_assert_eq!(y_b_tail.len(), k);
 
@@ -425,21 +420,14 @@ impl<F: PrimeField + FftField> RsDr1csNpFlpcpSparse<F> {
         // concurrently can easily exceed machine memory. For large sizes, compute tails sequentially.
         let out_len = 2 * k - 1;
         let size = out_len.next_power_of_two();
-        let (y_a_tail, y_b_tail, y_c_tail) = if size >= (1 << 24) {
-            let ya = extrapolate_consecutive_next_block::<F>(&y_a);
-            let yb = extrapolate_consecutive_next_block::<F>(&y_b);
-            let yc = extrapolate_consecutive_next_block::<F>(&y_c);
-            (ya, yb, yc)
-        } else {
-            let (ya, (yb, yc)) = join(
-                || extrapolate_consecutive_next_block::<F>(&y_a),
-                || join(
-                    || extrapolate_consecutive_next_block::<F>(&y_b),
-                    || extrapolate_consecutive_next_block::<F>(&y_c),
-                ),
-            );
-            (ya, yb, yc)
-        };
+        // Memory note:
+        // Running 3 huge extrapolations concurrently can explode RSS. Keep bounded parallelism:
+        // compute 2 in parallel, then the third.
+        let (y_a_tail, y_b_tail) = join(
+            || extrapolate_consecutive_next_block::<F>(&y_a),
+            || extrapolate_consecutive_next_block::<F>(&y_b),
+        );
+        let y_c_tail = extrapolate_consecutive_next_block::<F>(&y_c);
 
         // Build w (length 2k).
         let mut w = Vec::with_capacity(2 * k);
