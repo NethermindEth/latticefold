@@ -2583,7 +2583,8 @@ impl StreamingSumcheck {
         // - MLE evaluation (including CM fused matvecs / streamed-h)
         // - combiner computation
         //
-        // We sample 1 out of 4096 vertices per thread to keep overhead negligible.
+        // We sample 1 out of 4096 vertices (by global `b`) to keep overhead negligible and avoid
+        // bias from rayon work splitting (per-scratch counters can reset and oversample).
         const SAMPLE_MASK: u32 = (1 << 12) - 1;
 
         struct Scratch<Rr: OverField + PolyRing>
@@ -2599,8 +2600,6 @@ impl StreamingSumcheck {
             cm_cache_odd: Option<(usize, usize, [Rr; 4])>,
             cm_lazy_cache_even: Option<(usize, usize, usize, [Rr; 4])>,
             cm_lazy_cache_odd: Option<(usize, usize, usize, [Rr; 4])>,
-            // sampled timing
-            sample_ctr: u32,
             t_eval_ns: u64,
             t_comb_ns: u64,
             n_samples: u64,
@@ -2616,7 +2615,6 @@ impl StreamingSumcheck {
             cm_cache_odd: None,
             cm_lazy_cache_even: None,
             cm_lazy_cache_odd: None,
-            sample_ctr: 0,
             t_eval_ns: 0,
             t_comb_ns: 0,
             n_samples: 0,
@@ -2709,8 +2707,7 @@ impl StreamingSumcheck {
             .fold(scratch, |mut s, b| {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
-                let do_sample = profile && ((s.sample_ctr & SAMPLE_MASK) == 0);
-                s.sample_ctr = s.sample_ctr.wrapping_add(1);
+                let do_sample = profile && (((b as u32) & SAMPLE_MASK) == 0);
                 let t0 = if do_sample { Some(std::time::Instant::now()) } else { None };
                 for (i, mle) in state.mles.iter().enumerate() {
                     s.vals0[i] = eval_mle_with_cm_cache(
@@ -2770,8 +2767,7 @@ impl StreamingSumcheck {
             for b in 0..domain_half {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
-                let do_sample = profile && ((s.sample_ctr & SAMPLE_MASK) == 0);
-                s.sample_ctr = s.sample_ctr.wrapping_add(1);
+                let do_sample = profile && (((b as u32) & SAMPLE_MASK) == 0);
                 let t0 = if do_sample { Some(std::time::Instant::now()) } else { None };
                 for (i, mle) in state.mles.iter().enumerate() {
                     s.vals0[i] = eval_mle_with_cm_cache(
