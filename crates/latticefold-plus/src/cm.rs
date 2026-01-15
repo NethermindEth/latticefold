@@ -1308,27 +1308,32 @@ where
             );
         }
 
-        let comb_fn = |vals: &[R]| -> R {
-            (0..L)
-                .map(|l| {
-                    let l_idx = 1 + l * (4 + 4 * Mlen);
-                    vals[0] * ( // eq
-                    vals[l_idx] * rcps[l_idx - 1]  // tau
-                    + vals[l_idx + 1] * rcps[l_idx] // m_tau
-                    + vals[l_idx + 2] * rcps[l_idx + 1] // f
-                    + vals[l_idx + 3] * rcps[l_idx + 2] // h
-                    + (0..Mlen).map(|i| {
-                        let idx = l_idx + 4 + i * 4;
-                        vals[idx] * rcps[idx - 1] // M_i * tau
-                        + vals[idx + 1] * rcps[idx] // M_i * m_tau
-                        + vals[idx + 2] * rcps[idx + 1] // M_i * f
-                        + vals[idx + 3] * rcps[idx + 2] // M_i * h
-                     }).sum::<R>()
-                )
-            + (vals[l_idx] * vals[vals.len()-2]) * rcps[vals.len() - 3] // t(0)
-            + (vals[l_idx] * vals[vals.len()-1]) * rcps[vals.len() - 2] // t(1)
-                })
-                .sum::<R>()
+        // Hot path: this combiner runs ~3*(2^nvars-1) times for degree=2.
+        // Avoid iterator chains and nested `sum()` to reduce overhead.
+        let comb_fn = move |vals: &[R]| -> R {
+            debug_assert_eq!(vals.len(), 1 + L * (4 + 4 * Mlen) + 2);
+            let eq = vals[0];
+            let n = vals.len();
+            let t0 = vals[n - 2];
+            let t1 = vals[n - 1];
+            let w_t0 = rcps[n - 3];
+            let w_t1 = rcps[n - 2];
+            let stride = 4 + 4 * Mlen;
+
+            let mut out = R::ZERO;
+            for l in 0..L {
+                let l_idx = 1 + l * stride;
+                let tau = vals[l_idx];
+
+                let mut lin = R::ZERO;
+                for j in l_idx..(l_idx + stride) {
+                    lin += vals[j] * rcps[j - 1];
+                }
+                lin += (tau * t0) * w_t0;
+                lin += (tau * t1) * w_t1;
+                out += eq * lin;
+            }
+            out
         };
 
         let t_sc = Instant::now();
@@ -1763,30 +1768,29 @@ where
             );
         }
 
-        let comb_fn = |vals: &[R]| -> R {
-            (0..L)
-                .map(|l| {
-                    let l_idx = 1 + l * (4 + 4 * Mlen);
-                    vals[0]
-                        * ( // eq
-                            vals[l_idx] * rcps[l_idx - 1] // tau
-                            + vals[l_idx + 1] * rcps[l_idx] // m_tau
-                            + vals[l_idx + 2] * rcps[l_idx + 1] // f
-                            + vals[l_idx + 3] * rcps[l_idx + 2] // h
-                            + (0..Mlen)
-                                .map(|i| {
-                                    let idx = l_idx + 4 + i * 4;
-                                    vals[idx] * rcps[idx - 1] // M_i * tau
-                                        + vals[idx + 1] * rcps[idx] // M_i * m_tau
-                                        + vals[idx + 2] * rcps[idx + 1] // M_i * f
-                                        + vals[idx + 3] * rcps[idx + 2] // M_i * h
-                                })
-                                .sum::<R>()
-                        )
-                        + (vals[l_idx] * vals[vals.len() - 2]) * rcps[vals.len() - 3] // tau * t(0)
-                        + (vals[l_idx] * vals[vals.len() - 1]) * rcps[vals.len() - 2] // tau * t(1)
-                })
-                .sum::<R>()
+        let comb_fn = move |vals: &[R]| -> R {
+            debug_assert_eq!(vals.len(), 1 + L * (4 + 4 * Mlen) + 2);
+            let eq = vals[0];
+            let n = vals.len();
+            let t0 = vals[n - 2];
+            let t1 = vals[n - 1];
+            let w_t0 = rcps[n - 3];
+            let w_t1 = rcps[n - 2];
+            let stride = 4 + 4 * Mlen;
+
+            let mut out = R::ZERO;
+            for l in 0..L {
+                let l_idx = 1 + l * stride;
+                let tau = vals[l_idx];
+                let mut lin = R::ZERO;
+                for j in l_idx..(l_idx + stride) {
+                    lin += vals[j] * rcps[j - 1];
+                }
+                lin += (tau * t0) * w_t0;
+                lin += (tau * t1) * w_t1;
+                out += eq * lin;
+            }
+            out
         };
 
         let t_sc = Instant::now();
@@ -2191,27 +2195,29 @@ where
 
         // MUST match `sumchecker_streaming` combiner exactly (including the `tau * t(z)` terms),
         // otherwise the verifier's sumcheck will fail.
-        let comb_fn = |vals: &[R]| -> R {
-            (0..L)
-                .map(|l| {
-                    let l_idx = 1 + l * (4 + 4 * Mlen);
-                    vals[0] * ( // eq
-                        vals[l_idx] * rcps[l_idx - 1]  // tau
-                        + vals[l_idx + 1] * rcps[l_idx] // m_tau
-                        + vals[l_idx + 2] * rcps[l_idx + 1] // f
-                        + vals[l_idx + 3] * rcps[l_idx + 2] // h
-                        + (0..Mlen).map(|i| {
-                            let idx = l_idx + 4 + i * 4;
-                            vals[idx] * rcps[idx - 1] // M_i * tau
-                            + vals[idx + 1] * rcps[idx] // M_i * m_tau
-                            + vals[idx + 2] * rcps[idx + 1] // M_i * f
-                            + vals[idx + 3] * rcps[idx + 2] // M_i * h
-                         }).sum::<R>()
-                    )
-                    + (vals[l_idx] * vals[vals.len()-2]) * rcps[vals.len() - 3] // t(0)
-                    + (vals[l_idx] * vals[vals.len()-1]) * rcps[vals.len() - 2] // t(1)
-                })
-                .sum::<R>()
+        let comb_fn = move |vals: &[R]| -> R {
+            debug_assert_eq!(vals.len(), 1 + L * (4 + 4 * Mlen) + 2);
+            let eq = vals[0];
+            let n = vals.len();
+            let t0 = vals[n - 2];
+            let t1 = vals[n - 1];
+            let w_t0 = rcps[n - 3];
+            let w_t1 = rcps[n - 2];
+            let stride = 4 + 4 * Mlen;
+
+            let mut out = R::ZERO;
+            for l in 0..L {
+                let l_idx = 1 + l * stride;
+                let tau = vals[l_idx];
+                let mut lin = R::ZERO;
+                for j in l_idx..(l_idx + stride) {
+                    lin += vals[j] * rcps[j - 1];
+                }
+                lin += (tau * t0) * w_t0;
+                lin += (tau * t1) * w_t1;
+                out += eq * lin;
+            }
+            out
         };
 
         let (sumcheck_proof, randomness, final_vals) =
