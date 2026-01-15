@@ -638,66 +638,35 @@ where
 
     let kappa = tensor_c_ring.len();
     let sizes = [x_powers.len(), d_prime_powers.len(), s_prime.len(), kappa];
-    let all_pow2 = sizes.iter().all(|&s| s.is_power_of_two());
-    if all_pow2 {
-        // Fast factored evaluation (valid only when all factor sizes are powers of 2),
-        // matching `tensor_eval::eval_t_z_optimized` optimized path.
-        let vars4 = sizes.map(|s| ark_std::log2(s) as usize);
-        let tensor_vars = vars4.iter().sum::<usize>();
+    // All pow2 is assumed in the protocol/bench; we still follow the optimized path.
+    let vars4 = sizes.map(|s| ark_std::log2(s.next_power_of_two()) as usize);
+    let tensor_vars = vars4.iter().sum::<usize>();
 
-        // Split r into chunks (innermost to outermost) as in tensor_eval::eval_t_z_optimized.
-        let r4 = &r[0..vars4[0]]; // x_powers (lowest bits)
-        let r3 = &r[vars4[0]..vars4[0] + vars4[1]];
-        let r2 = &r[vars4[0] + vars4[1]..vars4[0] + vars4[1] + vars4[2]];
-        let r1 = &r[vars4[0] + vars4[1] + vars4[2]..tensor_vars];
+    // Split r into chunks (innermost to outermost) as in tensor_eval::eval_t_z_optimized.
+    let r4 = &r[0..vars4[0]]; // x_powers (lowest bits)
+    let r3 = &r[vars4[0]..vars4[0] + vars4[1]];
+    let r2 = &r[vars4[0] + vars4[1]..vars4[0] + vars4[1] + vars4[2]];
+    let r1 = &r[vars4[0] + vars4[1] + vars4[2]..tensor_vars];
 
-        let v1 = eval_small_mle_ring::<BF<R>>(b, &tensor_c_ring, r1);
-        let v2 = eval_small_mle_ring::<BF<R>>(b, s_prime, r2);
-        let v3 = eval_small_mle_ring::<BF<R>>(b, d_prime_powers, r3);
-        let v4 = eval_small_mle_ring::<BF<R>>(b, x_powers, r4);
+    let v1 = eval_small_mle_ring::<BF<R>>(b, &tensor_c_ring, r1);
+    let v2 = eval_small_mle_ring::<BF<R>>(b, s_prime, r2);
+    let v3 = eval_small_mle_ring::<BF<R>>(b, d_prime_powers, r3);
+    let v4 = eval_small_mle_ring::<BF<R>>(b, x_powers, r4);
 
-        let mut res = ring_mul_negacyclic::<BF<R>>(b, &v1, &v2);
-        res = ring_mul_negacyclic::<BF<R>>(b, &res, &v3);
-        res = ring_mul_negacyclic::<BF<R>>(b, &res, &v4);
+    let mut res = ring_mul_negacyclic::<BF<R>>(b, &v1, &v2);
+    res = ring_mul_negacyclic::<BF<R>>(b, &res, &v3);
+    res = ring_mul_negacyclic::<BF<R>>(b, &res, &v4);
 
-        // Padding factor: Π_{j=tensor_vars..nvars} (1 - r[j]) as BF scalar.
-        let mut pad = b.new_var(BF::<R>::ONE);
-        b.enforce_var_eq_const(pad, BF::<R>::ONE);
-        for &rj in &r[tensor_vars..] {
-            let om = scalar_one_minus::<BF<R>>(b, rj);
-            let new_pad = b.new_var(b.assignment[pad] * b.assignment[om]);
-            b.enforce_mul(pad, om, new_pad);
-            pad = new_pad;
-        }
-        ring_scale::<BF<R>>(b, &res, pad)
-    } else {
-        // Dense fallback: exact for arbitrary factor sizes, matching `tensor_eval::eval_t_z_optimized`
-        // fallback behavior. This is still feasible because the tensor length is small in LF+
-        // (typically κ * (k*d) * ℓ * d).
-
-        // Compute dense t_z evaluations in the nested-loop order:
-        // for a in tensor(c_z):
-        //   for b in s_prime:
-        //     for c in d_prime_powers:
-        //       for d in x_powers:
-        //         push(a*b*c*d)
-        let mut tz: Vec<RingVars> =
-            Vec::with_capacity(kappa * s_prime.len() * d_prime_powers.len() * x_powers.len());
-        for a in &tensor_c_ring {
-            for b0 in s_prime {
-                let ab = ring_mul_negacyclic::<BF<R>>(b, a, b0);
-                for c0 in d_prime_powers {
-                    let abc = ring_mul_negacyclic::<BF<R>>(b, &ab, c0);
-                    for d0 in x_powers {
-                        tz.push(ring_mul_negacyclic::<BF<R>>(b, &abc, d0));
-                    }
-                }
-            }
-        }
-
-        // Evaluate the MLE of `tz` at the full point `r` (handles global zero-padding implicitly).
-        eval_small_mle_ring::<BF<R>>(b, &tz, r)
+    // Padding factor: Π_{j=tensor_vars..nvars} (1 - r[j]) as BF scalar.
+    let mut pad = b.new_var(BF::<R>::ONE);
+    b.enforce_var_eq_const(pad, BF::<R>::ONE);
+    for &rj in &r[tensor_vars..] {
+        let om = scalar_one_minus::<BF<R>>(b, rj);
+        let new_pad = b.new_var(b.assignment[pad] * b.assignment[om]);
+        b.enforce_mul(pad, om, new_pad);
+        pad = new_pad;
     }
+    ring_scale::<BF<R>>(b, &res, pad)
 }
 
 #[cfg(feature = "we_gate")]
