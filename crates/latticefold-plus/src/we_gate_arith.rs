@@ -4185,7 +4185,7 @@ mod tests {
         };
 
         // Seeded Ajtai scheme (deterministic system parameter).
-        const AJTAI_SEED: [u8; 32] = *b"LFP_TEST_AJTAI_SEED_V1_000000000000";
+        const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
         let ajtai = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
 
         // Trivial satisfiable R1CS: A=B=C=0, so (Az)*(Bz) - Cz = 0 for any witness.
