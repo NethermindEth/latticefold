@@ -689,15 +689,17 @@ impl MulUnchecked for FrogRing64 {
 
 impl Decompose for FrogRing64 {
     fn decompose_to(&self, b: u128, out: &mut [Self]) {
-        // Delegate to the underlying cyclotomic coefficient-form implementation.
-        let mut tmp = vec![
-            stark_rings::cyclotomic_ring::CyclotomicPolyRingGeneral::<Frog64Config, 1, 64>::ZERO;
-            out.len()
-        ];
-        self.0.decompose_to(b, &mut tmp);
-        for (o, t) in out.iter_mut().zip(tmp.into_iter()) {
-            *o = Self(t);
-        }
+        // Delegate to the underlying cyclotomic coefficient-form implementation **without**
+        // allocating a temporary buffer.
+        //
+        // SAFETY:
+        // - `FrogRing64` is `#[repr(transparent)]` over the inner `CyclotomicPolyRingGeneral`,
+        //   so `[FrogRing64]` has the same layout and alignment as `[Inner]`.
+        // - We only pass the slice to `decompose_to` for in-place writes; no aliasing with `self.0`.
+        type Inner = stark_rings::cyclotomic_ring::CyclotomicPolyRingGeneral<Frog64Config, 1, 64>;
+        let out_inner: &mut [Inner] =
+            unsafe { core::slice::from_raw_parts_mut(out.as_mut_ptr() as *mut Inner, out.len()) };
+        self.0.decompose_to(b, out_inner);
     }
 }
 
@@ -760,6 +762,26 @@ mod frog64_tests {
         // Reference via inner generic multiplication by scalar (should match).
         let ref_out = Inner::from(a.into_coeffs()) * s;
         assert_eq!(got.coeffs(), ref_out.coeffs());
+    }
+
+    #[test]
+    fn test_frog64_decompose_to_matches_inner() {
+        let mut rng = test_rng();
+        for _ in 0..64 {
+            let a = FrogRing64::rand(&mut rng);
+            let b = rng.next_u64() as u128 | 2; // ensure b>=2
+            let len = 8usize;
+
+            let mut out = vec![FrogRing64::ZERO; len];
+            a.decompose_to(b, &mut out);
+
+            let mut out_ref = vec![Inner::ZERO; len];
+            Inner::from(a.into_coeffs()).decompose_to(b, &mut out_ref);
+
+            for i in 0..len {
+                assert_eq!(out[i].coeffs(), out_ref[i].coeffs());
+            }
+        }
     }
 
     /// Rough timing smoke test (ignored by default).
