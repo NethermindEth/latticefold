@@ -1329,9 +1329,10 @@ where
                 for j in l_idx..(l_idx + stride) {
                     lin += vals[j] * rcps[j - 1];
                 }
-                lin += (tau * t0) * w_t0;
-                lin += (tau * t1) * w_t1;
                 out += eq * lin;
+                // NOTE: the `tau * t(z)` terms are NOT multiplied by `eq` in this protocol.
+                out += (tau * t0) * w_t0;
+                out += (tau * t1) * w_t1;
             }
             out
         };
@@ -1786,9 +1787,9 @@ where
                 for j in l_idx..(l_idx + stride) {
                     lin += vals[j] * rcps[j - 1];
                 }
-                lin += (tau * t0) * w_t0;
-                lin += (tau * t1) * w_t1;
                 out += eq * lin;
+                out += (tau * t0) * w_t0;
+                out += (tau * t1) * w_t1;
             }
             out
         };
@@ -2213,9 +2214,9 @@ where
                 for j in l_idx..(l_idx + stride) {
                     lin += vals[j] * rcps[j - 1];
                 }
-                lin += (tau * t0) * w_t0;
-                lin += (tau * t1) * w_t1;
                 out += eq * lin;
+                out += (tau * t0) * w_t0;
+                out += (tau * t1) * w_t1;
             }
             out
         };
