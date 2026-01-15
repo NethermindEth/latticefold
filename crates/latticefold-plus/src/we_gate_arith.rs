@@ -4079,14 +4079,60 @@ mod tests {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(20);
-        let n = 1usize << n_pow;
-        let k = 4usize;
         let kappa = 2usize;
         let ell = 32usize;
         let d = RR::dimension();
         let b = (d / 2) as u128;
-        let nvars = ark_std::log2(n) as usize;
+        // Match SP1 oneproof-style parameter choice:
+        // - digit base is d' = d/2
+        // - choose the *minimal* k to cover centered BabyBear values, then round up to pow2.
+        //
+        // Allow overriding p_bb and/or k for experiments.
+        let p_bb: u64 = std::env::var("LFP_TRACE_PBB")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(2013265921); // BabyBear prime
+        let d_prime_u64: u64 = (d / 2) as u64;
+        fn next_power_of_two_u64(n: u64) -> u64 {
+            if n <= 1 {
+                return 1;
+            }
+            1u64 << (64 - (n - 1).leading_zeros())
+        }
+        fn min_k_for_bound(base: u64, bound: u64) -> u64 {
+            debug_assert!(base >= 2 && base % 2 == 0);
+            if bound == 0 {
+                return 1;
+            }
+            let b = base as u128;
+            let half = (base / 2) as u128;
+            let target = bound as u128;
+            let mut k: u64 = 1;
+            let mut pow: u128 = b; // b^1
+            loop {
+                let max = half.saturating_mul(pow.saturating_sub(1) / (b - 1));
+                if max >= target {
+                    return k;
+                }
+                k += 1;
+                pow = pow.saturating_mul(b);
+            }
+        }
+        let k: usize = std::env::var("LFP_TRACE_K")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or_else(|| {
+                let k_raw = min_k_for_bound(d_prime_u64, p_bb / 2);
+                next_power_of_two_u64(k_raw) as usize
+            });
         let dparams = DecompParameters { b, k, l: ell };
+
+        // IMPORTANT: `RgInstance::from_f0_seeded` requires `n >= tau_unpadded_len` for `split`.
+        // Keep the caller-provided `2^n_pow` as a *minimum*, but bump up if k/d/ell/kappa demand it.
+        let n_min: usize = 1usize << n_pow;
+        let tau_unpadded_len: usize = kappa * (k * d) * ell * d;
+        let n: usize = n_min.max(tau_unpadded_len).next_power_of_two();
+        let nvars = ark_std::log2(n) as usize;
 
         type BR = <RR as PolyRing>::BaseRing;
         type FSmall = <BR as ark_ff::Field>::BasePrimeField;
