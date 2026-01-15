@@ -266,6 +266,7 @@ fn ntt(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
     const PAR_NTT_MIN_N: usize = 1 << 18; // 262k
     const PAR_NTT_MIN_LEN: usize = 1 << 10; // 1024
     let use_par = n >= PAR_NTT_MIN_N && rayon::current_num_threads() > 1;
+    let par_threads = if use_par { rayon::current_num_threads() } else { 1 };
 
     // Reuse twiddle buffer to avoid per-stage allocations.
     let mut twiddles: Vec<u32> = Vec::new();
@@ -285,15 +286,37 @@ fn ntt(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
         }
 
         if use_par && len >= PAR_NTT_MIN_LEN {
-            a.par_chunks_mut(len).for_each(|chunk| {
-                debug_assert_eq!(chunk.len(), len);
-                for j in 0..(len / 2) {
-                    let u = chunk[j];
-                    let v = mul_mod_u32(chunk[j + len / 2], twiddles[j], modulus);
-                    chunk[j] = add_mod_u32(u, v, modulus);
-                    chunk[j + len / 2] = sub_mod_u32(u, v, modulus);
-                }
-            });
+            let blocks = n / len;
+            if blocks >= par_threads {
+                // Many independent blocks: parallelize across blocks (good locality).
+                a.par_chunks_mut(len).for_each(|chunk| {
+                    debug_assert_eq!(chunk.len(), len);
+                    for j in 0..(len / 2) {
+                        let u = chunk[j];
+                        let v = mul_mod_u32(chunk[j + len / 2], twiddles[j], modulus);
+                        chunk[j] = add_mod_u32(u, v, modulus);
+                        chunk[j + len / 2] = sub_mod_u32(u, v, modulus);
+                    }
+                });
+            } else {
+                // Few blocks in late stages: parallelize across all butterflies to keep cores busy.
+                //
+                // SAFETY: each butterfly writes to a unique pair of indices, so there is no aliasing.
+                let half = len / 2;
+                let ptr = a.as_mut_ptr();
+                (0..(n / 2)).into_par_iter().for_each(|t| {
+                    let blk = (t / half) * len;
+                    let j = t % half;
+                    unsafe {
+                        let p0 = ptr.add(blk + j);
+                        let p1 = ptr.add(blk + j + half);
+                        let u = *p0;
+                        let v = mul_mod_u32(*p1, twiddles[j], modulus);
+                        *p0 = add_mod_u32(u, v, modulus);
+                        *p1 = sub_mod_u32(u, v, modulus);
+                    }
+                });
+            }
         } else {
             for i in (0..n).step_by(len) {
                 for j in 0..(len / 2) {
@@ -542,6 +565,7 @@ fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
     const PAR_NTT_MIN_N: usize = 1 << 18;
     const PAR_NTT_MIN_LEN: usize = 1 << 10;
     let use_par = n >= PAR_NTT_MIN_N && rayon::current_num_threads() > 1;
+    let par_threads = if use_par { rayon::current_num_threads() } else { 1 };
 
     let mut twiddles: Vec<u64> = Vec::new();
 
@@ -559,14 +583,32 @@ fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
         }
 
         if use_par && len >= PAR_NTT_MIN_LEN {
-            a.par_chunks_mut(len).for_each(|chunk| {
-                for j in 0..(len / 2) {
-                    let u = chunk[j];
-                    let v = mul_mod_u64(chunk[j + len / 2], twiddles[j], modulus);
-                    chunk[j] = add_mod_u64(u, v, modulus);
-                    chunk[j + len / 2] = sub_mod_u64(u, v, modulus);
-                }
-            });
+            let blocks = n / len;
+            if blocks >= par_threads {
+                a.par_chunks_mut(len).for_each(|chunk| {
+                    for j in 0..(len / 2) {
+                        let u = chunk[j];
+                        let v = mul_mod_u64(chunk[j + len / 2], twiddles[j], modulus);
+                        chunk[j] = add_mod_u64(u, v, modulus);
+                        chunk[j + len / 2] = sub_mod_u64(u, v, modulus);
+                    }
+                });
+            } else {
+                let half = len / 2;
+                let ptr = a.as_mut_ptr();
+                (0..(n / 2)).into_par_iter().for_each(|t| {
+                    let blk = (t / half) * len;
+                    let j = t % half;
+                    unsafe {
+                        let p0 = ptr.add(blk + j);
+                        let p1 = ptr.add(blk + j + half);
+                        let u = *p0;
+                        let v = mul_mod_u64(*p1, twiddles[j], modulus);
+                        *p0 = add_mod_u64(u, v, modulus);
+                        *p1 = sub_mod_u64(u, v, modulus);
+                    }
+                });
+            }
         } else {
             for i in (0..n).step_by(len) {
                 for j in 0..(len / 2) {
