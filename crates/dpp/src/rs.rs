@@ -360,8 +360,14 @@ fn convolution_ntt_mod_from_u64(a: &[u64], b: &[u64], out_len: usize, size: usiz
 
     ntt(&mut fa, false, modulus, primitive_root);
     ntt(&mut fb, false, modulus, primitive_root);
-    for i in 0..size {
-        fa[i] = mul_mod_u32(fa[i], fb[i], modulus);
+    if size >= (1 << 18) && rayon::current_num_threads() > 1 {
+        fa.par_iter_mut()
+            .zip(fb.par_iter())
+            .for_each(|(x, &y)| *x = mul_mod_u32(*x, y, modulus));
+    } else {
+        for i in 0..size {
+            fa[i] = mul_mod_u32(fa[i], fb[i], modulus);
+        }
     }
     ntt(&mut fa, true, modulus, primitive_root);
     fa.truncate(out_len);
@@ -648,8 +654,14 @@ fn convolution_ntt_mod_u64_from_u64(a: &[u64], b: &[u64], out_len: usize, size: 
 
     ntt_u64(&mut fa, false, modulus, root_n);
     ntt_u64(&mut fb, false, modulus, root_n);
-    for i in 0..size {
-        fa[i] = mul_mod_u64(fa[i], fb[i], modulus);
+    if size >= (1 << 18) && rayon::current_num_threads() > 1 {
+        fa.par_iter_mut()
+            .zip(fb.par_iter())
+            .for_each(|(x, &y)| *x = mul_mod_u64(*x, y, modulus));
+    } else {
+        for i in 0..size {
+            fa[i] = mul_mod_u64(fa[i], fb[i], modulus);
+        }
     }
     ntt_u64(&mut fa, true, modulus, root_n);
     fa.truncate(out_len);
