@@ -524,40 +524,6 @@ where
                             } else {
                                 mul_negacyclic_by_monomial::<R>(&rest_sum, shift0, scale0)
                             };
-                            if profile {
-                                // Diagnostic: how sparse is the streamed-h representation?
-                                // If `term0_tab` entries and `term_rest` are monomial-like, we can update `acc3`
-                                // in O(1) coeff ops inside the sparse matvec scan (big win for d64).
-                                fn nnz0<Rr: OverField + PolyRing>(x: &Rr) -> usize
-                                where
-                                    Rr::BaseRing: Ring,
-                                {
-                                    x.coeffs().iter().filter(|&&c| c != Rr::BaseRing::ZERO).count()
-                                }
-                                let mut mono = 0usize;
-                                let mut max_nnz = 0usize;
-                                let mut sum_nnz = 0usize;
-                                for r in term0_tab.iter() {
-                                    let k = nnz0::<R>(r);
-                                    if k <= 1 {
-                                        mono += 1;
-                                    }
-                                    if k > max_nnz {
-                                        max_nnz = k;
-                                    }
-                                    sum_nnz += k;
-                                }
-                                let rest_nnz = nnz0::<R>(&term_rest);
-                                let avg = (sum_nnz as f64) / (term0_tab.len().max(1) as f64);
-                                println!(
-                                    "[LF+ Cm::prove_base] stream_h stats: term0_tab_len={} mono_like={} avg_nnz={:.2} max_nnz={} term_rest_nnz={}",
-                                    term0_tab.len(),
-                                    mono,
-                                    avg,
-                                    max_nnz,
-                                    rest_nnz
-                                );
-                            }
                             precomps.push(HCol0Precomp {
                                 col0: col0.clone(),
                                 zero_idx: *zero_idx,
@@ -1498,40 +1464,6 @@ where
         let L = self.rg.instances.len();
         let Mlen = m_arcs0.len();
 
-        // Probe whether the external matrices share the same row sparsity pattern.
-        // If they do (common in some constructions), we can fuse across Mlen and cut row scans ~3x.
-        if profile && Mlen == 3 {
-            let m0 = &m_arcs0[0];
-            let m1 = &m_arcs0[1];
-            let m2 = &m_arcs0[2];
-            let nrows = m0.coeffs.len();
-            let nsamp = 2048usize.min(nrows);
-            let mut same01 = 0usize;
-            let mut same02 = 0usize;
-            let mut same12 = 0usize;
-            let mut same_all = 0usize;
-            // Deterministic pseudo-random row selection (no RNG dependency).
-            let mut x: u64 = 0x9e3779b97f4a7c15;
-            for _ in 0..nsamp {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1);
-                let row = (x as usize) & (nrows.saturating_sub(1));
-                let r0 = &m0.coeffs[row];
-                let r1 = &m1.coeffs[row];
-                let r2 = &m2.coeffs[row];
-                let eq01 = r0.len() == r1.len() && r0.iter().zip(r1.iter()).all(|((_, a), (_, b))| a == b);
-                let eq02 = r0.len() == r2.len() && r0.iter().zip(r2.iter()).all(|((_, a), (_, b))| a == b);
-                let eq12 = r1.len() == r2.len() && r1.iter().zip(r2.iter()).all(|((_, a), (_, b))| a == b);
-                if eq01 { same01 += 1; }
-                if eq02 { same02 += 1; }
-                if eq12 { same12 += 1; }
-                if eq01 && eq02 { same_all += 1; }
-            }
-            println!(
-                "[LF+ Cm::sumchecker_streaming] M-pattern probe: rows={} samples={} same01={} same02={} same12={} same_all={}",
-                nrows, nsamp, same01, same02, same12, same_all
-            );
-        }
-
         let mut mles = Vec::with_capacity(1 + L * (4 + 4 * Mlen) + 2);
 
         let r0 = dcom.out.r.clone();
@@ -1655,36 +1587,6 @@ where
             if h_cc {
                 unreachable!("streaming-h path should not mark h as const-coeff");
             } else {
-                if profile {
-                    // Print a one-line summary of the h MLE shape, since it determines whether
-                    // CM's fused `eval4_at_row` can hit dense/HFrom fast paths (after peeling empty LazyFixed).
-                    fn describe_mle<R: OverField + PolyRing>(m: &StreamingMleEnum<R>) -> String
-                    where
-                        R::BaseRing: Ring,
-                    {
-                        match m {
-                            StreamingMleEnum::LazyFixed { inner, fixed, max_lazy, .. } => {
-                                if fixed.is_empty() {
-                                    format!("LazyFixed(empty,max_lazy={}) -> {}", max_lazy, describe_mle(inner.as_ref()))
-                                } else {
-                                    format!("LazyFixed(k={},max_lazy={}) -> {}", fixed.len(), max_lazy, describe_mle(inner.as_ref()))
-                                }
-                            }
-                            StreamingMleEnum::HFromMfDigitsConstCol0 { .. } => "HFromMfDigitsConstCol0".to_string(),
-                            StreamingMleEnum::DenseArc { .. } => "DenseArc".to_string(),
-                            StreamingMleEnum::DenseOwned { .. } => "DenseOwned".to_string(),
-                            StreamingMleEnum::BaseScalarArc { .. } => "BaseScalarArc".to_string(),
-                            StreamingMleEnum::BaseScalarOwned { .. } => "BaseScalarOwned".to_string(),
-                            StreamingMleEnum::MonomialDigitsArc { .. } => "MonomialDigitsArc".to_string(),
-                            StreamingMleEnum::CmMatVec4Part { .. } => "CmMatVec4Part".to_string(),
-                            _ => "Other".to_string(),
-                        }
-                    }
-                    println!(
-                        "[LF+ Cm::sumchecker_streaming] h_mle: {}",
-                        describe_mle::<R>(h_mles_full[i].as_ref())
-                    );
-                }
                 let mle = (*h_mles_full[i]).clone();
                 if cm_lazy > 0 {
                     mles.push(StreamingMleEnum::LazyFixed {
@@ -1741,25 +1643,13 @@ where
                                     }
                                 }
                             }
-                            if ok {
-                            if profile {
-                                println!(
-                                    "[LF+ Cm::sumchecker_streaming] mtau witness: MonomialDigitsMonomial (table_len={})",
-                                    exp_table.len()
-                                );
-                            }
+                        if ok {
                                 CmMatVecWitness::MonomialDigitsMonomial {
                                     digits: digits.clone(),
                                     mono_idx: std::sync::Arc::new(mono_idx),
                                     mono_coeff: std::sync::Arc::new(mono_coeff),
                                 }
                             } else {
-                            if profile {
-                                println!(
-                                    "[LF+ Cm::sumchecker_streaming] mtau witness: MonomialDigits (table_len={})",
-                                    exp_table.len()
-                                );
-                            }
                                 CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
                             }
                         }
@@ -2194,25 +2084,13 @@ where
                                     }
                                 }
                             }
-                            if ok {
-                            if profile {
-                                println!(
-                                    "[LF+ Cm::sumchecker_streaming(base)] mtau witness: MonomialDigitsMonomial (table_len={})",
-                                    exp_table.len()
-                                );
-                            }
+                        if ok {
                                 CmMatVecWitness::MonomialDigitsMonomial {
                                     digits: digits.clone(),
                                     mono_idx: std::sync::Arc::new(mono_idx),
                                     mono_coeff: std::sync::Arc::new(mono_coeff),
                                 }
                             } else {
-                            if profile {
-                                println!(
-                                    "[LF+ Cm::sumchecker_streaming(base)] mtau witness: MonomialDigits (table_len={})",
-                                    exp_table.len()
-                                );
-                            }
                                 CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
                             }
                         }

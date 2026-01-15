@@ -2612,14 +2612,6 @@ impl StreamingSumcheck {
         let domain_half = 1usize << (nv - 1);
         let num_polys = state.mles.len();
 
-        // Sampled timing (profile-only) to attribute time between:
-        // - MLE evaluation (including CM fused matvecs / streamed-h)
-        // - combiner computation
-        //
-        // We sample 1 out of 4096 vertices (by global `b`) to keep overhead negligible and avoid
-        // bias from rayon work splitting (per-scratch counters can reset and oversample).
-        const SAMPLE_MASK: u32 = (1 << 12) - 1;
-
         struct Scratch<Rr: OverField + PolyRing>
         where
             Rr::BaseRing: Ring,
@@ -2633,9 +2625,6 @@ impl StreamingSumcheck {
             cm_cache_odd: Option<(usize, usize, [Rr; 4])>,
             cm_lazy_cache_even: Option<(usize, usize, usize, [Rr; 4])>,
             cm_lazy_cache_odd: Option<(usize, usize, usize, [Rr; 4])>,
-            t_eval_ns: u64,
-            t_comb_ns: u64,
-            n_samples: u64,
         }
 
         let scratch = || Scratch {
@@ -2648,9 +2637,6 @@ impl StreamingSumcheck {
             cm_cache_odd: None,
             cm_lazy_cache_even: None,
             cm_lazy_cache_odd: None,
-            t_eval_ns: 0,
-            t_comb_ns: 0,
-            n_samples: 0,
         };
 
         #[inline]
@@ -2740,8 +2726,6 @@ impl StreamingSumcheck {
             .fold(scratch, |mut s, b| {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
-                let do_sample = profile && (((b as u32) & SAMPLE_MASK) == 0);
-                let t0 = if do_sample { Some(std::time::Instant::now()) } else { None };
                 for (i, mle) in state.mles.iter().enumerate() {
                     s.vals0[i] = eval_mle_with_cm_cache(
                         mle,
@@ -2762,27 +2746,17 @@ impl StreamingSumcheck {
                         profile,
                     );
                 }
-                let t1 = if do_sample { Some(std::time::Instant::now()) } else { None };
                 let le = comb_fn2(&s.vals0, &s.vals1);
-                let t2 = if do_sample { Some(std::time::Instant::now()) } else { None };
-                if let (Some(t0), Some(t1), Some(t2)) = (t0, t1, t2) {
-                    s.t_eval_ns += t1.duration_since(t0).as_nanos() as u64;
-                    s.t_comb_ns += t2.duration_since(t1).as_nanos() as u64;
-                    s.n_samples += 1;
-                }
                 s.evals[0] += le[0];
                 s.evals[1] += le[1];
                 s.evals[2] += le[2];
                 s
             })
-            .map(|s| ((s.evals, s.t_eval_ns, s.t_comb_ns, s.n_samples), s.cm_stats))
+            .map(|s| (s.evals, s.cm_stats))
             .reduce_with(|mut acc, (evals, stats)| {
-                acc.0.0[0] += evals.0[0];
-                acc.0.0[1] += evals.0[1];
-                acc.0.0[2] += evals.0[2];
-                acc.0.1 += evals.1;
-                acc.0.2 += evals.2;
-                acc.0.3 += evals.3;
+                acc.0[0] += evals[0];
+                acc.0[1] += evals[1];
+                acc.0[2] += evals[2];
                 acc.1.cm_hit += stats.cm_hit;
                 acc.1.cm_miss += stats.cm_miss;
                 acc.1.lazy_hit += stats.lazy_hit;
@@ -2791,7 +2765,7 @@ impl StreamingSumcheck {
                 acc.1.hfrom_miss += stats.hfrom_miss;
                 acc
             })
-            .unwrap_or_else(|| (([R::ZERO; 3], 0, 0, 0), CmCacheStats::default()));
+            .unwrap_or_else(|| ([R::ZERO; 3], CmCacheStats::default()));
 
         #[cfg(not(feature = "parallel"))]
         let (result, stats) = {
@@ -2800,8 +2774,6 @@ impl StreamingSumcheck {
             for b in 0..domain_half {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
-                let do_sample = profile && (((b as u32) & SAMPLE_MASK) == 0);
-                let t0 = if do_sample { Some(std::time::Instant::now()) } else { None };
                 for (i, mle) in state.mles.iter().enumerate() {
                     s.vals0[i] = eval_mle_with_cm_cache(
                         mle,
@@ -2822,35 +2794,13 @@ impl StreamingSumcheck {
                         profile,
                     );
                 }
-                let t1 = if do_sample { Some(std::time::Instant::now()) } else { None };
                 let le = comb_fn2(&s.vals0, &s.vals1);
-                let t2 = if do_sample { Some(std::time::Instant::now()) } else { None };
-                if let (Some(t0), Some(t1), Some(t2)) = (t0, t1, t2) {
-                    s.t_eval_ns += t1.duration_since(t0).as_nanos() as u64;
-                    s.t_comb_ns += t2.duration_since(t1).as_nanos() as u64;
-                    s.n_samples += 1;
-                }
                 acc[0] += le[0];
                 acc[1] += le[1];
                 acc[2] += le[2];
             }
-            ((acc, s.t_eval_ns, s.t_comb_ns, s.n_samples), s.cm_stats)
+            (acc, s.cm_stats)
         };
-
-        if profile && result.3 > 0 {
-            let samples = result.3 as f64;
-            let avg_eval_ns = (result.1 as f64) / samples;
-            let avg_comb_ns = (result.2 as f64) / samples;
-            let est_total_eval_s = avg_eval_ns * (domain_half as f64) / 1e9;
-            let est_total_comb_s = avg_comb_ns * (domain_half as f64) / 1e9;
-            println!(
-                "[LF+ streaming_sumcheck] round_sample(deg2): est_eval={:.3}s est_comb={:.3}s (samples={}, domain_half={})",
-                est_total_eval_s,
-                est_total_comb_s,
-                result.3,
-                domain_half
-            );
-        }
 
         if profile {
             CM_CACHE_HITS.fetch_add(stats.cm_hit, Ordering::Relaxed);
@@ -2862,7 +2812,7 @@ impl StreamingSumcheck {
         }
 
         ProverMsg {
-            evaluations: vec![result.0[0], result.0[1], result.0[2]],
+            evaluations: vec![result[0], result[1], result[2]],
         }
     }
 
