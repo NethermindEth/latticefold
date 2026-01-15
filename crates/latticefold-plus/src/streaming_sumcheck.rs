@@ -1896,6 +1896,11 @@ impl StreamingSumcheck {
             // within the current hypercube vertex pair.
             cm_cache_even: Option<(usize, usize, [Rr; 4])>, // (shared_id, row, vals)
             cm_cache_odd: Option<(usize, usize, [Rr; 4])>,
+            // CM optimization (LazyFixed): cache the *lazy-combined* value for a fused mat-vec
+            // (summing over the fixed low bits). This prevents re-scanning the same 2^k rows for
+            // each of the 4 parts.
+            cm_lazy_cache_even: Option<(usize, usize, usize, usize, [Rr; 4])>, // (weights_id, shared_id, base, k, vals)
+            cm_lazy_cache_odd: Option<(usize, usize, usize, usize, [Rr; 4])>,
         }
 
         let scratch = || Scratch {
@@ -1907,6 +1912,8 @@ impl StreamingSumcheck {
             levals: vec![R::ZERO; degree + 1],
             cm_cache_even: None,
             cm_cache_odd: None,
+            cm_lazy_cache_even: None,
+            cm_lazy_cache_odd: None,
         };
 
         #[inline]
@@ -1914,14 +1921,46 @@ impl StreamingSumcheck {
             mle: &StreamingMleEnum<R>,
             index: usize,
             cache: &mut Option<(usize, usize, [R; 4])>,
+            lazy_cache: &mut Option<(usize, usize, usize, usize, [R; 4])>,
         ) -> R
         where
             R::BaseRing: Ring,
         {
-            // Peel the "identity" LazyFixed wrapper (fixed.len()==0) so CM can still hit the cache.
-            if let StreamingMleEnum::LazyFixed { inner, fixed, .. } = mle {
+            // Peel/handle LazyFixed so CM caching is effective:
+            // - if fixed.len()==0, just unwrap (identity)
+            // - if inner is CmMatVec4Part and fixed.len()>0, compute the lazy-combined value for all 4 parts once
+            if let StreamingMleEnum::LazyFixed { inner, fixed, weights, .. } = mle {
                 if fixed.is_empty() {
-                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache);
+                    return eval_mle_with_cm_cache::<R>(inner.as_ref(), index, cache, lazy_cache);
+                }
+                if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = inner.as_ref() {
+                    let k = fixed.len();
+                    let wid = *which as usize;
+                    debug_assert!(wid < 4);
+                    let sid = Arc::as_ptr(shared) as usize;
+                    let wid_weights = weights.as_ptr() as usize;
+                    let base = index << k;
+
+                    if let Some((cw, csid, cbase, ck, vals)) = lazy_cache.as_ref() {
+                        if *cw == wid_weights && *csid == sid && *cbase == base && *ck == k {
+                            return vals[wid];
+                        }
+                    }
+
+                    // Compute all 4 parts at once: Σ_b weights[b] * shared.eval4_at_row(base|b).
+                    let mut acc = [R::ZERO; 4];
+                    for (b, &w) in weights.iter().enumerate() {
+                        if w == R::BaseRing::ZERO {
+                            continue;
+                        }
+                        let v = shared.eval4_at_row(base | b);
+                        acc[0] += v[0] * w;
+                        acc[1] += v[1] * w;
+                        acc[2] += v[2] * w;
+                        acc[3] += v[3] * w;
+                    }
+                    *lazy_cache = Some((wid_weights, sid, base, k, acc));
+                    return acc[wid];
                 }
             }
             if let StreamingMleEnum::CmMatVec4Part { shared, which, .. } = mle {
@@ -1947,8 +1986,8 @@ impl StreamingSumcheck {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
                 for (i, mle) in state.mles.iter().enumerate() {
-                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even);
-                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd);
+                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even, &mut s.cm_lazy_cache_even);
+                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd, &mut s.cm_lazy_cache_odd);
                 }
                 s.levals[0] = comb_fn(&s.vals0);
                 s.levals[1] = comb_fn(&s.vals1);
@@ -1985,8 +2024,8 @@ impl StreamingSumcheck {
                 let idx0 = b << 1;
                 let idx1 = (b << 1) | 1;
                 for (i, mle) in state.mles.iter().enumerate() {
-                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even);
-                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd);
+                    s.vals0[i] = eval_mle_with_cm_cache(mle, idx0, &mut s.cm_cache_even, &mut s.cm_lazy_cache_even);
+                    s.vals1[i] = eval_mle_with_cm_cache(mle, idx1, &mut s.cm_cache_odd, &mut s.cm_lazy_cache_odd);
                 }
                 s.levals[0] = comb_fn(&s.vals0);
                 s.levals[1] = comb_fn(&s.vals1);
