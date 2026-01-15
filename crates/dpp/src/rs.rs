@@ -299,23 +299,21 @@ fn ntt(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
                     }
                 });
             } else {
-                // Few blocks in late stages: parallelize across all butterflies to keep cores busy.
-                //
-                // SAFETY: each butterfly writes to a unique pair of indices, so there is no aliasing.
                 let half = len / 2;
-                let ptr = a.as_mut_ptr();
-                (0..(n / 2)).into_par_iter().for_each(|t| {
-                    let blk = (t / half) * len;
-                    let j = t % half;
-                    unsafe {
-                        let p0 = ptr.add(blk + j);
-                        let p1 = ptr.add(blk + j + half);
-                        let u = *p0;
-                        let v = mul_mod_u32(*p1, twiddles[j], modulus);
-                        *p0 = add_mod_u32(u, v, modulus);
-                        *p1 = sub_mod_u32(u, v, modulus);
-                    }
-                });
+                // Few blocks in late stages: parallelize *within* each block across butterflies.
+                for chunk in a.chunks_mut(len) {
+                    debug_assert_eq!(chunk.len(), len);
+                    let (lo, hi) = chunk.split_at_mut(half);
+                    lo.par_iter_mut()
+                        .zip(hi.par_iter_mut())
+                        .enumerate()
+                        .for_each(|(j, (lo_j, hi_j))| {
+                            let u = *lo_j;
+                            let v = mul_mod_u32(*hi_j, twiddles[j], modulus);
+                            *lo_j = add_mod_u32(u, v, modulus);
+                            *hi_j = sub_mod_u32(u, v, modulus);
+                        });
+                }
             }
         } else {
             for i in (0..n).step_by(len) {
@@ -595,19 +593,18 @@ fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
                 });
             } else {
                 let half = len / 2;
-                let ptr = a.as_mut_ptr();
-                (0..(n / 2)).into_par_iter().for_each(|t| {
-                    let blk = (t / half) * len;
-                    let j = t % half;
-                    unsafe {
-                        let p0 = ptr.add(blk + j);
-                        let p1 = ptr.add(blk + j + half);
-                        let u = *p0;
-                        let v = mul_mod_u64(*p1, twiddles[j], modulus);
-                        *p0 = add_mod_u64(u, v, modulus);
-                        *p1 = sub_mod_u64(u, v, modulus);
-                    }
-                });
+                for chunk in a.chunks_mut(len) {
+                    let (lo, hi) = chunk.split_at_mut(half);
+                    lo.par_iter_mut()
+                        .zip(hi.par_iter_mut())
+                        .enumerate()
+                        .for_each(|(j, (lo_j, hi_j))| {
+                            let u = *lo_j;
+                            let v = mul_mod_u64(*hi_j, twiddles[j], modulus);
+                            *lo_j = add_mod_u64(u, v, modulus);
+                            *hi_j = sub_mod_u64(u, v, modulus);
+                        });
+                }
             }
         } else {
             for i in (0..n).step_by(len) {
