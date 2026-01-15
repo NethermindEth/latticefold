@@ -341,7 +341,16 @@ where
                 let digs: &[u16] = digits.as_ref();
                 let mono_idx: &[u16] = mono_idx.as_ref();
                 let mono_coeff: &[R::BaseRing] = mono_coeff.as_ref();
-                let w3m: &StreamingMleEnum<R> = w3.as_ref();
+                // Peel `LazyFixed` layers with empty `fixed` (identity) so we can hit the dense/HFrom fast paths.
+                let mut w3m: &StreamingMleEnum<R> = w3.as_ref();
+                loop {
+                    match w3m {
+                        StreamingMleEnum::LazyFixed { inner, fixed, .. } if fixed.is_empty() => {
+                            w3m = inner.as_ref();
+                        }
+                        _ => break,
+                    }
+                }
                 enum W3Fast<'a, Rr: OverField + PolyRing>
                 where
                     Rr::BaseRing: Ring,
@@ -411,7 +420,16 @@ where
                 let w0s: &[R::BaseRing] = w0.as_ref();
                 let w1s: &[R] = w1.as_ref();
                 let w2s: &[R::BaseRing] = w2.as_ref();
-                let w3m: &StreamingMleEnum<R> = w3.as_ref();
+                // Peel `LazyFixed` layers with empty `fixed` (identity) so we can hit the dense/HFrom fast paths.
+                let mut w3m: &StreamingMleEnum<R> = w3.as_ref();
+                loop {
+                    match w3m {
+                        StreamingMleEnum::LazyFixed { inner, fixed, .. } if fixed.is_empty() => {
+                            w3m = inner.as_ref();
+                        }
+                        _ => break,
+                    }
+                }
                 enum W3Fast<'a, Rr: OverField + PolyRing>
                 where
                     Rr::BaseRing: Ring,
@@ -472,7 +490,16 @@ where
                 let w0s: &[R::BaseRing] = w0.as_ref();
                 let w1s: &[R::BaseRing] = w1.as_ref();
                 let w2s: &[R::BaseRing] = w2.as_ref();
-                let w3m: &StreamingMleEnum<R> = w3.as_ref();
+                // Peel `LazyFixed` layers with empty `fixed` (identity) so we can hit the dense/HFrom fast paths.
+                let mut w3m: &StreamingMleEnum<R> = w3.as_ref();
+                loop {
+                    match w3m {
+                        StreamingMleEnum::LazyFixed { inner, fixed, .. } if fixed.is_empty() => {
+                            w3m = inner.as_ref();
+                        }
+                        _ => break,
+                    }
+                }
                 enum W3Fast<'a, Rr: OverField + PolyRing>
                 where
                     Rr::BaseRing: Ring,
