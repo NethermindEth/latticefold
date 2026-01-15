@@ -1899,8 +1899,10 @@ impl StreamingSumcheck {
             // CM optimization (LazyFixed): cache the *lazy-combined* value for a fused mat-vec
             // (summing over the fixed low bits). This prevents re-scanning the same 2^k rows for
             // each of the 4 parts.
-            cm_lazy_cache_even: Option<(usize, usize, usize, usize, [Rr; 4])>, // (weights_id, shared_id, base, k, vals)
-            cm_lazy_cache_odd: Option<(usize, usize, usize, usize, [Rr; 4])>,
+            // Keyed only by (shared_id, base, k). For CM, the per-part LazyFixed weights are identical
+            // across the 4 parts (they are fixed by the same challenges), so we can safely share.
+            cm_lazy_cache_even: Option<(usize, usize, usize, [Rr; 4])>, // (shared_id, base, k, vals)
+            cm_lazy_cache_odd: Option<(usize, usize, usize, [Rr; 4])>,
         }
 
         let scratch = || Scratch {
@@ -1921,7 +1923,7 @@ impl StreamingSumcheck {
             mle: &StreamingMleEnum<R>,
             index: usize,
             cache: &mut Option<(usize, usize, [R; 4])>,
-            lazy_cache: &mut Option<(usize, usize, usize, usize, [R; 4])>,
+            lazy_cache: &mut Option<(usize, usize, usize, [R; 4])>,
         ) -> R
         where
             R::BaseRing: Ring,
@@ -1938,11 +1940,10 @@ impl StreamingSumcheck {
                     let wid = *which as usize;
                     debug_assert!(wid < 4);
                     let sid = Arc::as_ptr(shared) as usize;
-                    let wid_weights = weights.as_ptr() as usize;
                     let base = index << k;
 
-                    if let Some((cw, csid, cbase, ck, vals)) = lazy_cache.as_ref() {
-                        if *cw == wid_weights && *csid == sid && *cbase == base && *ck == k {
+                    if let Some((csid, cbase, ck, vals)) = lazy_cache.as_ref() {
+                        if *csid == sid && *cbase == base && *ck == k {
                             return vals[wid];
                         }
                     }
@@ -1959,7 +1960,7 @@ impl StreamingSumcheck {
                         acc[2] += v[2] * w;
                         acc[3] += v[3] * w;
                     }
-                    *lazy_cache = Some((wid_weights, sid, base, k, acc));
+                    *lazy_cache = Some((sid, base, k, acc));
                     return acc[wid];
                 }
             }
