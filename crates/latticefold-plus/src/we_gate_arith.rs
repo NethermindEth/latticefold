@@ -4212,11 +4212,38 @@ mod tests {
         let lin_params = crate::lin::LinParameters { kappa, decomp: dparams.clone() };
 
         // Π_decomp base B:
-        // Use a fixed very-large power-of-two so 2-digit decomposition is always valid in this test,
-        // regardless of how the field modulus is represented on different platforms/toolchains.
+        // Compute a portable conservative power-of-two bound from the base field modulus so that
+        // every base-field coefficient fits in exactly 2 digits (balanced) for Π_decomp.
         //
-        // (This is test-only; production picks the minimal B to keep digits small.)
-        let b_decomp: u128 = 1u128 << 64;
+        // We avoid relying on `MODULUS.0[0]` limb layout (platform-dependent) by using bytes.
+        let b_decomp: u128 = {
+            use ark_ff::BigInteger;
+            let m = <BR as ark_ff::PrimeField>::MODULUS;
+            let bytes = m.to_bytes_le();
+            let mut last = None;
+            for (i, &b) in bytes.iter().enumerate().rev() {
+                if b != 0 {
+                    last = Some((i, b));
+                    break;
+                }
+            }
+            let bitlen: u32 = match last {
+                None => 0,
+                Some((i, b)) => {
+                    // msb position in this byte (1..=8)
+                    let msb = 8u32 - (b.leading_zeros() as u32);
+                    (i as u32) * 8 + msb
+                }
+            };
+            // Choose B >= 2^{ceil(bitlen/2)+1} to ensure B^2 > modulus (with slack).
+            let shift = ((bitlen + 1) / 2 + 1) as u32;
+            let shift = shift.min(126); // keep within u128 shift range
+            let mut b = 1u128 << shift;
+            if b % 2 == 1 {
+                b += 1;
+            }
+            b
+        };
 
         let pparams = PlusParameters { lin: lin_params, B: b_decomp };
 
