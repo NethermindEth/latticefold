@@ -4510,7 +4510,9 @@ mod tests {
         let d = RR::dimension();
         let d_prime = d / 2;
         let lnq = (BR::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
-        let ell = (lnq / (d_prime as f64).ln()).ceil() as usize;
+        // Pow2-friendly: we round ℓ up so WE can use the fast factored `t(z)` path.
+        let ell_raw = (lnq / (d_prime as f64).ln()).ceil() as usize;
+        let ell = ell_raw.next_power_of_two();
 
         let tau_unpadded_len = kappa * (k * d) * ell * d;
         let n = tau_unpadded_len.next_power_of_two();

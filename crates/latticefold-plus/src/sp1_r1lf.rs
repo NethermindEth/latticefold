@@ -57,8 +57,10 @@ pub fn nvars_from_ncols_pow2(ncols: usize) -> Result<usize, String> {
 /// Default WE-gate parameters for SP1 BabyBear-in-Frog integration over an R1LF cache.
 ///
 /// This is the **canonical** parameterization we want statement-bound in the WE arithmetization:
-/// - boundedness digit base: `b = 2^16`
-/// - digits per value: `k = 2`
+/// - boundedness digit base: `b = d' = d/2` (matches the monomial-based rgchk/setchk pipeline)
+/// - digits per value: `k` chosen large enough to represent centered BabyBear values
+/// - **pow2-friendly**: we round `k` and `l` up to powers of two so WE can use the fast factored
+///   `t(z)` evaluation path (avoiding dense fallback and huge memory).
 ///
 /// `mlen` is the number of matrices being committed in the surrounding protocol layer.
 pub fn sp1_default_we_params_for_r1lf_cache<R: PolyRing>(
@@ -72,8 +74,9 @@ where
     let nvars = nvars_from_ncols_pow2(cache.ncols)?;
     // log_{d'}(q) where d' = d/2
     let lnq = (R::BaseRing::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
-    let l = (lnq / ((R::dimension() / 2) as f64).ln()).ceil() as u64;
     let d_prime = (R::dimension() / 2) as u64;
+    let l_raw = (lnq / (d_prime as f64).ln()).ceil() as u64;
+    let l = next_power_of_two(l_raw as usize) as u64;
 
     // Production boundedness strategy:
     // Use the existing monomial-based rgchk/setchk pipeline, so we must choose a digit base
@@ -113,7 +116,8 @@ where
 
     let p_bb = cache.stats.p_bb;
     let bound = p_bb / 2;
-    let k: u64 = min_k_for_bound(d_prime, bound);
+    let k_raw: u64 = min_k_for_bound(d_prime, bound);
+    let k: u64 = next_power_of_two(k_raw as usize) as u64;
 
     Ok(WeParams {
         nvars_setchk: nvars as u64,
