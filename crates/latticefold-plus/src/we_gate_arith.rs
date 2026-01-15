@@ -4169,15 +4169,21 @@ mod tests {
 
         type BR = <RR as PolyRing>::BaseRing;
 
-        // Choose parameters so the internal range-check/CM tau tables fit comfortably in `n=2^9`.
+        // Choose small-but-valid parameters for the internal range-check/CM machinery.
+        //
+        // IMPORTANT: `rgchk` digit decomposition will panic if `k` is too small for the chosen base,
+        // so we use the production-style choice `decomp_b = d/2` and pick ℓ = ceil(log_{d'} q).
         let kappa = 1usize;
-        let k = 1usize;
-        let ell = 2usize;
+        let k = 2usize;
         let d = RR::dimension();
+        let d_prime = d / 2;
+        let lnq = (BR::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
+        let ell = (lnq / (d_prime as f64).ln()).ceil() as usize;
+
         let tau_unpadded_len = kappa * (k * d) * ell * d;
         let n = tau_unpadded_len.next_power_of_two();
         let nvars = ark_std::log2(n) as usize;
-        assert!(n <= (1 << 12), "keep this test small");
+        assert!(n <= (1 << 15), "keep this test small");
 
         // SP1-style public inputs: 256 digest bits.
         type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
@@ -4208,7 +4214,7 @@ mod tests {
         let m0 = cr1cs.x.matrices_arc_base();
 
         // Range-check decomposition parameters (used inside CM/RG machinery).
-        let dparams = DecompParameters { b: 2u128, k, l: ell };
+        let dparams = DecompParameters { b: d_prime as u128, k, l: ell };
         let lin_params = crate::lin::LinParameters { kappa, decomp: dparams.clone() };
 
         // Π_decomp base B:
