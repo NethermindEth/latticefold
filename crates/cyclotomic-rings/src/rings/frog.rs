@@ -153,10 +153,89 @@ macro_rules! fwd_binop_assign {
 
 fwd_binop!(Add, add, +);
 fwd_binop!(Sub, sub, -);
-fwd_binop!(Mul, mul, *);
 fwd_binop_assign!(AddAssign, add_assign, +=);
 fwd_binop_assign!(SubAssign, sub_assign, -=);
-fwd_binop_assign!(MulAssign, mul_assign, *=);
+
+// -----------------------------------------------------------------------------
+// FrogRing64 multiplication (performance-critical)
+// -----------------------------------------------------------------------------
+//
+// IMPORTANT:
+// The generic `CyclotomicPolyRingGeneral` multiplication path can be allocation-heavy. LF+/WE uses
+// *a lot* of ring multiplies in sumcheck combiners, so `FrogRing64` needs an allocation-free
+// `Mul` implementation to be remotely competitive.
+//
+// We implement the negacyclic convolution mod (X^64 + 1):
+//   (a * b)[k] = Σ_{i+j=k} a[i]b[j]  -  Σ_{i+j=k+64} a[i]b[j]
+//
+// This is an O(d^2) schoolbook multiply (4096 muls) but avoids heap churn and is a major
+// improvement over the generic Vec-based path.
+impl core::ops::Mul for FrogRing64 {
+    type Output = Self;
+    #[inline]
+    fn mul(self, rhs: Self) -> Self::Output {
+        let a = self.coeffs();
+        let b = rhs.coeffs();
+        debug_assert_eq!(a.len(), 64);
+        debug_assert_eq!(b.len(), 64);
+
+        let mut out = [<Fq as Field>::ZERO; 64];
+        for i in 0..64 {
+            let ai = a[i];
+            if ai == <Fq as Field>::ZERO {
+                continue;
+            }
+            for j in 0..64 {
+                let prod = ai * b[j];
+                let k = i + j;
+                if k < 64 {
+                    out[k] += prod;
+                } else {
+                    out[k - 64] -= prod;
+                }
+            }
+        }
+
+        let mut r = FrogRing64::ZERO;
+        r.coeffs_mut().copy_from_slice(&out);
+        r
+    }
+}
+
+impl<'a> core::ops::Mul<&'a Self> for FrogRing64 {
+    type Output = Self;
+    #[inline(always)]
+    fn mul(self, rhs: &'a Self) -> Self::Output {
+        self * (*rhs)
+    }
+}
+impl<'a> core::ops::Mul<&'a mut Self> for FrogRing64 {
+    type Output = Self;
+    #[inline(always)]
+    fn mul(self, rhs: &'a mut Self) -> Self::Output {
+        self * (*rhs)
+    }
+}
+
+impl core::ops::MulAssign for FrogRing64 {
+    #[inline]
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs;
+    }
+}
+
+impl<'a> core::ops::MulAssign<&'a Self> for FrogRing64 {
+    #[inline(always)]
+    fn mul_assign(&mut self, rhs: &'a Self) {
+        *self = *self * (*rhs);
+    }
+}
+impl<'a> core::ops::MulAssign<&'a mut Self> for FrogRing64 {
+    #[inline(always)]
+    fn mul_assign(&mut self, rhs: &'a mut Self) {
+        *self = *self * (*rhs);
+    }
+}
 
 impl core::ops::Neg for FrogRing64 {
     type Output = Self;
@@ -300,7 +379,11 @@ impl Flatten for FrogRing64 {}
 impl core::ops::Mul<Fq> for FrogRing64 {
     type Output = Self;
     fn mul(self, rhs: Fq) -> Self::Output {
-        Self(self.0 * rhs)
+        let mut out = self;
+        for c in out.coeffs_mut() {
+            *c *= rhs;
+        }
+        out
     }
 }
 
@@ -344,7 +427,8 @@ impl MulUnchecked for FrogRing64 {
     type Output = Self;
 
     fn mul_unchecked(self, rhs: Self) -> Self::Output {
-        Self(self.0.mul_unchecked(rhs.0))
+        // Keep `mul_unchecked` consistent with `Mul` (we're already in coefficient form).
+        self * rhs
     }
 }
 
@@ -386,6 +470,81 @@ impl LatticefoldChallengeSet<FrogRing64> for Frog64ChallengeSet {
                 .map(|&x| Fq::from(x as i16 - 128))
                 .collect::<Vec<Fq>>(),
         ))
+    }
+}
+
+#[cfg(test)]
+mod frog64_tests {
+    use super::*;
+    use ark_std::{test_rng, UniformRand, Zero};
+
+    type Inner = stark_rings::cyclotomic_ring::CyclotomicPolyRingGeneral<Frog64Config, 1, 64>;
+
+    #[test]
+    fn test_frog64_mul_matches_inner_generic() {
+        let mut rng = test_rng();
+        for _ in 0..256 {
+            let a = FrogRing64::rand(&mut rng);
+            let b = FrogRing64::rand(&mut rng);
+
+            // Reference: underlying generic ring multiplication.
+            let ref_out = Inner::from(a.into_coeffs()) * Inner::from(b.into_coeffs());
+            let got = a * b;
+
+            assert_eq!(got.coeffs(), ref_out.coeffs());
+        }
+    }
+
+    #[test]
+    fn test_frog64_mul_by_scalar_in_place() {
+        let mut rng = test_rng();
+        let a = FrogRing64::rand(&mut rng);
+        let s = Fq::rand(&mut rng);
+        let got = a * s;
+
+        // Reference via inner generic multiplication by scalar (should match).
+        let ref_out = Inner::from(a.into_coeffs()) * s;
+        assert_eq!(got.coeffs(), ref_out.coeffs());
+    }
+
+    /// Rough timing smoke test (ignored by default).
+    ///
+    /// This is not a benchmark harness; it’s just a sanity check that `FrogRing64` isn't
+    /// catastrophically slower than `FrogRingPoly` for multiplication.
+    #[test]
+    #[ignore]
+    fn test_frog64_mul_timing_smoke() {
+        use std::time::Instant;
+
+        let mut rng = test_rng();
+        let iters: usize = 50_000;
+
+        let mut acc64 = FrogRing64::ONE;
+        let a64 = FrogRing64::rand(&mut rng);
+        let b64 = FrogRing64::rand(&mut rng);
+        let t64 = Instant::now();
+        for _ in 0..iters {
+            acc64 *= a64;
+            acc64 *= b64;
+        }
+        let dt64 = t64.elapsed();
+
+        let mut acc16 = FrogRingPoly::ONE;
+        let a16 = FrogRingPoly::rand(&mut rng);
+        let b16 = FrogRingPoly::rand(&mut rng);
+        let t16 = Instant::now();
+        for _ in 0..iters {
+            acc16 *= a16;
+            acc16 *= b16;
+        }
+        let dt16 = t16.elapsed();
+
+        // Keep the values live.
+        assert!(!acc64.is_zero() || !acc16.is_zero());
+        eprintln!(
+            "[frog64_smoke] iters={} mul64={:?} mul16={:?}",
+            iters, dt64, dt16
+        );
     }
 }
 
