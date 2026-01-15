@@ -2850,7 +2850,7 @@ where
              -> Result<(), String> {
                 match trace.ops.get(*op_idx) {
                     Some(Op::SqueezeField(v)) if v.len() == expected_len => {
-                        *op_idx += 1;
+                        *op_idx += 2;
                         *squeezed_field_elems += v.len();
                         Ok(())
                     }
@@ -3002,7 +3002,7 @@ where
             expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
             // MLSumcheck::verify_as_subprotocol header (nvars, degree=2)
             expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
-            //expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
             // rounds: 3 evals + get_challenge (reabsorb) + explicit absorb
             for _ in 0..nvars_cm {
                 for _ in 0..3 {
