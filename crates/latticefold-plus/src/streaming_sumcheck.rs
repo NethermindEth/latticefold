@@ -379,6 +379,16 @@ where
         mono_idx: Arc<Vec<u16>>,
         mono_coeff: Arc<Vec<R::BaseRing>>,
     },
+    /// Specialized monomial-digit witness where every `exp_table[d]` has **small support** (<=4 nonzero coeffs).
+    ///
+    /// This generalizes `MonomialDigitsMonomial` and avoids dense ring multiplies in the sparse row scan:
+    /// we update up to 4 coefficients directly per nonzero.
+    MonomialDigitsSparse4 {
+        digits: Arc<Vec<u16>>,
+        nnz: Arc<Vec<u8>>,                   // length = table_len, each <= 4
+        idx: Arc<Vec<[u16; 4]>>,             // packed indices for each digit
+        coeff: Arc<Vec<[R::BaseRing; 4]>>,   // packed coeffs for each digit
+    },
     Mle(Arc<StreamingMleEnum<R>>),
 }
 
@@ -419,6 +429,22 @@ where
                     // Return ring monomial with coefficient `mono_coeff[d]`.
                     let mut out = R::ZERO;
                     out.coeffs_mut()[idx] = mono_coeff[d];
+                    Some(out)
+                } else {
+                    None
+                }
+            }
+            CmMatVecWitness::MonomialDigitsSparse4 { digits, nnz, idx, coeff } => {
+                let cj = col;
+                if cj < digits.len() {
+                    let d = digits[cj] as usize;
+                    let t = nnz[d] as usize;
+                    let mut out = R::ZERO;
+                    let outc = out.coeffs_mut();
+                    for k in 0..t {
+                        let ii = idx[d][k] as usize;
+                        outc[ii] = coeff[d][k];
+                    }
                     Some(out)
                 } else {
                     None
@@ -541,6 +567,128 @@ where
                             acc1_coeffs[mono_idx[d] as usize] += mono_coeff[d] * c0;
                         }
                     }
+                    // `w3` is an MLE; avoid creating temporaries `hv * c0` in the hot loop.
+                    match &w3fast {
+                        W3Fast::Dense(v) => {
+                            if let Some(hv) = v.get(cj) {
+                                Self::add_scaled(&mut acc3, hv, c0);
+                            }
+                        }
+                        W3Fast::HFrom { groups, rest_sum, .. } => {
+                            let cache = hcache.as_mut().unwrap();
+                            let hv = cache.get_or_compute(cj, || {
+                                let mut hv = (*rest_sum).clone();
+                                for g in groups.iter() {
+                                    hv += &g.table[g.packed_at(cj)];
+                                }
+                                hv
+                            });
+                            Self::add_scaled(&mut acc3, &hv, c0);
+                        }
+                        W3Fast::Other(m) => {
+                            let hv = m.eval_at_index(cj);
+                            Self::add_scaled(&mut acc3, &hv, c0);
+                        }
+                    }
+                }
+                [R::from(acc0), acc1, R::from(acc2), acc3]
+            }
+            (
+                CmMatVecWitness::Base(w0),
+                CmMatVecWitness::MonomialDigitsSparse4 { digits, nnz, idx, coeff },
+                CmMatVecWitness::Base(w2),
+                CmMatVecWitness::Mle(w3),
+            ) => {
+                let w0s: &[R::BaseRing] = w0.as_ref();
+                let w2s: &[R::BaseRing] = w2.as_ref();
+                let digs: &[u16] = digits.as_ref();
+                let nnz: &[u8] = nnz.as_ref();
+                let idx: &[[u16; 4]] = idx.as_ref();
+                let coeff: &[[R::BaseRing; 4]] = coeff.as_ref();
+
+                // Peel `LazyFixed` layers with empty `fixed` (identity) so we can hit the dense/HFrom fast paths.
+                let mut w3m: &StreamingMleEnum<R> = w3.as_ref();
+                loop {
+                    match w3m {
+                        StreamingMleEnum::LazyFixed { inner, fixed, .. } if fixed.is_empty() => {
+                            w3m = inner.as_ref();
+                        }
+                        _ => break,
+                    }
+                }
+                enum W3Fast<'a, Rr: OverField + PolyRing>
+                where
+                    Rr::BaseRing: Ring,
+                {
+                    Dense(&'a [Rr]),
+                    HFrom {
+                        rest_sum: &'a Rr,
+                        groups: &'a [HFromGroup<Rr>],
+                        h_id: usize,
+                    },
+                    Other(&'a StreamingMleEnum<Rr>),
+                }
+                let w3fast = match w3m {
+                    StreamingMleEnum::DenseArc { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::DenseOwned { evals, .. } => W3Fast::Dense(evals.as_ref()),
+                    StreamingMleEnum::HFromMfDigitsConstCol0 { groups, rest_sum, .. } => W3Fast::HFrom {
+                        rest_sum,
+                        groups: groups.as_ref(),
+                        h_id: Arc::as_ptr(groups) as usize,
+                    },
+                    _ => W3Fast::Other(w3m),
+                };
+
+                let mut acc0 = R::BaseRing::ZERO;
+                let mut acc2 = R::BaseRing::ZERO;
+                let mut acc1 = R::ZERO;
+                let mut acc3 = R::ZERO;
+                let acc1_coeffs = acc1.coeffs_mut();
+
+                // If `w3` is streamed-h, prepare the per-thread cache once per row (avoid per-nonzero checks).
+                let mut hcache: Option<&mut HFromIndexCache<R>> = None;
+                if let W3Fast::HFrom { h_id, .. } = &w3fast {
+                    if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
+                        *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
+                    }
+                    hcache = Some(hfrom_cache.as_mut().unwrap());
+                }
+
+                // Collapse 2 bounds checks (w0/w2) into one fast-path where possible.
+                let len0 = w0s.len();
+                let len2 = w2s.len();
+                let len_fast = len0.min(len2);
+                let len_d = digs.len();
+
+                for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
+                    let c0 = *coeff0;
+                    let cj = *col_idx;
+                    if cj < len_fast {
+                        // Safe: `cj < min(len0,len2)`.
+                        unsafe {
+                            acc0 += c0 * *w0s.get_unchecked(cj);
+                            acc2 += c0 * *w2s.get_unchecked(cj);
+                        }
+                    } else {
+                        if cj < len0 {
+                            acc0 += c0 * w0s[cj];
+                        }
+                        if cj < len2 {
+                            acc2 += c0 * w2s[cj];
+                        }
+                    }
+
+                    // Sparse-support exp_table digit: update up to 4 coefficients directly.
+                    if cj < len_d {
+                        let d = digs[cj] as usize;
+                        let t = nnz[d] as usize;
+                        let id = idx[d];
+                        let cd = coeff[d];
+                        for k in 0..t {
+                            acc1_coeffs[id[k] as usize] += cd[k] * c0;
+                        }
+                    }
+
                     // `w3` is an MLE; avoid creating temporaries `hv * c0` in the hot loop.
                     match &w3fast {
                         W3Fast::Dense(v) => {
