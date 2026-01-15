@@ -1496,6 +1496,36 @@ where
             if h_cc {
                 unreachable!("streaming-h path should not mark h as const-coeff");
             } else {
+                if profile {
+                    // Print a one-line summary of the h MLE shape, since it determines whether
+                    // CM's fused `eval4_at_row` can hit dense/HFrom fast paths (after peeling empty LazyFixed).
+                    fn describe_mle<R: OverField + PolyRing>(m: &StreamingMleEnum<R>) -> String
+                    where
+                        R::BaseRing: Ring,
+                    {
+                        match m {
+                            StreamingMleEnum::LazyFixed { inner, fixed, max_lazy, .. } => {
+                                if fixed.is_empty() {
+                                    format!("LazyFixed(empty,max_lazy={}) -> {}", max_lazy, describe_mle(inner.as_ref()))
+                                } else {
+                                    format!("LazyFixed(k={},max_lazy={}) -> {}", fixed.len(), max_lazy, describe_mle(inner.as_ref()))
+                                }
+                            }
+                            StreamingMleEnum::HFromMfDigitsConstCol0 { .. } => "HFromMfDigitsConstCol0".to_string(),
+                            StreamingMleEnum::DenseArc { .. } => "DenseArc".to_string(),
+                            StreamingMleEnum::DenseOwned { .. } => "DenseOwned".to_string(),
+                            StreamingMleEnum::BaseScalarArc { .. } => "BaseScalarArc".to_string(),
+                            StreamingMleEnum::BaseScalarOwned { .. } => "BaseScalarOwned".to_string(),
+                            StreamingMleEnum::MonomialDigitsArc { .. } => "MonomialDigitsArc".to_string(),
+                            StreamingMleEnum::CmMatVec4Part { .. } => "CmMatVec4Part".to_string(),
+                            _ => "Other".to_string(),
+                        }
+                    }
+                    println!(
+                        "[LF+ Cm::sumchecker_streaming] h_mle: {}",
+                        describe_mle::<R>(h_mles_full[i].as_ref())
+                    );
+                }
                 let mle = (*h_mles_full[i]).clone();
                 if cm_lazy > 0 {
                     mles.push(StreamingMleEnum::LazyFixed {
