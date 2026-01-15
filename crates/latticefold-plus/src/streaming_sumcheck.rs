@@ -258,6 +258,15 @@ where
         digits: Arc<Vec<u16>>,
         exp_table: Arc<Vec<R>>,
     },
+    /// Specialized monomial-digit witness where every `exp_table[d]` is monomial-like (<=1 nonzero coeff).
+    ///
+    /// This allows O(1) update of the accumulator coefficient instead of doing a full ring multiply
+    /// by a monomial element inside the sparse row scan (important for d64).
+    MonomialDigitsMonomial {
+        digits: Arc<Vec<u16>>,
+        mono_idx: Arc<Vec<u16>>,
+        mono_coeff: Arc<Vec<R::BaseRing>>,
+    },
     Mle(Arc<StreamingMleEnum<R>>),
 }
 
@@ -274,6 +283,19 @@ where
                 let cj = col;
                 if cj < digits.len() {
                     Some(exp_table[digits[cj] as usize])
+                } else {
+                    None
+                }
+            }
+            CmMatVecWitness::MonomialDigitsMonomial { digits, mono_idx, mono_coeff } => {
+                let cj = col;
+                if cj < digits.len() {
+                    let d = digits[cj] as usize;
+                    let idx = mono_idx[d] as usize;
+                    // Return ring monomial with coefficient `mono_coeff[d]`.
+                    let mut out = R::ZERO;
+                    out.coeffs_mut()[idx] = mono_coeff[d];
+                    Some(out)
                 } else {
                     None
                 }
@@ -303,14 +325,15 @@ where
         match (&self.w0, &self.w1, &self.w2, &self.w3) {
             (
                 CmMatVecWitness::Base(w0),
-                CmMatVecWitness::MonomialDigits { digits, exp_table },
+                CmMatVecWitness::MonomialDigitsMonomial { digits, mono_idx, mono_coeff },
                 CmMatVecWitness::Base(w2),
                 CmMatVecWitness::Mle(w3),
             ) => {
                 let w0s: &[R::BaseRing] = w0.as_ref();
                 let w2s: &[R::BaseRing] = w2.as_ref();
                 let digs: &[u16] = digits.as_ref();
-                let exps: &[R] = exp_table.as_ref();
+                let mono_idx: &[u16] = mono_idx.as_ref();
+                let mono_coeff: &[R::BaseRing] = mono_coeff.as_ref();
                 let w3m: &StreamingMleEnum<R> = w3.as_ref();
 
                 let mut acc0 = R::BaseRing::ZERO;
@@ -327,7 +350,9 @@ where
                         acc2 += c0 * w2s[cj];
                     }
                     if cj < digs.len() {
-                        acc1 += exps[digs[cj] as usize] * c0;
+                        let d = digs[cj] as usize;
+                        // exp_table[d] is monomial-like: add into that coefficient directly.
+                        acc1.coeffs_mut()[mono_idx[d] as usize] += mono_coeff[d] * c0;
                     }
                     // `w3` is an MLE; evaluate on demand (can be dense, LazyFixed, etc.)
                     acc3 += w3m.eval_at_index(cj) * c0;

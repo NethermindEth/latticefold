@@ -1523,7 +1523,44 @@ where
                     match &inst.m_tau {
                         crate::rgchk::MonomialVec::Dense(v) => CmMatVecWitness::Ring(v.clone()),
                         crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                            CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                            // Fast path: if exp_table entries are monomial-like, store their (idx, coeff) form.
+                            let mut mono_idx = Vec::<u16>::with_capacity(exp_table.len());
+                            let mut mono_coeff = Vec::<R::BaseRing>::with_capacity(exp_table.len());
+                            let mut ok = true;
+                            for r in exp_table.iter() {
+                                let mut found: Option<(usize, R::BaseRing)> = None;
+                                for (i, &ci) in r.coeffs().iter().enumerate() {
+                                    if ci != R::BaseRing::ZERO {
+                                        if found.is_some() {
+                                            ok = false;
+                                            break;
+                                        }
+                                        found = Some((i, ci));
+                                    }
+                                }
+                                if !ok {
+                                    break;
+                                }
+                                match found {
+                                    None => {
+                                        mono_idx.push(0u16);
+                                        mono_coeff.push(R::BaseRing::ZERO);
+                                    }
+                                    Some((i, c)) => {
+                                        mono_idx.push(i as u16);
+                                        mono_coeff.push(c);
+                                    }
+                                }
+                            }
+                            if ok {
+                                CmMatVecWitness::MonomialDigitsMonomial {
+                                    digits: digits.clone(),
+                                    mono_idx: std::sync::Arc::new(mono_idx),
+                                    mono_coeff: std::sync::Arc::new(mono_coeff),
+                                }
+                            } else {
+                                CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                            }
                         }
                     }
                 };
@@ -1907,7 +1944,44 @@ where
                     match &inst.m_tau {
                         crate::rgchk::MonomialVec::Dense(v) => CmMatVecWitness::Ring(v.clone()),
                         crate::rgchk::MonomialVec::Digits { digits, exp_table } => {
-                            CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                            // Fast path: if exp_table entries are monomial-like, store their (idx, coeff) form.
+                            let mut mono_idx = Vec::<u16>::with_capacity(exp_table.len());
+                            let mut mono_coeff = Vec::<R::BaseRing>::with_capacity(exp_table.len());
+                            let mut ok = true;
+                            for r in exp_table.iter() {
+                                let mut found: Option<(usize, R::BaseRing)> = None;
+                                for (i, &ci) in r.coeffs().iter().enumerate() {
+                                    if ci != R::BaseRing::ZERO {
+                                        if found.is_some() {
+                                            ok = false;
+                                            break;
+                                        }
+                                        found = Some((i, ci));
+                                    }
+                                }
+                                if !ok {
+                                    break;
+                                }
+                                match found {
+                                    None => {
+                                        mono_idx.push(0u16);
+                                        mono_coeff.push(R::BaseRing::ZERO);
+                                    }
+                                    Some((i, c)) => {
+                                        mono_idx.push(i as u16);
+                                        mono_coeff.push(c);
+                                    }
+                                }
+                            }
+                            if ok {
+                                CmMatVecWitness::MonomialDigitsMonomial {
+                                    digits: digits.clone(),
+                                    mono_idx: std::sync::Arc::new(mono_idx),
+                                    mono_coeff: std::sync::Arc::new(mono_coeff),
+                                }
+                            } else {
+                                CmMatVecWitness::MonomialDigits { digits: digits.clone(), exp_table: exp_table.clone() }
+                            }
                         }
                     }
                 };
