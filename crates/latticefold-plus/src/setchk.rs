@@ -480,17 +480,36 @@ impl<R: OverField + PolyRing> In<R> {
         // random linear combinator, for batching
         let rc: Option<R::BaseRing> = (Ms_len > 1).then(|| transcript.get_challenge());
 
+        // Precompute alpha powers for the (rare) non-ConstCol0 matrix sets.
+        // This avoids doing `alpha.pow([j])` inside the per-point sumcheck combiner.
+        let alpha_pows: Vec<Option<Vec<R::BaseRing>>> = (0..Ms_len)
+            .map(|i| {
+                if mat_is_constcol0.get(i).copied().unwrap_or(false) {
+                    None
+                } else {
+                    let alpha = alphas[i];
+                    let mut p = Vec::with_capacity(ncols);
+                    let mut acc = R::BaseRing::ONE; // alpha^0
+                    for _ in 0..ncols {
+                        p.push(acc);
+                        acc *= alpha;
+                    }
+                    Some(p)
+                }
+            })
+            .collect();
+
         // Base-ring combiner (all tables here are constant-coeff), so we can use the
         // base-optimized streaming sumcheck prover.
         let comb_fn0 = |vals: &[R::BaseRing]| -> R::BaseRing {
             // When there is only a single term, `rc` is omitted; semantically this means
             // "all terms have weight 1". (We must still include both matrix- and vector-set
             // contributions, otherwise the sumcheck claim won't match Step 3.)
-            use ark_std::One;
             let mut lc = R::BaseRing::ZERO;
 
             let mut s = 0usize;
-            for (i, alpha) in alphas.iter().enumerate().take(Ms_len) {
+            let mut rc_pow = R::BaseRing::ONE;
+            for i in 0..Ms_len {
                 let mut res = R::BaseRing::ZERO;
                 if mat_is_constcol0.get(i).copied().unwrap_or(false) {
                     // Layout: [m0, m0', eq] (stride 3). alpha^0 = 1.
@@ -499,18 +518,18 @@ impl<R: OverField + PolyRing> In<R> {
                     s += 3;
                 } else {
                     // Layout: [m_j, m'_j] for j=0..d-1, then eq (stride 2*d+1).
+                    let ap = alpha_pows[i].as_ref().expect("alpha powers must exist for non-ConstCol0");
                     for j in 0..ncols {
                         res += (vals[s + j * 2] * vals[s + j * 2] - vals[s + j * 2 + 1])
-                            * alpha.pow([j as u64])
+                            * ap[j];
                     }
                     res *= vals[s + 2 * ncols]; // eq
                     s += 2 * ncols + 1;
                 }
-                let w = rc
-                    .as_ref()
-                    .map(|rc| rc.pow([i as u64]))
-                    .unwrap_or(R::BaseRing::one());
-                lc += res * w;
+                lc += res * rc_pow;
+                if let Some(rc) = rc {
+                    rc_pow *= rc;
+                }
             }
 
             for i in 0..ms.len() {
@@ -519,11 +538,10 @@ impl<R: OverField + PolyRing> In<R> {
                 let mut res = R::BaseRing::ZERO;
                 res += (vals[s0] * vals[s0] - vals[s0 + 1]) * alphas[alpha_idx];
                 res *= vals[s0 + 2]; // eq
-                let w = rc
-                    .as_ref()
-                    .map(|rc| rc.pow([alpha_idx as u64]))
-                    .unwrap_or(R::BaseRing::one());
-                lc += res * w;
+                lc += res * rc_pow;
+                if let Some(rc) = rc {
+                    rc_pow *= rc;
+                }
             }
             lc
         };
