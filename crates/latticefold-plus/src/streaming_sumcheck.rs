@@ -2372,15 +2372,17 @@ impl StreamingSumcheck {
             hfrom_cache: Option<HFromIndexCache<Rr>>,
             // CM optimization: cache one fused mat-vec row scan for the "even" and "odd" indices
             // within the current hypercube vertex pair.
-            cm_cache_even: Option<(usize, usize, [Rr; 4])>, // (shared_id, row, vals)
-            cm_cache_odd: Option<(usize, usize, [Rr; 4])>,
+            // NOTE: store cached `[R;4]` on the heap to avoid huge per-thread stack frames when
+            // `R` is large (e.g. `FrogRing64`). Rayon's worker stack is limited and can overflow.
+            cm_cache_even: Option<(usize, usize, Box<[Rr; 4]>)>, // (shared_id, row, vals)
+            cm_cache_odd: Option<(usize, usize, Box<[Rr; 4]>)>,
             // CM optimization (LazyFixed): cache the *lazy-combined* value for a fused mat-vec
             // (summing over the fixed low bits). This prevents re-scanning the same 2^k rows for
             // each of the 4 parts.
             // Keyed only by (shared_id, base, k). For CM, the per-part LazyFixed weights are identical
             // across the 4 parts (they are fixed by the same challenges), so we can safely share.
-            cm_lazy_cache_even: Option<(usize, usize, usize, [Rr; 4])>, // (shared_id, base, k, vals)
-            cm_lazy_cache_odd: Option<(usize, usize, usize, [Rr; 4])>,
+            cm_lazy_cache_even: Option<(usize, usize, usize, Box<[Rr; 4]>)>, // (shared_id, base, k, vals)
+            cm_lazy_cache_odd: Option<(usize, usize, usize, Box<[Rr; 4]>)>,
         }
 
         let scratch = || Scratch {
@@ -2401,8 +2403,8 @@ impl StreamingSumcheck {
         fn eval_mle_with_cm_cache<R: OverField + PolyRing>(
             mle: &StreamingMleEnum<R>,
             index: usize,
-            cache: &mut Option<(usize, usize, [R; 4])>,
-            lazy_cache: &mut Option<(usize, usize, usize, [R; 4])>,
+            cache: &mut Option<(usize, usize, Box<[R; 4]>)>,
+            lazy_cache: &mut Option<(usize, usize, usize, Box<[R; 4]>)>,
             hfrom_cache: &mut Option<HFromIndexCache<R>>,
         ) -> R
         where
@@ -2446,7 +2448,17 @@ impl StreamingSumcheck {
                         acc[2] += v[2] * w;
                         acc[3] += v[3] * w;
                     }
-                    *lazy_cache = Some((sid, base, k, acc));
+                    match lazy_cache.as_mut() {
+                        Some((csid, cbase, ck, vals)) => {
+                            *csid = sid;
+                            *cbase = base;
+                            *ck = k;
+                            **vals = acc;
+                        }
+                        None => {
+                            *lazy_cache = Some((sid, base, k, Box::new(acc)));
+                        }
+                    }
                     return acc[wid];
                 }
             }
@@ -2460,7 +2472,16 @@ impl StreamingSumcheck {
                     }
                 }
                 let vals = shared.eval4_at_row(index, hfrom_cache);
-                *cache = Some((sid, index, vals));
+                match cache.as_mut() {
+                    Some((csid, crow, cvals)) => {
+                        *csid = sid;
+                        *crow = index;
+                        **cvals = vals;
+                    }
+                    None => {
+                        *cache = Some((sid, index, Box::new(vals)));
+                    }
+                }
                 return vals[wid];
             }
             mle.eval_at_index(index)
@@ -2619,10 +2640,11 @@ impl StreamingSumcheck {
             vals0: Vec<Rr>,
             vals1: Vec<Rr>,
             hfrom_cache: Option<HFromIndexCache<Rr>>,
-            cm_cache_even: Option<(usize, usize, [Rr; 4])>,
-            cm_cache_odd: Option<(usize, usize, [Rr; 4])>,
-            cm_lazy_cache_even: Option<(usize, usize, usize, [Rr; 4])>,
-            cm_lazy_cache_odd: Option<(usize, usize, usize, [Rr; 4])>,
+            // Heap-cached `[R;4]` to avoid large stack frames for big rings (e.g. `FrogRing64`).
+            cm_cache_even: Option<(usize, usize, Box<[Rr; 4]>)>,
+            cm_cache_odd: Option<(usize, usize, Box<[Rr; 4]>)>,
+            cm_lazy_cache_even: Option<(usize, usize, usize, Box<[Rr; 4]>)>,
+            cm_lazy_cache_odd: Option<(usize, usize, usize, Box<[Rr; 4]>)>,
         }
 
         let scratch = || Scratch {
@@ -2640,8 +2662,8 @@ impl StreamingSumcheck {
         fn eval_mle_with_cm_cache<R: OverField + PolyRing>(
             mle: &StreamingMleEnum<R>,
             index: usize,
-            cache: &mut Option<(usize, usize, [R; 4])>,
-            lazy_cache: &mut Option<(usize, usize, usize, [R; 4])>,
+            cache: &mut Option<(usize, usize, Box<[R; 4]>)>,
+            lazy_cache: &mut Option<(usize, usize, usize, Box<[R; 4]>)>,
             hfrom_cache: &mut Option<HFromIndexCache<R>>,
         ) -> R
         where
@@ -2681,7 +2703,17 @@ impl StreamingSumcheck {
                         acc[2] += v[2] * w;
                         acc[3] += v[3] * w;
                     }
-                    *lazy_cache = Some((sid, base, k, acc));
+                    match lazy_cache.as_mut() {
+                        Some((csid, cbase, ck, vals)) => {
+                            *csid = sid;
+                            *cbase = base;
+                            *ck = k;
+                            **vals = acc;
+                        }
+                        None => {
+                            *lazy_cache = Some((sid, base, k, Box::new(acc)));
+                        }
+                    }
                     return acc[wid];
                 }
             }
@@ -2695,7 +2727,16 @@ impl StreamingSumcheck {
                     }
                 }
                 let vals = shared.eval4_at_row(index, hfrom_cache);
-                *cache = Some((sid, index, vals));
+                match cache.as_mut() {
+                    Some((csid, crow, cvals)) => {
+                        *csid = sid;
+                        *crow = index;
+                        **cvals = vals;
+                    }
+                    None => {
+                        *cache = Some((sid, index, Box::new(vals)));
+                    }
+                }
                 return vals[wid];
             }
             mle.eval_at_index(index)
