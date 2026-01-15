@@ -25,7 +25,7 @@ use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
 use latticefold_plus::utils::maybe_print_rss;
 use latticefold_plus::we_statement::{we_statement_hash_lf_plus, LFP_WE_GATE_DIGEST_V1};
-use cyclotomic_rings::rings::FrogRingPoly as R;
+use cyclotomic_rings::rings::FrogRing64 as R;
 use stark_rings::PolyRing;
 use stark_rings_linalg::SparseMatrix;
 use std::sync::Arc;
@@ -215,7 +215,6 @@ fn main() {
     let m0 = cr1cs.x.matrices_arc_base();
     maybe_print_rss("after matrices_arc");
 
-    // LF+ parameters: boundedness base b=2^16,k=2, and a conservative decomp base B for Π_decomp.
     let we_params =
         latticefold_plus::sp1_r1lf::sp1_default_we_params_for_r1lf_cache::<R>(&cache, kappa as u64, m0.len() as u64)
             .expect("sp1_default_we_params_for_r1lf_cache");
