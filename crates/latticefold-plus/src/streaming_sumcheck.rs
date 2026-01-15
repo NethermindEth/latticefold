@@ -487,19 +487,44 @@ where
                 let mut acc1 = R::ZERO;
                 let mut acc3 = R::ZERO;
                 let acc1_coeffs = acc1.coeffs_mut();
+                // If `w3` is streamed-h, prepare the per-thread cache once per row (avoid per-nonzero checks).
+                let mut hcache: Option<&mut HFromIndexCache<R>> = None;
+                if let W3Fast::HFrom { h_id, .. } = &w3fast {
+                    if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
+                        *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
+                    }
+                    hcache = Some(hfrom_cache.as_mut().unwrap());
+                }
+                // Collapse 3 bounds checks (w0/w2/digs) into one fast-path where possible.
+                let len0 = w0s.len();
+                let len2 = w2s.len();
+                let len_d = digs.len();
+                let len_fast = len0.min(len2).min(len_d);
                 for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
                     let c0 = *coeff0;
                     let cj = *col_idx;
-                    if cj < w0s.len() {
-                        acc0 += c0 * w0s[cj];
-                    }
-                    if cj < w2s.len() {
-                        acc2 += c0 * w2s[cj];
-                    }
-                    if cj < digs.len() {
-                        let d = digs[cj] as usize;
-                        // exp_table[d] is monomial-like: add into that coefficient directly.
-                        acc1_coeffs[mono_idx[d] as usize] += mono_coeff[d] * c0;
+                    if cj < len_fast {
+                        // Safe: `cj < min(len0,len2,len_d)`.
+                        unsafe {
+                            acc0 += c0 * *w0s.get_unchecked(cj);
+                            acc2 += c0 * *w2s.get_unchecked(cj);
+                            let d = *digs.get_unchecked(cj) as usize;
+                            // exp_table[d] is monomial-like: add into that coefficient directly.
+                            acc1_coeffs[*mono_idx.get_unchecked(d) as usize] +=
+                                *mono_coeff.get_unchecked(d) * c0;
+                        }
+                    } else {
+                        if cj < len0 {
+                            acc0 += c0 * w0s[cj];
+                        }
+                        if cj < len2 {
+                            acc2 += c0 * w2s[cj];
+                        }
+                        if cj < len_d {
+                            let d = digs[cj] as usize;
+                            // exp_table[d] is monomial-like: add into that coefficient directly.
+                            acc1_coeffs[mono_idx[d] as usize] += mono_coeff[d] * c0;
+                        }
                     }
                     // `w3` is an MLE; avoid creating temporaries `hv * c0` in the hot loop.
                     match &w3fast {
@@ -508,20 +533,15 @@ where
                                 Self::add_scaled(&mut acc3, hv, c0);
                             }
                         }
-                        W3Fast::HFrom { groups, rest_sum, h_id } => {
-                            if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
-                                *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
-                            }
-                            let hv = hfrom_cache
-                                .as_mut()
-                                .unwrap()
-                                .get_or_compute(cj, || {
-                                    let mut hv = (*rest_sum).clone();
-                                    for g in groups.iter() {
-                                        hv += &g.table[g.packed_at(cj)];
-                                    }
-                                    hv
-                                });
+                        W3Fast::HFrom { groups, rest_sum, .. } => {
+                            let cache = hcache.as_mut().unwrap();
+                            let hv = cache.get_or_compute(cj, || {
+                                let mut hv = (*rest_sum).clone();
+                                for g in groups.iter() {
+                                    hv += &g.table[g.packed_at(cj)];
+                                }
+                                hv
+                            });
                             Self::add_scaled(&mut acc3, &hv, c0);
                         }
                         W3Fast::Other(m) => {
@@ -580,14 +600,33 @@ where
                 let mut acc2 = R::BaseRing::ZERO;
                 let mut acc1 = R::ZERO;
                 let mut acc3 = R::ZERO;
+                // If `w3` is streamed-h, prepare the per-thread cache once per row (avoid per-nonzero checks).
+                let mut hcache: Option<&mut HFromIndexCache<R>> = None;
+                if let W3Fast::HFrom { h_id, .. } = &w3fast {
+                    if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
+                        *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
+                    }
+                    hcache = Some(hfrom_cache.as_mut().unwrap());
+                }
+                // Collapse 2 bounds checks (w0/w2) into one fast-path where possible.
+                let len0 = w0s.len();
+                let len2 = w2s.len();
+                let len_fast = len0.min(len2);
                 for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
                     let c0 = *coeff0;
                     let cj = *col_idx;
-                    if cj < w0s.len() {
-                        acc0 += c0 * w0s[cj];
-                    }
-                    if cj < w2s.len() {
-                        acc2 += c0 * w2s[cj];
+                    if cj < len_fast {
+                        unsafe {
+                            acc0 += c0 * *w0s.get_unchecked(cj);
+                            acc2 += c0 * *w2s.get_unchecked(cj);
+                        }
+                    } else {
+                        if cj < len0 {
+                            acc0 += c0 * w0s[cj];
+                        }
+                        if cj < len2 {
+                            acc2 += c0 * w2s[cj];
+                        }
                     }
                     if let Some(v1) = w1s.get(cj) {
                         Self::add_scaled(&mut acc1, v1, c0);
@@ -598,20 +637,15 @@ where
                                 Self::add_scaled(&mut acc3, hv, c0);
                             }
                         }
-                        W3Fast::HFrom { groups, rest_sum, h_id } => {
-                            if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
-                                *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
-                            }
-                            let hv = hfrom_cache
-                                .as_mut()
-                                .unwrap()
-                                .get_or_compute(cj, || {
-                                    let mut hv = (*rest_sum).clone();
-                                    for g in groups.iter() {
-                                        hv += &g.table[g.packed_at(cj)];
-                                    }
-                                    hv
-                                });
+                        W3Fast::HFrom { groups, rest_sum, .. } => {
+                            let cache = hcache.as_mut().unwrap();
+                            let hv = cache.get_or_compute(cj, || {
+                                let mut hv = (*rest_sum).clone();
+                                for g in groups.iter() {
+                                    hv += &g.table[g.packed_at(cj)];
+                                }
+                                hv
+                            });
                             Self::add_scaled(&mut acc3, &hv, c0);
                         }
                         W3Fast::Other(m) => {
@@ -665,17 +699,38 @@ where
                 let mut acc1 = R::BaseRing::ZERO;
                 let mut acc2 = R::BaseRing::ZERO;
                 let mut acc3 = R::ZERO;
+                // If `w3` is streamed-h, prepare the per-thread cache once per row (avoid per-nonzero checks).
+                let mut hcache: Option<&mut HFromIndexCache<R>> = None;
+                if let W3Fast::HFrom { h_id, .. } = &w3fast {
+                    if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
+                        *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
+                    }
+                    hcache = Some(hfrom_cache.as_mut().unwrap());
+                }
+                // Collapse 3 bounds checks (w0/w1/w2) into one fast-path where possible.
+                let len0 = w0s.len();
+                let len1 = w1s.len();
+                let len2 = w2s.len();
+                let len_fast = len0.min(len1).min(len2);
                 for (coeff0, col_idx) in &self.matrix0.coeffs[row] {
                     let c0 = *coeff0;
                     let cj = *col_idx;
-                    if cj < w0s.len() {
-                        acc0 += c0 * w0s[cj];
-                    }
-                    if cj < w1s.len() {
-                        acc1 += c0 * w1s[cj];
-                    }
-                    if cj < w2s.len() {
-                        acc2 += c0 * w2s[cj];
+                    if cj < len_fast {
+                        unsafe {
+                            acc0 += c0 * *w0s.get_unchecked(cj);
+                            acc1 += c0 * *w1s.get_unchecked(cj);
+                            acc2 += c0 * *w2s.get_unchecked(cj);
+                        }
+                    } else {
+                        if cj < len0 {
+                            acc0 += c0 * w0s[cj];
+                        }
+                        if cj < len1 {
+                            acc1 += c0 * w1s[cj];
+                        }
+                        if cj < len2 {
+                            acc2 += c0 * w2s[cj];
+                        }
                     }
                     match &w3fast {
                         W3Fast::Dense(v) => {
@@ -683,20 +738,15 @@ where
                                 Self::add_scaled(&mut acc3, hv, c0);
                             }
                         }
-                        W3Fast::HFrom { groups, rest_sum, h_id } => {
-                            if hfrom_cache.as_ref().map(|c| c.id) != Some(*h_id) {
-                                *hfrom_cache = Some(HFromIndexCache::<R>::new(*h_id));
-                            }
-                            let hv = hfrom_cache
-                                .as_mut()
-                                .unwrap()
-                                .get_or_compute(cj, || {
-                                    let mut hv = (*rest_sum).clone();
-                                    for g in groups.iter() {
-                                        hv += &g.table[g.packed_at(cj)];
-                                    }
-                                    hv
-                                });
+                        W3Fast::HFrom { groups, rest_sum, .. } => {
+                            let cache = hcache.as_mut().unwrap();
+                            let hv = cache.get_or_compute(cj, || {
+                                let mut hv = (*rest_sum).clone();
+                                for g in groups.iter() {
+                                    hv += &g.table[g.packed_at(cj)];
+                                }
+                                hv
+                            });
                             Self::add_scaled(&mut acc3, &hv, c0);
                         }
                         W3Fast::Other(m) => {
