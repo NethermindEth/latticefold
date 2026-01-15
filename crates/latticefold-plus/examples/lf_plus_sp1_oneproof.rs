@@ -22,11 +22,14 @@ use latticefold::commitment::AjtaiCommitmentScheme;
 use latticefold::transcript::Transcript;
 use latticefold_plus::lin::LinearizedVerify;
 use latticefold_plus::utils::maybe_print_rss;
+use latticefold_plus::we_statement::{we_statement_hash_lf_plus, LFP_WE_GATE_DIGEST_V1};
 use cyclotomic_rings::rings::FrogRingPoly as R;
 use stark_rings::PolyRing;
 use stark_rings_linalg::SparseMatrix;
 use std::sync::Arc;
 use std::time::Instant;
+use sha2::{Digest, Sha256};
+use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 type F = <R as PolyRing>::BaseRing;
 
@@ -237,6 +240,30 @@ fn main() {
         let d: [u8; 32] = cache.stats.digest;
         latticefold_plus::we_statement::digest32_to_bits_field::<BFSmall>(d)
     };
+
+    // Proof-agnostic arming statement digest (binds vk, r1cs, gate version, **params**, and public inputs).
+    // This is what an honest armer/decapper should use to derive lock coins.
+    let vk_hash = [0u8; 32]; // TODO: wire SP1 program/vk digest here (statement-defined)
+    let r1cs_digest = cache.stats.digest; // SP1 R1LF instance digest (statement-defined)
+    let stmt_digest = we_statement_hash_lf_plus::<R>(vk_hash, r1cs_digest, LFP_WE_GATE_DIGEST_V1, &we_params, &public_inputs);
+    println!("  stmt_digest={:02x?}...", &stmt_digest[..8]);
+
+    // Demonstrate how an honest armer derives lock/query coins from the statement digest.
+    // (This is *outside* the LF+ transcript, so it does not affect prover/verifier behavior.)
+    const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
+    let lock_j: u64 = 0;
+    let coin_seed: [u8; 32] = {
+        let mut h = Sha256::new();
+        h.update(b"LFP_LOCK_COIN_V1");
+        h.update(&ARMER_SEED);
+        h.update(&stmt_digest);
+        h.update(&lock_j.to_le_bytes());
+        h.finalize().into()
+    };
+    println!("  lock_coin_seed={:02x?}... (j={lock_j})", &coin_seed[..8]);
+    let mut _coin_rng = StdRng::from_seed(coin_seed);
+    // Consume one word so it’s clear the RNG is “live” (not just printed).
+    let _ = _coin_rng.next_u64();
 
     let mut prover = latticefold_plus::plus::PlusProverSparseBase::init_seeded_base(
         ajtai.clone(),

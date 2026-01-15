@@ -638,8 +638,22 @@ where
 
     let kappa = tensor_c_ring.len();
     let sizes = [x_powers.len(), d_prime_powers.len(), s_prime.len(), kappa];
-    // All pow2 is assumed in the protocol/bench; we still follow the optimized path.
-    let vars4 = sizes.map(|s| ark_std::log2(s.next_power_of_two()) as usize);
+    // Hard requirement: the optimized factored `t(z)` evaluation is only valid when each tensor
+    // factor length is a power of two (matching the verifier's optimized path).
+    //
+    // If this fails, do NOT attempt a dense fallback here (it can explode WE build memory);
+    // instead fix the statement-bound parameters so these sizes are powers of two.
+    let all_pow2 = sizes.iter().all(|&s| s.is_power_of_two());
+    assert!(
+        all_pow2,
+        "WE eval_t_z_optimized_ring requires pow2 factor sizes, got: x_powers={} d_prime_powers={} s_prime={} kappa={}",
+        sizes[0],
+        sizes[1],
+        sizes[2],
+        sizes[3],
+    );
+
+    let vars4 = sizes.map(|s| ark_std::log2(s) as usize);
     let tensor_vars = vars4.iter().sum::<usize>();
 
     // Split r into chunks (innermost to outermost) as in tensor_eval::eval_t_z_optimized.
@@ -889,9 +903,6 @@ where
         }
         u_vars.push(u_l);
     }
-    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
-        eprintln!("[we_cm_diag] after u_vars: constraints={}", b.rows.len());
-    }
 
     // --- tensor(c0/c1) and tcch0/tcch1 ---
     let tensor_c0 = tensor_scalar_vars::<BF<R>>(&mut b, &field_wiring.c0);
@@ -916,9 +927,6 @@ where
         tcch0.push(acc0);
         tcch1.push(acc1);
     }
-    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
-        eprintln!("[we_cm_diag] after tcch: constraints={}", b.rows.len());
-    }
 
     // --- Precompute constants for eval_t_z_optimized ---
     // dpp = [dp^i] as scalar ring elements (length ℓ = dparams.l)
@@ -935,9 +943,6 @@ where
     for i in 0..d {
         let mi = stark_rings::unit_monomial::<R>(i);
         xp.push(ring_to_ringvars::<R>(&mut b, &mi));
-    }
-    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
-        eprintln!("[we_cm_diag] after dpp/xp: constraints={}", b.rows.len());
     }
 
     // --- Verify the two degree-2 sumchecks + recombination equality ---
@@ -992,7 +997,6 @@ where
     // - subclaim_eval via sumcheck_verify_degree2
     // - eval via recombination
     // and enforce equality.
-    let cm_diag = std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1");
     let do_one = |_which: usize,
                   b: &mut Dr1csBuilder<BF<R>>,
                   absorb_flat: &mut Vec<usize>,
@@ -1002,11 +1006,6 @@ where
                   evals: &[Vec<[RingVars; 4]>],
                   tcch0: &[RingVars],
                   tcch1: &[RingVars]| -> Result<(), String> {
-        let diag0 = if cm_diag && _which == 0 {
-            Some(b.rows.len())
-        } else {
-            None
-        };
         // Sumcheck parameter block absorbed by the transcript.
         // NOTE: we assume base field (extension_degree=1), matching our Poseidon wiring usage.
         let v_nvars = const_var(b, BF::<R>::from(nvars as u64));
@@ -1069,12 +1068,6 @@ where
         }
 
         let subclaim_eval = sumcheck_verify_degree2::<BF<R>>(b, claimed_sum, msgs, r_sc)?;
-        if let Some(start) = diag0 {
-            eprintln!(
-                "[we_cm_diag] do_one(0): after sumcheck_verify_degree2 added {} constraints",
-                b.rows.len().saturating_sub(start)
-            );
-        }
 
         // t(z) eval at ro (independent of l)
         let t0 = eval_t_z_optimized_ring::<R>(
@@ -1149,34 +1142,7 @@ where
             eval_acc = ring_add::<BF<R>>(b, &eval_acc, &t1e_s);
         }
 
-        if std::env::var("LFP_WE_CM_SKIP_SC_EQ").ok().as_deref() != Some("1") {
-            if std::env::var("LFP_WE_CM_EQ_DUMP").ok().as_deref() == Some("1") && _which == 0 {
-                // Dump coefficient-wise mismatch before enforcing equality.
-                let d = subclaim_eval.d();
-                let mut any = false;
-                for i in 0..d {
-                    let a = b.assignment[subclaim_eval.coeffs[i]];
-                    let e = b.assignment[eval_acc.coeffs[i]];
-                    if a != e {
-                        any = true;
-                        eprintln!(
-                            "[we_cm_eq_dump] coeff[{i}] subclaim_eval - eval_acc = {:?}",
-                            (a - e).into_bigint()
-                        );
-                    }
-                }
-                if !any {
-                    eprintln!("[we_cm_eq_dump] no coeff mismatch (unexpected if failing)");
-                }
-            }
-            ring_eq::<BF<R>>(b, &subclaim_eval, &eval_acc);
-        }
-        if let Some(start) = diag0 {
-            eprintln!(
-                "[we_cm_diag] do_one(0): total constraints added in do_one = {}",
-                b.rows.len().saturating_sub(start)
-            );
-        }
+        ring_eq::<BF<R>>(b, &subclaim_eval, &eval_acc);
 
         // After sumcheck verification, Cm verifier absorbs the per-instance eval tables.
         // (`absorb_evaluations(evals, transcript)`).
@@ -1192,15 +1158,6 @@ where
         Ok(())
     };
 
-    if std::env::var("LFP_WE_CM_SKIP_SC0").ok().as_deref() == Some("1") {
-        let (inst, asg) = b.into_instance();
-        return Ok((
-            inst,
-            asg,
-            CmMathWiring { short: short_wiring, field: field_wiring, absorb_flat },
-        ));
-    }
-
     do_one(
         0,
         &mut b,
@@ -1212,17 +1169,6 @@ where
         &tcch0,
         &tcch1,
     )?;
-    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
-        eprintln!("[we_cm_diag] after do_one(0): constraints={}", b.rows.len());
-    }
-    if std::env::var("LFP_WE_CM_SKIP_SC1").ok().as_deref() == Some("1") {
-        let (inst, asg) = b.into_instance();
-        return Ok((
-            inst,
-            asg,
-            CmMathWiring { short: short_wiring, field: field_wiring, absorb_flat },
-        ));
-    }
     do_one(
         1,
         &mut b,
@@ -1234,9 +1180,6 @@ where
         &tcch0,
         &tcch1,
     )?;
-    if std::env::var("LFP_WE_CM_DIAG").ok().as_deref() == Some("1") {
-        eprintln!("[we_cm_diag] after do_one(1): constraints={}", b.rows.len());
-    }
 
     let (inst, asg) = b.into_instance();
     Ok((
@@ -2241,9 +2184,6 @@ where
     let absorb_op_offset = 0usize;
     let squeezed_field_offset = 0usize;
 
-    let profile_build = std::env::var("LFP_WE_BUILD_PROFILE").ok().as_deref() == Some("1");
-    let t_total = std::time::Instant::now();
-
     // Poseidon trace -> dR1CS (+ wiring).
     let ops = lf_ops_to_symphony_ops::<BF<R>>(&trace.ops);
     // Parameters used by multiple sub-builders.
@@ -2323,13 +2263,6 @@ where
             (pose_build()?, params_build()?, dcom_build()?, coin_build()?, cm_build()?)
         }
     };
-
-    if profile_build {
-        eprintln!(
-            "[we_build] parts: poseidon={:?} params={:?} dcom={:?} coin={:?} cm={:?}",
-            t_pose, t_params, t_dcom, t_coin, t_cm
-        );
-    }
 
     let (pose_byte_vars, pose_field_vars) =
         cm_poseidon_challenge_vars::<R>(&pose_wiring, &byte_wiring, &op_wiring)?;
@@ -2547,14 +2480,6 @@ where
         glue.push((0, *pv, 5, *cv));
     }
 
-    if profile_build {
-        eprintln!(
-            "[we_build] glue: {:?} (glue_eqs={})",
-            t_glue.elapsed(),
-            glue.len()
-        );
-    }
-
     let parts = vec![
         (pose_inst, pose_asg),   // 0
         (params_inst, params_asg), // 1
@@ -2567,15 +2492,7 @@ where
 
     let t_merge = std::time::Instant::now();
     let (inst, assignment) = merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
-    if profile_build {
-        eprintln!(
-            "[we_build] merge: {:?} (base_constraints={}, glue_constraints={})",
-            t_merge.elapsed(),
-            base_constraints,
-            glue.len()
-        );
-        eprintln!("[we_build] total: {:?}", t_total.elapsed());
-    }
+    let _ = (t_pose, t_params, t_dcom, t_coin, t_cm, t_glue, base_constraints, t_merge);
 
     let public_len = 1 + 10 + public_inputs.len();
     Ok(WeDr1csOutput { inst, assignment, public_len })
@@ -3557,25 +3474,6 @@ where
         (cm_inst, cm_asg),         // 7
         (decomp_inst, decomp_asg), // 8
     ];
-    if std::env::var("LFP_WE_BUILD_DIAG").ok().as_deref() == Some("1") {
-        let names = [
-            "poseidon", "params", "lin", "stmt", "dcom", "coin", "field", "cm", "decomp",
-        ];
-        let mut start = 0usize;
-        eprintln!("[we_build_diag] constraint ranges (start..end):");
-        for (name, (inst, _asg)) in names.iter().zip(parts.iter()) {
-            let len = inst.constraints.len();
-            eprintln!("  - {name}: {start}..{}", start + len);
-            start += len;
-        }
-        eprintln!("  - glue: {start}..{}", start + glue.len());
-        eprintln!(
-            "[we_build_diag] totals: base={} glue={} total={}",
-            start,
-            glue.len(),
-            start + glue.len()
-        );
-    }
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
     let public_len = 1 + 10 + public_inputs.len();
@@ -4158,7 +4056,7 @@ mod tests {
         use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as RR;
         use stark_rings::PolyRing;
 
-        use crate::we_statement::{digest32_to_bits_field, LFP_WE_GATE_DIGEST_V1, we_statement_hash_lf_plus};
+        use crate::we_statement::{digest32_to_bits_field, we_statement_hash_lf_plus, LFP_WE_GATE_DIGEST_V1};
         use dpp::dr1cs_flpcp::Dr1csInstanceSparse as DppInst;
         use dpp::sparse::SparseVec;
         use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
@@ -4366,7 +4264,13 @@ mod tests {
 
             let vk_hash = [1u8; 32];
             let r1cs_digest = [2u8; 32];
-            let stmt_digest = we_statement_hash_lf_plus::<RR>(vk_hash, r1cs_digest, LFP_WE_GATE_DIGEST_V1, sp1_digest_bits);
+            let stmt_digest = we_statement_hash_lf_plus::<RR>(
+                vk_hash,
+                r1cs_digest,
+                LFP_WE_GATE_DIGEST_V1,
+                &params,
+                sp1_digest_bits,
+            );
             const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
             let lock_j: u64 = 0;
             let coin_seed: [u8; 32] = {
@@ -4584,56 +4488,6 @@ mod tests {
             .expect("cm verify (record)");
         let trace = rec.trace().clone();
 
-        // Optional isolate: check the Cm verifier-math dR1CS part alone.
-        // This helps localize regressions to the Cm arithmetization vs glue/merge.
-        if std::env::var("LFP_WE_FAIL_DUMP").ok().as_deref() == Some("1") {
-            let log_kappa = ark_std::log2((kappa as usize).next_power_of_two()) as usize;
-            let (cm_inst, cm_asg, _cm_wiring) =
-                cm_verifier_math_dr1cs::<RR>(&trace, &proof.cmproof, k, log_kappa, nvars, m0.len(), 0)
-                    .expect("cm_verifier_math_dr1cs");
-            if let Err(e) = cm_inst.check(&cm_asg) {
-                eprintln!("[we_fail_dump] cm_inst alone fails: {e}");
-                let parse_idx = |s: &str| -> Option<usize> {
-                    let pfx = "constraint ";
-                    let s = s.strip_prefix(pfx)?;
-                    let (num, _rest) = s.split_once(' ').unwrap_or((s, ""));
-                    num.parse::<usize>().ok()
-                };
-                if let Some(i) = parse_idx(&e) {
-                    let row = cm_inst.constraints.get(i).expect("cm constraint index oob");
-                    let eval_lc = |lc: &[(BF0, usize)]| -> BF0 {
-                        lc.iter()
-                            .fold(BF0::ZERO, |acc, (c, idx)| acc + (*c * cm_asg[*idx]))
-                    };
-                    let a = eval_lc(&row.a);
-                    let b = eval_lc(&row.b);
-                    let c = eval_lc(&row.c);
-                    eprintln!(
-                        "[we_fail_dump] cm idx={} a_terms={} b_terms={} c_terms={}",
-                        i,
-                        row.a.len(),
-                        row.b.len(),
-                        row.c.len()
-                    );
-                    eprintln!("[we_fail_dump] cm a*b-c = {:?}", a * b - c);
-                    eprintln!(
-                        "[we_fail_dump] cm a_lc_first={:?}",
-                        row.a.iter().take(8).collect::<Vec<_>>()
-                    );
-                    eprintln!(
-                        "[we_fail_dump] cm b_lc_first={:?}",
-                        row.b.iter().take(8).collect::<Vec<_>>()
-                    );
-                    eprintln!(
-                        "[we_fail_dump] cm c_lc_first={:?}",
-                        row.c.iter().take(8).collect::<Vec<_>>()
-                    );
-                }
-            } else {
-                eprintln!("[we_fail_dump] cm_inst alone OK");
-            }
-        }
-
         let params = WeParams {
             nvars_setchk: nvars as u64,
             degree_setchk: 3,
@@ -4657,55 +4511,7 @@ mod tests {
             b_decomp,
         )
         .expect("build_we_dr1cs_for_plus_proof");
-        if let Err(e) = out.inst.check(&out.assignment) {
-            // Optional debug: dump the failing constraint shape/value.
-            if std::env::var("LFP_WE_FAIL_DUMP").ok().as_deref() == Some("1") {
-                let parse_idx = |s: &str| -> Option<usize> {
-                    let pfx = "constraint ";
-                    let s = s.strip_prefix(pfx)?;
-                    let (num, _rest) = s.split_once(' ').unwrap_or((s, ""));
-                    num.parse::<usize>().ok()
-                };
-                if let Some(i) = parse_idx(&e) {
-                    let row = out
-                        .inst
-                        .constraints
-                        .get(i)
-                        .expect("constraint index oob");
-                    let eval_lc = |lc: &[(BF0, usize)]| -> BF0 {
-                        lc.iter()
-                            .fold(BF0::ZERO, |acc, (c, idx)| acc + (*c * out.assignment[*idx]))
-                    };
-                    let a = eval_lc(&row.a);
-                    let b = eval_lc(&row.b);
-                    let c = eval_lc(&row.c);
-                    eprintln!(
-                        "[we_fail_dump] idx={} a_terms={} b_terms={} c_terms={}",
-                        i,
-                        row.a.len(),
-                        row.b.len(),
-                        row.c.len()
-                    );
-                    eprintln!(
-                        "[we_fail_dump] a*b-c = {:?}",
-                        a * b - c
-                    );
-                    eprintln!(
-                        "[we_fail_dump] a_lc_first={:?}",
-                        row.a.iter().take(8).collect::<Vec<_>>()
-                    );
-                    eprintln!(
-                        "[we_fail_dump] b_lc_first={:?}",
-                        row.b.iter().take(8).collect::<Vec<_>>()
-                    );
-                    eprintln!(
-                        "[we_fail_dump] c_lc_first={:?}",
-                        row.c.iter().take(8).collect::<Vec<_>>()
-                    );
-                }
-            }
-            panic!("we gate dr1cs satisfied: {e:?}");
-        }
+        out.inst.check(&out.assignment).expect("we gate dr1cs satisfied");
     }
 }
 

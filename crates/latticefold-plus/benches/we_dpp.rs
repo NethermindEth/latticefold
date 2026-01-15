@@ -234,7 +234,7 @@ fn bench_we_dpp(c: &mut Criterion) {
         let gate_digest: [u8; 32] = LFP_WE_GATE_DIGEST_V1;
         // In SP1, "public inputs" for statement arming are just the SP1 public I/O digest(s).
         let stmt_digest =
-            we_statement_hash_lf_plus::<R>(vk_hash, r1cs_digest, gate_digest, &sp1_public_input_digest_bits);
+            we_statement_hash_lf_plus::<R>(vk_hash, r1cs_digest, gate_digest, &params, &sp1_public_input_digest_bits);
 
         const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
         let lock_j: u64 = 0;

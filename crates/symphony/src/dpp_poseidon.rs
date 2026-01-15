@@ -46,19 +46,6 @@ impl<F: PrimeField> SparseDr1csInstance<F> {
             ));
         }
 
-        // Debug/reproducibility mode: force deterministic first-failure index.
-        if std::env::var("LFP_DR1CS_CHECK_SEQ").ok().as_deref() == Some("1") {
-            for (i, row) in self.constraints.iter().enumerate() {
-                let a = Self::eval_lc(&row.a, assignment);
-                let b = Self::eval_lc(&row.b, assignment);
-                let c = Self::eval_lc(&row.c, assignment);
-                if a * b != c {
-                    return Err(format!("constraint {i} failed"));
-                }
-            }
-            return Ok(());
-        }
-
         let failed = self
             .constraints
             .par_iter()
@@ -206,7 +193,7 @@ pub fn merge_sparse_dr1cs_share_one_with_glue<F: PrimeField>(
     // parallel remap that preserves constraint order and does not allocate *extra* constraints
     // beyond the final merged list (it still must allocate the final `merged_constraints`).
     let use_parallel_merge =
-        std::env::var("LFP_WE_MERGE_PARALLEL").ok().as_deref() == Some("1") || total_constraints >= 2_000_000;
+        total_constraints >= 2_000_000;
 
     if use_parallel_merge {
         let remapped_parts: Vec<Vec<Constraint<F>>> = parts

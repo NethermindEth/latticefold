@@ -58,6 +58,7 @@ pub fn we_statement_hash_lf_plus<R: OverField>(
     vk_hash: [u8; 32],
     r1cs_digest: [u8; 32],
     gate_digest: [u8; 32],
+    params: &WeParams,
     public_inputs: &[R::BaseRing],
 ) -> [u8; 32]
 where
@@ -68,6 +69,22 @@ where
     h.update(&vk_hash);
     h.update(&r1cs_digest);
     h.update(&gate_digest);
+
+    // Bind statement params in the same order as `WeParams::to_field_vec`.
+    for v in [
+        params.nvars_setchk,
+        params.degree_setchk,
+        params.nvars_cm,
+        params.degree_cm,
+        params.kappa,
+        params.ring_dim_d,
+        params.decomp_b,
+        params.k,
+        params.l,
+        params.mlen,
+    ] {
+        h.update(&v.to_le_bytes());
+    }
 
     h.update(&(public_inputs.len() as u64).to_le_bytes());
     for x in public_inputs {
