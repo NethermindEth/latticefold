@@ -27,7 +27,7 @@ pub struct WeParams {
     pub ring_dim_d: u64,
     /// Balanced decomposition base `b` used in LF+ range-check (`RgChk`) digit decomposition.
     ///
-    /// For SP1 BabyBear-in-Frog boundedness, this should be `2^16`.
+    /// For SP1 BabyBear-in-Frog boundedness, this is statement-bound (e.g. Frog64 uses `16`).
     pub decomp_b: u64,
     pub k: u64,
     pub l: u64,

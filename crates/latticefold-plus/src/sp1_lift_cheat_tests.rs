@@ -4,7 +4,8 @@
 //! - If lift vars (`t_i` = carry/quotient) are *not* bounded, the lifted constraint is vacuous:
 //!     t := (A*B - C) * p_bb^{-1}  (mod q_frog)
 //!   always satisfies in the host field.
-//! - With LF+ boundedness enforced via balanced base-2^16 digits with k=2, that cheating `t`
+//! - With LF+ boundedness enforced via **balanced base-16 digits with k=8** (SP1/Frog64 setting),
+//!   that cheating `t`
 //!   is (overwhelmingly) out of range and cannot be decomposed -> rejected.
 
 #![cfg(all(test, feature = "we_gate"))]
@@ -17,6 +18,8 @@ use stark_rings::{
 };
 
 const P_BB: u64 = 2013265921;
+const BOUND_BASE: u128 = 16;
+const BOUND_K: usize = 8;
 
 fn centered_i64(x: Fq) -> i64 {
     let mag = x
@@ -27,12 +30,12 @@ fn centered_i64(x: Fq) -> i64 {
     if neg { -mag } else { mag }
 }
 
-fn decompose_fits_base2_16_k2(x: Fq) -> bool {
-    // If x needs more than k=2 digits in balanced base 2^16, Decompose will panic (slice too short).
+fn decompose_fits_sp1_frog64_bound(x: Fq) -> bool {
+    // If x needs more than k digits in balanced base B, Decompose will panic (slice too short).
     // We treat that as "does not fit bound", which is exactly what the boundedness layer should enforce.
-    let mut out = [Fq::ZERO; 2];
+    let mut out = [Fq::ZERO; BOUND_K];
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        x.decompose_to(1u128 << 16, &mut out);
+        x.decompose_to(BOUND_BASE, &mut out);
     }))
     .is_ok()
 }
@@ -47,7 +50,7 @@ fn test_lift_vacuity_exists_but_boundedness_rejects_random() {
     let mut rng = ark_std::test_rng();
     let inv_p = Fq::from(P_BB).inverse().unwrap();
 
-    // Find a sample where the computed t does NOT fit in base2^16,k=2.
+    // Find a sample where the computed t does NOT fit in the SP1/Frog64 boundedness regime.
     for _ in 0..10_000 {
         let a_u: u64 = rng.gen_range(0..P_BB);
         let b_u: u64 = rng.gen_range(0..P_BB);
@@ -65,8 +68,8 @@ fn test_lift_vacuity_exists_but_boundedness_rejects_random() {
         let rhs = c + Fq::from(P_BB) * t;
         assert_eq!(lhs, rhs);
 
-        // Under boundedness (b=2^16,k=2), this t should almost never fit.
-        if !decompose_fits_base2_16_k2(t) {
+        // Under boundedness (base=16,k=8), this t should almost never fit.
+        if !decompose_fits_sp1_frog64_bound(t) {
             // Nice to sanity-print magnitude if needed while debugging.
             let _mag = centered_i64(t);
             return;
@@ -91,7 +94,7 @@ fn test_lift_nonvacuous_accepts_small_valid_case() {
     let t = Fq::ZERO; // quotient/carry is 0
 
     assert_eq!(a * b, c + Fq::from(P_BB) * t);
-    assert!(decompose_fits_base2_16_k2(t));
+    assert!(decompose_fits_sp1_frog64_bound(t));
 }
 
 #[test]
@@ -111,7 +114,7 @@ fn test_lift_add_carry_example_is_bounded() {
 
     // Model linear constraint as (A=1, B = a+b, C = c + p*carry) or equivalently just check integer equality:
     assert_eq!(a + b, c + Fq::from(P_BB) * carry);
-    assert!(decompose_fits_base2_16_k2(carry));
+    assert!(decompose_fits_sp1_frog64_bound(carry));
 }
 
 #[test]
@@ -134,7 +137,7 @@ fn test_lift_mul_cheat_t_is_rejected_by_boundedness() {
         let c = Fq::from(c_u);
         let t = (a * b - c) * inv_p;
         assert_eq!(a * b, c + Fq::from(P_BB) * t);
-        if !decompose_fits_base2_16_k2(t) {
+        if !decompose_fits_sp1_frog64_bound(t) {
             return;
         }
     }
