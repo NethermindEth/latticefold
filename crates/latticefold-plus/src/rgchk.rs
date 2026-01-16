@@ -560,7 +560,7 @@ where
         // |digit| <= floor(b/2). Using [-b, b] here is a safe (slightly larger) superset.
         // without panicking, and the resulting global bound is sufficient for SP1 lift soundness.
         let b_i128: i128 = decomp.b as i128;
-        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
+        assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
         let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
@@ -813,7 +813,7 @@ where
         // Reuse the same digit-table logic as `from_f`, including the const-coeff optimization.
         // (This keeps transcript behavior and setchk wiring identical.)
         let b_i128: i128 = decomp.b as i128;
-        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
+        assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
         let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
@@ -1059,7 +1059,7 @@ where
         }
 
         let b_i128: i128 = decomp.b as i128;
-        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
+        assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
         let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
