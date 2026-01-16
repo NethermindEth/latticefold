@@ -350,7 +350,6 @@ pub struct RsNpCodewords<F: PrimeField> {
     pub y_b: Vec<F>,
     pub y_b_tail: Vec<F>,
     pub y_c: Vec<F>,
-    pub y_c_tail: Vec<F>,
     pub w: Vec<F>, // length 2k: w[i]=y_a_full[i]*y_b_full[i]
 }
 
@@ -423,7 +422,11 @@ impl<F: PrimeField + FftField> RsDr1csNpFlpcpSparse<F> {
             || extrapolate_consecutive_next_block::<F>(&y_a),
             || extrapolate_consecutive_next_block::<F>(&y_b),
         );
-        let y_c_tail = extrapolate_consecutive_next_block::<F>(&y_c);
+        // NOTE: we intentionally do **not** compute `y_c_tail`.
+        //
+        // For the RS-FLPCP query used by the packed lock check, the tail-half query does not use the
+        // `C`-part (see coin-form logic in `we_gate_arith::tests::test_large_trace`), so computing
+        // `y_c_tail` is wasted work and can be extremely expensive at SP1 scale.
 
         // Build w (length 2k).
         let mut w = Vec::with_capacity(2 * k);
@@ -447,7 +450,6 @@ impl<F: PrimeField + FftField> RsDr1csNpFlpcpSparse<F> {
                 y_b,
                 y_b_tail,
                 y_c,
-                y_c_tail,
                 w,
             },
         )
