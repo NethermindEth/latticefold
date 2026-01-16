@@ -280,28 +280,33 @@ fn ntt(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
         };
         // Precompute twiddles for this stage: tw[j] = wlen^j.
         //
-        // NOTE: for late stages `len/2` is huge (tens of millions) and a naive sequential fill
-        // becomes a bottleneck (visible as ~1–2 cores used). We generate twiddles in parallel
-        // by splitting into blocks and computing each block's starting power via exponentiation.
+        // NOTE: for late stages `len/2` is huge (tens of millions). We want parallel fill without
+        // doing `pow()` per block (which is catastrophically slow). So we:
+        // - compute `step = wlen^BLOCK` once,
+        // - compute block start powers by prefix-multiplying by `step`,
+        // - fill each block in parallel by repeated multiplication by `wlen`.
         let half = len / 2;
         twiddles.resize(half, 0u32);
         if half > 0 {
             twiddles[0] = 1u32;
         }
         if use_par && half >= (1 << 20) {
-            // 4096 gives good locality and low pow() overhead per block.
             const BLOCK: usize = 4096;
             let base = wlen;
+            let blocks = (half + BLOCK - 1) / BLOCK;
+            let step = pow_mod_u32(base, BLOCK as u32, modulus);
+            let mut starts = vec![0u32; blocks];
+            if blocks > 0 {
+                starts[0] = 1u32;
+                for i in 1..blocks {
+                    starts[i] = mul_mod_u32(starts[i - 1], step, modulus);
+                }
+            }
             twiddles
                 .par_chunks_mut(BLOCK)
                 .enumerate()
                 .for_each(|(bi, chunk)| {
-                    let start = bi * BLOCK;
-                    let mut cur = if start == 0 {
-                        1u32
-                    } else {
-                        pow_mod_u32(base, start as u32, modulus)
-                    };
+                    let mut cur = starts[bi];
                     for slot in chunk.iter_mut() {
                         *slot = cur;
                         cur = mul_mod_u32(cur, base, modulus);
@@ -616,16 +621,20 @@ fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
         if use_par && half >= (1 << 20) {
             const BLOCK: usize = 4096;
             let base = wlen;
+            let blocks = (half + BLOCK - 1) / BLOCK;
+            let step = pow_mod_u64_wide(base, BLOCK as u64, modulus);
+            let mut starts = vec![0u64; blocks];
+            if blocks > 0 {
+                starts[0] = 1u64;
+                for i in 1..blocks {
+                    starts[i] = mul_mod_u64(starts[i - 1], step, modulus);
+                }
+            }
             twiddles
                 .par_chunks_mut(BLOCK)
                 .enumerate()
                 .for_each(|(bi, chunk)| {
-                    let start = bi * BLOCK;
-                    let mut cur = if start == 0 {
-                        1u64
-                    } else {
-                        pow_mod_u64_wide(base, start as u64, modulus)
-                    };
+                    let mut cur = starts[bi];
                     for slot in chunk.iter_mut() {
                         *slot = cur;
                         cur = mul_mod_u64(cur, base, modulus);
