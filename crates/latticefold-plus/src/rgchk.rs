@@ -521,15 +521,10 @@ where
         // We represent digits via `exp::<R>(digit)` and use the existing rgchk/setchk machinery.
         //
         // This requires the digit magnitude to be O(d). Concretely, for Frog(d=16 or d=64),
-        // we use `decomp.b = d/2` so balanced digits lie in approximately [-d/4, d/4], which `exp`
-        // can represent without panicking (and keeps monomial encoding safe).
+        // we use `decomp.b = d/2` so digits lie in [-d/2, d/2], which `exp` can represent
         // without panicking, and the resulting global bound is sufficient for SP1 lift soundness.
         let b_i128: i128 = decomp.b as i128;
-        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let half: i128 = b_i128 / 2;
-        // Balanced decomposition digits for even base `b` are bounded by about `b/2`,
-        // so we only need the exact alphabet `[-b/2, b/2]`.
-        let digit_elems: Vec<R::BaseRing> = (-half..=half)
+        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
                     R::BaseRing::from(x as u128)
@@ -555,7 +550,7 @@ where
                 digit_elems
                     .iter()
                     .position(|&x| x == dig)
-                    .expect("digit not in [-b/2,b/2] alphabet") as u16
+                    .expect("digit not in [-b,b] alphabet") as u16
             });
 
         // If `f` is constant-coefficient (only col=0 can be nonzero), we can store only the
@@ -785,9 +780,7 @@ where
         // Reuse the same digit-table logic as `from_f`, including the const-coeff optimization.
         // (This keeps transcript behavior and setchk wiring identical.)
         let b_i128: i128 = decomp.b as i128;
-        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let half: i128 = b_i128 / 2;
-        let digit_elems: Vec<R::BaseRing> = (-half..=half)
+        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
                     R::BaseRing::from(x as u128)
@@ -808,7 +801,7 @@ where
                 digit_elems
                     .iter()
                     .position(|&x| x == dig)
-                    .expect("digit not in [-b/2,b/2] alphabet") as u16
+                    .expect("digit not in [-b,b] alphabet") as u16
             });
 
         let is_const_coeff = f.iter().all(|fi| fi.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
@@ -1037,9 +1030,7 @@ where
 
         // Digit alphabet for balanced decomposition digits in [-b, b].
         let b_i128: i128 = decomp.b as i128;
-        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let half: i128 = b_i128 / 2;
-        let digit_elems: Vec<R::BaseRing> = (-half..=half)
+        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
                     R::BaseRing::from(x as u128)
@@ -1060,7 +1051,7 @@ where
                 digit_elems
                     .iter()
                     .position(|&x| x == dig)
-                    .expect("digit not in [-b/2,b/2] alphabet") as u16
+                    .expect("digit not in [-b,b] alphabet") as u16
             });
 
         // Const-coeff witness: store only col0 digit table.
