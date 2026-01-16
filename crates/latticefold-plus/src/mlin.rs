@@ -95,42 +95,48 @@ where
             println!("[LF+ Mlin::mlin] Cm::prove: {:?}", t.elapsed());
         }
 
-        let cm_g = com
-            .x
-            .cm_g
-            .iter()
-            .fold(vec![R::zero(); self.params.kappa], |mut acc, cm| {
-                acc.iter_mut().zip(cm.iter()).for_each(|(acc_r, cm_r)| {
-                    *acc_r += cm_r;
-                });
-                acc
-            });
+        // IMPORTANT (peak RSS):
+        // Avoid allocating a fresh `vec![0; n]` accumulator for large vectors (notably `g`).
+        // For L=1 this would double peak memory. Instead, reuse the first vector as the accumulator
+        // and add remaining vectors into it.
+        let crate::cm::Com { g: g_vecs, x: com_x } = com;
 
-        let nlin = com.x.vo[0].len();
-        let vo = com
-            .x
-            .vo
-            .iter()
-            .fold(vec![(R::zero(), R::zero()); nlin], |mut acc, v| {
-                v.iter().enumerate().for_each(|(i, v)| {
-                    acc[i].0 += v.0;
-                    acc[i].1 += v.1;
-                });
-                acc
-            });
+        let mut cmg_iter = com_x.cm_g.into_iter();
+        let mut cm_g = cmg_iter
+            .next()
+            .unwrap_or_else(|| vec![R::zero(); self.params.kappa]);
+        for cm in cmg_iter {
+            for (acc_r, cm_r) in cm_g.iter_mut().zip(cm.into_iter()) {
+                *acc_r += cm_r;
+            }
+        }
+
+        let mut vo_iter = com_x.vo.into_iter();
+        let mut vo = vo_iter
+            .next()
+            .unwrap_or_else(|| Vec::<(R, R)>::new());
+        for v in vo_iter {
+            debug_assert_eq!(v.len(), vo.len());
+            for (acc, vv) in vo.iter_mut().zip(v.into_iter()) {
+                acc.0 += vv.0;
+                acc.1 += vv.1;
+            }
+        }
 
         let x = LinB2X {
             cm_g,
-            ro: com.x.ro,
+            ro: com_x.ro,
             vo,
         };
 
-        let g = com.g.iter().fold(vec![R::zero(); n], |mut acc, gi| {
-            acc.iter_mut().zip(gi.iter()).for_each(|(acc_r, gi_r)| {
+        let mut g_iter = g_vecs.into_iter();
+        let mut g = g_iter.next().unwrap_or_else(|| vec![R::zero(); n]);
+        for gi in g_iter {
+            debug_assert_eq!(gi.len(), g.len());
+            for (acc_r, gi_r) in g.iter_mut().zip(gi.into_iter()) {
                 *acc_r += gi_r;
-            });
-            acc
-        });
+            }
+        }
         let linb2 = LinB2 { g, x };
 
         if profile {
@@ -216,42 +222,44 @@ where
             println!("[LF+ Mlin::mlin_seeded] Cm::prove: {:?}", t.elapsed());
         }
 
-        let cm_g = com
-            .x
-            .cm_g
-            .iter()
-            .fold(vec![R::zero(); self.params.kappa], |mut acc, cm| {
-                acc.iter_mut().zip(cm.iter()).for_each(|(acc_r, cm_r)| {
-                    *acc_r += cm_r;
-                });
-                acc
-            });
+        let crate::cm::Com { g: g_vecs, x: com_x } = com;
 
-        let nlin = com.x.vo[0].len();
-        let vo = com
-            .x
-            .vo
-            .iter()
-            .fold(vec![(R::zero(), R::zero()); nlin], |mut acc, v| {
-                v.iter().enumerate().for_each(|(i, v)| {
-                    acc[i].0 += v.0;
-                    acc[i].1 += v.1;
-                });
-                acc
-            });
+        let mut cmg_iter = com_x.cm_g.into_iter();
+        let mut cm_g = cmg_iter
+            .next()
+            .unwrap_or_else(|| vec![R::zero(); self.params.kappa]);
+        for cm in cmg_iter {
+            for (acc_r, cm_r) in cm_g.iter_mut().zip(cm.into_iter()) {
+                *acc_r += cm_r;
+            }
+        }
+
+        let mut vo_iter = com_x.vo.into_iter();
+        let mut vo = vo_iter
+            .next()
+            .unwrap_or_else(|| Vec::<(R, R)>::new());
+        for v in vo_iter {
+            debug_assert_eq!(v.len(), vo.len());
+            for (acc, vv) in vo.iter_mut().zip(v.into_iter()) {
+                acc.0 += vv.0;
+                acc.1 += vv.1;
+            }
+        }
 
         let x = LinB2X {
             cm_g,
-            ro: com.x.ro,
+            ro: com_x.ro,
             vo,
         };
 
-        let g = com.g.iter().fold(vec![R::zero(); n], |mut acc, gi| {
-            acc.iter_mut().zip(gi.iter()).for_each(|(acc_r, gi_r)| {
+        let mut g_iter = g_vecs.into_iter();
+        let mut g = g_iter.next().unwrap_or_else(|| vec![R::zero(); n]);
+        for gi in g_iter {
+            debug_assert_eq!(gi.len(), g.len());
+            for (acc_r, gi_r) in g.iter_mut().zip(gi.into_iter()) {
                 *acc_r += gi_r;
-            });
-            acc
-        });
+            }
+        }
         let linb2 = LinB2 { g, x };
 
         if profile {
@@ -335,42 +343,44 @@ where
             println!("[LF+ Mlin::mlin_seeded_base] Cm::prove_base: {:?}", t.elapsed());
         }
 
-        let cm_g = com
-            .x
-            .cm_g
-            .iter()
-            .fold(vec![R::zero(); self.params.kappa], |mut acc, cm| {
-                acc.iter_mut().zip(cm.iter()).for_each(|(acc_r, cm_r)| {
-                    *acc_r += cm_r;
-                });
-                acc
-            });
+        let crate::cm::Com { g: g_vecs, x: com_x } = com;
 
-        let nlin = com.x.vo[0].len();
-        let vo = com
-            .x
-            .vo
-            .iter()
-            .fold(vec![(R::zero(), R::zero()); nlin], |mut acc, v| {
-                v.iter().enumerate().for_each(|(i, v)| {
-                    acc[i].0 += v.0;
-                    acc[i].1 += v.1;
-                });
-                acc
-            });
+        let mut cmg_iter = com_x.cm_g.into_iter();
+        let mut cm_g = cmg_iter
+            .next()
+            .unwrap_or_else(|| vec![R::zero(); self.params.kappa]);
+        for cm in cmg_iter {
+            for (acc_r, cm_r) in cm_g.iter_mut().zip(cm.into_iter()) {
+                *acc_r += cm_r;
+            }
+        }
+
+        let mut vo_iter = com_x.vo.into_iter();
+        let mut vo = vo_iter
+            .next()
+            .unwrap_or_else(|| Vec::<(R, R)>::new());
+        for v in vo_iter {
+            debug_assert_eq!(v.len(), vo.len());
+            for (acc, vv) in vo.iter_mut().zip(v.into_iter()) {
+                acc.0 += vv.0;
+                acc.1 += vv.1;
+            }
+        }
 
         let x = LinB2X {
             cm_g,
-            ro: com.x.ro,
+            ro: com_x.ro,
             vo,
         };
 
-        let g = com.g.iter().fold(vec![R::zero(); n], |mut acc, gi| {
-            acc.iter_mut().zip(gi.iter()).for_each(|(acc_r, gi_r)| {
+        let mut g_iter = g_vecs.into_iter();
+        let mut g = g_iter.next().unwrap_or_else(|| vec![R::zero(); n]);
+        for gi in g_iter {
+            debug_assert_eq!(gi.len(), g.len());
+            for (acc_r, gi_r) in g.iter_mut().zip(gi.into_iter()) {
                 *acc_r += gi_r;
-            });
-            acc
-        });
+            }
+        }
         let linb2 = LinB2 { g, x };
 
         if profile {
