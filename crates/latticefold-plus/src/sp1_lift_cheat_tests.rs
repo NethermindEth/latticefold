@@ -80,8 +80,8 @@ fn decompose_fits_sp1_frog64_bound(x: Fq) -> bool {
         let bi = pow_b[i];
         let r = rem_bound[i];
         // Need: |cur - d*bi| <= r  =>  (cur-r)/bi <= d <= (cur+r)/bi
-        let mut lo = div_ceil(cur - r, bi).max(-DIGIT_MAX);
-        let mut hi = div_floor(cur + r, bi).min(DIGIT_MAX);
+        let lo = div_ceil(cur - r, bi).max(-DIGIT_MAX);
+        let hi = div_floor(cur + r, bi).min(DIGIT_MAX);
         if lo > hi {
             return false;
         }
