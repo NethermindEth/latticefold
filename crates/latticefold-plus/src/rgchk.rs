@@ -521,9 +521,13 @@ where
         // We represent digits via `exp::<R>(digit)` and use the existing rgchk/setchk machinery.
         //
         // This requires the digit magnitude to be O(d). Concretely, for Frog(d=16 or d=64),
-        // we use `decomp.b = d/2` so digits lie in [-d/2, d/2], which `exp` can represent
+        // we use `decomp.b = d/2` and build a monomial digit alphabet covering [-b, b].
+        //
+        // Note: the balanced decomposition algorithm for even base `b` produces digits with
+        // |digit| <= floor(b/2). Using [-b, b] here is a safe (slightly larger) superset.
         // without panicking, and the resulting global bound is sufficient for SP1 lift soundness.
         let b_i128: i128 = decomp.b as i128;
+        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
         let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
@@ -780,6 +784,7 @@ where
         // Reuse the same digit-table logic as `from_f`, including the const-coeff optimization.
         // (This keeps transcript behavior and setchk wiring identical.)
         let b_i128: i128 = decomp.b as i128;
+        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
         let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
@@ -1028,8 +1033,8 @@ where
             );
         }
 
-        // Digit alphabet for balanced decomposition digits in [-b, b].
         let b_i128: i128 = decomp.b as i128;
+        debug_assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
         let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
             .map(|x| {
                 if x >= 0 {
