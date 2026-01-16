@@ -247,126 +247,6 @@ fn bit_reverse_permute(a: &mut [u32]) {
     }
 }
 
-#[inline(always)]
-fn bitrev_usize(i: usize, log_n: u32) -> usize {
-    // Reverse the low `log_n` bits of `i`.
-    //
-    // size = 2^log_n, so we drop the top bits after reversing.
-    (i.reverse_bits()) >> (usize::BITS - log_n)
-}
-
-fn ntt_no_bitreverse(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
-    // Same as `ntt`, but assumes the input is already in bit-reversed order.
-    // This is useful to avoid an O(n) *sequential* permutation in convolution codepaths.
-    let n = a.len();
-
-    // Compute n-th primitive root: g^{(p-1)/n}
-    let root = pow_mod_u32(primitive_root, (modulus - 1) / (n as u32), modulus);
-    let root_inv = inv_mod_u32(root, modulus);
-
-    const PAR_NTT_MIN_N: usize = 1 << 18; // 262k
-    const PAR_NTT_MIN_LEN: usize = 1 << 10; // 1024
-    let use_par = n >= PAR_NTT_MIN_N && rayon::current_num_threads() > 1;
-    let par_threads = if use_par { rayon::current_num_threads() } else { 1 };
-
-    // Reuse twiddle buffer to avoid per-stage allocations.
-    let mut twiddles: Vec<u32> = Vec::new();
-
-    let mut len = 2usize;
-    while len <= n {
-        let wlen = if invert {
-            pow_mod_u32(root_inv, (n / len) as u32, modulus)
-        } else {
-            pow_mod_u32(root, (n / len) as u32, modulus)
-        };
-        let half = len / 2;
-        twiddles.resize(half, 0u32);
-        if half > 0 {
-            twiddles[0] = 1u32;
-        }
-        if use_par && half >= (1 << 20) {
-            const BLOCK: usize = 4096;
-            let base = wlen;
-            let blocks = (half + BLOCK - 1) / BLOCK;
-            let step = pow_mod_u32(base, BLOCK as u32, modulus);
-            let mut starts = vec![0u32; blocks];
-            if blocks > 0 {
-                starts[0] = 1u32;
-                for i in 1..blocks {
-                    starts[i] = mul_mod_u32(starts[i - 1], step, modulus);
-                }
-            }
-            twiddles
-                .par_chunks_mut(BLOCK)
-                .enumerate()
-                .for_each(|(bi, chunk)| {
-                    let mut cur = starts[bi];
-                    for slot in chunk.iter_mut() {
-                        *slot = cur;
-                        cur = mul_mod_u32(cur, base, modulus);
-                    }
-                });
-        } else {
-            for j in 1..half {
-                twiddles[j] = mul_mod_u32(twiddles[j - 1], wlen, modulus);
-            }
-        }
-
-        if use_par && len >= PAR_NTT_MIN_LEN {
-            let blocks = n / len;
-            if blocks >= par_threads {
-                a.par_chunks_mut(len).for_each(|chunk| {
-                    debug_assert_eq!(chunk.len(), len);
-                    for j in 0..(len / 2) {
-                        let u = chunk[j];
-                        let v = mul_mod_u32(chunk[j + len / 2], twiddles[j], modulus);
-                        chunk[j] = add_mod_u32(u, v, modulus);
-                        chunk[j + len / 2] = sub_mod_u32(u, v, modulus);
-                    }
-                });
-            } else {
-                let half = len / 2;
-                for chunk in a.chunks_mut(len) {
-                    debug_assert_eq!(chunk.len(), len);
-                    let (lo, hi) = chunk.split_at_mut(half);
-                    lo.par_iter_mut()
-                        .zip(hi.par_iter_mut())
-                        .enumerate()
-                        .for_each(|(j, (lo_j, hi_j))| {
-                            let u = *lo_j;
-                            let v = mul_mod_u32(*hi_j, twiddles[j], modulus);
-                            *lo_j = add_mod_u32(u, v, modulus);
-                            *hi_j = sub_mod_u32(u, v, modulus);
-                        });
-                }
-            }
-        } else {
-            for i in (0..n).step_by(len) {
-                for j in 0..(len / 2) {
-                    let u = a[i + j];
-                    let v = mul_mod_u32(a[i + j + len / 2], twiddles[j], modulus);
-                    a[i + j] = add_mod_u32(u, v, modulus);
-                    a[i + j + len / 2] = sub_mod_u32(u, v, modulus);
-                }
-            }
-        }
-        len <<= 1;
-    }
-
-    if invert {
-        let n_inv = inv_mod_u32(n as u32, modulus);
-        if use_par {
-            a.par_iter_mut().for_each(|x| {
-                *x = mul_mod_u32(*x, n_inv, modulus);
-            });
-        } else {
-            for x in a.iter_mut() {
-                *x = mul_mod_u32(*x, n_inv, modulus);
-            }
-        }
-    }
-}
-
 fn ntt(a: &mut [u32], invert: bool, modulus: u32, primitive_root: u32) {
     let n = a.len();
     bit_reverse_permute(a);
@@ -501,30 +381,18 @@ fn convolution_ntt_mod_from_u64(a: &[u64], b: &[u64], out_len: usize, size: usiz
     let mut fb = vec![0u32; size];
     let m = modulus as u64;
 
-    // Fill inputs directly in **bit-reversed order** and skip the O(n) bit-reversal step
-    // for the forward NTTs. This removes two sequential permutations per modulus.
-    let log_n = size.trailing_zeros();
-    let a_len = a.len();
-    let b_len = b.len();
-    if size >= (1 << 18) && rayon::current_num_threads() > 1 {
-        fa.par_iter_mut().enumerate().for_each(|(j, dst)| {
-            let i = bitrev_usize(j, log_n);
-            *dst = if i < a_len { (a[i] % m) as u32 } else { 0u32 };
-        });
-        fb.par_iter_mut().enumerate().for_each(|(j, dst)| {
-            let i = bitrev_usize(j, log_n);
-            *dst = if i < b_len { (b[i] % m) as u32 } else { 0u32 };
-        });
-    } else {
-        for j in 0..size {
-            let i = bitrev_usize(j, log_n);
-            fa[j] = if i < a_len { (a[i] % m) as u32 } else { 0u32 };
-            fb[j] = if i < b_len { (b[i] % m) as u32 } else { 0u32 };
-        }
-    }
+    // Fill (parallel) without allocating intermediate aa/bb vectors.
+    fa[..a.len()]
+        .par_iter_mut()
+        .zip(a.par_iter())
+        .for_each(|(dst, &v)| *dst = (v % m) as u32);
+    fb[..b.len()]
+        .par_iter_mut()
+        .zip(b.par_iter())
+        .for_each(|(dst, &v)| *dst = (v % m) as u32);
 
-    ntt_no_bitreverse(&mut fa, false, modulus, primitive_root);
-    ntt_no_bitreverse(&mut fb, false, modulus, primitive_root);
+    ntt(&mut fa, false, modulus, primitive_root);
+    ntt(&mut fb, false, modulus, primitive_root);
     if size >= (1 << 18) && rayon::current_num_threads() > 1 {
         fa.par_iter_mut()
             .zip(fb.par_iter())
@@ -728,111 +596,6 @@ fn root_of_unity_u64(p: u64, n: usize) -> u64 {
     unreachable!("failed to find root of unity for p={p} n={n}");
 }
 
-fn ntt_u64_no_bitreverse(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
-    // Same as `ntt_u64`, but assumes input is already in bit-reversed order.
-    let n = a.len();
-
-    let root = root_n;
-    let root_inv = inv_mod_u64(root, modulus);
-
-    const PAR_NTT_MIN_N: usize = 1 << 18;
-    const PAR_NTT_MIN_LEN: usize = 1 << 10;
-    let use_par = n >= PAR_NTT_MIN_N && rayon::current_num_threads() > 1;
-    let par_threads = if use_par { rayon::current_num_threads() } else { 1 };
-
-    let mut twiddles: Vec<u64> = Vec::new();
-
-    let mut len = 2usize;
-    while len <= n {
-        let wlen = if invert {
-            pow_mod_u64_wide(root_inv, (n / len) as u64, modulus)
-        } else {
-            pow_mod_u64_wide(root, (n / len) as u64, modulus)
-        };
-        let half = len / 2;
-        twiddles.resize(half, 0u64);
-        if half > 0 {
-            twiddles[0] = 1;
-        }
-        if use_par && half >= (1 << 20) {
-            const BLOCK: usize = 4096;
-            let base = wlen;
-            let blocks = (half + BLOCK - 1) / BLOCK;
-            let step = pow_mod_u64_wide(base, BLOCK as u64, modulus);
-            let mut starts = vec![0u64; blocks];
-            if blocks > 0 {
-                starts[0] = 1u64;
-                for i in 1..blocks {
-                    starts[i] = mul_mod_u64(starts[i - 1], step, modulus);
-                }
-            }
-            twiddles
-                .par_chunks_mut(BLOCK)
-                .enumerate()
-                .for_each(|(bi, chunk)| {
-                    let mut cur = starts[bi];
-                    for slot in chunk.iter_mut() {
-                        *slot = cur;
-                        cur = mul_mod_u64(cur, base, modulus);
-                    }
-                });
-        } else {
-            for j in 1..half {
-                twiddles[j] = mul_mod_u64(twiddles[j - 1], wlen, modulus);
-            }
-        }
-
-        if use_par && len >= PAR_NTT_MIN_LEN {
-            let blocks = n / len;
-            if blocks >= par_threads {
-                a.par_chunks_mut(len).for_each(|chunk| {
-                    for j in 0..(len / 2) {
-                        let u = chunk[j];
-                        let v = mul_mod_u64(chunk[j + len / 2], twiddles[j], modulus);
-                        chunk[j] = add_mod_u64(u, v, modulus);
-                        chunk[j + len / 2] = sub_mod_u64(u, v, modulus);
-                    }
-                });
-            } else {
-                let half = len / 2;
-                for chunk in a.chunks_mut(len) {
-                    let (lo, hi) = chunk.split_at_mut(half);
-                    lo.par_iter_mut()
-                        .zip(hi.par_iter_mut())
-                        .enumerate()
-                        .for_each(|(j, (lo_j, hi_j))| {
-                            let u = *lo_j;
-                            let v = mul_mod_u64(*hi_j, twiddles[j], modulus);
-                            *lo_j = add_mod_u64(u, v, modulus);
-                            *hi_j = sub_mod_u64(u, v, modulus);
-                        });
-                }
-            }
-        } else {
-            for i in (0..n).step_by(len) {
-                for j in 0..(len / 2) {
-                    let u = a[i + j];
-                    let v = mul_mod_u64(a[i + j + len / 2], twiddles[j], modulus);
-                    a[i + j] = add_mod_u64(u, v, modulus);
-                    a[i + j + len / 2] = sub_mod_u64(u, v, modulus);
-                }
-            }
-        }
-        len <<= 1;
-    }
-
-    if invert {
-        let n_inv = inv_mod_u64(n as u64, modulus);
-        if use_par {
-            a.par_iter_mut().for_each(|x| *x = mul_mod_u64(*x, n_inv, modulus));
-        } else {
-            for x in a.iter_mut() {
-                *x = mul_mod_u64(*x, n_inv, modulus);
-            }
-        }
-    }
-}
-
 fn ntt_u64(a: &mut [u64], invert: bool, modulus: u64, root_n: u64) {
     let n = a.len();
     bit_reverse_permute_u64(a);
@@ -943,29 +706,18 @@ fn convolution_ntt_mod_u64_from_u64(a: &[u64], b: &[u64], out_len: usize, size: 
     let mut fa = vec![0u64; size];
     let mut fb = vec![0u64; size];
 
-    // Fill inputs directly in bit-reversed order and skip the forward bit-reversal permute.
-    let log_n = size.trailing_zeros();
-    let a_len = a.len();
-    let b_len = b.len();
-    if size >= (1 << 18) && rayon::current_num_threads() > 1 {
-        fa.par_iter_mut().enumerate().for_each(|(j, dst)| {
-            let i = bitrev_usize(j, log_n);
-            *dst = if i < a_len { a[i] % modulus } else { 0u64 };
-        });
-        fb.par_iter_mut().enumerate().for_each(|(j, dst)| {
-            let i = bitrev_usize(j, log_n);
-            *dst = if i < b_len { b[i] % modulus } else { 0u64 };
-        });
-    } else {
-        for j in 0..size {
-            let i = bitrev_usize(j, log_n);
-            fa[j] = if i < a_len { a[i] % modulus } else { 0u64 };
-            fb[j] = if i < b_len { b[i] % modulus } else { 0u64 };
-        }
-    }
+    // Fill (parallel) without allocating intermediate aa/bb vectors.
+    fa[..a.len()]
+        .par_iter_mut()
+        .zip(a.par_iter())
+        .for_each(|(dst, &v)| *dst = v % modulus);
+    fb[..b.len()]
+        .par_iter_mut()
+        .zip(b.par_iter())
+        .for_each(|(dst, &v)| *dst = v % modulus);
 
-    ntt_u64_no_bitreverse(&mut fa, false, modulus, root_n);
-    ntt_u64_no_bitreverse(&mut fb, false, modulus, root_n);
+    ntt_u64(&mut fa, false, modulus, root_n);
+    ntt_u64(&mut fb, false, modulus, root_n);
     if size >= (1 << 18) && rayon::current_num_threads() > 1 {
         fa.par_iter_mut()
             .zip(fb.par_iter())
