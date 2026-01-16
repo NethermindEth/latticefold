@@ -367,14 +367,14 @@ fn main() {
     let ell_rs = 2 * k_rows;
     let flpcp = RsDr1csNpFlpcpSparse::<BFSmall>::new(inst_sparse, public_len, ell_rs);
 
-    // Produce codewords once so we can answer the RS-FLPCP query in coin form
-    // (matching `test_large_trace`).
-    let x_small = assignment[..public_len].to_vec();
-    let z_w_small = assignment[public_len..].to_vec();
-    let (_pi_field, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
-
+    // -------------------------------------------------------------------------
+    // Armer-time: sample reusable coin/query randomness from the statement digest.
+    //
+    // This does NOT require the witness/assignment; it only depends on public parameters and
+    // statement-bound randomness. We keep it here to make the phase separation explicit.
+    // -------------------------------------------------------------------------
     let dppv = build_rev2_dpp_sparse_boolean_auto::<BFSmall, FBig, _>(
-        flpcp,
+        flpcp.clone(),
         dpp::EmbeddingParams {
             gamma: 2,
             assume_boolean_proof: true,
@@ -392,6 +392,14 @@ fn main() {
         .expect("sample_packing_weights");
     let idx = (rng.next_u64() as usize) % ell_rs;
     let lambda_small = BFSmall::from(rng.next_u64());
+
+    // -------------------------------------------------------------------------
+    // Decap/prover-time: produce the FLPCP proof `π` and cached codewords once, then answer
+    // many armer coins efficiently.
+    // -------------------------------------------------------------------------
+    let x_small = assignment[..public_len].to_vec();
+    let z_w_small = assignment[public_len..].to_vec();
+    let (_pi_field, cw) = flpcp.prove_with_codewords(&x_small, &z_w_small);
 
     // Coin-form RS-FLPCP answers (exactly like `test_large_trace`).
     let (a_small, b_small, c_small) = if idx < k_rows {

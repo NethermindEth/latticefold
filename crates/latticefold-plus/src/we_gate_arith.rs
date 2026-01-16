@@ -4281,6 +4281,59 @@ mod tests {
             let l_public = public_len;
             let flpcp = dpp::dr1cs_flpcp::RsDr1csNpFlpcpSparse::<FSmall>::new(inst_sparse, l_public, ell_rs);
 
+            // Build the packed DPP verifier object (parameters + decoding), which is armer-time
+            // public information. This does not require the witness.
+            let t6 = std::time::Instant::now();
+            let dppv = build_rev2_dpp_sparse_boolean_auto::<FSmall, FBig, _>(
+                flpcp.clone(),
+                dpp::EmbeddingParams { gamma: 2, assume_boolean_proof: true, k_prime: 0 },
+            )
+            .expect("build dpp");
+            eprintln!("[test_large_trace] build_rev2_dpp: {:?}", t6.elapsed());
+
+            // ---------------------------------------------------------------------
+            // Armer-time: derive the query "coin" from statement-bound randomness.
+            // ---------------------------------------------------------------------
+            let vk_hash = [1u8; 32];
+            let r1cs_digest = [2u8; 32];
+            let stmt_digest = we_statement_hash_lf_plus::<RR>(
+                vk_hash,
+                r1cs_digest,
+                LFP_WE_GATE_DIGEST_V1,
+                &params,
+                sp1_digest_bits,
+            );
+            const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
+            let lock_j: u64 = 0;
+            let coin_seed: [u8; 32] = {
+                let mut h = Sha256::new();
+                h.update(b"LFP_LOCK_COIN_V1");
+                h.update(&ARMER_SEED);
+                h.update(&stmt_digest);
+                h.update(&lock_j.to_le_bytes());
+                h.finalize().into()
+            };
+            let mut rng = StdRng::from_seed(coin_seed);
+            // NOTE: `dppv.sample_query()` expands to a huge packed query vector and can be
+            // O(|constraints|) for RS-FLPCP instances (k = #rows). For SP1-scale k this is not viable.
+            //
+            // Instead: sample coins (idx, λ) + packing weights, answer the 3 RS-FLPCP queries in coin
+            // form (by indexing cached codewords), then pack/decode.
+            let t7 = std::time::Instant::now();
+            let b = dppv.flpcp.bounds_b();
+            let w = sample_packing_weights::<FBig>(&mut rng, dppv.params.ell, &b).expect("sample_packing_weights");
+            let pred = FlpcpPredicate::MulEqModP {
+                p_small: num_bigint::BigInt::from_bytes_le(
+                    num_bigint::Sign::Plus,
+                    &FSmall::MODULUS.to_bytes_le(),
+                ),
+            };
+            let idx = (rng.next_u64() as usize) % ell_rs;
+            let lambda_small = FSmall::from(rng.next_u64());
+            eprintln!(
+                "[test_large_trace] lock coins: idx={idx} (ell_rs={ell_rs}, k_rows={k_rows})"
+            );
+
             let t4 = std::time::Instant::now();
             let x_small = assignment[..l_public].to_vec();
             let z_w_small = assignment[l_public..].to_vec();
@@ -4307,59 +4360,9 @@ mod tests {
                 pi_bits_packed.len()
             );
 
-            let t6 = std::time::Instant::now();
-            let dppv = build_rev2_dpp_sparse_boolean_auto::<FSmall, FBig, _>(
-                flpcp,
-                dpp::EmbeddingParams { gamma: 2, assume_boolean_proof: true, k_prime: 0 },
-            )
-            .expect("build dpp");
-            eprintln!("[test_large_trace] build_rev2_dpp: {:?}", t6.elapsed());
-
             let t_xbig = std::time::Instant::now();
             let _x_big = x_small.iter().copied().map(lift_to_big::<FSmall>).collect::<Vec<_>>();
             eprintln!("[test_large_trace] lift x_small->x_big: {:?}", t_xbig.elapsed());
-
-            let vk_hash = [1u8; 32];
-            let r1cs_digest = [2u8; 32];
-            let stmt_digest = we_statement_hash_lf_plus::<RR>(
-                vk_hash,
-                r1cs_digest,
-                LFP_WE_GATE_DIGEST_V1,
-                &params,
-                sp1_digest_bits,
-            );
-            const ARMER_SEED: [u8; 32] = *b"LFP_ARMER_SEED_V1_00000000000000";
-            let lock_j: u64 = 0;
-            let coin_seed: [u8; 32] = {
-                let mut h = Sha256::new();
-                h.update(b"LFP_LOCK_COIN_V1");
-                h.update(&ARMER_SEED);
-                h.update(&stmt_digest);
-                h.update(&lock_j.to_le_bytes());
-                h.finalize().into()
-            };
-            let mut rng = StdRng::from_seed(coin_seed);
-            // NOTE: `dppv.sample_query()` expands to a huge packed query vector and can be
-            // O(|constraints|) for RS-FLPCP instances (k = #rows). For SP1-scale k this is not viable.
-            //
-            // sample coins (idx, λ) + packing weights,
-            // answer the 3 RS-FLPCP queries in coin form (by indexing cached codewords), then pack/decode.
-            let t7 = std::time::Instant::now();
-            let b = dppv.flpcp.bounds_b();
-            let w = sample_packing_weights::<FBig>(&mut rng, dppv.params.ell, &b).expect("sample_packing_weights");
-            let pred = FlpcpPredicate::MulEqModP {
-                p_small: num_bigint::BigInt::from_bytes_le(
-                    num_bigint::Sign::Plus,
-                    &FSmall::MODULUS.to_bytes_le(),
-                ),
-            };
-            let k_rows = cw.y_a.len();
-            let ell_rs = 2 * k_rows;
-            let idx = (rng.next_u64() as usize) % ell_rs;
-            let lambda_small = FSmall::from(rng.next_u64());
-            eprintln!(
-                "[test_large_trace] lock coins: idx={idx} (ell_rs={ell_rs}, k_rows={k_rows})"
-            );
 
             let (a_small, b_small, c_small) = if idx < k_rows {
                 let a = cw.y_a[idx];
