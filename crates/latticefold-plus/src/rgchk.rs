@@ -18,7 +18,14 @@ use crate::{
 use rayon::prelude::*;
 
 #[inline]
-fn digit_lookup_or_panic<BR>(digit_elems: &[BR], dig: BR, b: u128, k: usize) -> u16
+fn digit_lookup_or_panic<BR>(
+    digit_elems: &[BR],
+    dig: BR,
+    b: u128,
+    k: usize,
+    alpha_min: i128,
+    alpha_max: i128,
+) -> u16
 where
     BR: Zq + Ring + Copy + PartialEq,
 {
@@ -35,13 +42,13 @@ where
 
     panic!(
         "digit not in alphabet: \
-         b={} k={} expected alphabet=[-b,b] => [-{},{}]; \
+         b={} k={} expected alphabet=[{},{}]; \
          dig: canon_u64={:?} centered_mag_u64={:?} sign_is_neg={} signed_mag={:?} \
          (check |signed_mag| <= floor(b/2)={} )",
         b,
         k,
-        b,
-        b,
+        alpha_min,
+        alpha_max,
         canon,
         mag,
         is_neg,
@@ -561,7 +568,8 @@ where
         // without panicking, and the resulting global bound is sufficient for SP1 lift soundness.
         let b_i128: i128 = decomp.b as i128;
         assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+        let half: i128 = b_i128 / 2;
+        let digit_elems: Vec<R::BaseRing> = (-half..=half)
             .map(|x| {
                 if x >= 0 {
                     R::BaseRing::from(x as u128)
@@ -583,8 +591,12 @@ where
         );
         let digit_elems = Arc::new(digit_elems);
         let b_u128 = decomp.b;
+        let alpha_min = -half;
+        let alpha_max = half;
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
-            Box::new(move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&digit_elems, dig, b_u128, k) });
+            Box::new(move |dig: R::BaseRing| -> u16 {
+                digit_lookup_or_panic(&digit_elems, dig, b_u128, k, alpha_min, alpha_max)
+            });
 
         // If `f` is constant-coefficient (only col=0 can be nonzero), we can store only the
         // `col=0` digit table and treat all other coeff columns as digit=0.
@@ -814,7 +826,8 @@ where
         // (This keeps transcript behavior and setchk wiring identical.)
         let b_i128: i128 = decomp.b as i128;
         assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+        let half: i128 = b_i128 / 2;
+        let digit_elems: Vec<R::BaseRing> = (-half..=half)
             .map(|x| {
                 if x >= 0 {
                     R::BaseRing::from(x as u128)
@@ -831,8 +844,12 @@ where
         );
         let digit_elems = Arc::new(digit_elems);
         let b_u128 = decomp.b;
+        let alpha_min = -half;
+        let alpha_max = half;
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
-            Box::new(move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&digit_elems, dig, b_u128, k) });
+            Box::new(move |dig: R::BaseRing| -> u16 {
+                digit_lookup_or_panic(&digit_elems, dig, b_u128, k, alpha_min, alpha_max)
+            });
 
         let is_const_coeff = f.iter().all(|fi| fi.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
@@ -1060,7 +1077,8 @@ where
 
         let b_i128: i128 = decomp.b as i128;
         assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let digit_elems: Vec<R::BaseRing> = (-b_i128..=b_i128)
+        let half: i128 = b_i128 / 2;
+        let digit_elems: Vec<R::BaseRing> = (-half..=half)
             .map(|x| {
                 if x >= 0 {
                     R::BaseRing::from(x as u128)
@@ -1077,8 +1095,12 @@ where
         );
         let digit_elems = Arc::new(digit_elems);
         let b_u128 = decomp.b;
+        let alpha_min = -half;
+        let alpha_max = half;
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
-            Box::new(move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&digit_elems, dig, b_u128, k) });
+            Box::new(move |dig: R::BaseRing| -> u16 {
+                digit_lookup_or_panic(&digit_elems, dig, b_u128, k, alpha_min, alpha_max)
+            });
 
         // Const-coeff witness: store only col0 digit table.
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
