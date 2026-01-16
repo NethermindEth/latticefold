@@ -13,7 +13,6 @@
 
 use ark_ff::Field;
 use stark_rings::{
-    balanced_decomposition::Decompose,
     cyclotomic_ring::models::frog_ring::Fq,
     Zq,
 };
@@ -35,34 +34,61 @@ fn centered_i64(x: Fq) -> i64 {
 fn decompose_fits_sp1_frog64_bound(x: Fq) -> bool {
     // Model the actual boundedness envelope used in the current verifier argument:
     // represent x as sum_{i<k} d_i * B^i with each digit d_i in [-DIGIT_MAX, DIGIT_MAX].
+    //
+    // IMPORTANT: we must *not* use a greedy “first valid digit” strategy (it can cycle even when
+    // a valid representation exists). Instead we choose digits from high-to-low while preserving
+    // the invariant that the remaining tail stays representable.
+    #[inline]
+    fn div_floor(a: i128, b: i128) -> i128 {
+        debug_assert!(b > 0);
+        let q = a / b;
+        let r = a % b;
+        if r != 0 && a < 0 { q - 1 } else { q }
+    }
+    #[inline]
+    fn div_ceil(a: i128, b: i128) -> i128 {
+        debug_assert!(b > 0);
+        let q = a / b;
+        let r = a % b;
+        if r != 0 && a > 0 { q + 1 } else { q }
+    }
+    #[inline]
+    fn div_round(a: i128, b: i128) -> i128 {
+        debug_assert!(b > 0);
+        let q = div_floor(a, b);
+        let r = a - q * b; // 0..b-1
+        if r * 2 >= b { q + 1 } else { q }
+    }
+
     let mag = x.center().to_u64().expect("centered magnitude fits u64") as i128;
     let is_neg = x.sign() == -Fq::ONE;
     let mut cur: i128 = if is_neg { -mag } else { mag };
 
+    // Precompute powers and remaining-tail bounds.
+    let mut pow_b: [i128; BOUND_K] = [1; BOUND_K];
+    for i in 1..BOUND_K {
+        pow_b[i] = pow_b[i - 1] * BOUND_BASE;
+    }
+    // rem_bound[i] = DIGIT_MAX * (B^i - 1)/(B - 1) is the maximum representable magnitude using i digits.
+    let mut rem_bound: [i128; BOUND_K] = [0; BOUND_K];
+    let denom = BOUND_BASE - 1;
     for i in 0..BOUND_K {
-        if cur == 0 {
-            // remaining digits are 0
-            return true;
-        }
-        let r = cur.rem_euclid(BOUND_BASE); // 0..B-1
-        // choose digit = r + m*B within [-DIGIT_MAX, DIGIT_MAX]
-        let mut ok = false;
-        // m range is tiny for our params (|m| <= ceil((DIGIT_MAX+|r|)/B)).
-        for m in -4..=4 {
-            let d = r + (m as i128) * BOUND_BASE;
-            if d < -DIGIT_MAX || d > DIGIT_MAX {
-                continue;
-            }
-            let next = (cur - d) / BOUND_BASE;
-            // Accept the first valid choice (deterministic enough for a test).
-            cur = next;
-            ok = true;
-            break;
-        }
-        if !ok {
+        rem_bound[i] = DIGIT_MAX * (pow_b[i].saturating_sub(1)) / denom;
+    }
+
+    for i in (0..BOUND_K).rev() {
+        let bi = pow_b[i];
+        let r = rem_bound[i];
+        // Need: |cur - d*bi| <= r  =>  (cur-r)/bi <= d <= (cur+r)/bi
+        let mut lo = div_ceil(cur - r, bi).max(-DIGIT_MAX);
+        let mut hi = div_floor(cur + r, bi).min(DIGIT_MAX);
+        if lo > hi {
             return false;
         }
-        let _ = i;
+        let mut d = div_round(cur, bi);
+        if d < lo { d = lo; }
+        if d > hi { d = hi; }
+        cur -= d * bi;
     }
     cur == 0
 }
