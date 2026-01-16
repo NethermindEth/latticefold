@@ -453,53 +453,22 @@ fn convolution_crt_ntt<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: us
 
     // For each modulus, reduce inputs and convolve.
     //
-    // IMPORTANT (memory):
-    // Each convolution allocates O(size) NTT buffers; parallelizing across *all* moduli can
-    // explode RSS for large sizes (e.g. 2^27, 2^28). However, running fully sequential can be
-    // much slower. We use **bounded** moduli parallelism:
-    // - small sizes: run all moduli in parallel
-    // - huge sizes: run 2 moduli at a time (still allows good CPU utilization with acceptable RSS)
-    let par_moduli: usize = if size >= (1 << 26) { 2 } else { k.max(1) };
-    let mut residues_vec: Vec<Vec<u32>> = Vec::with_capacity(k);
-    let mut i = 0usize;
-    while i < k {
-        if par_moduli >= 2 && (i + 1) < k {
-            let (r0, r1) = rayon::join(
-                || {
-                    let modulus = mods[i];
-                    let root = roots[i];
-                    debug_assert!(
-                        ((modulus - 1) as usize) % size == 0,
-                        "internal: synthesized NTT modulus does not support size {size}"
-                    );
-                    convolution_ntt_mod_from_u64(&a_u, &b_u, out_len, size, modulus, root)
-                },
-                || {
-                    let modulus = mods[i + 1];
-                    let root = roots[i + 1];
-                    debug_assert!(
-                        ((modulus - 1) as usize) % size == 0,
-                        "internal: synthesized NTT modulus does not support size {size}"
-                    );
-                    convolution_ntt_mod_from_u64(&a_u, &b_u, out_len, size, modulus, root)
-                },
-            );
-            residues_vec.push(r0);
-            residues_vec.push(r1);
-            i += 2;
-        } else {
+    // Performance note:
+    // For SP1-scale instances, wall time is dominated by these CRT moduli convolutions.
+    // Now that we no longer compute the third (C) tail in `prove_with_codewords`, we can afford
+    // parallelism across moduli again (only 2 extrapolations run concurrently: A and B).
+    let residues_vec: Vec<Vec<u32>> = (0..k)
+        .into_par_iter()
+        .map(|i| {
             let modulus = mods[i];
             let root = roots[i];
             debug_assert!(
                 ((modulus - 1) as usize) % size == 0,
                 "internal: synthesized NTT modulus does not support size {size}"
             );
-            residues_vec.push(convolution_ntt_mod_from_u64(
-                &a_u, &b_u, out_len, size, modulus, root,
-            ));
-            i += 1;
-        }
-    }
+            convolution_ntt_mod_from_u64(&a_u, &b_u, out_len, size, modulus, root)
+        })
+        .collect();
 
     let residues = residues_vec;
 
@@ -874,39 +843,13 @@ fn convolution_crt_ntt_u64<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size
 
     // Compute roots and convolve under each modulus.
     //
-    // As with the u32 path, moduli-parallelism can explode RSS. Here `k=3`, so we can usually
-    // afford 2-way parallelism even at large sizes, and 3-way at smaller sizes.
-    let par_moduli: usize = if size >= (1 << 26) { 2 } else { 3 };
-    let residues_vec: Vec<Vec<u64>> = if par_moduli >= 3 && k >= 3 {
-        let (r0, (r1, r2)) = rayon::join(
-            || convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, mods[0], roots_n[0]),
-            || rayon::join(
-                || convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, mods[1], roots_n[1]),
-                || convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, mods[2], roots_n[2]),
-            ),
-        );
-        vec![r0, r1, r2]
-    } else if par_moduli >= 2 && k >= 2 {
-        let (r0, r1) = rayon::join(
-            || convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, mods[0], roots_n[0]),
-            || convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, mods[1], roots_n[1]),
-        );
-        let mut v = Vec::with_capacity(k);
-        v.push(r0);
-        v.push(r1);
-        for i in 2..k {
-            v.push(convolution_ntt_mod_u64_from_u64(
-                &a_u, &b_u, out_len, size, mods[i], roots_n[i],
-            ));
-        }
-        v
-    } else {
-        (0..k)
-            .map(|i| {
-                convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, mods[i], roots_n[i])
-            })
-            .collect()
-    };
+    // Here k=3; parallelize fully (fits typical RAM budgets, and is faster).
+    let residues_vec: Vec<Vec<u64>> = (0..k)
+        .into_par_iter()
+        .map(|i| {
+            convolution_ntt_mod_u64_from_u64(&a_u, &b_u, out_len, size, mods[i], roots_n[i])
+        })
+        .collect();
 
     // Garner reconstruction mod p using 3 moduli.
     let m0 = mods[0];
