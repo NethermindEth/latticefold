@@ -83,25 +83,38 @@ where
     //
     // We *fix* (decomp_b, k) to a pair that is good enough for the SP1 BabyBear-in-Frog lift.
     // Rationale:
-    // IMPORTANT SECURITY NOTE:
+    // SECURITY RATIONALE:
     //
-    // In the current LF+ monomial digit machinery, the verifier enforces that each digit is a unit
-    // monomial exponent within roughly |digit| < d/2 (Frog64: |digit| <= 31), not “balanced digits
-    // |digit| <= b/2” unless an explicit subset check is added.
+    // The SP1 lift adds auxiliary “quotient/carry” witness coordinates `q_i` to each lifted row:
+    //   (A_i·f)(B_i·f) = (C_i·f) + p_bb * q_i   (mod q_frog).
     //
-    // Therefore, our safe-parameter selection must be sound under the conservative envelope:
-    //   |x| <= D * (b^k - 1)/(b - 1), where D = (d/2 - 1) = 31 for Frog64.
+    // This is vacuous without boundedness: a cheating prover can always pick `q_i` modulo q_frog
+    // to satisfy the equation. Therefore we must ensure LF+’s verifier enforces that all witness
+    // coordinates (including the aux tail) are small enough that equality mod q_frog implies the
+    // intended integer equality (no wraparound).
     //
-    // With b=14, k=8:
-    //   max = 31 * (14^8 - 1)/(14 - 1) = 3,519,189,285
-    // which covers centered BabyBear values (<= p_bb/2 ≈ 1,006,632,960) and stays below q/(2*p_bb).
+    // In the current LF+ rgchk/setchk design, the verifier enforces:
+    // - digits are represented as unit monomials (set-check), and
+    // - the monomial “range-check” identity implies a conservative exponent bound |digit| < d/2
+    //   (Frog64 => |digit| <= D where D = d/2 - 1 = 31).
     //
-    // NOTE: This is also monomial-safe for rgchk/setchk because |digit| <= B/2 = 8 << d=64,
-    // so `exp::<R>(digit)` does not panic.
+    // IMPORTANT: “balanced decomposition digits satisfy |digit| <= b/2” is an *honest prover*
+    // property of `decompose_to(b, ...)`. It is NOT a security guarantee unless the verifier also
+    // enforces membership in that smaller subset. Since the verifier does not currently do that,
+    // we choose parameters that are safe under the conservative digit bound D.
+    //
+    // For base `b` and `k` digits, any single coordinate is conservatively bounded by:
+    //   |x| <= D * (b^k - 1) / (b - 1).
+    //
+    // With Frog64, choose b=12, k=8:
+    //   max = 31 * (12^8 - 1)/(12 - 1) = 1,211,766,595
+    // which covers centered BabyBear values (<= p_bb/2 ≈ 1,006,632,960) and gives significantly
+    // more margin for *multiplication-row* no-wrap bounds (quadratic in M), while still staying
+    // below q_frog/(2*p_bb) ≈ 3,951,810,924 for the aux term.
     const SP1_P_BB: u64 = 2013265921;
     let p_bb = cache.stats.p_bb;
     if d == 64 && p_bb == SP1_P_BB {
-        let decomp_b: u64 = 14;
+        let decomp_b: u64 = 12;
         let k: u64 = 8;
         // Log the chosen parameters (matches LF_PLUS_PROFILE pattern).
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");

@@ -4,7 +4,7 @@
 //! - If lift vars (`t_i` = carry/quotient) are *not* bounded, the lifted constraint is vacuous:
 //!     t := (A*B - C) * p_bb^{-1}  (mod q_frog)
 //!   always satisfies in the host field.
-//! - With LF+ boundedness enforced via **base-14 digits with k=8** under the conservative
+//! - With LF+ boundedness enforced via **base-12 digits with k=8** under the conservative
 //!   per-digit bound \(|digit|\le 31\) (Frog64 unit monomial exponent range),
 //!   that cheating `t`
 //!   is (overwhelmingly) out of range and cannot be decomposed -> rejected.
@@ -18,7 +18,7 @@ use stark_rings::{
 };
 
 const P_BB: u64 = 2013265921;
-const BOUND_BASE: i128 = 14;
+const BOUND_BASE: i128 = 12;
 const BOUND_K: usize = 8;
 const DIGIT_MAX: i128 = 31; // Frog64 unit-monomial exponent range
 
