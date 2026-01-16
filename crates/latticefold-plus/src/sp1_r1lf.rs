@@ -83,24 +83,35 @@ where
     //
     // We *fix* (decomp_b, k) to a pair that is good enough for the SP1 BabyBear-in-Frog lift.
     // Rationale:
-    // - With balanced base B=16 and k=8 digits, the max representable magnitude is:
-    //     max = (B/2) * (B^k - 1)/(B - 1) = 2,290,649,224
-    //   which covers centered BabyBear values (<= p_bb/2 ≈ 1,006,632,960) and stays below q/(2*p_bb).
+    // IMPORTANT SECURITY NOTE:
+    //
+    // In the current LF+ monomial digit machinery, the verifier enforces that each digit is a unit
+    // monomial exponent within roughly |digit| < d/2 (Frog64: |digit| <= 31), not “balanced digits
+    // |digit| <= b/2” unless an explicit subset check is added.
+    //
+    // Therefore, our safe-parameter selection must be sound under the conservative envelope:
+    //   |x| <= D * (b^k - 1)/(b - 1), where D = (d/2 - 1) = 31 for Frog64.
+    //
+    // With b=14, k=8:
+    //   max = 31 * (14^8 - 1)/(14 - 1) = 3,519,189,285
+    // which covers centered BabyBear values (<= p_bb/2 ≈ 1,006,632,960) and stays below q/(2*p_bb).
     //
     // NOTE: This is also monomial-safe for rgchk/setchk because |digit| <= B/2 = 8 << d=64,
     // so `exp::<R>(digit)` does not panic.
     const SP1_P_BB: u64 = 2013265921;
     let p_bb = cache.stats.p_bb;
     if d == 64 && p_bb == SP1_P_BB {
-        let decomp_b: u64 = 16;
+        let decomp_b: u64 = 14;
         let k: u64 = 8;
         // Log the chosen parameters (matches LF_PLUS_PROFILE pattern).
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
         if profile {
+            // Conservative verifier-enforced digit max for Frog64 unit monomials.
+            let digit_max: u128 = (d / 2 - 1) as u128; // 31
             println!(
                 "[sp1_default_we_params] SP1/Frog64 hardcoded safe params: decomp_b={}, k={}, l={}, max_bound={}",
                 decomp_b, k, l,
-                (decomp_b / 2) as u128 * ((decomp_b as u128).pow(k as u32) - 1) / (decomp_b as u128 - 1)
+                digit_max * ((decomp_b as u128).pow(k as u32) - 1) / (decomp_b as u128 - 1)
             );
         }
         return Ok(WeParams {

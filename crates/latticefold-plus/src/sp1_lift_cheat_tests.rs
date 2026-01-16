@@ -4,7 +4,8 @@
 //! - If lift vars (`t_i` = carry/quotient) are *not* bounded, the lifted constraint is vacuous:
 //!     t := (A*B - C) * p_bb^{-1}  (mod q_frog)
 //!   always satisfies in the host field.
-//! - With LF+ boundedness enforced via **balanced base-16 digits with k=8** (SP1/Frog64 setting),
+//! - With LF+ boundedness enforced via **base-14 digits with k=8** under the conservative
+//!   per-digit bound \(|digit|\le 31\) (Frog64 unit monomial exponent range),
 //!   that cheating `t`
 //!   is (overwhelmingly) out of range and cannot be decomposed -> rejected.
 
@@ -18,8 +19,9 @@ use stark_rings::{
 };
 
 const P_BB: u64 = 2013265921;
-const BOUND_BASE: u128 = 16;
+const BOUND_BASE: i128 = 14;
 const BOUND_K: usize = 8;
+const DIGIT_MAX: i128 = 31; // Frog64 unit-monomial exponent range
 
 fn centered_i64(x: Fq) -> i64 {
     let mag = x
@@ -31,13 +33,38 @@ fn centered_i64(x: Fq) -> i64 {
 }
 
 fn decompose_fits_sp1_frog64_bound(x: Fq) -> bool {
-    // If x needs more than k digits in balanced base B, Decompose will panic (slice too short).
-    // We treat that as "does not fit bound", which is exactly what the boundedness layer should enforce.
-    let mut out = [Fq::ZERO; BOUND_K];
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        x.decompose_to(BOUND_BASE, &mut out);
-    }))
-    .is_ok()
+    // Model the actual boundedness envelope used in the current verifier argument:
+    // represent x as sum_{i<k} d_i * B^i with each digit d_i in [-DIGIT_MAX, DIGIT_MAX].
+    let mag = x.center().to_u64().expect("centered magnitude fits u64") as i128;
+    let is_neg = x.sign() == -Fq::ONE;
+    let mut cur: i128 = if is_neg { -mag } else { mag };
+
+    for i in 0..BOUND_K {
+        if cur == 0 {
+            // remaining digits are 0
+            return true;
+        }
+        let r = cur.rem_euclid(BOUND_BASE); // 0..B-1
+        // choose digit = r + m*B within [-DIGIT_MAX, DIGIT_MAX]
+        let mut ok = false;
+        // m range is tiny for our params (|m| <= ceil((DIGIT_MAX+|r|)/B)).
+        for m in -4..=4 {
+            let d = r + (m as i128) * BOUND_BASE;
+            if d < -DIGIT_MAX || d > DIGIT_MAX {
+                continue;
+            }
+            let next = (cur - d) / BOUND_BASE;
+            // Accept the first valid choice (deterministic enough for a test).
+            cur = next;
+            ok = true;
+            break;
+        }
+        if !ok {
+            return false;
+        }
+        let _ = i;
+    }
+    cur == 0
 }
 
 #[test]
@@ -68,7 +95,7 @@ fn test_lift_vacuity_exists_but_boundedness_rejects_random() {
         let rhs = c + Fq::from(P_BB) * t;
         assert_eq!(lhs, rhs);
 
-        // Under boundedness (base=16,k=8), this t should almost never fit.
+        // Under boundedness (base=14,k=8,digit_max=31), this t should almost never fit.
         if !decompose_fits_sp1_frog64_bound(t) {
             // Nice to sanity-print magnitude if needed while debugging.
             let _mag = centered_i64(t);

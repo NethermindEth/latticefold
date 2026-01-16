@@ -21,6 +21,7 @@ use rayon::prelude::*;
 fn digit_lookup_or_panic<BR>(
     digit_elems: &[BR],
     dig: BR,
+    digit_abs_max: i128,
     b: u128,
     k: usize,
     ctx: &'static str,
@@ -37,49 +38,124 @@ where
     let mag = dig.center().to_u64().ok();
     let is_neg = dig.sign() == -BR::ONE;
     let signed_mag: Option<i128> = mag.map(|m| if is_neg { -(m as i128) } else { m as i128 });
-    let half = (b / 2) as i128;
-
     panic!(
         "digit not in alphabet: \
-         ctx={} b={} k={} expected alphabet=[-b/2,b/2] => [-{},{}]; \
+         ctx={} b={} k={} expected alphabet=[-D,D] => [-{},{}]; \
          dig: canon_u64={:?} centered_mag_u64={:?} sign_is_neg={} signed_mag={:?} \
-         (check |signed_mag| <= floor(b/2)={} )",
+         (check |signed_mag| <= D={} )",
         ctx,
         b,
         k,
-        half,
-        half,
+        digit_abs_max,
+        digit_abs_max,
         canon,
         mag,
         is_neg,
         signed_mag,
-        half
+        digit_abs_max
     );
 }
 
 #[inline]
-fn assert_digit_within_half_base<BR>(
-    dig: BR,
-    b: u128,
+fn div_floor_i128(a: i128, b: i128) -> i128 {
+    debug_assert!(b > 0);
+    let q = a / b;
+    let r = a % b;
+    if r != 0 && a < 0 { q - 1 } else { q }
+}
+
+#[inline]
+fn div_ceil_i128(a: i128, b: i128) -> i128 {
+    debug_assert!(b > 0);
+    let q = a / b;
+    let r = a % b;
+    if r != 0 && a > 0 { q + 1 } else { q }
+}
+
+#[inline]
+fn div_round_i128(a: i128, b: i128) -> i128 {
+    debug_assert!(b > 0);
+    let q = div_floor_i128(a, b);
+    let r = a - q * b; // 0..b-1
+    if r * 2 >= b { q + 1 } else { q }
+}
+
+#[inline]
+fn br_from_i128<BR: Ring + From<u128>>(x: i128) -> BR {
+    if x >= 0 {
+        BR::from(x as u128)
+    } else {
+        -BR::from((-x) as u128)
+    }
+}
+
+/// Deterministically decompose a *small integer* representative into `k` digits in base `b`,
+/// with each digit in `[-digit_abs_max, digit_abs_max]`.
+///
+/// This is the decomposition model that matches what the verifier can enforce today via
+/// unit-monomial exponents: for Frog(d=64), `digit_abs_max = d/2 - 1 = 31`.
+#[inline]
+fn bounded_decompose_to_digits<BR>(
+    x: BR,
+    b: i128,
+    digit_abs_max: i128,
+    pow_b: &[i128],
+    rem_bound: &[i128],
+    out: &mut [BR],
     row_idx: usize,
-    k_i: usize,
     ctx: &'static str,
-)
-where
-    BR: Zq + Ring + Copy,
+) where
+    BR: Zq + Ring + Copy + From<u128>,
 {
-    let half = (b / 2) as u64;
-    let mag = dig
+    debug_assert!(b >= 2);
+    debug_assert_eq!(pow_b.len(), out.len());
+    debug_assert_eq!(rem_bound.len(), out.len());
+
+    // Interpret as signed integer via Zq centering (must fit in i128 for our parameter regimes).
+    let mag_u64 = x
         .center()
         .to_u64()
-        .expect("digit centered magnitude should fit in u64");
-    if mag > half {
-        let canon = dig.to_u64().ok();
-        let is_neg = dig.sign() == -BR::ONE;
-        let signed_mag: i128 = if is_neg { -(mag as i128) } else { mag as i128 };
+        .expect("centered magnitude should fit in u64") as i128;
+    let is_neg = x.sign() == -BR::ONE;
+    let mut cur: i128 = if is_neg { -mag_u64 } else { mag_u64 };
+
+    // Choose digits from high-to-low to maintain the invariant that the remaining tail is representable.
+    for i in (0..out.len()).rev() {
+        let bi = pow_b[i];
+        let r = rem_bound[i]; // representable bound using lower i digits
+
+        // Need: |cur - d*bi| <= r  =>  (cur-r)/bi <= d <= (cur+r)/bi
+        let mut lo = div_ceil_i128(cur - r, bi);
+        let mut hi = div_floor_i128(cur + r, bi);
+        lo = lo.max(-digit_abs_max);
+        hi = hi.min(digit_abs_max);
+        if lo > hi {
+            panic!(
+                "bounded decomposition failed: ctx={} row_idx={} cur={} b={} digit_abs_max={} (lo={}, hi={})",
+                ctx, row_idx, cur, b, digit_abs_max, lo, hi
+            );
+        }
+
+        let mut d = div_round_i128(cur, bi);
+        if d < lo {
+            d = lo;
+        } else if d > hi {
+            d = hi;
+        }
+
+        cur -= d * bi;
+        out[i] = br_from_i128::<BR>(d);
+    }
+
+    if cur != 0 {
         panic!(
-            "balanced digit magnitude violation: ctx={} b={} half={} row_idx={} k_i={} mag={} signed_mag={} canon_u64={:?}",
-            ctx, b, half, row_idx, k_i, mag, signed_mag, canon
+            "bounded decomposition remainder nonzero: ctx={} row_idx={} rem={} (b={}, digit_abs_max={}, k={})",
+            ctx,
+            row_idx,
+            cur,
+            b,
+            digit_abs_max,
+            out.len()
         );
     }
 }
@@ -568,7 +644,7 @@ impl<R: PolyRing> RgInstance<R> {
 
 impl<R: CoeffRing> RgInstance<R>
 where
-    R::BaseRing: Decompose + Zq,
+    R::BaseRing: Zq + From<u128>,
     R: Decompose,
 {
     pub fn from_f(f: Vec<R>, A: &Matrix<R>, decomp: &DecompParameters) -> Self {
@@ -585,23 +661,16 @@ where
         let k = decomp.k;
         let t = std::time::Instant::now();
         // Digit encoding (monomial path):
-        // We represent digits via `exp::<R>(digit)` and use the existing rgchk/setchk machinery.
         //
-        // This requires the digit magnitude to be O(d). Concretely, for Frog(d=16 or d=64),
-        // we use `decomp.b = d/2` and build a monomial digit alphabet matching the balanced
-        // digit range `[-b/2, b/2]` (for even `b`).
-        // without panicking, and the resulting global bound is sufficient for SP1 lift soundness.
+        // The verifier enforces that each digit is a unit monomial exponent (via psi/exp),
+        // which implies a conservative per-digit bound of |digit| <= D where D = d/2 - 1.
+        // We therefore build the digit alphabet as [-D, D] and decompose coefficients into that set.
+        let digit_abs_max: i128 = (R::dimension() as i128) / 2 - 1;
+        assert!(digit_abs_max >= 1, "ring dimension too small for monomial digits");
         let b_i128: i128 = decomp.b as i128;
-        assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let half: i128 = b_i128 / 2;
-        let digit_elems: Vec<R::BaseRing> = (-half..=half)
-            .map(|x| {
-                if x >= 0 {
-                    R::BaseRing::from(x as u128)
-                } else {
-                    -R::BaseRing::from((-x) as u128)
-                }
-            })
+        assert!(b_i128 >= 2, "decomposition base must be >= 2");
+        let digit_elems: Vec<R::BaseRing> = (-digit_abs_max..=digit_abs_max)
+            .map(|x| br_from_i128::<R::BaseRing>(x))
             .collect();
         assert!(
             digit_elems.len() <= (u16::MAX as usize),
@@ -619,8 +688,20 @@ where
         let ctx: &'static str = "RgInstance::from_f";
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
             Box::new(move |dig: R::BaseRing| -> u16 {
-                digit_lookup_or_panic(&digit_elems, dig, b_u128, k, ctx)
+                digit_lookup_or_panic(&digit_elems, dig, digit_abs_max, b_u128, k, ctx)
             });
+
+        // Precompute base powers and tail-bounds for bounded decomposition.
+        let mut pow_b: Vec<i128> = vec![1; k];
+        for i in 1..k {
+            pow_b[i] = pow_b[i - 1] * b_i128;
+        }
+        let mut rem_bound: Vec<i128> = vec![0; k];
+        // rem_bound[i] = D * (b^i - 1)/(b - 1)
+        let denom = b_i128 - 1;
+        for i in 0..k {
+            rem_bound[i] = digit_abs_max * (pow_b[i].saturating_sub(1)) / denom;
+        }
 
         // If `f` is constant-coefficient (only col=0 can be nonzero), we can store only the
         // `col=0` digit table and treat all other coeff columns as digit=0.
@@ -649,11 +730,29 @@ where
                         debug_assert_eq!(coeffs.len(), d);
                         if is_const_coeff {
                             // Only constant coefficient matters; other columns are fixed to digit=0.
-                            coeffs[0].decompose_to(decomp.b, &mut tmp_local);
+                            bounded_decompose_to_digits(
+                                coeffs[0],
+                                b_i128,
+                                digit_abs_max,
+                                &pow_b,
+                                &rem_bound,
+                                &mut tmp_local,
+                                row_idx,
+                                ctx,
+                            );
                             table[row_idx] = (map_digit_to_idx)(tmp_local[k_i]);
                         } else {
                             for (col_idx, &c) in coeffs.iter().enumerate() {
-                                c.decompose_to(decomp.b, &mut tmp_local);
+                                bounded_decompose_to_digits(
+                                    c,
+                                    b_i128,
+                                    digit_abs_max,
+                                    &pow_b,
+                                    &rem_bound,
+                                    &mut tmp_local,
+                                    row_idx,
+                                    ctx,
+                                );
                                 table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
                             }
                         }
@@ -667,14 +766,32 @@ where
                 let coeffs = fi.coeffs();
                 debug_assert_eq!(coeffs.len(), d);
                 if is_const_coeff {
-                    coeffs[0].decompose_to(decomp.b, &mut tmp);
+                    bounded_decompose_to_digits(
+                        coeffs[0],
+                        b_i128,
+                        digit_abs_max,
+                        &pow_b,
+                        &rem_bound,
+                        &mut tmp,
+                        row_idx,
+                        ctx,
+                    );
                     for k_i in 0..k {
                         digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
                     }
                 } else {
                     for (col_idx, &c) in coeffs.iter().enumerate() {
                         // Writes into tmp[0..k] in-place.
-                        c.decompose_to(decomp.b, &mut tmp);
+                        bounded_decompose_to_digits(
+                            c,
+                            b_i128,
+                            digit_abs_max,
+                            &pow_b,
+                            &rem_bound,
+                            &mut tmp,
+                            row_idx,
+                            ctx,
+                        );
                         for k_i in 0..k {
                             digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
                         }
@@ -848,17 +965,12 @@ where
 
         // Reuse the same digit-table logic as `from_f`, including the const-coeff optimization.
         // (This keeps transcript behavior and setchk wiring identical.)
+        let digit_abs_max: i128 = (R::dimension() as i128) / 2 - 1;
+        assert!(digit_abs_max >= 1, "ring dimension too small for monomial digits");
         let b_i128: i128 = decomp.b as i128;
-        assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let half: i128 = b_i128 / 2;
-        let digit_elems: Vec<R::BaseRing> = (-half..=half)
-            .map(|x| {
-                if x >= 0 {
-                    R::BaseRing::from(x as u128)
-                } else {
-                    -R::BaseRing::from((-x) as u128)
-                }
-            })
+        assert!(b_i128 >= 2, "decomposition base must be >= 2");
+        let digit_elems: Vec<R::BaseRing> = (-digit_abs_max..=digit_abs_max)
+            .map(|x| br_from_i128::<R::BaseRing>(x))
             .collect();
         let exp_table: Arc<Vec<R>> = Arc::new(
             digit_elems
@@ -871,11 +983,21 @@ where
         let ctx: &'static str = "RgInstance::from_f_seeded";
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
             Box::new(move |dig: R::BaseRing| -> u16 {
-                digit_lookup_or_panic(&digit_elems, dig, b_u128, k, ctx)
+                digit_lookup_or_panic(&digit_elems, dig, digit_abs_max, b_u128, k, ctx)
             });
 
         let is_const_coeff = f.iter().all(|fi| fi.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
+
+        let mut pow_b: Vec<i128> = vec![1; k];
+        for i in 1..k {
+            pow_b[i] = pow_b[i - 1] * b_i128;
+        }
+        let mut rem_bound: Vec<i128> = vec![0; k];
+        let denom = b_i128 - 1;
+        for i in 0..k {
+            rem_bound[i] = digit_abs_max * (pow_b[i].saturating_sub(1)) / denom;
+        }
         let mut digits_tables: Vec<Vec<u16>> = if is_const_coeff {
             (0..k).map(|_| vec![zero_idx; n]).collect()
         } else {
@@ -893,11 +1015,29 @@ where
                         let coeffs = fi.coeffs();
                         debug_assert_eq!(coeffs.len(), d);
                         if is_const_coeff {
-                            coeffs[0].decompose_to(decomp.b, &mut tmp_local);
+                            bounded_decompose_to_digits(
+                                coeffs[0],
+                                b_i128,
+                                digit_abs_max,
+                                &pow_b,
+                                &rem_bound,
+                                &mut tmp_local,
+                                row_idx,
+                                ctx,
+                            );
                             table[row_idx] = (map_digit_to_idx)(tmp_local[k_i]);
                         } else {
                             for (col_idx, &c) in coeffs.iter().enumerate() {
-                                c.decompose_to(decomp.b, &mut tmp_local);
+                                bounded_decompose_to_digits(
+                                    c,
+                                    b_i128,
+                                    digit_abs_max,
+                                    &pow_b,
+                                    &rem_bound,
+                                    &mut tmp_local,
+                                    row_idx,
+                                    ctx,
+                                );
                                 table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
                             }
                         }
@@ -911,13 +1051,31 @@ where
                 let coeffs = fi.coeffs();
                 debug_assert_eq!(coeffs.len(), d);
                 if is_const_coeff {
-                    coeffs[0].decompose_to(decomp.b, &mut tmp);
+                    bounded_decompose_to_digits(
+                        coeffs[0],
+                        b_i128,
+                        digit_abs_max,
+                        &pow_b,
+                        &rem_bound,
+                        &mut tmp,
+                        row_idx,
+                        ctx,
+                    );
                     for k_i in 0..k {
                         digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
                     }
                 } else {
                     for (col_idx, &c) in coeffs.iter().enumerate() {
-                        c.decompose_to(decomp.b, &mut tmp);
+                        bounded_decompose_to_digits(
+                            c,
+                            b_i128,
+                            digit_abs_max,
+                            &pow_b,
+                            &rem_bound,
+                            &mut tmp,
+                            row_idx,
+                            ctx,
+                        );
                         for k_i in 0..k {
                             digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
                         }
@@ -1098,17 +1256,12 @@ where
             );
         }
 
+        let digit_abs_max: i128 = (R::dimension() as i128) / 2 - 1;
+        assert!(digit_abs_max >= 1, "ring dimension too small for monomial digits");
         let b_i128: i128 = decomp.b as i128;
-        assert!(b_i128 >= 2 && (b_i128 % 2 == 0), "balanced decomposition base must be even");
-        let half: i128 = b_i128 / 2;
-        let digit_elems: Vec<R::BaseRing> = (-half..=half)
-            .map(|x| {
-                if x >= 0 {
-                    R::BaseRing::from(x as u128)
-                } else {
-                    -R::BaseRing::from((-x) as u128)
-                }
-            })
+        assert!(b_i128 >= 2, "decomposition base must be >= 2");
+        let digit_elems: Vec<R::BaseRing> = (-digit_abs_max..=digit_abs_max)
+            .map(|x| br_from_i128::<R::BaseRing>(x))
             .collect();
         let exp_table: Arc<Vec<R>> = Arc::new(
             digit_elems
@@ -1117,39 +1270,22 @@ where
                 .collect::<Vec<_>>(),
         );
         let digit_elems = Arc::new(digit_elems);
+        let digit_elems_for_idx = digit_elems.clone();
         let b_u128 = decomp.b;
         let ctx: &'static str = "RgInstance::from_f0_seeded";
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
             Box::new(move |dig: R::BaseRing| -> u16 {
-                digit_lookup_or_panic(&digit_elems, dig, b_u128, k, ctx)
+                digit_lookup_or_panic(&digit_elems_for_idx, dig, digit_abs_max, b_u128, k, ctx)
             });
 
-        // Tau-digit alphabet (for `m_tau`): `split` uses basis `tau_b = d/2`, so digits are bounded by ±tau_b/2 = ±(d/4).
-        // Keep a separate exp-table for these, since they can exceed the witness digit range (e.g. 14 when b/2=8).
+        // Tau digits from `split` are within ±(d/4), which is always within our witness digit alphabet [-D,D].
         let tau_b: u128 = (R::dimension() / 2) as u128;
         assert!(tau_b >= 2 && (tau_b % 2 == 0), "tau decomposition base must be even");
-        let tau_half: i128 = (tau_b / 2) as i128;
-        let tau_digit_elems: Arc<Vec<R::BaseRing>> = Arc::new(
-            (-tau_half..=tau_half)
-                .map(|x| {
-                    if x >= 0 {
-                        R::BaseRing::from(x as u128)
-                    } else {
-                        -R::BaseRing::from((-x) as u128)
-                    }
-                })
-                .collect(),
-        );
-        let exp_table_tau: Arc<Vec<R>> = Arc::new(
-            tau_digit_elems
-                .iter()
-                .map(|&x| exp::<R>(x).unwrap())
-                .collect::<Vec<_>>(),
-        );
+        // Map tau digits using the same alphabet/exp-table.
         let ctx_tau: &'static str = "RgInstance::from_f0_seeded::m_tau";
         let map_tau_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> = Box::new({
-            let tau_digit_elems = tau_digit_elems.clone();
-            move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&tau_digit_elems, dig, tau_b, 0, ctx_tau) }
+            let digit_elems = digit_elems.clone();
+            move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&digit_elems, dig, digit_abs_max, tau_b, 0, ctx_tau) }
         });
 
         // Const-coeff witness: store only col0 digit table.
@@ -1157,6 +1293,15 @@ where
         // Only materialize digits for the prefix; rows beyond `prefix_len` are implicitly zero digits.
         let mut digits_tables: Vec<Vec<u16>> = (0..k).map(|_| vec![zero_idx; prefix_len]).collect();
         let t_digits = std::time::Instant::now();
+        let mut pow_b: Vec<i128> = vec![1; k];
+        for i in 1..k {
+            pow_b[i] = pow_b[i - 1] * b_i128;
+        }
+        let mut rem_bound: Vec<i128> = vec![0; k];
+        let denom = b_i128 - 1;
+        for i in 0..k {
+            rem_bound[i] = digit_abs_max * (pow_b[i].saturating_sub(1)) / denom;
+        }
         #[cfg(feature = "parallel")]
         {
             use rayon::prelude::*;
@@ -1183,9 +1328,17 @@ where
             f0.par_iter()
                 .enumerate()
                 .for_each_init(|| vec![R::BaseRing::ZERO; k], |tmp, (row_idx, &c0)| {
-                    c0.decompose_to(decomp.b, tmp);
+                    bounded_decompose_to_digits(
+                        c0,
+                        b_i128,
+                        digit_abs_max,
+                        &pow_b,
+                        &rem_bound,
+                        tmp,
+                        row_idx,
+                        ctx,
+                    );
                     for k_i in 0..k {
-                        assert_digit_within_half_base(tmp[k_i], decomp.b, row_idx, k_i, "RgInstance::from_f0_seeded");
                         let dig = (map_digit_to_idx)(tmp[k_i]);
                         unsafe {
                             debug_assert!(k_i < tbl.len);
@@ -1199,9 +1352,17 @@ where
         {
             let mut tmp = vec![R::BaseRing::ZERO; k];
             for (row_idx, &c0) in f0.iter().enumerate() {
-                c0.decompose_to(decomp.b, &mut tmp);
+                bounded_decompose_to_digits(
+                    c0,
+                    b_i128,
+                    digit_abs_max,
+                    &pow_b,
+                    &rem_bound,
+                    &mut tmp,
+                    row_idx,
+                    ctx,
+                );
                 for k_i in 0..k {
-                    assert_digit_within_half_base(tmp[k_i], decomp.b, row_idx, k_i, "RgInstance::from_f0_seeded");
                     digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
                 }
             }
@@ -1324,7 +1485,7 @@ where
         let cm_f = cm_pair[0].as_ref().to_vec();
         let C_Mf = cm_pair[1].as_ref().to_vec();
         let cm_mtau = scheme
-            .commit_many_with_monomial_digits(n, 1, exp_table_tau.clone(), {
+            .commit_many_with_monomial_digits(n, 1, exp_table.clone(), {
                 let digits = m_tau_digits.clone();
                 move |j, out| {
                     out[0] = digits[j];
@@ -1342,7 +1503,7 @@ where
         Self {
             M_f,
             tau: tau0.clone(),
-            m_tau: MonomialVec::Digits { digits: m_tau_digits, exp_table: exp_table_tau.clone() },
+            m_tau: MonomialVec::Digits { digits: m_tau_digits, exp_table: exp_table.clone() },
             f: WitnessVec::ConstCoeffBase {
                 values: f0,
                 domain_len: n,
