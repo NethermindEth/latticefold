@@ -779,7 +779,9 @@ mod frog64_tests {
         let mut rng = test_rng();
         for _ in 0..64 {
             let a = FrogRing64::rand(&mut rng);
-            let b = rng.next_u64() as u128 | 2; // ensure b>=2
+            // Balanced decomposition requires an **even** basis `b`.
+            // Ensure b >= 2 and even.
+            let b = ((rng.next_u64() as u128) | 2) & !1;
             let len = 8usize;
 
             let mut out = vec![FrogRing64::ZERO; len];
