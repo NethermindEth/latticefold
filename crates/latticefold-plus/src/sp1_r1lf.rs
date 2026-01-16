@@ -74,9 +74,54 @@ where
     let nvars = nvars_from_ncols_pow2(cache.ncols)?;
     // log_{d'}(q) where d' = d/2
     let lnq = (R::BaseRing::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
+    let d = R::dimension() as u64;
     let d_prime = (R::dimension() / 2) as u64;
     let l_raw = (lnq / (d_prime as f64).ln()).ceil() as u64;
     let l = next_power_of_two(l_raw as usize) as u64;
+
+    // Production choice (SP1 BabyBear-in-Frog with Frog(d=64)):
+    //
+    // We *fix* (decomp_b, k) to a known-safe pair instead of "auto-tuning" it.
+    // Rationale:
+    // - We need boundedness tight enough to prevent the classic lift slack attack:
+    //     (A·f)(B·f) = (C·f) + p_bb * aux  (mod q_frog)
+    //   where an attacker can always solve for `aux` mod q_frog unless `aux` is bounded.
+    // - For Frog's base prime q ≈ 1.59e19 and p_bb ≈ 2.01e9, requiring
+    //     |aux| < q/(2*p_bb) ≈ 3.95e9
+    //   suffices to prevent wraparound on the p_bb*aux term.
+    // - With balanced base B=16 and k=8 digits, the max representable magnitude is:
+    //     max = (B/2) * (B^k - 1)/(B - 1) = 2,290,649,224
+    //   which covers centered BabyBear values (<= p_bb/2 ≈ 1,006,632,960) and stays below q/(2*p_bb).
+    //
+    // NOTE: This is also monomial-safe for rgchk/setchk because |digit| <= B/2 = 8 << d=64,
+    // so `exp::<R>(digit)` does not panic.
+    const SP1_P_BB: u64 = 2013265921;
+    let p_bb = cache.stats.p_bb;
+    if d == 64 && p_bb == SP1_P_BB {
+        let decomp_b: u64 = 16;
+        let k: u64 = 8;
+        // Log the chosen parameters (matches LF_PLUS_PROFILE pattern).
+        let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+        if profile {
+            println!(
+                "[sp1_default_we_params] SP1/Frog64 hardcoded safe params: decomp_b={}, k={}, l={}, max_bound={}",
+                decomp_b, k, l,
+                (decomp_b / 2) as u128 * ((decomp_b as u128).pow(k as u32) - 1) / (decomp_b as u128 - 1)
+            );
+        }
+        return Ok(WeParams {
+            nvars_setchk: nvars as u64,
+            degree_setchk: 3,
+            nvars_cm: nvars as u64,
+            degree_cm: 2,
+            kappa,
+            ring_dim_d: d,
+            decomp_b,
+            k,
+            l,
+            mlen,
+        });
+    }
 
     // Production boundedness strategy:
     // Use the existing monomial-based rgchk/setchk pipeline, so we must choose a digit base
@@ -118,6 +163,16 @@ where
     let bound = p_bb / 2;
     let k_raw: u64 = min_k_for_bound(d_prime, bound);
     let k: u64 = next_power_of_two(k_raw as usize) as u64;
+
+    // Log the chosen parameters (matches LF_PLUS_PROFILE pattern).
+    let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
+    if profile {
+        let max_bound = (d_prime / 2) as u128 * ((d_prime as u128).pow(k as u32) - 1) / (d_prime as u128 - 1);
+        println!(
+            "[sp1_default_we_params] generic path: d={}, decomp_b={}, k_raw={}, k={}, l={}, max_bound={}",
+            d, d_prime, k_raw, k, l, max_bound
+        );
+    }
 
     Ok(WeParams {
         nvars_setchk: nvars as u64,
