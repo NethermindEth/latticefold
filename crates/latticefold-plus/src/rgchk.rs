@@ -17,6 +17,39 @@ use crate::{
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
+#[inline]
+fn digit_lookup_or_panic<BR>(digit_elems: &[BR], dig: BR, b: u128, k: usize) -> u16
+where
+    BR: Zq + Ring + Copy + PartialEq,
+{
+    if let Some(pos) = digit_elems.iter().position(|&x| x == dig) {
+        return pos as u16;
+    }
+
+    // Diagnostic: try to interpret `dig` as a signed small integer under Zq centering.
+    let canon = dig.to_u64().ok();
+    let mag = dig.center().to_u64().ok();
+    let is_neg = dig.sign() == -BR::ONE;
+    let signed_mag: Option<i128> = mag.map(|m| if is_neg { -(m as i128) } else { m as i128 });
+    let half = (b / 2) as i128;
+
+    panic!(
+        "digit not in alphabet: \
+         b={} k={} expected alphabet=[-b,b] => [-{},{}]; \
+         dig: canon_u64={:?} centered_mag_u64={:?} sign_is_neg={} signed_mag={:?} \
+         (check |signed_mag| <= floor(b/2)={} )",
+        b,
+        k,
+        b,
+        b,
+        canon,
+        mag,
+        is_neg,
+        signed_mag,
+        half
+    );
+}
+
 // D_f: decomposed cf(f), Z n x dk
 // M_f: EXP(D_f)
 
@@ -549,13 +582,9 @@ where
                 .collect::<Vec<_>>(),
         );
         let digit_elems = Arc::new(digit_elems);
+        let b_u128 = decomp.b;
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
-            Box::new(move |dig: R::BaseRing| -> u16 {
-                digit_elems
-                    .iter()
-                    .position(|&x| x == dig)
-                    .expect("digit not in [-b,b] alphabet") as u16
-            });
+            Box::new(move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&digit_elems, dig, b_u128, k) });
 
         // If `f` is constant-coefficient (only col=0 can be nonzero), we can store only the
         // `col=0` digit table and treat all other coeff columns as digit=0.
@@ -801,13 +830,9 @@ where
                 .collect::<Vec<_>>(),
         );
         let digit_elems = Arc::new(digit_elems);
+        let b_u128 = decomp.b;
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
-            Box::new(move |dig: R::BaseRing| -> u16 {
-                digit_elems
-                    .iter()
-                    .position(|&x| x == dig)
-                    .expect("digit not in [-b,b] alphabet") as u16
-            });
+            Box::new(move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&digit_elems, dig, b_u128, k) });
 
         let is_const_coeff = f.iter().all(|fi| fi.coeffs().iter().skip(1).all(|c| *c == R::BaseRing::ZERO));
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
@@ -1051,13 +1076,9 @@ where
                 .collect::<Vec<_>>(),
         );
         let digit_elems = Arc::new(digit_elems);
+        let b_u128 = decomp.b;
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
-            Box::new(move |dig: R::BaseRing| -> u16 {
-                digit_elems
-                    .iter()
-                    .position(|&x| x == dig)
-                    .expect("digit not in [-b,b] alphabet") as u16
-            });
+            Box::new(move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&digit_elems, dig, b_u128, k) });
 
         // Const-coeff witness: store only col0 digit table.
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
