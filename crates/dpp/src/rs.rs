@@ -493,11 +493,15 @@ fn convolution_crt_ntt<F: PrimeField>(a: &[F], b: &[F], out_len: usize, size: us
     }
 
     // Garner reconstruction per coefficient, then reduce mod p and map back to F.
+    //
+    // PERFORMANCE:
+    // `k` is small (<= target_count=8). Avoid allocating a `Vec` per coefficient.
+    debug_assert!(k <= 8, "unexpected CRT modulus count k={k}");
     let out: Vec<F> = (0..out_len)
         .into_par_iter()
         .map(|t| {
             // mixed radix digits c[i] in [0, MODS[i])
-            let mut c = vec![0u32; k];
+            let mut c = [0u32; 8];
             c[0] = residues[0][t];
             for i in 1..k {
                 let mi = mods[i];
