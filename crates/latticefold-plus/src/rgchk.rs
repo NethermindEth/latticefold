@@ -1124,6 +1124,34 @@ where
                 digit_lookup_or_panic(&digit_elems, dig, b_u128, k, ctx)
             });
 
+        // Tau-digit alphabet (for `m_tau`): `split` uses basis `tau_b = d/2`, so digits are bounded by ±tau_b/2 = ±(d/4).
+        // Keep a separate exp-table for these, since they can exceed the witness digit range (e.g. 14 when b/2=8).
+        let tau_b: u128 = (R::dimension() / 2) as u128;
+        assert!(tau_b >= 2 && (tau_b % 2 == 0), "tau decomposition base must be even");
+        let tau_half: i128 = (tau_b / 2) as i128;
+        let tau_digit_elems: Arc<Vec<R::BaseRing>> = Arc::new(
+            (-tau_half..=tau_half)
+                .map(|x| {
+                    if x >= 0 {
+                        R::BaseRing::from(x as u128)
+                    } else {
+                        -R::BaseRing::from((-x) as u128)
+                    }
+                })
+                .collect(),
+        );
+        let exp_table_tau: Arc<Vec<R>> = Arc::new(
+            tau_digit_elems
+                .iter()
+                .map(|&x| exp::<R>(x).unwrap())
+                .collect::<Vec<_>>(),
+        );
+        let ctx_tau: &'static str = "RgInstance::from_f0_seeded::m_tau";
+        let map_tau_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> = Box::new({
+            let tau_digit_elems = tau_digit_elems.clone();
+            move |dig: R::BaseRing| -> u16 { digit_lookup_or_panic(&tau_digit_elems, dig, tau_b, 0, ctx_tau) }
+        });
+
         // Const-coeff witness: store only col0 digit table.
         let zero_idx: u16 = (map_digit_to_idx)(R::BaseRing::ZERO);
         // Only materialize digits for the prefix; rows beyond `prefix_len` are implicitly zero digits.
@@ -1250,7 +1278,7 @@ where
         let com = Matrix::hconcat(&comM_f).unwrap();
 
         let t = std::time::Instant::now();
-        let tau = split(&com, n, (R::dimension() / 2) as u128, decomp.l);
+        let tau = split(&com, n, tau_b, decomp.l);
         if profile {
             println!("[LF+ RgInstance::from_f0_seeded] split tau: {:?}", t.elapsed());
         }
@@ -1263,13 +1291,13 @@ where
                 use rayon::prelude::*;
                 Arc::new(
                     tau.par_iter()
-                        .map(|&c| (map_digit_to_idx)(c))
+                        .map(|&c| (map_tau_digit_to_idx)(c))
                         .collect::<Vec<u16>>(),
                 )
             }
             #[cfg(not(feature = "parallel"))]
             {
-                Arc::new(tau.iter().copied().map(|c| (map_digit_to_idx)(c)).collect::<Vec<u16>>())
+                Arc::new(tau.iter().copied().map(|c| (map_tau_digit_to_idx)(c)).collect::<Vec<u16>>())
             }
         };
         if profile {
@@ -1296,7 +1324,7 @@ where
         let cm_f = cm_pair[0].as_ref().to_vec();
         let C_Mf = cm_pair[1].as_ref().to_vec();
         let cm_mtau = scheme
-            .commit_many_with_monomial_digits(n, 1, exp_table.clone(), {
+            .commit_many_with_monomial_digits(n, 1, exp_table_tau.clone(), {
                 let digits = m_tau_digits.clone();
                 move |j, out| {
                     out[0] = digits[j];
@@ -1314,7 +1342,7 @@ where
         Self {
             M_f,
             tau: tau0.clone(),
-            m_tau: MonomialVec::Digits { digits: m_tau_digits, exp_table: exp_table.clone() },
+            m_tau: MonomialVec::Digits { digits: m_tau_digits, exp_table: exp_table_tau.clone() },
             f: WitnessVec::ConstCoeffBase {
                 values: f0,
                 domain_len: n,
