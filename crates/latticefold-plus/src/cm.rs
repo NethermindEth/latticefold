@@ -439,9 +439,15 @@ where
             .collect::<Vec<_>>();
         let s_prime_flat = s_prime.clone().into_iter().flatten().collect::<Vec<R>>();
 
-        // Optional: avoid materializing the full length-2^n `h: Vec<R>` (big RSS jump).
-        // NOTE: this must be enabled explicitly, and only works when every `M_f` is `ConstCol0`.
-        let stream_h = std::env::var("LF_PLUS_CM_STREAM_H").ok().as_deref() == Some("1");
+        // Avoid materializing the full length-2^n `h: Vec<R>` (big RSS jump).
+        //
+        // Default: ON (try streaming first). This is the safe default for SP1-scale instances,
+        // where materializing `h` can easily exceed typical RAM budgets for large rings (e.g. d=64).
+        //
+        // Opt-out: set `LF_PLUS_CM_STREAM_H=0` to force materialization (useful for debugging).
+        //
+        // Streaming only works when every `M_f` is `ConstCol0`; otherwise we fall back.
+        let stream_h = std::env::var("LF_PLUS_CM_STREAM_H").ok().as_deref() != Some("0");
         let mut h_mles_full: Option<Vec<Arc<StreamingMleEnum<R>>>> = None;
 
         // Helpers for fast negacyclic-by-monomial multiplication in cyclotomic rings.
