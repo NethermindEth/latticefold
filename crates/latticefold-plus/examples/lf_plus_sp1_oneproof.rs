@@ -271,7 +271,7 @@ fn main() {
     maybe_print_rss("after init Ajtai scheme");
 
     let cr1cs =
-        latticefold_plus::r1cs::ComR1CSBase::<R>::from_f0_seeded_base(r1cs, f0, l_pub, &ajtai);
+        latticefold_plus::r1cs::ComR1CSBase::<R>::from_f0_seeded_base(r1cs, f0.clone(), l_pub, &ajtai);
     maybe_print_rss("after ComR1CS::from_f0_seeded");
     let m0 = cr1cs.x.matrices_arc_base();
     maybe_print_rss("after matrices_arc");
