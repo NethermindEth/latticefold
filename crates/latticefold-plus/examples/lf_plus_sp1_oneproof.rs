@@ -358,7 +358,7 @@ Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP
             1 + l_pub
         );
     }
-    let public_inputs: Vec<BFSmall> = w_host[1..1 + l_pub].to_vec();
+    let mut public_inputs: Vec<BFSmall> = w_host[1..1 + l_pub].to_vec();
     println!("  public_inputs_len={} (from witness[1..=l])", public_inputs.len());
 
     if !public_inputs.is_empty() {
