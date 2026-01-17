@@ -2220,7 +2220,6 @@ where
     let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
     for &x in public_inputs {
             let v = b_params.new_var(x);
-            enforce_bool(&mut b_params, v);
             pub_input_vars.push(v);
     }
     let (params_inst, params_asg) = b_params.into_instance();
@@ -3011,7 +3010,6 @@ where
             let mut pub_input_vars = Vec::with_capacity(public_inputs.len());
             for &x in public_inputs {
                 let v = b_params.new_var(x);
-                enforce_bool(&mut b_params, v);
                 pub_input_vars.push(v);
             }
             let (params_inst, params_asg) = b_params.into_instance();
@@ -3230,13 +3228,11 @@ where
     }
 
     // Local statement absorbs are the public inputs as field-elements-as-ring, in order.
-    // Local statement absorbs are the public inputs as field-elements-as-ring, in order.
     let mut b_stmt = Dr1csBuilder::<BF<R>>::new();
     b_stmt.enforce_var_eq_const(b_stmt.one(), BF::<R>::ONE);
     let mut stmt_pub_vars = Vec::with_capacity(public_inputs.len());
     for &x in public_inputs {
         let v = b_stmt.new_var(x);
-        enforce_bool(&mut b_stmt, v);
         stmt_pub_vars.push(v);
     }
     let mut stmt_absorb_flat: Vec<usize> = Vec::new();
