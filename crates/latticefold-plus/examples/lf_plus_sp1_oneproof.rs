@@ -240,27 +240,17 @@ fn main() {
     //
     // IMPORTANT: do NOT pad to `ncols`. We treat missing columns as implicit zeros throughout
     // the prover, while still committing / sampling challenges over the full `ncols` domain.
-    // IMPORTANT: SP1 R1LF/R1CS exports statement-bound public inputs occupying indices 1..=l_pub.
-    let l_pub = cache.stats.num_public;
     let t_f0 = Instant::now();
     let mut f0 = (*w_host).clone();
     f0.truncate(cache.stats.num_vars);
-    // Tamper the statement **before proving** by perturbing the first public input coordinate.
-    // This MUST happen before `ComR1CSBase::from_f0_seeded_base` so the LF+ instance is built
-    // for a different statement than the SP1 witness actually satisfies.
-    if l_pub != 0 {
-        if f0.len() <= 1 {
-            panic!("witness too short to tamper public input");
-        }
-        f0[1] = <BFSmall as ark_ff::Field>::ONE - f0[1];
-        println!("  NOTE: tampered public input f0[1] = 1 - f0[1] before proving (expected FAIL)");
-    }
     let f0: Arc<Vec<F>> = Arc::new(f0);
     println!("  build f0 (base scalars, padded): {:?}", t_f0.elapsed());
     maybe_print_rss("after build f0 padded");
 
     // Build `ComR1CS` instance and run the full LF+ prover to produce a `PlusProof`.
     let t_setup = Instant::now();
+    // IMPORTANT: SP1 R1LF/R1CS exports statement-bound public inputs occupying indices 1..=l.
+    let l_pub = cache.stats.num_public;
     let r1cs = latticefold::arith::r1cs::R1CS::<F> { l: l_pub, A: m_a, B: m_b, C: m_c };
     maybe_print_rss("after build r1cs struct");
 
@@ -271,7 +261,7 @@ fn main() {
     maybe_print_rss("after init Ajtai scheme");
 
     let cr1cs =
-        latticefold_plus::r1cs::ComR1CSBase::<R>::from_f0_seeded_base(r1cs, f0.clone(), l_pub, &ajtai);
+        latticefold_plus::r1cs::ComR1CSBase::<R>::from_f0_seeded_base(r1cs, f0, l_pub, &ajtai);
     maybe_print_rss("after ComR1CS::from_f0_seeded");
     let m0 = cr1cs.x.matrices_arc_base();
     maybe_print_rss("after matrices_arc");
@@ -361,15 +351,20 @@ fn main() {
 Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP1 R1CS compiler."
         );
     }
-    if f0.len() < 1 + l_pub {
+    if w_host.len() < 1 + l_pub {
         panic!(
             "witness too short for declared public inputs: w_len={} need_at_least={}",
-            f0.len(),
+            w_host.len(),
             1 + l_pub
         );
     }
-    let public_inputs: Vec<BFSmall> = f0[1..1 + l_pub].to_vec();
+    let public_inputs: Vec<BFSmall> = w_host[1..1 + l_pub].to_vec();
     println!("  public_inputs_len={} (from witness[1..=l])", public_inputs.len());
+
+    if !public_inputs.is_empty() {
+        public_inputs[0] =
+            <BFSmall as ark_ff::Field>::ONE - public_inputs[0];
+    }
     // Proof-agnostic arming statement digest (binds vk, r1cs, gate version, **params**, and public inputs).
     // This is what an honest armer/decapper should use to derive lock coins.
     let r1cs_digest = cache.stats.digest; // SP1 R1LF instance digest (statement-defined)
