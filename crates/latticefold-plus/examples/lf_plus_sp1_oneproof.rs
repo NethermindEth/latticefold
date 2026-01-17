@@ -169,7 +169,6 @@ fn main() {
         cache.stats.p_bb,
         cache.stats.total_nonzeros
     );
-    println!("  digest={:02x?}...", &cache.stats.digest[..8]);
 
     // Materialize full (A,B,C) as SparseMatrix<F> (constant-coeff) by concatenating chunk rows.
     let t_mats = Instant::now();
@@ -335,10 +334,20 @@ fn main() {
     //
     // We encode each digest as 256 bits (boolean field elems) to keep DPP boolean assumptions.
     if bundle.r1lf_digest != cache.stats.digest {
-        panic!("witness bundle R1LF digest does not match SP1_R1LF");
+        panic!(
+            "witness bundle r1lf_digest does not match SP1_R1LF cache:\n  bundle_r1lf_digest=0x{}\n  cache_r1lf_digest=0x{}",
+            hex32(&bundle.r1lf_digest),
+            hex32(&cache.stats.digest)
+        );
     }
 
     let (vk_hash, committed_values_digest) = bundle.public_inputs;
+    println!("  bundle_r1lf_digest=0x{}", hex32(&bundle.r1lf_digest));
+    println!("  vk_hash=0x{}", hex32(&vk_hash));
+    println!(
+        "  committed_values_digest=0x{}",
+        hex32(&committed_values_digest)
+    );
     if vk_hash == [0u8; 32] || committed_values_digest == [0u8; 32] {
         eprintln!(
             "WARNING: SP1_VK_HASH or SP1_COMMITTED_VALUES_DIGEST unset; using zeros (dev only)"
