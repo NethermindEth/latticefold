@@ -11,7 +11,7 @@
 //!
 //! Usage:
 //!   SP1_R1LF=/path/to/shrink_verifier.r1lf \
-//!   SP1_WITNESS=/path/to/shrink_verifier.witness.u64le \
+//!   SP1_WITNESS=/path/to/shrink_verifier.witness.bundle \
 //!     cargo run -p latticefold-plus --example lf_plus_sp1_oneproof --features we_gate --release
 
 #![cfg(feature = "we_gate")]
@@ -51,6 +51,64 @@ type FBig = Fp384<MontBackend<Secp384r1Config, 6>>;
 
 type F = <R as PolyRing>::BaseRing;
 
+fn parse_hex_32(label: &str, hex: &str) -> [u8; 32] {
+    let s = hex.strip_prefix("0x").unwrap_or(hex).trim();
+    if s.len() != 64 {
+        panic!("{label} must be 32-byte hex (64 chars), got len={}", s.len());
+    }
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        let byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
+            .unwrap_or_else(|_| panic!("{label} contains non-hex characters"));
+        out[i] = byte;
+    }
+    out
+}
+
+fn hex32(bytes: &[u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(64);
+    for &b in bytes {
+        out.push(HEX[(b >> 4) as usize] as char);
+        out.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn load_sp1_public_inputs() -> ([u8; 32], [u8; 32]) {
+    if let Ok(path) = std::env::var("SP1_PUBLIC_INPUTS_FILE") {
+        let data = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read SP1_PUBLIC_INPUTS_FILE={path}: {e}"));
+        let tokens = data
+            .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>();
+        if tokens.len() < 2 {
+            panic!("SP1_PUBLIC_INPUTS_FILE must contain 2 hex digests");
+        }
+        return (
+            parse_hex_32("SP1_PUBLIC_INPUTS_FILE.vk_hash", tokens[0]),
+            parse_hex_32("SP1_PUBLIC_INPUTS_FILE.committed_values_digest", tokens[1]),
+        );
+    }
+
+    let vk_hash = std::env::var("SP1_VK_HASH")
+        .ok()
+        .map(|h| parse_hex_32("SP1_VK_HASH", &h))
+        .unwrap_or([0u8; 32]);
+    let committed_values_digest = std::env::var("SP1_COMMITTED_VALUES_DIGEST")
+        .ok()
+        .map(|h| parse_hex_32("SP1_COMMITTED_VALUES_DIGEST", &h))
+        .or_else(|| {
+            std::env::var("SP1_STATEMENT_HASH")
+                .ok()
+                .map(|h| parse_hex_32("SP1_STATEMENT_HASH", &h))
+        })
+        .unwrap_or([0u8; 32]);
+
+    (vk_hash, committed_values_digest)
+}
+
 fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
     FBig::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
 }
@@ -81,7 +139,7 @@ fn main() {
 
     let r1lf_path = std::env::var("SP1_R1LF").expect("Set SP1_R1LF=/path/to/shrink.r1lf");
     let witness_path =
-        std::env::var("SP1_WITNESS").expect("Set SP1_WITNESS=/path/to/shrink_verifier.witness.u64le");
+        std::env::var("SP1_WITNESS").expect("Set SP1_WITNESS=/path/to/shrink_verifier.witness.bundle");
     let chunk_size: usize = std::env::var("CHUNK_SIZE")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -172,9 +230,12 @@ fn main() {
     );
     maybe_print_rss("after build full mats (A,B,C)");
 
-    let (w_u64, base_len, aux_len) =
-        latticefold_plus::sp1_witness_io::load_sp1_witness_any(&witness_path, cache.stats.num_vars)
-            .expect("load witness");
+    let bundle = latticefold_plus::sp1_witness_io::load_sp1_witness_any(
+        &witness_path,
+        cache.stats.num_vars,
+    )
+    .expect("load witness");
+    let (w_u64, base_len, aux_len) = (bundle.witness, bundle.base_len, bundle.aux_len);
     println!("  loaded witness: base={} aux={} full={}", base_len, aux_len, w_u64.len());
     assert!(!w_u64.is_empty() && w_u64[0] == 1, "witness must have w[0]=1");
     maybe_print_rss("after load witness u64");
@@ -266,19 +327,35 @@ fn main() {
     let b_decomp: u128 = next_pow2_u128(b_min);
     let pparams = latticefold_plus::plus::PlusParameters { lin: lin_params, B: b_decomp };
 
-    // Public statement binding: use the SP1 r1lf digest bits as public inputs (boolean field elems).
+    // Public statement binding: use boolean inputs.
+    //
+    // SP1 pipeline convention: public inputs are 2 digests:
+    // - vk_hash: program/verifier id (32 bytes)
+    // - committed_values_digest: statement digest (32 bytes)
+    //
+    // We encode each digest as 256 bits (boolean field elems) to keep DPP boolean assumptions.
+    if bundle.r1lf_digest != cache.stats.digest {
+        panic!("witness bundle R1LF digest does not match SP1_R1LF");
+    }
+
+    let (vk_hash, committed_values_digest) = bundle.public_inputs;
+    if vk_hash == [0u8; 32] || committed_values_digest == [0u8; 32] {
+        eprintln!(
+            "WARNING: SP1_VK_HASH or SP1_COMMITTED_VALUES_DIGEST unset; using zeros (dev only)"
+        );
+    }
     type BFSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
-    let public_inputs: Vec<BFSmall> = {
-        let d: [u8; 32] = cache.stats.digest;
-        latticefold_plus::we_statement::digest32_to_bits_field::<BFSmall>(d)
-    };
+    let mut public_inputs: Vec<BFSmall> =
+        latticefold_plus::we_statement::digest32_to_bits_field::<BFSmall>(vk_hash);
+    public_inputs.extend(latticefold_plus::we_statement::digest32_to_bits_field::<BFSmall>(
+        committed_values_digest,
+    ));
 
     // Proof-agnostic arming statement digest (binds vk, r1cs, gate version, **params**, and public inputs).
     // This is what an honest armer/decapper should use to derive lock coins.
-    let vk_hash = [0u8; 32]; // TODO: wire SP1 program/vk digest here (statement-defined)
     let r1cs_digest = cache.stats.digest; // SP1 R1LF instance digest (statement-defined)
     let stmt_digest = we_statement_hash_lf_plus::<R>(vk_hash, r1cs_digest, LFP_WE_GATE_DIGEST_V1, &we_params, &public_inputs);
-    println!("  stmt_digest={:02x?}...", &stmt_digest[..8]);
+    println!("  stmt_digest=0x{}", hex32(&stmt_digest));
 
     // Demonstrate how an honest armer derives lock/query coins from the statement digest.
     // (This is *outside* the LF+ transcript, so it does not affect prover/verifier behavior.)
@@ -292,7 +369,7 @@ fn main() {
         h.update(&lock_j.to_le_bytes());
         h.finalize().into()
     };
-    println!("  lock_coin_seed={:02x?}... (j={lock_j})", &coin_seed[..8]);
+    println!("  lock_coin_seed=0x{} (j={lock_j})", hex32(&coin_seed));
 
     let mut prover = latticefold_plus::plus::PlusProverSparseBase::init_seeded_base(
         ajtai.clone(),
