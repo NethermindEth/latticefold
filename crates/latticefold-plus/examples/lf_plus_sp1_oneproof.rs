@@ -51,6 +51,21 @@ type FBig = Fp384<MontBackend<Secp384r1Config, 6>>;
 
 type F = <R as PolyRing>::BaseRing;
 
+// -----------------------------------------------------------------------------
+// Shape-bound constants (sanity checks).
+// -----------------------------------------------------------------------------
+// These should remain stable for a fixed SP1 shrink verifier relation + lift format.
+const EXPECTED_R1LF_DIGEST: [u8; 32] = [
+    0x50, 0x92, 0x3f, 0xdc, 0x94, 0xe3, 0xf3, 0xfd, 0x7b, 0xf3, 0x69, 0x79, 0xf6, 0xc3,
+    0x60, 0x2d, 0x7a, 0x0e, 0x9c, 0x3f, 0xcc, 0x0b, 0x31, 0x6b, 0x12, 0x80, 0x22, 0x85,
+    0x6b, 0x6c, 0x71, 0xda,
+];
+const EXPECTED_VK_HASH: [u8; 32] = [
+    0x00, 0x4c, 0xda, 0x92, 0x74, 0x63, 0xa9, 0xcd, 0xa6, 0x48, 0xd0, 0x10, 0x28, 0xf3,
+    0xde, 0x6b, 0x4d, 0x4f, 0xf3, 0x13, 0x56, 0x83, 0x77, 0x25, 0x08, 0xde, 0x85, 0x9c,
+    0x42, 0xfe, 0x6a, 0x08,
+];
+
 fn hex32(bytes: &[u8; 32]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(64);
@@ -292,6 +307,13 @@ fn main() {
             hex32(&cache.stats.digest)
         );
     }
+    if bundle.r1lf_digest != EXPECTED_R1LF_DIGEST {
+        panic!(
+            "unexpected R1LF digest (shape changed?):\n  expected_r1lf_digest=0x{}\n  got_r1lf_digest=0x{}",
+            hex32(&EXPECTED_R1LF_DIGEST),
+            hex32(&bundle.r1lf_digest)
+        );
+    }
 
     let (vk_hash, committed_values_digest) = bundle.public_inputs;
     println!("  bundle_r1lf_digest=0x{}", hex32(&bundle.r1lf_digest));
@@ -300,6 +322,13 @@ fn main() {
         "  committed_values_digest=0x{}",
         hex32(&committed_values_digest)
     );
+    if vk_hash != EXPECTED_VK_HASH {
+        panic!(
+            "unexpected vk_hash (verifier/program changed?):\n  expected_vk_hash=0x{}\n  got_vk_hash=0x{}",
+            hex32(&EXPECTED_VK_HASH),
+            hex32(&vk_hash)
+        );
+    }
     if vk_hash == [0u8; 32] || committed_values_digest == [0u8; 32] {
         eprintln!(
             "WARNING: vk_hash or committed_values_digest is zero (dev only)"
