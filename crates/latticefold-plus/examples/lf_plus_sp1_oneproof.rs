@@ -51,20 +51,6 @@ type FBig = Fp384<MontBackend<Secp384r1Config, 6>>;
 
 type F = <R as PolyRing>::BaseRing;
 
-fn parse_hex_32(label: &str, hex: &str) -> [u8; 32] {
-    let s = hex.strip_prefix("0x").unwrap_or(hex).trim();
-    if s.len() != 64 {
-        panic!("{label} must be 32-byte hex (64 chars), got len={}", s.len());
-    }
-    let mut out = [0u8; 32];
-    for i in 0..32 {
-        let byte = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
-            .unwrap_or_else(|_| panic!("{label} contains non-hex characters"));
-        out[i] = byte;
-    }
-    out
-}
-
 fn hex32(bytes: &[u8; 32]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::with_capacity(64);
@@ -73,40 +59,6 @@ fn hex32(bytes: &[u8; 32]) -> String {
         out.push(HEX[(b & 0x0f) as usize] as char);
     }
     out
-}
-
-fn load_sp1_public_inputs() -> ([u8; 32], [u8; 32]) {
-    if let Ok(path) = std::env::var("SP1_PUBLIC_INPUTS_FILE") {
-        let data = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read SP1_PUBLIC_INPUTS_FILE={path}: {e}"));
-        let tokens = data
-            .split(|c: char| c.is_whitespace() || c == ',' || c == ';')
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>();
-        if tokens.len() < 2 {
-            panic!("SP1_PUBLIC_INPUTS_FILE must contain 2 hex digests");
-        }
-        return (
-            parse_hex_32("SP1_PUBLIC_INPUTS_FILE.vk_hash", tokens[0]),
-            parse_hex_32("SP1_PUBLIC_INPUTS_FILE.committed_values_digest", tokens[1]),
-        );
-    }
-
-    let vk_hash = std::env::var("SP1_VK_HASH")
-        .ok()
-        .map(|h| parse_hex_32("SP1_VK_HASH", &h))
-        .unwrap_or([0u8; 32]);
-    let committed_values_digest = std::env::var("SP1_COMMITTED_VALUES_DIGEST")
-        .ok()
-        .map(|h| parse_hex_32("SP1_COMMITTED_VALUES_DIGEST", &h))
-        .or_else(|| {
-            std::env::var("SP1_STATEMENT_HASH")
-                .ok()
-                .map(|h| parse_hex_32("SP1_STATEMENT_HASH", &h))
-        })
-        .unwrap_or([0u8; 32]);
-
-    (vk_hash, committed_values_digest)
 }
 
 fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
@@ -350,7 +302,7 @@ fn main() {
     );
     if vk_hash == [0u8; 32] || committed_values_digest == [0u8; 32] {
         eprintln!(
-            "WARNING: SP1_VK_HASH or SP1_COMMITTED_VALUES_DIGEST unset; using zeros (dev only)"
+            "WARNING: vk_hash or committed_values_digest is zero (dev only)"
         );
     }
     type BFSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
