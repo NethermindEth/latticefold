@@ -39,7 +39,7 @@ use dpp::packing::{
     centered_bigint_to_field, field_to_centered_bigint, sample_packing_weights, FlpcpPredicate,
     PackedDppQuerySparse,
 };
-use dpp::pipeline::build_rev2_dpp_sparse_auto;
+use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
 use dpp::sparse::SparseVec;
 
 // Big field for Rev2 embedding (same as `test_large_trace` / `benches/we_dpp.rs`).
@@ -460,11 +460,13 @@ Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP
     // This does NOT require the witness/assignment; it only depends on public parameters and
     // statement-bound randomness. We keep it here to make the phase separation explicit.
     // -------------------------------------------------------------------------
-    let dppv = build_rev2_dpp_sparse_auto::<BFSmall, FBig, _>(
+    // DPP Rev2 packing requires tight bounds. We therefore use the Boolean-proof wrapper
+    // (Claim 5.3) even though the *statement* public inputs are general field elements.
+    let dppv = build_rev2_dpp_sparse_boolean_auto::<BFSmall, FBig, _>(
         flpcp.clone(),
         dpp::EmbeddingParams {
             gamma: 2,
-            assume_boolean_proof: false,
+            assume_boolean_proof: true,
             k_prime: 0,
         },
     )
