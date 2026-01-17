@@ -1596,11 +1596,13 @@ where
 
     // Allocate extra statement-defined public inputs as vars (not fixed), and absorb them
     // as field-elements-as-ring at the start of the transcript (proof-agnostic binding).
+    //
+    // IMPORTANT: These are *general field elements* in the current SP1 integration (e.g. SP1's
+    // exported R1CS public inputs like `sp1_vk_digest` and `committed_value_digest` bytes).
+    // They are not necessarily boolean bits, so we must NOT enforce booleanity here.
     let mut public_input_vars = Vec::with_capacity(public_inputs.len());
     for &x in public_inputs {
         let v = b.new_var(x);
-        // Public statement digest bits are expected to be boolean for the DPP/WE model.
-        enforce_bool(&mut b, v);
         public_input_vars.push(v);
     }
 
