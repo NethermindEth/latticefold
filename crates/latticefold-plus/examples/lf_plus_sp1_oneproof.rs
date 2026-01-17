@@ -59,7 +59,7 @@ type F = <R as PolyRing>::BaseRing;
 // - `EXPECTED_R1LF_DIGEST_HEX`: digest of the SP1 R1LF instance (shape id)
 // - `EXPECTED_VK_HASH_HEX`: SP1 verifier/program id (bytes32_raw)
 const EXPECTED_R1LF_DIGEST_HEX: &str =
-    "0x6d0ae4586db2f034851895a5a099dbdf27a5d0bf1c517cbbc535246330851aeb";
+    "0x1d5fa6fcd7ec8246f73714190327d203592e08a86d9feb510eba0d3c3c02ecce";
 const EXPECTED_VK_HASH_HEX: &str =
     "0x004cda927463a9cda648d01028f3de6b4d4ff3135683772508de859c42fe6a08";
 
