@@ -396,6 +396,27 @@ fn main() {
     maybe_print_rss("after verify(record)");
     let trace = rec.trace().clone();
 
+    // Negative test (no flag): flip one public-input bit and ensure verification fails.
+    // This checks transcript binding: proof+trace must be statement-bound.
+    let mut tampered_public_inputs = public_inputs.clone();
+    if !tampered_public_inputs.is_empty() {
+        tampered_public_inputs[0] =
+            <BFSmall as ark_ff::Field>::ONE - tampered_public_inputs[0];
+    }
+    let mut rec_bad =
+        latticefold_plus::recording_transcript::TracePoseidonTranscript::<R>::empty::<PC>();
+    for b in &tampered_public_inputs {
+        rec_bad.absorb_field_element(b);
+    }
+    for lp in &proof.lproof {
+        lp.verify(&mut rec_bad);
+    }
+    let bad_ok = proof.cmproof.verify_with_mlen(m0.len(), &mut rec_bad).is_ok();
+    assert!(
+        !bad_ok,
+        "tampered public inputs should cause cmproof verification to fail"
+    );
+
     let t_we = Instant::now();
     let out = latticefold_plus::we_gate_arith::build_we_dr1cs_for_plus_proof::<R>(
         &poseidon_cfg,
@@ -516,6 +537,6 @@ fn main() {
         .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, b_decomp);
     println!("  Π_decomp local verify (non-trace): {:?}", t_decomp_local.elapsed());
 
-    println!("  OK: WE gate DR1CS satisfied (existing gate, unchanged)");
+    println!("  OK: WE gate DR1CS satisfied");
 }
 
