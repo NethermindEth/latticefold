@@ -54,15 +54,14 @@ type F = <R as PolyRing>::BaseRing;
 // -----------------------------------------------------------------------------
 // Shape-bound constants (sanity checks).
 // -----------------------------------------------------------------------------
-// These checks are valuable (pin “shape” to an expected digest), but the expected values depend on
-// the currently exported SP1 shrink-verifier shape. We therefore configure them via env vars:
+// These are intended to change **only** when the exported SP1 shrink-verifier *shape* changes.
 //
-// - `EXPECTED_R1LF_DIGEST=0x...`   (32 bytes hex)
-// - `EXPECTED_VK_HASH=0x...`       (32 bytes hex; SP1 prover-format bytes32_raw)
-//
-// If unset, we only print and continue.
-const EXPECTED_R1LF_DIGEST_ENV: &str = "EXPECTED_R1LF_DIGEST";
-const EXPECTED_VK_HASH_ENV: &str = "EXPECTED_VK_HASH";
+// - `EXPECTED_R1LF_DIGEST_HEX`: digest of the SP1 R1LF instance (shape id)
+// - `EXPECTED_VK_HASH_HEX`: SP1 verifier/program id (bytes32_raw)
+const EXPECTED_R1LF_DIGEST_HEX: &str =
+    "0x6d0ae4586db2f034851895a5a099dbdf27a5d0bf1c517cbbc535246330851aeb";
+const EXPECTED_VK_HASH_HEX: &str =
+    "0x004cda927463a9cda648d01028f3de6b4d4ff3135683772508de859c42fe6a08";
 
 fn hex32(bytes: &[u8; 32]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -74,18 +73,17 @@ fn hex32(bytes: &[u8; 32]) -> String {
     out
 }
 
-fn parse_hex_32_env(var: &str) -> Option<[u8; 32]> {
-    let s = std::env::var(var).ok()?;
-    let s = s.strip_prefix("0x").unwrap_or(&s).trim();
+fn parse_hex_32(label: &str, hex: &str) -> [u8; 32] {
+    let s = hex.strip_prefix("0x").unwrap_or(hex).trim();
     if s.len() != 64 {
-        panic!("{var} must be 32-byte hex (64 chars), got len={}", s.len());
+        panic!("{label} must be 32-byte hex (64 chars), got len={}", s.len());
     }
     let mut out = [0u8; 32];
     for i in 0..32 {
         out[i] = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16)
-            .unwrap_or_else(|_| panic!("{var} contains non-hex characters"));
+            .unwrap_or_else(|_| panic!("{label} contains non-hex characters"));
     }
-    Some(out)
+    out
 }
 
 fn lift_to_big<Fs: PrimeField>(x: Fs) -> FBig {
@@ -318,14 +316,13 @@ fn main() {
             hex32(&cache.stats.digest)
         );
     }
-    if let Some(expected) = parse_hex_32_env(EXPECTED_R1LF_DIGEST_ENV) {
-        if bundle.r1lf_digest != expected {
-            panic!(
-                "unexpected r1lf_digest (shape changed?):\n  expected_r1lf_digest=0x{}\n  got_r1lf_digest=0x{}",
-                hex32(&expected),
-                hex32(&bundle.r1lf_digest)
-            );
-        }
+    let expected_r1lf_digest = parse_hex_32("EXPECTED_R1LF_DIGEST_HEX", EXPECTED_R1LF_DIGEST_HEX);
+    if bundle.r1lf_digest != expected_r1lf_digest {
+        panic!(
+            "unexpected r1lf_digest (shape changed?):\n  expected_r1lf_digest=0x{}\n  got_r1lf_digest=0x{}",
+            hex32(&expected_r1lf_digest),
+            hex32(&bundle.r1lf_digest)
+        );
     }
     let (vk_hash, committed_values_digest) = bundle.public_inputs;
     println!("  bundle_r1lf_digest=0x{}", hex32(&bundle.r1lf_digest));
@@ -334,14 +331,13 @@ fn main() {
         "  committed_values_digest=0x{}",
         hex32(&committed_values_digest)
     );
-    if let Some(expected) = parse_hex_32_env(EXPECTED_VK_HASH_ENV) {
-        if vk_hash != expected {
-            panic!(
-                "unexpected vk_hash (verifier/program changed?):\n  expected_vk_hash=0x{}\n  got_vk_hash=0x{}",
-                hex32(&expected),
-                hex32(&vk_hash)
-            );
-        }
+    let expected_vk_hash = parse_hex_32("EXPECTED_VK_HASH_HEX", EXPECTED_VK_HASH_HEX);
+    if vk_hash != expected_vk_hash {
+        panic!(
+            "unexpected vk_hash (verifier/program changed?):\n  expected_vk_hash=0x{}\n  got_vk_hash=0x{}",
+            hex32(&expected_vk_hash),
+            hex32(&vk_hash)
+        );
     }
     if vk_hash == [0u8; 32] || committed_values_digest == [0u8; 32] {
         eprintln!(
