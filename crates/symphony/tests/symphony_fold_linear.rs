@@ -1,67 +1,37 @@
 
 
-use ark_std::One;
-use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
-use symphony::{
-    public_coin_transcript::FixedTranscript,
-    recording_transcript::RecordingTranscriptRef,
-    rp_rgchk::{verify_pi_rg_and_output, RPParams, RPRangeProver},
-    symphony_fold::{fold_batchlin, fold_instances, pi_rg_to_fold_shapes, SymphonyBatchLin, SymphonyInstance},
-    transcript::PoseidonTranscript,
-};
+use symphony::symphony_fold::{fold_batchlin, fold_instances, SymphonyBatchLin, SymphonyInstance};
 use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing, Ring};
-use stark_rings_linalg::Matrix;
 
 #[test]
 fn test_linear_folding_matches_manual_combination() {
-    // Create two Π_rg outputs and fold them linearly with a chosen beta,
-    // then compare to a direct manual combination.
-    let n = 1 << 10;
-    let params = RPParams {
-        l_h: 64,
-        lambda_pj: 32,
-        k_g: 4,
-        d_prime: (R::dimension() as u128) / 2,
+    // This is a unit test for the *linear folding operators* (Figure 4, Step 5),
+    // independent of Π_rg internals. We just need two consistent instances with shared randomness.
+    let r = vec![
+        <R as PolyRing>::BaseRing::from(11u128),
+        <R as PolyRing>::BaseRing::from(22u128),
+    ];
+    let r_prime = vec![
+        <R as PolyRing>::BaseRing::from(11u128),
+        <R as PolyRing>::BaseRing::from(22u128),
+        <R as PolyRing>::BaseRing::from(33u128),
+    ];
+    let kappa = 3;
+    let k_g = 4;
+
+    let inst0 = SymphonyInstance { c: vec![R::from(1u128), R::from(2u128)], r: r.clone(), v: R::from(7u128) };
+    let inst1 = SymphonyInstance { c: vec![R::from(3u128), R::from(5u128)], r: r.clone(), v: R::from(9u128) };
+
+    let bat0 = SymphonyBatchLin {
+        r_prime: r_prime.clone(),
+        c_g: (0..k_g).map(|i| vec![R::from((10 + i) as u128); kappa]).collect(),
+        u: (0..k_g).map(|i| R::from((100 + i) as u128)).collect(),
     };
-
-    let a = Matrix::<R>::rand(&mut ark_std::test_rng(), 2, n);
-
-    // Derive a single shared (public-coin) schedule of challenges/bytes/events from a real transcript,
-    // then replay that same coin stream for all instances. This matches Figure 4's "shared randomness".
-    let (coins_chals, coins_bytes, coins_events) = {
-        let f = vec![R::one(); n];
-        let cm_f = a.try_mul_vec(&f).unwrap();
-        let prover = RPRangeProver::<R>::new(f, params.clone());
-        let mut ts = PoseidonTranscript::empty::<PC>();
-        let mut rts = RecordingTranscriptRef::<R, _>::new(&mut ts);
-        let _proof = prover.prove(&mut rts, &cm_f);
-        (rts.coins_challenges, rts.coins_bytes, rts.events)
+    let bat1 = SymphonyBatchLin {
+        r_prime: r_prime.clone(),
+        c_g: (0..k_g).map(|i| vec![R::from((20 + i) as u128); kappa]).collect(),
+        u: (0..k_g).map(|i| R::from((200 + i) as u128)).collect(),
     };
-
-    let mk = |seed: u128| -> (Vec<R>, SymphonyInstance<R>, SymphonyBatchLin<R>) {
-        let f = vec![R::from(seed); n];
-        let cm_f = a.try_mul_vec(&f).unwrap();
-
-        let prover = RPRangeProver::<R>::new(f, params.clone());
-        let mut ts_p = FixedTranscript::<R>::new_with_coins_and_events(
-            coins_chals.clone(),
-            coins_bytes.clone(),
-            coins_events.clone(),
-        );
-        let proof = prover.prove(&mut ts_p, &cm_f);
-
-        let mut ts_v = FixedTranscript::<R>::new_with_coins_and_events(
-            coins_chals.clone(),
-            coins_bytes.clone(),
-            coins_events.clone(),
-        );
-        let out = verify_pi_rg_and_output(&proof, &cm_f, &mut ts_v).unwrap();
-        let (inst, bat) = pi_rg_to_fold_shapes(cm_f.clone(), &out);
-        (cm_f, inst, bat)
-    };
-
-    let (_cm0, inst0, bat0) = mk(7);
-    let (_cm1, inst1, bat1) = mk(9);
 
     // In Symphony, β is sampled from a low-norm subset S ⊆ R_q.
     // For this unit test we just use small *constant* ring elements.
@@ -83,12 +53,18 @@ fn test_linear_folding_matches_manual_combination() {
 
     assert_eq!(folded_inst, SymphonyInstance { c, r, v });
 
-    // Manual: batchlin fold.
+    // Manual: batchlin fold (both c_g and u).
     assert_eq!(folded_bat.r_prime, bat0.r_prime);
     let mut u = vec![R::ZERO; bat0.u.len()];
     for i in 0..u.len() {
         u[i] = b0_r * bat0.u[i] + b1_r * bat1.u[i];
     }
-    assert_eq!(folded_bat, SymphonyBatchLin { r_prime: bat0.r_prime, u });
+    let mut c_g = vec![vec![R::ZERO; kappa]; k_g];
+    for dig in 0..k_g {
+        for j in 0..kappa {
+            c_g[dig][j] = b0_r * bat0.c_g[dig][j] + b1_r * bat1.c_g[dig][j];
+        }
+    }
+    assert_eq!(folded_bat, SymphonyBatchLin { r_prime: bat0.r_prime, c_g, u });
 }
 

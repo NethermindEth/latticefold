@@ -12,9 +12,13 @@
 //! Run:
 //! - `cargo run -p symphony --example symphony_poseidon2_bench --release
 
+#![allow(non_local_definitions)]
+
 use std::sync::Arc;
 use std::time::Instant;
-use ark_ff::PrimeField;
+use ark_ff::{Field, Fp384, MontBackend, MontConfig, PrimeField};
+use rayon::ThreadPoolBuilder;
+use dpp::BoundedFlpcpSparse;
 
 fn main() {
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -82,9 +86,15 @@ fn main() {
 
         // Sweep permutation counts.
         //
-        // With R1CS witness decomposition enabled unconditionally in this benchmark,
-        // we use k_g=3 (Table 1 instantiation).
-        let k_list = vec![3usize];
+        // IMPORTANT:
+        // This benchmark stresses witness magnitudes; for Frog (~64-bit modulus) and small ring dim,
+        // a tiny k_g (like 3) will often overflow balanced decomposition. We therefore default to
+        // the computed `k_suggest` unless overridden via `K_G`.
+        let k_list = if let Ok(s) = std::env::var("K_G") {
+            vec![s.parse::<usize>().expect("K_G must be a usize")]
+        } else {
+            vec![k_suggest.max(3)]
+        };
         let perms_list: Vec<usize> = vec![1, 2, 4, 8];
         for &k_g in &k_list {
             for &num_perms in &perms_list {
@@ -94,8 +104,16 @@ fn main() {
                 let r = catch_unwind(AssertUnwindSafe(|| {
                     test_symphony_poseidon2_folding::<R, PC>(num_perms, k_g);
                 }));
-                if let Err(_) = r {
-                    println!("  !! PANIC: decomposition overflow for perms={num_perms}, k_g={k_g}");
+                if let Err(e) = r {
+                    // Print panic payload to distinguish decomposition overflow from other issues.
+                    let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                        *s
+                    } else if let Some(s) = e.downcast_ref::<String>() {
+                        s.as_str()
+                    } else {
+                        "<non-string panic payload>"
+                    };
+                    println!("  !! PANIC for perms={num_perms}, k_g={k_g}: {msg}");
                 }
             }
         }
@@ -115,6 +133,24 @@ fn main() {
 
     // All printing is done inside `run_for_ring`.
 }
+
+/// Helper alias: Poseidon's base prime field for a given ring `R`.
+type BF<R> = <<R as stark_rings::PolyRing>::BaseRing as Field>::BasePrimeField;
+
+// Large prime field for the large-field embedding/packing path (Rev2).
+//
+// IMPORTANT:
+// With Frog (~64-bit modulus) and multi-million-length witness vectors, the Rev2 packing step
+// (Construction 5.21) can require a modulus larger than 256 bits under the conservative bounds.
+// A 256-bit field (like secp256k1) can therefore fail with `PackingError::ModulusTooSmall`.
+//
+// We use the NIST P-384 prime here:
+//   p = 2^384 - 2^128 - 2^96 + 2^32 - 1
+#[derive(MontConfig)]
+#[modulus = "39402006196394479212279040100143613805079739270465446667948293404245721771496870329047266088258938001861606973112319"]
+#[generator = "2"]
+pub struct Secp384r1Config;
+type FLarge = Fp384<MontBackend<Secp384r1Config, 6>>;
 
 /// Build Poseidon2 Hadamard relation matrices (M1, M2, M3) for Symphony.
 ///
@@ -518,11 +554,18 @@ where
     use ark_ff::{BigInteger, Field, PrimeField};
     use latticefold::commitment::AjtaiCommitmentScheme;
     use symphony::{
+        pcs::folding_pcs_l2::{
+            BinMatrix, verify_folding_pcs_l2_with_c_matrices,
+        },
         rp_rgchk::RPParams,
         symphony_open::MultiAjtaiOpenVerifier,
+        symphony_pifold_batched::{verify_pi_fold_cp_poseidon_fs, PiFoldMatrices},
         symphony_pifold_streaming::{prove_pi_fold_poseidon_fs, PiFoldStreamingConfig},
-        symphony_we_relation::check_r_cp_poseidon_fs,
+        transcript::PoseidonTraceOp,
+        poseidon_trace::find_squeeze_bytes_idx_after_absorb_marker,
+        we_gate_arith::WeGateDr1csBuilder,
     };
+    use cyclotomic_rings::rings::GetPoseidonParams;
 
     println!("\n=== Testing Symphony Poseidon2 with {} permutation(s), k_g={} ===", num_permutations, k_g);
 
@@ -539,8 +582,15 @@ where
     let (m1, m2, m3, witness) =
         r1cs_decompose_witness_and_expand_matrices::<R>(&m1, &m2, &m3, &witness, 16, 16);
 
+    // After witness decomposition, the witness length grows by k_cs, which increases m_J.
+    // Π_fold requires: m_J <= m and m multiple of m_J, and also requires m*d is a power-of-two.
+    // This benchmark pads the matrices with empty rows to satisfy these shape constraints.
+    let mut m1 = m1;
+    let mut m2 = m2;
+    let mut m3 = m3;
+
     let n = witness.len();
-    let m = m1.nrows;
+    let mut m = m1.nrows;
 
     println!("  Hadamard matrices built:");
     println!("    Permutations: {num_permutations}");
@@ -548,6 +598,47 @@ where
     println!("    Matrix rows (m): {m}");
     println!("    Witness length (n): {n}");
     println!("    Build time: {build_time:?}");
+
+    // Build `rg_params` early so we can compute the required m_J for this run.
+    let rg_params = if k_g == 3 {
+        // Paper-style prototype mode:
+        // - use d' := d-2 in Eq.(29) / (33)
+        // - keep m_J small by using lambda_pj=1 (toy bench knob; paper uses 2^8)
+        RPParams {
+            l_h: 64,
+            lambda_pj: 1,
+            k_g,
+            d_prime: (R::dimension() as u128) - 2,
+        }
+    } else {
+        RPParams {
+            l_h: 64,
+            lambda_pj: 32,
+            k_g,
+            d_prime: (R::dimension() as u128) / 2,
+        }
+    };
+
+    let blocks = n / rg_params.l_h;
+    let m_j = blocks
+        .checked_mul(rg_params.lambda_pj)
+        .expect("m_J overflow");
+    if m < m_j || m % m_j != 0 {
+        let m_new = (m.max(m_j)).next_power_of_two();
+        println!(
+            "  !! Padding matrices: m={} -> {} to satisfy m_J={} (l_h={}, lambda_pj={})",
+            m, m_new, m_j, rg_params.l_h, rg_params.lambda_pj
+        );
+        // Extend coefficient rows with empties (zero rows).
+        m1.coeffs.resize(m_new, Vec::new());
+        m2.coeffs.resize(m_new, Vec::new());
+        m3.coeffs.resize(m_new, Vec::new());
+        m1.nrows = m_new;
+        m2.nrows = m_new;
+        m3.nrows = m_new;
+        m = m_new;
+        println!("    Matrix rows (m): {m} (padded)");
+    }
 
     // Witness magnitude proxy: maximum bit-length among base-prime-field limbs.
     //
@@ -588,41 +679,38 @@ where
     let m3 = Arc::new(m3);
     let witness = Arc::new(witness);
 
-    // Commitment setup
-    let kappa = 8; // Ajtai commitment rows
-    // Seeded Ajtai is the intended "CRS-as-seed" instantiation (public, fixed seed).
-    const MASTER_SEED: [u8; 32] = *b"SYMPHONY_AJTAI_SEED_V1_000000000";
-    let scheme = AjtaiCommitmentScheme::<R>::seeded(b"cm_f", MASTER_SEED, kappa, n);
-    let cm = scheme
-        .commit_const_coeff_fast(witness.as_ref())
-        .unwrap()
-        .as_ref()
-        .to_vec();
+    // Commitment setup (cm_f is PCS now).
+    //
+    // We commit to the **flattened witness coefficients** (Option A) using FoldingPCS(ℓ=2),
+    // and treat the commitment surface `t` as the public `cm_f` object that is absorbed into Π_fold.
+    let kappa = 8; // PCS commitment length (t_len)
+    let flat_witness: Vec<BF<R>> = witness
+        .iter()
+        .flat_map(|re| {
+            re.coeffs()
+                .iter()
+                .map(|c| c.to_base_prime_field_elements().into_iter().next().expect("bf limb"))
+        })
+        .collect();
+    let pcs_params_f = symphony::pcs::cmf_pcs::cmf_pcs_params_for_flat_len::<BF<R>>(
+        flat_witness.len(),
+        kappa,
+    )
+    .expect("cm_f pcs params");
+    let f_pcs_f = symphony::pcs::cmf_pcs::pad_flat_message(&pcs_params_f, &flat_witness);
+    let (t_pcs_f, s_pcs_f) = symphony::pcs::folding_pcs_l2::commit(&pcs_params_f, &f_pcs_f)
+        .expect("cm_f pcs commit failed");
+    // Pack the PCS commitment surface into ring elements for Π_fold plumbing (fills coefficients).
+    let cm = symphony::pcs::cmf_pcs::pack_t_as_ring::<R>(&t_pcs_f);
 
-    // Symphony Π_rg parameters
-    let rg_params = if k_g == 3 {
-        // Paper-style prototype mode:
-        // - use d' := d-2 in Eq.(29) / (33)
-        // - keep m_J small by using lambda_pj=1 (toy bench knob; paper uses 2^8)
-        RPParams {
-            l_h: 64,
-            lambda_pj: 1,
-            k_g,
-            d_prime: (R::dimension() as u128) - 2,
-        }
-    } else {
-        RPParams {
-            l_h: 64,
-            lambda_pj: 32,
-            k_g,
-            d_prime: (R::dimension() as u128) / 2,
-        }
-    };
+    // Symphony Π_rg parameters (defined above, after decomposition so it matches padded shapes).
 
     // CP commitment schemes for aux messages
+    const MASTER_SEED: [u8; 32] = *b"SYMPHONY_AJTAI_SEED_V1_000000000";
     let scheme_had =
         AjtaiCommitmentScheme::<R>::seeded(b"cfs_had_u", MASTER_SEED, kappa, 3 * R::dimension());
     let scheme_mon = AjtaiCommitmentScheme::<R>::seeded(b"cfs_mon_b", MASTER_SEED, kappa, rg_params.k_g);
+    let scheme_g = AjtaiCommitmentScheme::<R>::seeded(b"cm_g", MASTER_SEED, kappa, m * R::dimension());
 
     // Public inputs (statement binding)
     let public_inputs: Vec<R::BaseRing> = vec![
@@ -637,9 +725,9 @@ where
         .with_scheme("cfs_mon_b", scheme_mon.clone());
 
     // Helper: verify R_cp for a produced output
-    let verify = |out: &symphony::symphony_pifold_batched::PiFoldProverOutput<R>| -> Result<_, String> {
-        check_r_cp_poseidon_fs::<R, PC>(
-            [m1.as_ref(), m2.as_ref(), m3.as_ref()],
+    let verify = |out: &symphony::symphony_pifold_batched::PiFoldProverOutput<R>| -> Result<(), String> {
+        let attempt = verify_pi_fold_cp_poseidon_fs::<R, PC>(
+            PiFoldMatrices::Shared([m1.as_ref(), m2.as_ref(), m3.as_ref()]),
             &[cm.clone()],
             &out.proof,
             &open,
@@ -647,7 +735,9 @@ where
             &out.cfs_mon_b,
             &out.aux,
             &public_inputs,
-        )
+        );
+        let _ = attempt.result?;
+        Ok(())
     };
 
     // Streaming prover (canonical path)
@@ -665,6 +755,7 @@ where
         &public_inputs,
         Some(&scheme_had),
         Some(&scheme_mon),
+        &scheme_g,
         rg_params.clone(),
         &cfg,
     );
@@ -688,6 +779,407 @@ where
         Err(e) => {
             println!("  R_cp verify (streaming) FAILED: {e}");
             return;
+        }
+    }
+
+    // Gate dR1CS size report (R_cp vs full with PCS delta), using the *real verifier trace*.
+    let poseidon_cfg = <PC as GetPoseidonParams<BF<R>>>::get_poseidon_config();
+    let attempt = verify_pi_fold_cp_poseidon_fs::<R, PC>(
+        PiFoldMatrices::Shared([m1.as_ref(), m2.as_ref(), m3.as_ref()]),
+        &[cm.clone()],
+        &out.proof,
+        &open,
+        &out.cfs_had_u,
+        &out.cfs_mon_b,
+        &out.aux,
+        &public_inputs,
+    );
+    let _ = attempt
+        .result
+        .expect("unexpected verify failure when extracting trace for dr1cs sizing");
+    let trace = attempt.trace;
+
+    let (rcp, rcp_asg) = WeGateDr1csBuilder::r_cp_poseidon_pifold_math_and_cfs_openings::<R>(
+        &poseidon_cfg,
+        &trace.ops,
+        &[cm.clone()],
+        &out.proof,
+        &scheme_had,
+        &scheme_mon,
+        &out.aux,
+        &out.cfs_had_u,
+        &out.cfs_mon_b,
+    )
+    .expect("build r_cp dr1cs failed");
+    rcp.check(&rcp_asg).expect("r_cp dr1cs unsat");
+
+    let squeeze_bytes: Vec<Vec<u8>> = trace
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            PoseidonTraceOp::SqueezeBytes { out, .. } => Some(out.clone()),
+            _ => None,
+        })
+        .collect();
+    if squeeze_bytes.is_empty() {
+        println!(
+            "    gate dr1cs: r_cp(nvars={}, constraints={}) (no SqueezeBytes => skip full pcs)",
+            rcp.nvars,
+            rcp.constraints.len()
+        );
+    } else {
+        // Choose which Poseidon `SqueezeBytes` output seeds each PCS verifier.
+        //
+        // - PCS_f: keep the bench default (first SqueezeBytes) for now.
+        // - PCS_g (batchlin): use the *squeeze immediately after* the mandatory
+        // PCS#1 coin source: SqueezeBytes right after `CMF_PCS_DOMAIN_SEP`.
+        let pcs_coin_squeeze_idx = find_squeeze_bytes_idx_after_absorb_marker(
+            &trace.ops,
+            <BF<R> as From<u128>>::from(symphony::pcs::cmf_pcs::CMF_PCS_DOMAIN_SEP),
+        )
+        .expect("missing SqueezeBytes after CMF_PCS_DOMAIN_SEP");
+        let c_bytes = &squeeze_bytes[pcs_coin_squeeze_idx];
+        let mut bits = Vec::with_capacity(c_bytes.len() * 8);
+        for &b in c_bytes {
+            for i in 0..8 {
+                bits.push(((b >> i) & 1) == 1);
+            }
+        }
+
+        // PCS#1 (cm_f PCS): MUST match the actual cm_f commitment surface absorbed into Π_fold.
+        // So we use the prover's `pcs_params_f` and commitment `t_pcs_f`.
+        let pcs_params = pcs_params_f.clone();
+        let r = pcs_params.r;
+        let kappa_pcs = pcs_params.kappa;
+        let c1 = BinMatrix {
+            rows: r * kappa_pcs,
+            cols: kappa_pcs,
+            data: (0..(r * kappa_pcs * kappa_pcs))
+                .map(|i| if bits[i] { <BF<R> as Field>::ONE } else { <BF<R> as Field>::ZERO })
+                .collect(),
+        };
+        let c2 = BinMatrix {
+            rows: r * kappa_pcs,
+            cols: kappa_pcs,
+            data: (0..(r * kappa_pcs * kappa_pcs))
+                .map(|i| {
+                    if bits[(r * kappa_pcs * kappa_pcs) + i] {
+                        <BF<R> as Field>::ONE
+                    } else {
+                        <BF<R> as Field>::ZERO
+                    }
+                })
+                .collect(),
+        };
+        let x0 = vec![<BF<R> as Field>::ONE; r];
+        let x1 = vec![<BF<R> as Field>::ONE; r];
+        let x2 = vec![<BF<R> as Field>::ONE; r];
+        let (u_pcs, pcs_core) = symphony::pcs::folding_pcs_l2::open(
+            &pcs_params,
+            &f_pcs_f,
+            &s_pcs_f,
+            &x0,
+            &x1,
+            &x2,
+            &c1,
+            &c2,
+        )
+        .expect("cm_f pcs open failed");
+        verify_folding_pcs_l2_with_c_matrices(&pcs_params, &t_pcs_f, &x0, &x1, &x2, &u_pcs, &pcs_core, &c1, &c2)
+            .expect("native folding pcs sanity failed");
+
+        // use prover-produced commitment surface + proof core.
+        use symphony::pcs::batchlin_pcs::{batchlin_scalar_pcs_params, BATCHLIN_PCS_DOMAIN_SEP};
+        let log_n = ((out.proof.m * R::dimension()) as f64).log2() as usize;
+        let pcs_params_g = batchlin_scalar_pcs_params::<BF<R>>(log_n).expect("batchlin pcs params");
+        let t_pcs_g = &out.proof.batchlin_pcs_t[0];
+        let x0_g = &out.proof.batchlin_pcs_x0;
+        let x1_g = &out.proof.batchlin_pcs_x1;
+        let x2_g = &out.proof.batchlin_pcs_x2;
+        let pcs_core_g = &out.proof.batchlin_pcs_core;
+        let pcs_coin_squeeze_idx2 = find_squeeze_bytes_idx_after_absorb_marker(
+            &trace.ops,
+            <BF<R> as From<u128>>::from(BATCHLIN_PCS_DOMAIN_SEP),
+        )
+        .expect("missing SqueezeBytes after BATCHLIN_PCS_DOMAIN_SEP");
+        let (full, full_asg) = WeGateDr1csBuilder::poseidon_plus_pifold_plus_cfs_plus_pcs::<R>(
+            &poseidon_cfg,
+            &trace.ops,
+            &[cm.clone()],
+            &out.proof,
+            &scheme_had,
+            &scheme_mon,
+            &out.aux,
+            &out.cfs_had_u,
+            &out.cfs_mon_b,
+            &pcs_params,
+            &t_pcs_f,
+            &x0,
+            &x1,
+            &x2,
+            &pcs_core,
+            pcs_coin_squeeze_idx,
+            &pcs_params_g,
+            t_pcs_g,
+            x0_g,
+            x1_g,
+            x2_g,
+            pcs_core_g,
+            pcs_coin_squeeze_idx2,
+        )
+        .expect("build full gate dr1cs failed");
+        full.check(&full_asg).expect("full gate dr1cs unsat");
+
+        println!(
+            "    gate dr1cs: r_cp(nvars={}, constraints={})  full(nvars={}, constraints={})  delta(nvars={}, constraints={})",
+            rcp.nvars,
+            rcp.constraints.len(),
+            full.nvars,
+            full.constraints.len(),
+            full.nvars.saturating_sub(rcp.nvars),
+            full.constraints.len().saturating_sub(rcp.constraints.len()),
+        );
+
+        // Optional: run the *actual DPP proving + verify-with-query* over the full gate dR1CS.
+        //
+        // Enable on a fast machine:
+        //   DPP=1 cargo run -p symphony --example symphony_poseidon2_bench --release
+        //
+        // This is intentionally not CI-friendly (can be very slow for large gates).
+        if std::env::var("DPP").ok().as_deref() == Some("1") {
+            use dpp::{
+                dr1cs_flpcp::Dr1csInstanceSparse as DppDr1csInstanceSparse,
+                dr1cs_flpcp::RsDr1csNpFlpcpSparse,
+                embedding::EmbeddingParams,
+                pipeline::build_rev2_dpp_sparse_boolean_auto,
+                sparse::SparseVec,
+                BooleanProofFlpcpSparse,
+            };
+            use sha2::{Digest, Sha256};
+            use rand::{rngs::StdRng, RngCore, SeedableRng};
+            use rayon::prelude::*;
+            use symphony::we_statement::we_statement_hash_hetero_m;
+
+            println!("    DPP: building sparse Dr1csInstance for full gate...");
+            let t0 = Instant::now();
+            let k = full.constraints.len();
+            let nvars = full.nvars;
+            let a_rows: Vec<SparseVec<BF<R>>> = full
+                .constraints
+                .par_iter()
+                .map(|row| SparseVec::new(row.a.clone()))
+                .collect();
+            let b_rows: Vec<SparseVec<BF<R>>> = full
+                .constraints
+                .par_iter()
+                .map(|row| SparseVec::new(row.b.clone()))
+                .collect();
+            let c_rows: Vec<SparseVec<BF<R>>> = full
+                .constraints
+                .par_iter()
+                .map(|row| SparseVec::new(row.c.clone()))
+                .collect();
+            let dr1cs = DppDr1csInstanceSparse::<BF<R>> { n: nvars, a: a_rows, b: b_rows, c: c_rows };
+            println!("    DPP: dr1cs build: {:?} (nvars={}, k={})", t0.elapsed(), nvars, k);
+
+            // NP-style RS FLPCP over BF: x=[] (public), witness z_w = full assignment.
+            let ell = 2 * k;
+            let flpcp = RsDr1csNpFlpcpSparse::<BF<R>>::new(dr1cs, 0, ell);
+            let x_small: Vec<BF<R>> = vec![];
+
+            println!("    DPP: RS-FLPCP prove: START...");
+            let t1 = Instant::now();
+            // Run inside an explicit pool to ensure we actually use all cores for the heavy steps.
+            let avail = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+            let pool = ThreadPoolBuilder::new()
+                .num_threads(avail)
+                .build()
+                .expect("build rayon threadpool");
+            let (pi_field, cw) = pool.install(|| flpcp.prove_with_codewords(&x_small, &full_asg));
+            let t1e = t1.elapsed();
+            println!(
+                "    DPP: RS-FLPCP prove: {:?} (pi_field_len={})",
+                t1e,
+                pi_field.len()
+            );
+
+            println!("    DPP: booleanize + embed/pack: START...");
+            let t2 = Instant::now();
+            let boolized = BooleanProofFlpcpSparse::<BF<R>, _>::new(flpcp.clone());
+            // Use bitpacked Boolean proof to avoid multi-GB allocations.
+            let pi_bits_packed = pool.install(|| boolized.encode_proof_bits_packed(&pi_field));
+            let dpp = build_rev2_dpp_sparse_boolean_auto::<BF<R>, FLarge, _>(
+                flpcp,
+                EmbeddingParams { gamma: 2, assume_boolean_proof: true, k_prime: 0 },
+            )
+            .expect("build_rev2_dpp_sparse_boolean_auto");
+            let t2e = t2.elapsed();
+            println!(
+                "    DPP: booleanize+build: {:?} (pi_bits_len={}, packed_bytes={})",
+                t2e,
+                boolized.m_bits(),
+                pi_bits_packed.len()
+            );
+
+            // Lift x into FLarge (empty for NP mode).
+            let _x_large: Vec<FLarge> = vec![];
+            let _pi_bits_len = boolized.m_bits();
+
+            // Sample query and verify.
+            println!("    DPP: verify_with_query: START...");
+            println!("    DPP: rayon available_parallelism={avail}");
+            let _pool = pool; // keep pool alive for the remainder of the DPP section
+
+            let t4 = Instant::now();
+            // WE-friendly / statement-only coins: derive a deterministic RNG seed from the
+            // (vk_hash, r1cs_digest, gate_digest, public_inputs) statement hash.
+            //
+            // NOTE: In this benchmark we don't have a real SP1 vk hash nor a canonical gate digest
+            // yet, so we use placeholders plus a shape-dependent gate digest derived from the
+            // benchmark parameters. This is sufficient to demonstrate the intended structure.
+            // For this bench (no SP1), we still model statement binding by using:
+            // - vk_hash: a fixed "program id" digest
+            // - r1cs_digest: a digest of the Poseidon2/Hadamard instance parameters
+            // - gate_digest: a digest of the *actual built* WE gate constraint system shape
+            let vk_hash = {
+                let mut h = Sha256::new();
+                h.update(b"SYMPHONY_BENCH_VK_V1::POSEIDON2_HADAMARD");
+                h.finalize().into()
+            };
+            let r1cs_digest = {
+                let mut h = Sha256::new();
+                h.update(b"SYMPHONY_BENCH_R1CS_V1::POSEIDON2_HADAMARD");
+                h.update(&(num_permutations as u64).to_le_bytes());
+                h.update(&(k_g as u64).to_le_bytes());
+                h.update(&(n as u64).to_le_bytes());
+                h.update(&(m as u64).to_le_bytes());
+                h.finalize().into()
+            };
+            let gate_digest = {
+                let mut h = Sha256::new();
+                h.update(b"SYMPHONY_GATE_DIGEST_BENCH_V1");
+                h.update(&(full.nvars as u64).to_le_bytes());
+                h.update(&(full.constraints.len() as u64).to_le_bytes());
+                // Hash the sparse constraints deterministically. (This is O(|constraints|) work;
+                // in production we'd treat the gate digest as a precomputed per-shape constant.)
+                for row in &full.constraints {
+                    h.update(&(row.a.len() as u64).to_le_bytes());
+                    for (c, idx) in &row.a {
+                        h.update(&(*idx as u64).to_le_bytes());
+                        h.update(c.into_bigint().to_bytes_le());
+                    }
+                    h.update(&(row.b.len() as u64).to_le_bytes());
+                    for (c, idx) in &row.b {
+                        h.update(&(*idx as u64).to_le_bytes());
+                        h.update(c.into_bigint().to_bytes_le());
+                    }
+                    h.update(&(row.c.len() as u64).to_le_bytes());
+                    for (c, idx) in &row.c {
+                        h.update(&(*idx as u64).to_le_bytes());
+                        h.update(c.into_bigint().to_bytes_le());
+                    }
+                }
+                h.finalize().into()
+            };
+            let stmt_digest =
+                we_statement_hash_hetero_m::<R>(vk_hash, r1cs_digest, gate_digest, &public_inputs);
+
+            // Model WE arming: an armer derives per-lock public coins from (armer_seed, stmt_digest, j).
+            // Those public coins define the query randomness (idx, λ) and packing weights.
+            const ARMER_SEED: [u8; 32] = *b"SYMPHONY_ARMER_SEED_V1_000000000";
+            let lock_j: u64 = 0;
+            let coin_j: [u8; 32] = {
+                let mut h = Sha256::new();
+                h.update(b"SYMPHONY_LOCK_COIN_V1");
+                h.update(&ARMER_SEED);
+                h.update(&stmt_digest);
+                h.update(&lock_j.to_le_bytes());
+                h.finalize().into()
+            };
+            let mut rng = StdRng::from_seed(coin_j);
+            // NOTE: Avoid building booleanized query vectors (which explode to 100M+ terms).
+            // For lock evaluation, we can sample the *base* 3-query RS-FLPCP query over BF<R>,
+            // compute its 3 answers against the BF witness/proof, then pack those answers with `w`.
+            //
+            // This models the intended WE flow: locks are published as coins, not expanded vectors.
+            let b = dpp.flpcp.bounds_b();
+            let w = dpp::packing::sample_packing_weights::<FLarge>(&mut rng, dpp.params.ell, &b)
+                .expect("sample_packing_weights");
+            let pred = dpp::packing::FlpcpPredicate::MulEqModP {
+                p_small: num_bigint::BigInt::from_bytes_le(
+                    num_bigint::Sign::Plus,
+                    &BF::<R>::MODULUS.to_bytes_le(),
+                ),
+            };
+
+            // Sample RS-FLPCP verifier coins (idx, lambda) directly.
+            let k = cw.y_a.len();
+            let ell = 2 * k;
+            let idx = (rng.next_u64() as usize) % ell;
+            let lambda_small = BF::<R>::from(rng.next_u64());
+
+            // Split verification timing into:
+            // - compute k answers a_i = <q_i, v>
+            // - pack a = <a, w> (integers) and reduce to field
+            // - bounded decoding + predicate
+            let (a, t_dot) = {
+                let t = Instant::now();
+                // Evaluate the 3-query RS-FLPCP answers in coin form, by indexing codewords.
+                let (a_small, b_small, c_small) = {
+                    if idx < k {
+                        let a = cw.y_a[idx];
+                        let b = cw.y_b[idx];
+                        let wv = cw.w[idx];
+                        let cx_minus = cw.y_c[idx] - wv;
+                        let c = wv + lambda_small * cx_minus;
+                        (a, b, c)
+                    } else {
+                        let j = idx - k;
+                        let a = cw.y_a_tail[j];
+                        let b = cw.y_b_tail[j];
+                        let wv = cw.w[idx];
+                        // For α in the "tail" half (k+1..2k), the verifier's q3 uses only the w-part:
+                        // the C-part coefficient vector is zero because λ_{2k}(α) is the basis vector at idx>=k
+                        // and `sample_queries_and_predicate_sparse` uses only `lam_2k[..k]` for the C-part.
+                        // So the correct answer is just w(α) = a*b.
+                        let c = wv;
+                        (a, b, c)
+                    }
+                };
+
+                let ans_field: [FLarge; 3] = [
+                    FLarge::from_le_bytes_mod_order(&a_small.into_bigint().to_bytes_le()),
+                    FLarge::from_le_bytes_mod_order(&b_small.into_bigint().to_bytes_le()),
+                    FLarge::from_le_bytes_mod_order(&c_small.into_bigint().to_bytes_le()),
+                ];
+
+                // Pack into one integer a_int = Σ w_i * [ans_i]_centered, then reduce to field.
+                let mut a_int = num_bigint::BigInt::from(0);
+                for (wi, ai) in w.iter().zip(ans_field.iter()) {
+                    let ai_int = dpp::packing::field_to_centered_bigint::<FLarge>(ai);
+                    a_int += wi * ai_int;
+                }
+                let a = dpp::packing::centered_bigint_to_field::<FLarge>(&a_int);
+                (a, t.elapsed())
+            };
+            println!("    DPP: unpacked-dot+pack: {:?}", t_dot);
+
+            let (ok, t_dec) = {
+                let t = Instant::now();
+                // Use the same decoding + predicate as the packed DPP verifier.
+                let q_meta = dpp::packing::PackedDppQuerySparse {
+                    q: dpp::sparse::SparseVec::default(),
+                    w,
+                    b,
+                    pred,
+                };
+                let ok = dpp.verify_packed_answer(&a, &q_meta);
+                (ok, t.elapsed())
+            };
+            let ok = ok.expect("verify_packed_answer");
+            println!("    DPP: decode+pred: {:?}", t_dec);
+            let t4e = t4.elapsed();
+            println!("    DPP: verify_with_query: {:?} (ok={})", t4e, ok);
         }
     }
 

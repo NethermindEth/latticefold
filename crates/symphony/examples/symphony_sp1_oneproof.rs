@@ -17,18 +17,30 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
+use cyclotomic_rings::rings::GetPoseidonParams;
 use latticefold::commitment::AjtaiCommitmentScheme;
+use ark_ff::Field;
+use symphony::pcs::{cmf_pcs, folding_pcs_l2};
+use symphony::pcs::dpp_folding_pcs_l2::folding_pcs_l2_params;
+use symphony::pcs::folding_pcs_l2::{
+    gadget_apply_digits, kron_ct_in_mul, kron_i_a_mul, kron_ikn_xt_mul, BinMatrix, DenseMatrix,
+    FoldingPcsL2ProofCore,
+    verify_folding_pcs_l2_with_c_matrices,
+};
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings::PolyRing;
 use stark_rings::Ring;
 use symphony::rp_rgchk::RPParams;
 use symphony::symphony_open::MultiAjtaiOpenVerifier;
-use symphony::symphony_we_relation::{check_r_we_poseidon_fs_hetero_m_with_metrics_result, TrivialRo};
+use symphony::symphony_pifold_batched::{verify_pi_fold_cp_poseidon_fs, PiFoldMatrices};
 use symphony::sp1_r1cs_loader::FieldFromU64;
 use symphony::symphony_pifold_streaming::{
     prove_pi_fold_poseidon_fs, PiFoldStreamingConfig,
 };
 use symphony::symphony_sp1_r1cs::open_sp1_r1cs_chunk_cache;
+use symphony::transcript::PoseidonTraceOp;
+use symphony::poseidon_trace::find_squeeze_bytes_idx_after_absorb_marker;
+use symphony::we_gate_arith::WeGateDr1csBuilder;
 
 /// BabyBear field element for loading R1CS.
 #[derive(Debug, Clone, Copy, Default)]
@@ -69,8 +81,7 @@ fn main() {
     println!("=========================================================");
     println!("  CHUNK_SIZE={chunk_size}  L_H={l_h}  LAMBDA_PJ={lambda_pj}");
     println!(
-        "  parallel_feature={}  rayon_threads={}",
-        cfg!(feature = "parallel"),
+        "  rayon_threads={}",
         rayon::current_num_threads()
     );
 
@@ -97,14 +108,25 @@ fn main() {
         d_prime: (R::dimension() as u128) - 2,
     };
 
-    // Commit
+    // Commit (`cm_f` is PCS-backed; packed into ring elements for existing Π_fold APIs).
     const MASTER_SEED: [u8; 32] = *b"SYMPHONY_AJTAI_SEED_V1_000000000";
-    let scheme_main = Arc::new(AjtaiCommitmentScheme::<R>::seeded(b"cm_f", MASTER_SEED, 8, ncols));
-    let cm_main = scheme_main
-        .commit_const_coeff_fast(&witness)
-        .unwrap()
-        .as_ref()
-        .to_vec();
+    let kappa_cm_f = 8usize;
+    type BF = <<R as PolyRing>::BaseRing as Field>::BasePrimeField;
+    let flat_witness: Vec<BF> = witness
+        .iter()
+        .flat_map(|re| {
+            re.coeffs()
+                .iter()
+                .map(|c| c.to_base_prime_field_elements().into_iter().next().expect("bf limb"))
+        })
+        .collect();
+    let pcs_params_f =
+        cmf_pcs::cmf_pcs_params_for_flat_len::<BF>(flat_witness.len(), kappa_cm_f)
+            .expect("cm_f pcs params");
+    let f_pcs_f = cmf_pcs::pad_flat_message(&pcs_params_f, &flat_witness);
+    let (t_pcs_f, _s_pcs_f) =
+        folding_pcs_l2::commit(&pcs_params_f, &f_pcs_f).expect("cm_f pcs commit failed");
+    let cm_main = cmf_pcs::pack_t_as_ring::<R>(&t_pcs_f);
     let scheme_had = Arc::new(AjtaiCommitmentScheme::<R>::seeded(
         b"cfs_had_u",
         MASTER_SEED,
@@ -132,6 +154,10 @@ fn main() {
     }
     println!("  load all mats: {:?}", t_mats.elapsed());
 
+    // Commitment scheme for the monomial vectors g^(i): length = m*d, kappa matches other schemes.
+    let m = all_mats[0][0].nrows;
+    let scheme_g = AjtaiCommitmentScheme::<R>::seeded(b"cm_g", MASTER_SEED, 8, m * R::dimension());
+
     let cms_all: Vec<Vec<R>> = vec![cm_main; num_chunks];
     // Clone the Arc (refcount bump) so we can still use `witness` later for optional verification.
     let witnesses_all: Vec<Arc<Vec<R>>> = vec![witness.clone(); num_chunks];
@@ -144,6 +170,7 @@ fn main() {
         &public_inputs,
         Some(scheme_had.as_ref()),
         Some(scheme_mon.as_ref()),
+        &scheme_g,
         rg_params,
         &cfg,
     )
@@ -175,17 +202,19 @@ fn main() {
             .with_scheme("cfs_mon_b", (*scheme_mon).clone());
 
         let t_vfy = Instant::now();
-        let (res, metrics) = check_r_we_poseidon_fs_hetero_m_with_metrics_result::<R, PC, TrivialRo>(
-                &ms_ref,
-                &cms_all,
-                &out.proof,
-                &open_cfs,
-                &out.cfs_had_u,
-                &out.cfs_mon_b,
-                &out.aux,
-                &public_inputs,
-                &(),
-            );
+        let attempt = verify_pi_fold_cp_poseidon_fs::<R, PC>(
+            PiFoldMatrices::Hetero(ms_ref.as_slice()),
+            &cms_all,
+            &out.proof,
+            &open_cfs,
+            &out.cfs_had_u,
+            &out.cfs_mon_b,
+            &out.aux,
+            &public_inputs,
+        );
+        let res = attempt.result;
+        let metrics = attempt.metrics;
+        let trace = attempt.trace;
         println!("  verify (cp/aux): {:?}", t_vfy.elapsed());
         if let Err(e) = &res {
             println!("  verify (cp/aux) failed (expected with dummy witness): {e}");
@@ -207,18 +236,167 @@ fn main() {
             perms_absorb + perms_squeeze_field + perms_squeeze_bytes
         );
 
-        // Extra: time the Ajtai binding check for cm_f against the witness (linear work, no extra hashes).
-        //
-        // This is a proxy for the “bind cm_f to witness” part of the WE predicate; it’s O(ncols)
-        // but avoids materializing witness openings per chunk (we reuse the same witness here).
+        // Extra: time the cm_f PCS recompute against the witness (linear work in witness size).
         let t_cm = Instant::now();
-        let cm_re = scheme_main
-            .commit_const_coeff_fast(&witness)
-            .expect("commit_const_coeff_fast")
-            .as_ref()
-            .to_vec();
+        let cm_re = {
+            let flat_witness: Vec<BF> = witness
+                .iter()
+                .flat_map(|re| {
+                    re.coeffs()
+                        .iter()
+                        .map(|c| c.to_base_prime_field_elements().into_iter().next().expect("bf limb"))
+                })
+                .collect();
+            let f_pcs = cmf_pcs::pad_flat_message(&pcs_params_f, &flat_witness);
+            let (t, _s) = folding_pcs_l2::commit(&pcs_params_f, &f_pcs).expect("cm_f pcs commit");
+            cmf_pcs::pack_t_as_ring::<R>(&t)
+        };
         assert_eq!(cm_re, cms_all[0], "cm_f binding mismatch");
-        println!("  ajtai cm_f recompute: {:?}", t_cm.elapsed());
+        println!("  cm_f pcs recompute: {:?}", t_cm.elapsed());
+
+        // ---------------------------------------------------------------------
+        // dR1CS constraint counts for the WE gate (R_cp and full with PCS).
+        //
+        // This uses the *real verifier transcript trace* to build the dR1CS instance(s),
+        // so the counts reflect the actual coin schedule / #rounds for this run's params.
+        // ---------------------------------------------------------------------
+        type BF = <<R as PolyRing>::BaseRing as Field>::BasePrimeField;
+        let poseidon_cfg = <PC as GetPoseidonParams<BF>>::get_poseidon_config();
+
+        let (rcp, rcp_asg) = WeGateDr1csBuilder::r_cp_poseidon_pifold_math_and_cfs_openings::<R>(
+            &poseidon_cfg,
+            &trace.ops,
+            &cms_all,
+            &out.proof,
+            scheme_had.as_ref(),
+            scheme_mon.as_ref(),
+            &out.aux,
+            &out.cfs_had_u,
+            &out.cfs_mon_b,
+        )
+        .expect("build r_cp dr1cs failed");
+        rcp.check(&rcp_asg).expect("r_cp unsat");
+
+        // Build a tiny FoldingPCS(ℓ=2) instance just to measure incremental PCS arithmetization cost.
+        // (This is not yet the full production PCS-over-SP1-witness integration.)
+        let squeeze_bytes: Vec<Vec<u8>> = trace
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                PoseidonTraceOp::SqueezeBytes { out, .. } => Some(out.clone()),
+                _ => None,
+            })
+            .collect();
+        if squeeze_bytes.is_empty() {
+            println!("  gate dr1cs: no SqueezeBytes in trace; skipping full-gate (pcs) count");
+            return;
+        }
+        let pcs_coin_squeeze_idx = find_squeeze_bytes_idx_after_absorb_marker(
+            &trace.ops,
+            BF::from(cmf_pcs::CMF_PCS_DOMAIN_SEP),
+        )
+        .expect("missing SqueezeBytes after CMF_PCS_DOMAIN_SEP");
+        let c_bytes = &squeeze_bytes[pcs_coin_squeeze_idx];
+        let mut bits = Vec::with_capacity(c_bytes.len() * 8);
+        for &b in c_bytes {
+            for i in 0..8 {
+                bits.push(((b >> i) & 1) == 1);
+            }
+        }
+        let r = 1usize;
+        let kappa = 2usize;
+        let pcs_n = 4usize;
+        // Must satisfy delta^alpha >= modulus (enforced by folding_pcs_l2 exactness guard).
+        let delta = 1u64 << 32;
+        let alpha = 2usize;
+        let beta0 = 1u64 << 10;
+        let beta1 = 2 * beta0;
+        let beta2 = 2 * beta1;
+        let c1 = BinMatrix {
+            rows: r * kappa,
+            cols: kappa,
+            data: (0..(r * kappa * kappa))
+                .map(|i| if bits[i] { <BF as Field>::ONE } else { <BF as Field>::ZERO })
+                .collect(),
+        };
+        let c2 = BinMatrix {
+            rows: r * kappa,
+            cols: kappa,
+            data: (0..(r * kappa * kappa))
+                .map(|i| {
+                    if bits[(r * kappa * kappa) + i] {
+                        <BF as Field>::ONE
+                    } else {
+                        <BF as Field>::ZERO
+                    }
+                })
+                .collect(),
+        };
+        let mut a_data = vec![<BF as Field>::ZERO; pcs_n * (r * pcs_n * alpha)];
+        for i in 0..pcs_n {
+            a_data[i * (r * pcs_n * alpha) + i] = <BF as Field>::ONE;
+        }
+        let a = DenseMatrix::new(pcs_n, r * pcs_n * alpha, a_data);
+        let pcs_params = folding_pcs_l2_params(r, kappa, pcs_n, delta, alpha, beta0, beta1, beta2, a);
+        let x0 = vec![<BF as Field>::ONE; r];
+        let x1 = vec![<BF as Field>::ONE; r];
+        let x2 = vec![<BF as Field>::ONE; r];
+        let y0 = vec![<BF as Field>::ONE; pcs_params.y0_len()];
+        let y1 = kron_ct_in_mul(&c1, pcs_n, &y0);
+        let y2 = kron_ct_in_mul(&c2, pcs_n, &y1);
+        let t_pcs = kron_i_a_mul(&pcs_params.a, pcs_params.kappa, pcs_params.r * pcs_params.n * pcs_params.alpha, &y0);
+        let mut delta_pows = Vec::with_capacity(alpha);
+        let mut acc = <BF as Field>::ONE;
+        let delta_f = <BF as From<u64>>::from(delta);
+        for _ in 0..alpha {
+            delta_pows.push(acc);
+            acc *= delta_f;
+        }
+        let v0 = gadget_apply_digits(&delta_pows, r * kappa * pcs_n, &y0);
+        let v1 = gadget_apply_digits(&delta_pows, r * kappa * pcs_n, &y1);
+        let v2 = gadget_apply_digits(&delta_pows, r * kappa * pcs_n, &y2);
+        let u_pcs = kron_ikn_xt_mul(&x2, kappa, pcs_n, &v0);
+        let pcs_core = FoldingPcsL2ProofCore { y0, v0, y1, v1, y2, v2 };
+        verify_folding_pcs_l2_with_c_matrices(&pcs_params, &t_pcs, &x0, &x1, &x2, &u_pcs, &pcs_core, &c1, &c2)
+            .expect("native folding pcs sanity failed");
+
+        let (full, full_asg) = WeGateDr1csBuilder::poseidon_plus_pifold_plus_cfs_plus_pcs::<R>(
+            &poseidon_cfg,
+            &trace.ops,
+            &cms_all,
+            &out.proof,
+            scheme_had.as_ref(),
+            scheme_mon.as_ref(),
+            &out.aux,
+            &out.cfs_had_u,
+            &out.cfs_mon_b,
+            &pcs_params,
+            &t_pcs,
+            &x0,
+            &x1,
+            &x2,
+            &pcs_core,
+            pcs_coin_squeeze_idx,
+            &pcs_params,
+            &t_pcs,
+            &x0,
+            &x1,
+            &x2,
+            &pcs_core,
+            pcs_coin_squeeze_idx.saturating_add(1),
+        )
+        .expect("build full gate dr1cs failed");
+        full.check(&full_asg).expect("full gate unsat");
+
+        println!(
+            "  gate dr1cs: r_cp(nvars={}, constraints={})  full(nvars={}, constraints={})  delta(nvars={}, constraints={})",
+            rcp.nvars,
+            rcp.constraints.len(),
+            full.nvars,
+            full.constraints.len(),
+            full.nvars.saturating_sub(rcp.nvars),
+            full.constraints.len().saturating_sub(rcp.constraints.len()),
+        );
     }
 }
 

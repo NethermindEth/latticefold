@@ -86,8 +86,9 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         degree: usize,
         comb_fn: impl Fn(&[R]) -> R + Sync + Send,
     ) -> (Proof<R>, ProverState<R>) {
-        transcript.absorb(&R::from(nvars as u128));
-        transcript.absorb(&R::from(degree as u128));
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
+        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
         let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(mles, nvars, degree);
         let mut verifier_msg = None;
         let mut prover_msgs = Vec::with_capacity(nvars);
@@ -97,7 +98,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             transcript.absorb_slice(&prover_msg.evaluations);
             prover_msgs.push(prover_msg);
             let next_verifier_msg = IPForMLSumcheck::<R, T>::sample_round(transcript);
-            transcript.absorb(&next_verifier_msg.randomness.into());
+            transcript.absorb_field_element(&next_verifier_msg.randomness);  // scalar absorb
 
             verifier_msg = Some(next_verifier_msg);
         }
@@ -132,8 +133,9 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             hook_round,
             nvars
         );
-        transcript.absorb(&R::from(nvars as u128));
-        transcript.absorb(&R::from(degree as u128));
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
+        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
         let mut prover_state = IPForMLSumcheck::<R, T>::prover_init(mles, nvars, degree);
         let mut verifier_msg = None;
         let mut prover_msgs = Vec::with_capacity(nvars);
@@ -148,7 +150,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             prover_msgs.push(prover_msg);
 
             let next_verifier_msg = IPForMLSumcheck::<R, T>::sample_round(transcript);
-            transcript.absorb(&next_verifier_msg.randomness.into());
+            transcript.absorb_field_element(&next_verifier_msg.randomness);  // scalar absorb
             sampled.push(next_verifier_msg.randomness);
 
             if hook_round != 0 && sampled.len() == hook_round {
@@ -174,8 +176,9 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         claimed_sum: R,
         proof: &Proof<R>,
     ) -> Result<SubClaim<R>, SumCheckError<R>> {
-        transcript.absorb(&R::from(nvars as u128));
-        transcript.absorb(&R::from(degree as u128));
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
+        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
 
         let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(nvars, degree);
         for i in 0..nvars {
@@ -183,7 +186,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             transcript.absorb_slice(&prover_msg.evaluations);
             let verifier_msg =
                 IPForMLSumcheck::verify_round(prover_msg.clone(), &mut verifier_state, transcript);
-            transcript.absorb(&verifier_msg.randomness.into());
+            transcript.absorb_field_element(&verifier_msg.randomness);  // scalar absorb
         }
 
         IPForMLSumcheck::<R, T>::check_and_generate_subclaim(verifier_state, claimed_sum)
@@ -206,8 +209,9 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             hook_round,
             nvars
         );
-        transcript.absorb(&R::from(nvars as u128));
-        transcript.absorb(&R::from(degree as u128));
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
+        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
 
         let mut verifier_state = IPForMLSumcheck::<R, T>::verifier_init(nvars, degree);
         let mut sampled: Vec<R::BaseRing> = Vec::with_capacity(nvars);
@@ -217,7 +221,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             transcript.absorb_slice(&prover_msg.evaluations);
             let verifier_msg =
                 IPForMLSumcheck::verify_round(prover_msg.clone(), &mut verifier_state, transcript);
-            transcript.absorb(&verifier_msg.randomness.into());
+            transcript.absorb_field_element(&verifier_msg.randomness);  // scalar absorb
             sampled.push(verifier_msg.randomness);
 
             if hook_round != 0 && sampled.len() == hook_round {
@@ -250,8 +254,9 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             hook_round,
             nvars
         );
-        transcript.absorb(&R::from(nvars as u128));
-        transcript.absorb(&R::from(degree as u128));
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
+        transcript.absorb_field_element(&R::BaseRing::from(nvars as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree as u128));
 
         let mut sampled: Vec<R::BaseRing> = Vec::with_capacity(nvars);
         for i in 0..nvars {
@@ -260,7 +265,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 
             // Sample the same verifier message as in verification, without checks.
             let verifier_msg = IPForMLSumcheck::<R, T>::sample_round(transcript);
-            transcript.absorb(&verifier_msg.randomness.into());
+            transcript.absorb_field_element(&verifier_msg.randomness);  // scalar absorb
             sampled.push(verifier_msg.randomness);
 
             if hook_round != 0 && sampled.len() == hook_round {
@@ -303,10 +308,11 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         assert!(hook_round <= nvars_b);
 
         // Encode both sumcheck parameter blocks up front.
-        transcript.absorb(&R::from(nvars_a as u128));
-        transcript.absorb(&R::from(degree_a as u128));
-        transcript.absorb(&R::from(nvars_b as u128));
-        transcript.absorb(&R::from(degree_b as u128));
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
+        transcript.absorb_field_element(&R::BaseRing::from(nvars_a as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree_a as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(nvars_b as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree_b as u128));
 
         let mut ps_a = IPForMLSumcheck::<R, T>::prover_init(mles_a, nvars_a, degree_a);
         let mut ps_b = IPForMLSumcheck::<R, T>::prover_init(mles_b, nvars_b, degree_b);
@@ -332,7 +338,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 
             // Sample one shared randomness.
             let r_i = transcript.get_challenge();
-            transcript.absorb(&r_i.into());
+            transcript.absorb_field_element(&r_i);  // scalar absorb
             sampled.push(r_i);
 
             if hook_round != 0 && sampled.len() == hook_round {
@@ -373,10 +379,11 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         assert!(nvars_a > 0 && nvars_b > 0);
         assert!(hook_round <= nvars_b);
 
-        transcript.absorb(&R::from(nvars_a as u128));
-        transcript.absorb(&R::from(degree_a as u128));
-        transcript.absorb(&R::from(nvars_b as u128));
-        transcript.absorb(&R::from(degree_b as u128));
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
+        transcript.absorb_field_element(&R::BaseRing::from(nvars_a as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree_a as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(nvars_b as u128));
+        transcript.absorb_field_element(&R::BaseRing::from(degree_b as u128));
 
         let mut vs_a = IPForMLSumcheck::<R, T>::verifier_init(nvars_a, degree_a);
         let mut vs_b = IPForMLSumcheck::<R, T>::verifier_init(nvars_b, degree_b);
@@ -399,7 +406,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             }
 
             let r_i = transcript.get_challenge();
-            transcript.absorb(&r_i.into());
+            transcript.absorb_field_element(&r_i);  // scalar absorb
             sampled.push(r_i);
 
             if hook_round != 0 && sampled.len() == hook_round {
@@ -448,9 +455,10 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         assert!(hook_round <= max_nvars);
 
         // Encode all sumcheck parameter blocks up front.
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
         for s in &specs {
-            transcript.absorb(&R::from(s.nvars as u128));
-            transcript.absorb(&R::from(s.degree as u128));
+            transcript.absorb_field_element(&R::BaseRing::from(s.nvars as u128));
+            transcript.absorb_field_element(&R::BaseRing::from(s.degree as u128));
         }
 
         let mut prover_states = specs
@@ -482,7 +490,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
 
             // Sample one shared randomness.
             let r_i = transcript.get_challenge();
-            transcript.absorb(&r_i.into());
+            transcript.absorb_field_element(&r_i);  // scalar absorb
             sampled.push(r_i);
 
             if hook_round != 0 && sampled.len() == hook_round {
@@ -521,9 +529,10 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
         let max_nvars = specs.iter().map(|s| s.nvars).max().unwrap();
         assert!(hook_round <= max_nvars);
 
+        // Use absorb_field_element for scalars (saves ~(d-1) base-field absorbs each).
         for s in &specs {
-            transcript.absorb(&R::from(s.nvars as u128));
-            transcript.absorb(&R::from(s.degree as u128));
+            transcript.absorb_field_element(&R::BaseRing::from(s.nvars as u128));
+            transcript.absorb_field_element(&R::BaseRing::from(s.degree as u128));
         }
 
         let mut verifier_states = specs
@@ -543,7 +552,7 @@ impl<R: OverField, T: Transcript<R>> MLSumcheck<R, T> {
             }
 
             let r_i = transcript.get_challenge();
-            transcript.absorb(&r_i.into());
+            transcript.absorb_field_element(&r_i);  // scalar absorb
             sampled.push(r_i);
 
             if hook_round != 0 && sampled.len() == hook_round {

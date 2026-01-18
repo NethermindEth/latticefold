@@ -1,14 +1,15 @@
 use latticefold::transcript::Transcript;
 use stark_rings::{
     balanced_decomposition::{convertible_ring::ConvertibleRing, Decompose},
-    CoeffRing, OverField, Zq,
+    CoeffRing, OverField, PolyRing, Zq,
 };
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 
 use crate::{
     cm::CmProof,
     mlin::{LinB2, Mlin},
-    rgchk::DecompParameters,
+    rgchk::{DecompParameters, WitnessVec},
 };
 
 pub trait Linearize<R: OverField> {
@@ -27,19 +28,19 @@ pub struct LinParameters {
 }
 
 #[derive(Clone, Debug)]
-pub struct LinBX<R> {
+pub struct LinBX<R: PolyRing> {
     pub cm_f: Vec<R>,
     pub r: Vec<(R, R)>,
     pub v: Vec<(R, R)>,
 }
 
 #[derive(Clone, Debug)]
-pub struct LinB<R> {
-    pub f: Vec<R>,
+pub struct LinB<R: PolyRing> {
+    pub f: WitnessVec<R>,
     pub x: LinBX<R>,
 }
 
-impl<R: CoeffRing> LinB<R>
+impl<R: CoeffRing + PolyRing> LinB<R>
 where
     R::BaseRing: ConvertibleRing + Decompose + Zq,
     R: Decompose,
@@ -50,7 +51,7 @@ where
     pub fn lin(
         &self,
         A: &Matrix<R>,
-        M: &[SparseMatrix<R>],
+        M: &[Arc<SparseMatrix<R>>],
         params: &LinParameters,
         transcript: &mut impl Transcript<R>,
     ) -> (LinB2<R>, CmProof<R>) {
@@ -115,7 +116,7 @@ mod tests {
 
         let cr1cs = ComR1CS::new(r1cs, z, 1, 2, k, &A);
 
-        let M = cr1cs.x.matrices();
+        let M = cr1cs.x.matrices_arc();
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         let (linb, lproof) = cr1cs.linearize(&mut ts);

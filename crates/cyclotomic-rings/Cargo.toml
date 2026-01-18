@@ -12,6 +12,7 @@ getrandom = ["ark-std/getrandom"]
 [dependencies]
 ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
+ark-serialize = { workspace = true }
 ark-std = { workspace = true } 
 num-bigint = { workspace = true }
 rand = { workspace = true }

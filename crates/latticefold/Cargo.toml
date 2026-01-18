@@ -49,15 +49,6 @@ dhat = "0.3.2"
 humansize = "2.1.3"
 lazy_static = "1.5.0"
 
-[profile.release]
-debug = 1
-
-[profile.bench]
-lto = false
-codegen-units = 16
-opt-level = 3
-rpath = true
-
 [lints.clippy]
 single_match = "warn"
 single_match_else = "warn"

@@ -1,6 +1,7 @@
 [workspace] 
 members = [
     "crates/cyclotomic-rings",
+    "crates/dpp",
     "crates/latticefold",
     "crates/latticefold-plus",
     "crates/symphony",
@@ -40,3 +41,12 @@ toml = "0.8.19"
 # To build locally, use 
 # RUSTDOCFLAGS="--html-in-header docs-header.html" cargo doc --no-deps --document-private-items --open
 rustdoc-args = ["--html-in-header", "docs-header.html"]
+
+[profile.release]
+debug = 1
+
+[profile.bench]
+lto = false
+codegen-units = 16
+opt-level = 3
+rpath = true

@@ -30,6 +30,10 @@ pub struct SymphonyInstance<R: PolyRing> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SymphonyBatchLin<R: PolyRing> {
     pub r_prime: Vec<R::BaseRing>,
+    /// Per-digit monomial commitments `c(i)` (Figure 2 Step 3 / Eq. (28)).
+    ///
+    /// Shape: `[k_g][kappa]`.
+    pub c_g: Vec<Vec<R>>,
     pub u: Vec<R>,
 }
 
@@ -72,7 +76,7 @@ where
 /// Fold the batch-linear outputs (Eq. (28)) linearly with respect to low-norm `β`.
 ///
 /// This corresponds to Figure 4 (Step 5), where for each digit `i`,
-/// `(c(i), u(i)) := Σ β_ℓ (c(i)_ℓ, u(i)_ℓ)`. Here we only fold `u(i)`.
+/// `(c(i), u(i)) := Σ β_ℓ (c(i)_ℓ, u(i)_ℓ)`.
 pub fn fold_batchlin<R>(
     beta: &[R],
     batch: &[SymphonyBatchLin<R>],
@@ -85,14 +89,26 @@ where
 
     let r_len = batch[0].r_prime.len();
     let kg = batch[0].u.len();
+    assert_eq!(batch[0].c_g.len(), kg, "c_g k_g mismatch");
+    let kappa = batch[0].c_g[0].len();
     for b in batch {
         assert_eq!(b.r_prime.len(), r_len, "r' must be shared");
         assert_eq!(b.u.len(), kg, "k_g mismatch");
         assert_eq!(b.r_prime, batch[0].r_prime, "r' must be identical across instances");
+        assert_eq!(b.c_g.len(), kg, "c_g k_g mismatch");
+        for ci in &b.c_g {
+            assert_eq!(ci.len(), kappa, "c_g kappa mismatch");
+        }
     }
 
+    let mut c_g = vec![vec![R::ZERO; kappa]; kg];
     let mut u = vec![R::ZERO; kg];
     for (b, inst) in beta.iter().zip(batch.iter()) {
+        for dig in 0..kg {
+            for j in 0..kappa {
+                c_g[dig][j] += *b * inst.c_g[dig][j];
+            }
+        }
         for (acc, x) in u.iter_mut().zip(inst.u.iter()) {
             *acc += *b * *x;
         }
@@ -100,6 +116,7 @@ where
 
     SymphonyBatchLin {
         r_prime: batch[0].r_prime.clone(),
+        c_g,
         u,
     }
 }
@@ -107,6 +124,7 @@ where
 /// Convenience: turn a verified Π_rg output into the `(c,r,v)` + batchlin shape used by folding.
 pub fn pi_rg_to_fold_shapes<R: PolyRing>(
     cm_f: Vec<R>,
+    c_g: Vec<Vec<R>>,
     out: &PiRgVerifiedOutput<R>,
 ) -> (SymphonyInstance<R>, SymphonyBatchLin<R>) {
     // Convert the coefficient vector `v ∈ K^d` into an `R_q` element by placing it in the
@@ -123,6 +141,7 @@ pub fn pi_rg_to_fold_shapes<R: PolyRing>(
         },
         SymphonyBatchLin {
             r_prime: out.r_prime.clone(),
+            c_g,
             u: out.u.clone(),
         },
     )

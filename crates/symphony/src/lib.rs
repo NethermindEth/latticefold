@@ -18,6 +18,13 @@ pub mod symphony_coins;
 pub mod symphony_open;
 pub mod symphony_pifold_batched;
 pub mod symphony_we_relation;
+pub mod we_statement;
+pub mod poseidon_trace;
+pub mod dpp_poseidon;
+pub mod dpp_ajtai;
+pub mod we_gate_arith;
+pub mod dpp_sumcheck;
+pub mod dpp_pifold_math;
 
 // SP1 R1CS integration
 pub mod sp1_r1cs_loader;
@@ -29,3 +36,6 @@ pub mod rp_rgchk;
 // Streaming sumcheck (memory-efficient MLE handling)
 pub mod streaming_sumcheck;
 pub mod symphony_pifold_streaming;
+
+// Polynomial Commitment Scheme (PCS) + dR1CS arithmetization (for aux → cm_f binding)
+pub mod pcs;

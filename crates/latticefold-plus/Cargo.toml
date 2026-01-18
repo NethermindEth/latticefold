@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["std"]
+default = ["std", "parallel"]
 std = ["ark-std/std", "cyclotomic-rings/std", "rand/std"]
 parallel = [
     "dep:rayon",
@@ -20,7 +20,11 @@ getrandom = ["ark-std/getrandom"]
 # dev-only
 dhat-heap = []
 
+# WE/DPP arithmetization helpers (bench/research only).
+we_gate = ["dep:dpp", "dep:symphony"]
+
 [dependencies]
+zstd = "0.13"
 ark-crypto-primitives = { workspace = true }
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
@@ -36,7 +40,10 @@ rayon = { workspace = true, optional = true }
 stark-rings = { workspace = true }
 stark-rings-linalg = { workspace = true }
 stark-rings-poly = { workspace = true }
+sha2 = { workspace = true }
 thiserror = { workspace = true }
+dpp = { path = "../dpp", optional = true }
+symphony = { path = "../symphony", optional = true }
 
 [build-dependencies]
 proc-macro2 = { workspace = true }
@@ -46,15 +53,6 @@ toml = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-
-[profile.release]
-debug = 1
-
-[profile.bench]
-lto = false
-codegen-units = 16
-opt-level = 3
-rpath = true
 
 [lints.clippy]
 single_match = "warn"
@@ -107,3 +105,11 @@ harness = false
 [[bench]]
 name = "lin"
 harness = false
+
+[[bench]]
+name = "we_dpp"
+harness = false
+
+[[example]]
+name = "lf_plus_sp1_oneproof"
+required-features = ["we_gate"]
