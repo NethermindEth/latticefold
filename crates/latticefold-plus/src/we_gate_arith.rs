@@ -4108,21 +4108,23 @@ mod tests {
         let n = tau_unpadded_len.next_power_of_two();
         let nvars = ark_std::log2(n) as usize;
 
-        let dparams = DecompParameters { b, k, l: ell };
-        let mut rng = ark_std::test_rng();
-        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
-        let inst = RgInstance::from_f(f, &A, &dparams);
-        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
-        let cm = Cm { rg };
-        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
-
         // Statement-defined SP1 public input digest as 256 boolean bits (collision-robust and DPP-friendly).
         type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
         let sp1_digest_bits: Vec<BF0> = {
             let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
             crate::we_statement::digest32_to_bits_field::<BF0>(d)
         };
+
+        let dparams = DecompParameters { b, k, l: ell };
+        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        // Bind the first digest bit to the exposed commitment prefix.
+        f[0] = RR::from(sp1_digest_bits[0]);
+        let mut A = Matrix::<RR>::zero(kappa, n);
+        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
+        let inst = RgInstance::from_f(f, &A, &dparams);
+        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
+        let cm = Cm { rg };
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         // Prove with digest absorbed before proving.
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
