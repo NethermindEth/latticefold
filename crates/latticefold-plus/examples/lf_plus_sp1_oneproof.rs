@@ -260,9 +260,11 @@ fn main() {
     // compare the commitment surface against the SP1 statement digest exported as R1CS public inputs:
     // - columns 1..=8 are the 8 BabyBear public inputs (digest), since column 0 is the shared ONE=1
     // - the first 8 commitment coordinates expose those witness coordinates verbatim
-    // - any remaining rows (kappa - 8) remain pseudorandom and still bind the full witness
+    // - remaining rows are pseudorandom and still bind the full witness
+    //
+    // IMPORTANT: Cm transcript samples `log_kappa = log2(kappa)` challenges, so `kappa` must be a power of 2.
     let kappa_expose: usize = 8;
-    let kappa_random: usize = 1;
+    let kappa_random: usize = 8;
     let kappa: usize = kappa_expose + kappa_random;
     const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
     let ajtai = AjtaiCommitmentScheme::<R>::seeded_with_exposed_prefix(
