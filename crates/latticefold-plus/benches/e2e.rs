@@ -218,7 +218,7 @@ impl VerifierBenchmark for E2EVerifier {
 
     fn run_verifier(verifier: &Self::Input, proof: &Self::Proof) {
         let mut v = verifier.clone();
-        assert!(v.verify(proof), "Verification should succeed");
+        assert!(v.verify(proof, &[]), "Verification should succeed");
     }
 }
 

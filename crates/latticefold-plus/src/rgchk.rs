@@ -347,6 +347,8 @@ pub enum RangeCheckError<R: PolyRing> {
         got: R,
         expected: R::BaseRing,
     },
+    #[error("Prefix binding requires L=1 instance (got L={got})")]
+    PrefixBindingRequiresSingleInstance { got: usize },
 }
 
 impl<R: CoeffRing> Rg<R>
@@ -627,10 +629,15 @@ where
         expected_prefix: &[R::BaseRing],
     ) -> Result<(), RangeCheckError<R>> {
         if !expected_prefix.is_empty() {
+            if self.fcoms.len() != 1 {
+                return Err(RangeCheckError::PrefixBindingRequiresSingleInstance {
+                    got: self.fcoms.len(),
+                });
+            }
             let inst0 = self
                 .fcoms
                 .get(0)
-                .expect("Dcom::verify_with_exposed_prefix: expected at least one instance");
+                .expect("Dcom::verify: expected at least one instance");
             if inst0.cm_f.len() < expected_prefix.len() {
                 return Err(RangeCheckError::ExposedPrefixMismatch {
                     i: expected_prefix.len() - 1,

@@ -1693,12 +1693,34 @@ where
                 let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_f[j]);
                 absorb_flat.extend_from_slice(&rv.coeffs);
                 // Statement binding (prefix exposure):
-                // Enforce that the first 8 Ajtai commitment coordinates expose the statement digest
-                // public inputs, i.e. cm_f[j] == public_inputs[j] as a constant-coeff ring element.
-                const EXPOSE: usize = 8;
-                if l == 0 && j < EXPOSE && public_input_vars.len() >= EXPOSE && kappa >= EXPOSE {
-                    let pv_ring = scalar_var_to_ringvars::<R>(&mut b, public_input_vars[j]);
-                    ring_eq::<BF<R>>(&mut b, &rv, &pv_ring);
+                //
+                // The Ajtai scheme is configured with an identity block so that the first few
+                // commitment coordinates are *literal* witness coordinates (readable from `cm_f`).
+                //
+                // Fail closed: if the verifier expects prefix binding (expose_rows > 0), require
+                // the corresponding number of statement public inputs to be provided.
+                const EXPOSE_MAX: usize = 8;
+                let expose_rows = EXPOSE_MAX.min(kappa);
+                if expose_rows > 0 {
+                    if public_input_vars.len() < expose_rows {
+                        return Err(format!(
+                            "dcom/rgchk: expected at least {} public inputs for prefix binding (got {})",
+                            expose_rows,
+                            public_input_vars.len()
+                        ));
+                    }
+                    // Current SP1 streamed/WE usage is L=1. If this ever changes, either bind all
+                    // instances or explicitly statement-bind a per-instance digest.
+                    if dcom.fcoms.len() != 1 {
+                        return Err(format!(
+                            "dcom/rgchk: prefix binding requires L=1 (got L={})",
+                            dcom.fcoms.len()
+                        ));
+                    }
+                    if l == 0 && j < expose_rows {
+                        let pv_ring = scalar_var_to_ringvars::<R>(&mut b, public_input_vars[j]);
+                        ring_eq::<BF<R>>(&mut b, &rv, &pv_ring);
+                    }
                 }
             }
             for j in 0..kappa {

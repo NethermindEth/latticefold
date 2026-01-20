@@ -194,7 +194,7 @@ where
 impl<R, TS> PlusVerifier<R, TS>
 where
     R::BaseRing: Zq,
-    R: CoeffRing,
+    R: CoeffRing + PolyRing,
     TS: Transcript<R>,
 {
     /// Initialize
@@ -213,11 +213,21 @@ where
     }
 
     /// Verify
-    pub fn verify<P: LinearizedVerify<R>>(&mut self, proof: &PlusProof<R, P>) -> bool {
+    ///
+    /// If `expected_prefix` is non-empty, this enforces the exposed-prefix binding for the Cm proof
+    /// (SP1 streamed/WE regime) and fails if binding cannot be applied.
+    pub fn verify<P: LinearizedVerify<R>>(
+        &mut self,
+        proof: &PlusProof<R, P>,
+        expected_prefix: &[R::BaseRing],
+    ) -> bool {
         for lp in &proof.lproof {
             lp.verify(&mut self.transcript);
         }
-        proof.cmproof.verify(&self.M, &mut self.transcript).unwrap();
+        proof
+            .cmproof
+            .verify_with_mlen(self.M.len(), &mut self.transcript, expected_prefix)
+            .unwrap();
         proof
             .dproof
             .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, self.params.B);
@@ -307,7 +317,7 @@ mod tests {
         
         // Time verification
         let start = std::time::Instant::now();
-        verifier.verify(&proof);
+        verifier.verify(&proof, &[]);
         let verify_time = start.elapsed();
         
         // Print transcript metrics for DPP cost estimation
@@ -386,7 +396,7 @@ mod tests {
 
         let transcript = PoseidonTranscript::empty::<PC>();
         let mut verifier = PlusVerifier::init(A, M, pparams, transcript);
-        verifier.verify(&proof);
+        verifier.verify(&proof, &[]);
     }
 
     /// Large-scale test to measure tensor optimization impact
@@ -490,7 +500,7 @@ mod tests {
         let ts = PoseidonTranscript::empty::<PC>();
         let mut verifier = PlusVerifier::init(A, M, pparams, ts);
         let start = std::time::Instant::now();
-        verifier.verify(&proof);
+        verifier.verify(&proof, &[]);
         let verify_time = start.elapsed();
         
         println!("\n=== VERIFICATION BENCHMARK (n={}) ===", n);
