@@ -450,9 +450,21 @@ Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP
     for lp in &proof.lproof {
         lp.verify(&mut rec);
     }
-    let bind_prefix = public_inputs
-        .get(0..8)
-        .expect("expected at least 8 statement public inputs for Ajtai prefix exposure");
+    // Debug escape hatch:
+    // - Normally we enforce exposed-prefix binding (cm_f[0..7] == public_inputs[0..7]) natively,
+    //   and verification should fail immediately if `FLIP_PUBLIC_INPUT0=1`.
+    // - If you want to *still* build the WE gate dR1CS and observe UNSAT there, set:
+    //     LFP_SKIP_PREFIX_BINDING_CHECK=1
+    //   This will skip the native check (NOT secure; for debugging only).
+    let skip_prefix_check =
+        std::env::var("LFP_SKIP_PREFIX_BINDING_CHECK").ok().as_deref() == Some("1");
+    let bind_prefix: &[BFSmall] = if skip_prefix_check {
+        &[]
+    } else {
+        public_inputs
+            .get(0..8)
+            .expect("expected at least 8 statement public inputs for Ajtai prefix exposure")
+    };
     proof.cmproof
         .verify_with_mlen(
             m0.len(),
