@@ -161,6 +161,9 @@ where
         <R::BaseRing as PrimeField>::BigInt: BigInteger,
     {
         maybe_print_rss("PlusProverSparseBase::prove_sparse_base (start)");
+        for &v in public_inputs {
+            self.transcript.absorb_field_element(&v);
+        }
         let mut lproof = Vec::with_capacity(comp.len());
         comp.iter().for_each(|compi| {
             let (linb, lp) = compi.linearize(&mut self.transcript);
@@ -169,9 +172,9 @@ where
         });
 
         maybe_print_rss("PlusProverSparseBase::prove_sparse_base (after linearize)");
-        let (linb2, cmproof) = self
-            .acc
-            .mlin_seeded_base(&self.scheme, &self.M0, public_inputs, &mut self.transcript);
+        let (linb2, cmproof) =
+            self.acc
+                .mlin_seeded_base(&self.scheme, &self.M0, &mut self.transcript);
         maybe_print_rss("PlusProverSparseBase::prove_sparse_base (after mlin_seeded)");
 
         let decomp = crate::decomp::DecompBase {

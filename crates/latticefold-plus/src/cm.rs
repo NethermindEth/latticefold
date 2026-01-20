@@ -394,7 +394,6 @@ where
     pub fn prove_base(
         &self,
         M0: &[Arc<SparseMatrix<R::BaseRing>>],
-        public_inputs: &[R::BaseRing],
         transcript: &mut impl Transcript<R>,
     ) -> (Com<R>, CmProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
@@ -423,10 +422,6 @@ where
                 self.rg.nvars,
                 M0.len(),
             );
-        }
-
-        for &v in public_inputs {
-            transcript.absorb_field_element(&v);
         }
 
         let t = Instant::now();

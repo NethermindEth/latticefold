@@ -276,7 +276,6 @@ where
         &self,
         scheme: &AjtaiCommitmentScheme<R>,
         M0: &[Arc<SparseMatrix<R::BaseRing>>],
-        public_inputs: &[R::BaseRing],
         transcript: &mut impl Transcript<R>,
     ) -> (LinB2<R>, CmProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
@@ -339,7 +338,7 @@ where
         let cm = Cm { rg };
 
         let t = Instant::now();
-        let (com, proof) = cm.prove_base(M0, public_inputs, transcript);
+        let (com, proof) = cm.prove_base(M0, transcript);
         if profile {
             println!("[LF+ Mlin::mlin_seeded_base] Cm::prove_base: {:?}", t.elapsed());
         }
