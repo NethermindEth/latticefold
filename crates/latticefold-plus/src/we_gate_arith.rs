@@ -4066,11 +4066,9 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
 
         let dparams = DecompParameters { b, k, l: ell };
-        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        // Bind the first public input to the exposed commitment prefix.
-        f[0] = RR::from(sp1_digest_bits[0]);
-        let mut A = Matrix::<RR>::zero(kappa, n);
-        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
+        let mut rng = ark_std::test_rng();
+        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
