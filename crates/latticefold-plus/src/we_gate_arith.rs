@@ -1656,6 +1656,26 @@ where
     }
 
     let mut absorb_flat: Vec<usize> = Vec::new();
+
+    // (Fiat–Shamir): commit-before-challenge.
+    //
+    // The native verifier now absorbs the witness commitments `Dcom.fcoms` (cm_f, C_Mf, cm_mtau)
+    // *before* sampling any set-check challenges. We must mirror that transcript schedule in the
+    // WE arithmetization by including those absorbed elements in the Poseidon wiring surface.
+    for f in &dcom.fcoms {
+        for r in &f.cm_f {
+            let rv = ring_to_ringvars::<R>(&mut b, r);
+            absorb_flat.extend_from_slice(&rv.coeffs);
+        }
+        for r in &f.C_Mf {
+            let rv = ring_to_ringvars::<R>(&mut b, r);
+            absorb_flat.extend_from_slice(&rv.coeffs);
+        }
+        for r in &f.cm_mtau {
+            let rv = ring_to_ringvars::<R>(&mut b, r);
+            absorb_flat.extend_from_slice(&rv.coeffs);
+        }
+    }
     // Public inputs absorbed before verification begins (optional when the overall verifier
     // has already absorbed them earlier in the transcript).
     if include_public_inputs_in_absorb {

@@ -14,6 +14,32 @@ use crate::{
     utils::split,
 };
 
+#[inline]
+fn absorb_fcoms_one<R: OverField + PolyRing>(f: &FComs<R>, transcript: &mut impl Transcript<R>) {
+    // Commit-before-challenge: bind witness-dependent commitments into the transcript
+    // before the set-check verifier samples any challenges.
+    transcript.absorb_slice(&f.cm_f);
+    transcript.absorb_slice(&f.C_Mf);
+    transcript.absorb_slice(&f.cm_mtau);
+}
+
+#[inline]
+fn absorb_fcoms_instances<R: OverField + PolyRing>(
+    instances: &[RgInstance<R>],
+    transcript: &mut impl Transcript<R>,
+) {
+    for inst in instances {
+        absorb_fcoms_one(&inst.fcoms, transcript);
+    }
+}
+
+#[inline]
+fn absorb_fcoms_fcoms<R: OverField + PolyRing>(fcoms: &[FComs<R>], transcript: &mut impl Transcript<R>) {
+    for f in fcoms {
+        absorb_fcoms_one(f, transcript);
+    }
+}
+
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
@@ -352,6 +378,8 @@ where
             sets,
             nvars: self.nvars,
         };
+        // (Fiat–Shamir): absorb witness commitments before sampling set-check challenges.
+        absorb_fcoms_instances(&self.instances, transcript);
         let out_rel = in_rel.set_check(crate::setchk::ExternalMats::Ring(M), transcript);
 
         // Avoid allocating a full eq-table of size 2^nvars.
@@ -481,6 +509,8 @@ where
             sets,
             nvars: self.nvars,
         };
+        // (Fiat–Shamir): absorb witness commitments before sampling set-check challenges.
+        absorb_fcoms_instances(&self.instances, transcript);
         let out_rel = in_rel.set_check(crate::setchk::ExternalMats::Base(M0), transcript);
 
         let one_minus_r = out_rel
@@ -576,6 +606,8 @@ where
     R::BaseRing: Zq,
 {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), RangeCheckError<R>> {
+        // (Fiat–Shamir): mirror prover-side ordering; absorb commitments before coins.
+        absorb_fcoms_fcoms(&self.fcoms, transcript);
         self.out.verify(transcript)?;
 
         absorb_evaluations(&self.evals, transcript);
