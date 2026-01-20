@@ -2876,6 +2876,26 @@ where
         let dcom = &proof.cmproof.dcom;
         let out = &dcom.out;
 
+        // Dcom::verify (prefix): absorb witness commitments (Fiat–Shamir commit-before-challenge).
+        //
+        // We absorb, for each folded instance:
+        // - cm_f (kappa ring elems)
+        // - C_Mf (kappa ring elems)
+        // - cm_mtau (kappa ring elems)
+        //
+        // Each ring element is absorbed as `len=d` base-field elements by the transcript.
+        for f in &dcom.fcoms {
+            for _ in 0..f.cm_f.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+            for _ in 0..f.C_Mf.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+            for _ in 0..f.cm_mtau.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+        }
+
         // Out::verify (SetChk) transcript coins.
         let nclaims = out.e[0].len() + out.b.len();
         for _ in 0..nclaims {
