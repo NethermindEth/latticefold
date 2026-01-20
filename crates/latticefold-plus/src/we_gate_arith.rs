@@ -1659,21 +1659,40 @@ where
 
     // (Fiat–Shamir): commit-before-challenge.
     //
-    // The native verifier now absorbs the witness commitments `Dcom.fcoms` (cm_f, C_Mf, cm_mtau)
-    // *before* sampling any set-check challenges. We must mirror that transcript schedule in the
-    // WE arithmetization by including those absorbed elements in the Poseidon wiring surface.
-    for f in &dcom.fcoms {
-        for r in &f.cm_f {
-            let rv = ring_to_ringvars::<R>(&mut b, r);
-            absorb_flat.extend_from_slice(&rv.coeffs);
+    // Dcom verification now absorbs the witness commitments before running `Out::verify`,
+    // so that all subsequent verifier coins are bound to the committed witness.
+    //
+    // Must match `rgchk::absorb_fcoms_{instances,fcoms}` ordering:
+    // for each instance l: cm_f, C_Mf, cm_mtau.
+    {
+        let kappa: usize = {
+            let k = params.kappa;
+            if k > (usize::MAX as u64) {
+                return Err("dcom/rgchk: kappa too large for usize".to_string());
+            }
+            k as usize
+        };
+        if dcom.fcoms.len() != dcom.evals.len() {
+            return Err("dcom/rgchk: fcoms length mismatch".to_string());
         }
-        for r in &f.C_Mf {
-            let rv = ring_to_ringvars::<R>(&mut b, r);
-            absorb_flat.extend_from_slice(&rv.coeffs);
-        }
-        for r in &f.cm_mtau {
-            let rv = ring_to_ringvars::<R>(&mut b, r);
-            absorb_flat.extend_from_slice(&rv.coeffs);
+        for (l, cmc) in dcom.fcoms.iter().enumerate() {
+            if cmc.cm_f.len() != kappa || cmc.C_Mf.len() != kappa || cmc.cm_mtau.len() != kappa {
+                return Err(format!(
+                    "dcom/rgchk: fcoms[{l}] commitment len mismatch (expected kappa={kappa})"
+                ));
+            }
+            for j in 0..kappa {
+                let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_f[j]);
+                absorb_flat.extend_from_slice(&rv.coeffs);
+            }
+            for j in 0..kappa {
+                let rv = ring_to_ringvars::<R>(&mut b, &cmc.C_Mf[j]);
+                absorb_flat.extend_from_slice(&rv.coeffs);
+            }
+            for j in 0..kappa {
+                let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_mtau[j]);
+                absorb_flat.extend_from_slice(&rv.coeffs);
+            }
         }
     }
     // Public inputs absorbed before verification begins (optional when the overall verifier
