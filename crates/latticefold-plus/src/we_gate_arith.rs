@@ -1102,7 +1102,7 @@ where
         );
 
         // eq(r, ro) where r is dcom.out.r (base ring)
-        let eq = eq_eval_vars::<BF<R>>(b, r_pre_vars, r_sc);
+        let eq = eq_eval_vars::<BF<R>>(b, &r_pre_vars, r_sc);
         let mut eval_acc = scalar_to_ringvars::<R>(b, BF::<R>::ZERO);
 
         for l in 0..l_instances {
