@@ -2379,7 +2379,15 @@ where
         let nvars = self.dcom.out.nvars;
         let L = self.evals.0.len();
 
-        self.dcom.verify(transcript).unwrap();
+        // Map range-check failures into a generic sumcheck failure.
+        //
+        // `CmProof::verify_with_mlen` historically returned `SumCheckError`, so we keep the
+        // signature stable and treat any `Dcom` verification failure as "verification failed".
+        // The specific `SumCheckError` variant is not semantically important here; callers
+        // only require an error to reject the proof.
+        self.dcom
+            .verify(transcript)
+            .map_err(|_e| SumCheckError::MaxDegreeExceeded)?;
 
         let s = (0..3)
             .map(|_| short_challenge(128, transcript))
@@ -2468,7 +2476,7 @@ where
         let xp = (0..d).map(|i| unit_monomial::<R>(i)).collect::<Vec<_>>();
 
         let mut verify_sumcheck =
-            |sumcheck_proof: &Proof<R>, evals: &[InstanceEvals<R>]| -> Result<Vec<R>, ()> {
+            |sumcheck_proof: &Proof<R>, evals: &[InstanceEvals<R>]| -> Result<Vec<R>, SumCheckError<R>> {
                 let rc: R = transcript.get_challenge().into();
                 let z_idx = L * (4 + 4 * mlen);
                 // Precompute rc^i for all indices used below.
@@ -2514,7 +2522,7 @@ where
                     claimed_sum,
                     sumcheck_proof,
                 )
-                .unwrap();
+                ?;
 
                 let r: Vec<R> = self.dcom.out.r.iter().map(|x| R::from(*x)).collect();
                 let ro: Vec<R> = subclaim.point.into_iter().map(|x| x.into()).collect();
@@ -2563,8 +2571,8 @@ where
                 Ok(ro)
             };
 
-        let ro0 = verify_sumcheck(&self.sumcheck_proofs.0, &self.evals.0).unwrap();
-        let ro1 = verify_sumcheck(&self.sumcheck_proofs.1, &self.evals.1).unwrap();
+        let ro0 = verify_sumcheck(&self.sumcheck_proofs.0, &self.evals.0)?;
+        let ro1 = verify_sumcheck(&self.sumcheck_proofs.1, &self.evals.1)?;
 
         let ro = ro0.into_iter().zip(ro1).collect::<Vec<_>>();
 

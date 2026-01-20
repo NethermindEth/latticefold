@@ -688,6 +688,10 @@ where
 struct CmMathWiring {
     short: CmShortChallengeWiring,
     field: CmFieldChallengeWiring,
+    /// Base-field variables for `dcom.out.r` used by CM's `eq(r, ro)` factor.
+    ///
+    /// This must be glued to the transcript-derived setchk point coming from the Dcom prefix.
+    r_pre_vars: Vec<usize>,
     /// Flattened BF variables that must equal Poseidon absorb inputs (non-reabsorb absorbs),
     /// for the CmProof segment starting at `absorb_comh`.
     absorb_flat: Vec<usize>,
@@ -992,6 +996,16 @@ where
     let z_idx = l_instances * (4 + 4 * mlen_chunks_usize);
     let max_pow = z_idx + 1;
 
+    // Base-field r used by CM's `eq(r, ro)` factor.
+    let r_pre_vars: Vec<usize> = proof
+        .dcom
+        .out
+        .r
+        .iter()
+        .copied()
+        .map(|x| b.new_var(bf_from_base_ring::<R>(x)))
+        .collect();
+
     // For each of the two sumchecks, compute:
     // - claimed_sum
     // - subclaim_eval via sumcheck_verify_degree2
@@ -1088,15 +1102,7 @@ where
         );
 
         // eq(r, ro) where r is dcom.out.r (base ring)
-        let r_pre = proof
-            .dcom
-            .out
-            .r
-            .iter()
-            .copied()
-            .map(|x| b.new_var(bf_from_base_ring::<R>(x)))
-            .collect::<Vec<_>>();
-        let eq = eq_eval_vars::<BF<R>>(b, &r_pre, r_sc);
+        let eq = eq_eval_vars::<BF<R>>(b, r_pre_vars, r_sc);
         let mut eval_acc = scalar_to_ringvars::<R>(b, BF::<R>::ZERO);
 
         for l in 0..l_instances {
@@ -1188,6 +1194,7 @@ where
         CmMathWiring {
             short: short_wiring,
             field: field_wiring,
+            r_pre_vars,
             absorb_flat,
         },
     ))
@@ -1489,6 +1496,8 @@ fn absorb_field_elem_as_ring<R>(
 struct DcomPrefixMathWiring {
     /// Local vars for all Poseidon `SqueezeField` outputs used in the Dcom prefix, in order.
     squeeze_field_vars: Vec<usize>,
+    /// Transcript-derived setchk sumcheck point `r` (base field), length = nvars.
+    r_point_vars: Vec<usize>,
     /// Local vars for the 9 statement-bound params (same order as `WeParams::to_field_vec`).
     params_vars: Vec<usize>,
     /// Local vars for the extra statement-defined public inputs (e.g. SP1 public input digest).
@@ -1860,6 +1869,7 @@ where
         asg,
         DcomPrefixMathWiring {
             squeeze_field_vars,
+            r_point_vars: r_point.clone(),
             params_vars,
             public_input_vars,
             absorb_flat,
@@ -3436,6 +3446,20 @@ where
     }
     for (pv, lv) in pose_abs_prefix.iter().zip(dcom_wiring.absorb_flat.iter()) {
         glue.push((0, *pv, 4, *lv));
+    }
+
+    // Glue SetChk sumcheck point `r` into CM math.
+    // In the standalone CmProof WE relation we still have the Dcom prefix, so we must tie
+    // the `dcom.out.r` used by CM verification to the transcript-derived `r`.
+    if dcom_wiring.r_point_vars.len() != cm_wiring.r_pre_vars.len() {
+        return Err("plus: dcom/cm r length mismatch".to_string());
+    }
+    for (rv, cv) in dcom_wiring
+        .r_point_vars
+        .iter()
+        .zip(cm_wiring.r_pre_vars.iter())
+    {
+        glue.push((4, *rv, 7, *cv));
     }
 
     // Glue Cm absorb surface (non-reabsorb absorbs starting at Cm segment) to Poseidon absorb vars.

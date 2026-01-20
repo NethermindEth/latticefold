@@ -10,7 +10,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::{
-    setchk::{DigitsMatrix, In, MonomialSet, Out},
+    setchk::{DigitsMatrix, In, MonomialSet, Out, SetCheckError},
     utils::split,
 };
 
@@ -309,6 +309,8 @@ pub struct DcomEvals<R: PolyRing> {
 
 #[derive(Debug, Error)]
 pub enum RangeCheckError<R: PolyRing> {
+    #[error("Set-check failed: {0}")]
+    SetCheck(#[from] SetCheckError<R>),
     #[error("Psi check failed: a = {0}, b = {1}")]
     PsiCheckAB(R::BaseRing, R),
     #[error("Psi check failed: v = {0}, u-comb = {1}")]
@@ -574,7 +576,7 @@ where
     R::BaseRing: Zq,
 {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), RangeCheckError<R>> {
-        self.out.verify(transcript).unwrap(); //.map_err(|_| ())?;
+        self.out.verify(transcript)?;
 
         absorb_evaluations(&self.evals, transcript);
 
