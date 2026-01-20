@@ -4257,16 +4257,19 @@ mod tests {
             }
             // Seeded Ajtai scheme (deterministic system parameter) with **prefix exposure**
             // for statement binding in the sparse/SP1 path.
-            const EXPOSE_ROWS: usize = 8;
-            const EXPOSE_COL_OFFSET: usize = 1; // witness[0] is the shared ONE=1
+            //
+            // NOTE: This large-trace benchmark defaults to `kappa=2` for cost reasons; in that
+            // configuration we can only expose/bind `min(kappa, 8)` coordinates.
+            let expose_rows: usize = 8usize.min(kappa);
+            let expose_col_offset: usize = 1; // witness[0] is the shared ONE=1
             const AJTAI_SEED: [u8; 32] = [7u8; 32];
             let scheme = AjtaiCommitmentScheme::<RR>::seeded_with_exposed_prefix(
                 b"lf_plus_ajtai",
                 AJTAI_SEED,
                 kappa,
                 n,
-                EXPOSE_ROWS,
-                EXPOSE_COL_OFFSET,
+                expose_rows,
+                expose_col_offset,
             );
 
             // Satisfiable const-coeff R1CS (base ring):
@@ -4278,16 +4281,16 @@ mod tests {
                 C: SparseMatrix::identity(n),
             };
             let bind_prefix = sp1_digest_bits
-                .get(0..EXPOSE_ROWS)
-                .expect("need at least 8 public inputs for prefix binding");
+                .get(0..expose_rows)
+                .expect("sp1_digest_bits shorter than expose_rows");
             let f0: Arc<Vec<BR>> = Arc::new(
                 (0..n)
                     .map(|i| {
                         if i == 0 {
                             BR::ONE
-                        } else if (EXPOSE_COL_OFFSET..EXPOSE_COL_OFFSET + EXPOSE_ROWS).contains(&i) {
+                        } else if (expose_col_offset..expose_col_offset + expose_rows).contains(&i) {
                             // Make the exposed witness prefix equal the statement public inputs.
-                            bind_prefix[i - EXPOSE_COL_OFFSET]
+                            bind_prefix[i - expose_col_offset]
                         } else {
                             BR::from((rng.next_u64() & 1) as u64)
                         }
