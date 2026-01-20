@@ -254,10 +254,25 @@ fn main() {
     let r1cs = latticefold::arith::r1cs::R1CS::<F> { l: l_pub, A: m_a, B: m_b, C: m_c };
     maybe_print_rss("after build r1cs struct");
 
-    // Deterministic Ajtai commitment scheme (system parameter). Keep kappa=1 for now.
-    let kappa: usize = 1;
+    // Deterministic Ajtai commitment scheme (system parameter).
+    //
+    // We use **prefix exposure** so that the verifier (and WE arithmetization) can cheaply
+    // compare the commitment surface against the SP1 statement digest exported as R1CS public inputs:
+    // - columns 1..=8 are the 8 BabyBear public inputs (digest), since column 0 is the shared ONE=1
+    // - the first 8 commitment coordinates expose those witness coordinates verbatim
+    // - any remaining rows (kappa - 8) remain pseudorandom and still bind the full witness
+    let kappa_expose: usize = 8;
+    let kappa_random: usize = 1;
+    let kappa: usize = kappa_expose + kappa_random;
     const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
-    let ajtai = AjtaiCommitmentScheme::<R>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, cache.ncols);
+    let ajtai = AjtaiCommitmentScheme::<R>::seeded_with_exposed_prefix(
+        b"lf_plus_ajtai",
+        AJTAI_SEED,
+        kappa,
+        cache.ncols,
+        kappa_expose,
+        1, // expose witness columns 1..=8 (skip the shared constant ONE at column 0)
+    );
     maybe_print_rss("after init Ajtai scheme");
 
     let cr1cs =
@@ -361,7 +376,9 @@ Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP
     let mut public_inputs: Vec<BFSmall> = w_host[1..1 + l_pub].to_vec();
     println!("  public_inputs_len={} (from witness[1..=l])", public_inputs.len());
 
-    if !public_inputs.is_empty() {
+    // Optional adversarial test: flip one public input and ensure the proof becomes invalid.
+    // Enabled by: FLIP_PUBLIC_INPUT0=1
+    if !public_inputs.is_empty() && std::env::var("FLIP_PUBLIC_INPUT0").ok().as_deref() == Some("1") {
         // Debug: show that the mutation actually changes the field element.
         let before0 = public_inputs[0];
         let before_preview_len = public_inputs.len().min(8);
@@ -432,7 +449,13 @@ Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP
         lp.verify(&mut rec);
     }
     proof.cmproof
-        .verify_with_mlen(m0.len(), &mut rec)
+        .verify_with_mlen_and_exposed_prefix(
+            m0.len(),
+            &mut rec,
+            // Bind the first 8 statement public inputs via Ajtai prefix exposure.
+            // (If fewer are present, skip the check.)
+            public_inputs.get(0..8).unwrap_or(&[]),
+        )
         .expect("cm proof verify");
     println!("  PlusVerifier::verify(record trace): {:?}", t_verify_record.elapsed());
     maybe_print_rss("after verify(record)");

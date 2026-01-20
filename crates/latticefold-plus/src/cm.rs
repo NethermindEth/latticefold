@@ -157,29 +157,29 @@ where
                 let n = 1 << self.rg.nvars;
                 maybe_print_rss("cm: build_h one inst start");
                 let mut h = vec![R::ZERO; n];
-                #[cfg(feature = "parallel")]
-                {
-                    use rayon::prelude::*;
+                        #[cfg(feature = "parallel")]
+                        {
+                            use rayon::prelude::*;
                     h.par_iter_mut().enumerate().for_each(|(row, out)| {
-                        let mut acc = R::ZERO;
+                                    let mut acc = R::ZERO;
                         for (i, M) in inst.M_f.iter().enumerate() {
                             let s_i = &s_prime[i];
-                            for col in 0..M.ncols {
-                                acc += M.get(row, col) * s_i[col];
-                            }
+                                    for col in 0..M.ncols {
+                                        acc += M.get(row, col) * s_i[col];
+                                    }
                         }
                         *out = acc;
                     });
-                }
-                #[cfg(not(feature = "parallel"))]
-                {
-                    for row in 0..n {
-                        let mut acc = R::ZERO;
+                        }
+                        #[cfg(not(feature = "parallel"))]
+                        {
+                            for row in 0..n {
+                                let mut acc = R::ZERO;
                         for (i, M) in inst.M_f.iter().enumerate() {
                             let s_i = &s_prime[i];
-                            for col in 0..M.ncols {
-                                acc += M.get(row, col) * s_i[col];
-                            }
+                                for col in 0..M.ncols {
+                                    acc += M.get(row, col) * s_i[col];
+                                }
                         }
                         h[row] = acc;
                     }
@@ -339,8 +339,8 @@ where
                             };
                             let r_h = h[i][j];
                             (s[0] * R::from(r_tau)) + (s[1] * r_mtau) + (s[2] * r_f) + r_h
-                        })
-                        .collect::<Vec<R>>()
+                    })
+                    .collect::<Vec<R>>()
                 }
                 #[cfg(not(feature = "parallel"))]
                 {
@@ -1164,7 +1164,7 @@ where
                 if cm_lazy > 0 {
                     mles.push(StreamingMleEnum::LazyFixed {
                         inner: Box::new(mle),
-                        num_vars: nvars,
+                    num_vars: nvars,
                         fixed: Vec::new(),
                         weights: vec![R::BaseRing::ONE],
                         max_lazy: cm_lazy,
@@ -1175,7 +1175,7 @@ where
             }
 
             if profile {
-                println!(
+                    println!(
                     "[LF+ Cm::sumchecker_streaming] const-coeff mat-vec flags (L_idx={}): mats_const={} tau_cc={} mtau_cc={} f_cc={} h_cc={}",
                     i, mats_const, tau_cc, mtau_cc, f_cc, h_cc
                 );
@@ -1225,9 +1225,9 @@ where
                     match &inst.m_tau {
                         crate::rgchk::MonomialVec::Dense(v) => {
                             let mle = StreamingMleEnum::SparseMatVec {
-                                matrix: m.clone(),
+                        matrix: m.clone(),
                                 witness: v.clone(),
-                                num_vars: nvars,
+                        num_vars: nvars,
                             };
                             if cm_lazy > 0 {
                                 mles.push(StreamingMleEnum::LazyFixed {
@@ -1265,32 +1265,32 @@ where
 
                 if f_cc {
                     mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                        matrix: m.clone(),
+                    matrix: m.clone(),
                         witness0: f0_arc.as_ref().unwrap().clone(),
-                        num_vars: nvars,
-                    });
+                    num_vars: nvars,
+                });
                 } else {
-                    mles.push(StreamingMleEnum::SparseMatVec {
-                        matrix: m.clone(),
+                mles.push(StreamingMleEnum::SparseMatVec {
+                    matrix: m.clone(),
                         witness: f_arc_ring
                             .as_ref()
                             .expect("Ring witness required when f_cc is false")
                             .clone(),
-                        num_vars: nvars,
-                    });
+                    num_vars: nvars,
+                });
                 }
 
                 if h_cc {
                     mles.push(StreamingMleEnum::SparseMatVecConstCoeff {
-                        matrix: m.clone(),
+                    matrix: m.clone(),
                         witness0: h0_arc.as_ref().unwrap().clone(),
-                        num_vars: nvars,
-                    });
+                    num_vars: nvars,
+                });
                 } else {
                     let mle = StreamingMleEnum::SparseMatVec {
-                        matrix: m.clone(),
+                    matrix: m.clone(),
                         witness: h_arc_ring.clone(),
-                        num_vars: nvars,
+                    num_vars: nvars,
                     };
                     if cm_lazy > 0 {
                         mles.push(StreamingMleEnum::LazyFixed {
@@ -1408,9 +1408,9 @@ where
 
         let t_evals = Instant::now();
         let evals = (0..L)
-            .map(|l| {
+                .map(|l| {
                 let mut e = Vec::with_capacity(1 + Mlen);
-                let l_idx = 1 + l * (4 + 4 * Mlen);
+                    let l_idx = 1 + l * (4 + 4 * Mlen);
                 e.push([
                     final_vals[l_idx],
                     final_vals[l_idx + 1],
@@ -1418,7 +1418,7 @@ where
                     final_vals[l_idx + 3],
                 ]);
                 for i in 0..Mlen {
-                    let idx = l_idx + 4 + i * 4;
+                        let idx = l_idx + 4 + i * 4;
                     e.push([
                         final_vals[idx],
                         final_vals[idx + 1],
@@ -2374,6 +2374,19 @@ where
         mlen: usize,
         transcript: &mut impl Transcript<R>,
     ) -> Result<ComX<R>, SumCheckError<R>> {
+        self.verify_with_mlen_and_exposed_prefix(mlen, transcript, &[])
+    }
+
+    /// Verify, additionally enforcing exposed-prefix statement binding on `cm_f`.
+    ///
+    /// See `rgchk::Dcom::verify_with_exposed_prefix`.
+    #[inline]
+    pub fn verify_with_mlen_and_exposed_prefix(
+        &self,
+        mlen: usize,
+        transcript: &mut impl Transcript<R>,
+        expected_prefix: &[R::BaseRing],
+    ) -> Result<ComX<R>, SumCheckError<R>> {
         let k = self.dcom.dparams.k;
         let d = R::dimension();
         let nvars = self.dcom.out.nvars;
@@ -2386,7 +2399,7 @@ where
         // The specific `SumCheckError` variant is not semantically important here; callers
         // only require an error to reject the proof.
         self.dcom
-            .verify(transcript)
+            .verify_with_exposed_prefix(transcript, expected_prefix)
             .map_err(|_e| SumCheckError::MaxDegreeExceeded)?;
 
         let s = (0..3)
@@ -2526,7 +2539,7 @@ where
 
                 let r: Vec<R> = self.dcom.out.r.iter().map(|x| R::from(*x)).collect();
                 let ro: Vec<R> = subclaim.point.into_iter().map(|x| x.into()).collect();
-
+                
                 // OPTIMIZED: Use tensor structure for O(small) evaluation instead of O(n)
                 // The tensor product t(z) = tensor(c_z) ⊗ s' ⊗ d_powers ⊗ x_powers
                 // can be evaluated factor-by-factor in O(κ + k*d + ℓ + d) time.

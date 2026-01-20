@@ -31,7 +31,29 @@ enum AjtaiMatrix<R> {
         domain: Vec<u8>,
         kappa: usize,
         n: usize,
+        /// Optional structured “prefix exposure” surface.
+        ///
+        /// When `expose.rows > 0`, the first `expose.rows` commitment coordinates are **exactly**
+        /// the witness entries in columns `expose.col_offset .. expose.col_offset + expose.rows`
+        /// (embedded as ring elements). Concretely, this fixes the Ajtai matrix so that:
+        ///
+        /// - for `row < expose.rows`, `A[row, col_offset + row] = 1` and `A[row, j] = 0` for all other `j`
+        /// - for `row >= expose.rows`, `A[row, j]` remains pseudorandom as usual
+        ///
+        /// This is used to make a small number of statement public inputs verifier-checkable
+        /// against the commitment surface while keeping the remaining rows binding to the full witness.
+        expose: AjtaiExpose,
     },
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AjtaiExpose {
+    rows: usize,
+    col_offset: usize,
+}
+
+impl AjtaiExpose {
+    const NONE: Self = Self { rows: 0, col_offset: 0 };
 }
 
 /// A concrete instantiation of the Ajtai commitment scheme.
@@ -65,6 +87,41 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 domain: domain.as_ref().to_vec(),
                 kappa,
                 n,
+                expose: AjtaiExpose::NONE,
+            },
+        }
+    }
+
+    /// Create a scheme with an implicitly-defined pseudorandom Ajtai matrix, with a structured
+    /// “prefix exposure” block on the first commitment coordinates.
+    ///
+    /// See `AjtaiMatrix::Seeded::expose` for the exact semantics.
+    pub fn seeded_with_exposed_prefix(
+        domain: impl AsRef<[u8]>,
+        seed: [u8; 32],
+        kappa: usize,
+        n: usize,
+        expose_rows: usize,
+        expose_col_offset: usize,
+    ) -> Self {
+        assert!(
+            expose_rows <= kappa,
+            "AjtaiCommitmentScheme::seeded_with_exposed_prefix: expose_rows must be <= kappa"
+        );
+        assert!(
+            expose_col_offset
+                .checked_add(expose_rows)
+                .map(|end| end <= n)
+                .unwrap_or(false),
+            "AjtaiCommitmentScheme::seeded_with_exposed_prefix: exposed column range out of bounds"
+        );
+        Self {
+            matrix: AjtaiMatrix::Seeded {
+                seed,
+                domain: domain.as_ref().to_vec(),
+                kappa,
+                n,
+                expose: AjtaiExpose { rows: expose_rows, col_offset: expose_col_offset },
             },
         }
     }
@@ -100,10 +157,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                     .ok_or(CommitmentError::WrongWitnessLength(f.len(), matrix.ncols))?;
                 Ok(Commitment::from_vec_raw(commitment))
             }
-            AjtaiMatrix::Seeded { seed, domain, kappa, n } => {
+            AjtaiMatrix::Seeded { seed, domain, kappa, n, expose } => {
                 if f.len() != *n {
                     return Err(CommitmentError::WrongWitnessLength(f.len(), *n));
                 }
+                let expose_rows = expose.rows.min(*kappa);
+                let expose_col_offset = expose.col_offset;
                 // Speed: pre-hash the (domain, seed) prefix once, then only hash `col` per column.
                 // This preserves *exactly* the same `derive_col_seed` outputs.
                 let prefix_hasher = {
@@ -126,6 +185,15 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if fj == R::ZERO {
                                     return (local, prefix);
                                 }
+                                // Expose the selected witness coordinates directly in the first
+                                // `expose_rows` commitment outputs.
+                                if expose_rows > 0
+                                    && j >= expose_col_offset
+                                    && j < expose_col_offset + expose_rows
+                                {
+                                    let which = j - expose_col_offset;
+                                    local[which] += fj;
+                                }
                                 // Equivalent to `derive_col_seed(domain, &seed, col=j)`, but avoids
                                 // re-hashing the prefix for every column.
                                 let col_seed = {
@@ -137,7 +205,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                     s
                                 };
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
-                                for i in 0..kappa {
+                                for i in expose_rows..kappa {
                                     let aij = R::rand(&mut rng);
                                     local[i] += aij * fj;
                                 }
@@ -163,6 +231,13 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                         if *fj == R::ZERO {
                             continue;
                         }
+                        if expose_rows > 0
+                            && j >= expose_col_offset
+                            && j < expose_col_offset + expose_rows
+                        {
+                            let which = j - expose_col_offset;
+                            acc[which] += *fj;
+                        }
                         let col_seed = {
                             let mut h = prefix.clone();
                             h.update((j as u64).to_le_bytes());
@@ -172,7 +247,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                             s
                         };
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
-                        for i in 0..*kappa {
+                        for i in expose_rows..*kappa {
                             let aij = R::rand(&mut rng);
                             acc[i] += aij * *fj;
                         }
@@ -220,10 +295,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 }
                 Ok(outs)
             }
-            AjtaiMatrix::Seeded { seed, domain, kappa, n: n_expected } => {
+            AjtaiMatrix::Seeded { seed, domain, kappa, n: n_expected, expose } => {
                 if n != *n_expected {
                     return Err(CommitmentError::WrongWitnessLength(n, *n_expected));
                 }
+                let expose_rows = expose.rows.min(*kappa);
+                let expose_col_offset = expose.col_offset;
                 let prefix_hasher = {
                     let mut h = Sha256::new();
                     h.update(b"AJTAI_COL_V1");
@@ -245,6 +322,18 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if scratch.iter().all(|x| *x == R::ZERO) {
                                     return (local, scratch, prefix);
                                 }
+                                if expose_rows > 0
+                                    && j >= expose_col_offset
+                                    && j < expose_col_offset + expose_rows
+                                {
+                                    let which_row = j - expose_col_offset;
+                                    for which in 0..t {
+                                        let fj = scratch[which];
+                                        if fj != R::ZERO {
+                                            local[which][which_row] += fj;
+                                        }
+                                    }
+                                }
                                 let col_seed = {
                                     let mut h = prefix.clone();
                                     h.update((j as u64).to_le_bytes());
@@ -254,7 +343,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                     s
                                 };
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
-                                for i in 0..kappa {
+                                for i in expose_rows..kappa {
                                     let aij = R::rand(&mut rng);
                                     for which in 0..t {
                                         let fj = scratch[which];
@@ -291,6 +380,18 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                         if scratch.iter().all(|x| *x == R::ZERO) {
                             continue;
                         }
+                        if expose_rows > 0
+                            && j >= expose_col_offset
+                            && j < expose_col_offset + expose_rows
+                        {
+                            let which_row = j - expose_col_offset;
+                            for which in 0..t {
+                                let fj = scratch[which];
+                                if fj != R::ZERO {
+                                    acc[which][which_row] += fj;
+                                }
+                            }
+                        }
                         let col_seed = {
                             let mut h = prefix.clone();
                             h.update((j as u64).to_le_bytes());
@@ -300,7 +401,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                             s
                         };
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
-                        for i in 0..*kappa {
+                        for i in expose_rows..*kappa {
                             let aij = R::rand(&mut rng);
                             for which in 0..t {
                                 let fj = scratch[which];
@@ -340,10 +441,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
         }
         match &self.matrix {
             AjtaiMatrix::Explicit(_) => self.commit_many_with(n, t, fill_values_at),
-            AjtaiMatrix::Seeded { seed, domain, kappa, n: n_expected } => {
+            AjtaiMatrix::Seeded { seed, domain, kappa, n: n_expected, expose } => {
                 if n != *n_expected {
                     return Err(CommitmentError::WrongWitnessLength(n, *n_expected));
                 }
+                let expose_rows = expose.rows.min(*kappa);
+                let expose_col_offset = expose.col_offset;
                 #[cfg(feature = "parallel")]
                 {
                     let kappa = *kappa;
@@ -358,9 +461,21 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if scratch.iter().all(|x| *x == R::ZERO) {
                                     return (local, scratch);
                                 }
+                                if expose_rows > 0
+                                    && j >= expose_col_offset
+                                    && j < expose_col_offset + expose_rows
+                                {
+                                    let which_row = j - expose_col_offset;
+                                    for which in 0..t {
+                                        let fj = scratch[which];
+                                        if fj != R::ZERO {
+                                            local[which][which_row] += fj;
+                                        }
+                                    }
+                                }
                                 let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
-                                for i in 0..kappa {
+                                for i in expose_rows..kappa {
                                     let aij = R::rand(&mut rng);
                                     for which in 0..t {
                                         let fj = scratch[which];
@@ -396,9 +511,21 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                         if scratch.iter().all(|x| *x == R::ZERO) {
                             continue;
                         }
+                        if expose_rows > 0
+                            && j >= expose_col_offset
+                            && j < expose_col_offset + expose_rows
+                        {
+                            let which_row = j - expose_col_offset;
+                            for which in 0..t {
+                                let fj = scratch[which];
+                                if fj != R::ZERO {
+                                    acc[which][which_row] += fj;
+                                }
+                            }
+                        }
                         let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
-                        for i in 0..*kappa {
+                        for i in expose_rows..*kappa {
                             let aij = R::rand(&mut rng);
                             for which in 0..t {
                                 let fj = scratch[which];
@@ -438,10 +565,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
 
         match &self.matrix {
             AjtaiMatrix::Explicit(_) => self.commit(f),
-            AjtaiMatrix::Seeded { seed, domain, kappa, n } => {
+            AjtaiMatrix::Seeded { seed, domain, kappa, n, expose } => {
                 if f.len() != *n {
                     return Err(CommitmentError::WrongWitnessLength(f.len(), *n));
                 }
+                let expose_rows = expose.rows.min(*kappa);
+                let expose_col_offset = expose.col_offset;
                 #[cfg(feature = "parallel")]
                 {
                     let kappa = *kappa;
@@ -455,9 +584,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if fj0 == R::BaseRing::ZERO {
                                     return local;
                                 }
+                                if expose_rows > 0
+                                    && j >= expose_col_offset
+                                    && j < expose_col_offset + expose_rows
+                                {
+                                    let which = j - expose_col_offset;
+                                    local[which] += R::ONE * fj0;
+                                }
                                 let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
-                                for i in 0..kappa {
+                                for i in expose_rows..kappa {
                                     let aij = R::rand(&mut rng);
                                     local[i] += aij * fj0;
                                 }
@@ -483,9 +619,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                         if fj0 == R::BaseRing::ZERO {
                             continue;
                         }
+                        if expose_rows > 0
+                            && j >= expose_col_offset
+                            && j < expose_col_offset + expose_rows
+                        {
+                            let which = j - expose_col_offset;
+                            acc[which] += R::ONE * fj0;
+                        }
                         let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
-                        for i in 0..*kappa {
+                        for i in expose_rows..*kappa {
                             let aij = R::rand(&mut rng);
                             acc[i] += aij * fj0;
                         }
@@ -554,10 +697,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 }
                 Ok(Commitment::from_vec_raw(acc))
             }
-            AjtaiMatrix::Seeded { seed, domain, kappa, n } => {
+            AjtaiMatrix::Seeded { seed, domain, kappa, n, expose } => {
                 if f0.len() != *n {
                     return Err(CommitmentError::WrongWitnessLength(f0.len(), *n));
                 }
+                let expose_rows = expose.rows.min(*kappa);
+                let expose_col_offset = expose.col_offset;
                 #[cfg(feature = "parallel")]
                 {
                     let kappa = *kappa;
@@ -571,9 +716,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if fj0 == R::BaseRing::ZERO {
                                     return local;
                                 }
+                                if expose_rows > 0
+                                    && j >= expose_col_offset
+                                    && j < expose_col_offset + expose_rows
+                                {
+                                    let which = j - expose_col_offset;
+                                    local[which] += R::ONE * fj0;
+                                }
                                 let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
-                                for i in 0..kappa {
+                                for i in expose_rows..kappa {
                                     let aij = R::rand(&mut rng);
                                     local[i] += aij * fj0;
                                 }
@@ -598,9 +750,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                         if fj0 == R::BaseRing::ZERO {
                             continue;
                         }
+                        if expose_rows > 0
+                            && j >= expose_col_offset
+                            && j < expose_col_offset + expose_rows
+                        {
+                            let which = j - expose_col_offset;
+                            acc[which] += R::ONE * fj0;
+                        }
                         let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
-                        for i in 0..*kappa {
+                        for i in expose_rows..*kappa {
                             let aij = R::rand(&mut rng);
                             acc[i] += aij * fj0;
                         }
@@ -660,11 +819,13 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 }
                 Ok(acc.into_iter().map(Commitment::from_vec_raw).collect())
             }
-            AjtaiMatrix::Seeded { seed, domain, kappa, n: nn } => {
+            AjtaiMatrix::Seeded { seed, domain, kappa, n: nn, expose } => {
                 if n != *nn {
                     return Err(CommitmentError::WrongWitnessLength(n, *nn));
                 }
                 let kappa = *kappa;
+                let expose_rows = expose.rows.min(kappa);
+                let expose_col_offset = expose.col_offset;
                 let domain = domain.as_slice();
                 let seed = *seed;
                 #[cfg(feature = "parallel")]
@@ -678,9 +839,21 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if scratch.iter().all(|x| *x == R::BaseRing::ZERO) {
                                     return (local, scratch);
                                 }
+                                if expose_rows > 0
+                                    && j >= expose_col_offset
+                                    && j < expose_col_offset + expose_rows
+                                {
+                                    let which_row = j - expose_col_offset;
+                                    for which in 0..t {
+                                        let fj0 = scratch[which];
+                                        if fj0 != R::BaseRing::ZERO {
+                                            local[which][which_row] += R::ONE * fj0;
+                                        }
+                                    }
+                                }
                                 let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
-                                for i in 0..kappa {
+                                for i in expose_rows..kappa {
                                     let aij = R::rand(&mut rng);
                                     for which in 0..t {
                                         let fj0 = scratch[which];
@@ -716,9 +889,21 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                         if scratch.iter().all(|x| *x == R::BaseRing::ZERO) {
                             continue;
                         }
+                        if expose_rows > 0
+                            && j >= expose_col_offset
+                            && j < expose_col_offset + expose_rows
+                        {
+                            let which_row = j - expose_col_offset;
+                            for which in 0..t {
+                                let fj0 = scratch[which];
+                                if fj0 != R::BaseRing::ZERO {
+                                    acc[which][which_row] += R::ONE * fj0;
+                                }
+                            }
+                        }
                         let col_seed = Self::derive_col_seed(domain, &seed, j as u64);
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
-                        for i in 0..kappa {
+                        for i in expose_rows..kappa {
                             let aij = R::rand(&mut rng);
                             for which in 0..t {
                                 let fj0 = scratch[which];
@@ -825,10 +1010,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                     }
                 })
             }
-            AjtaiMatrix::Seeded { seed, domain, kappa, n: n_expected } => {
+            AjtaiMatrix::Seeded { seed, domain, kappa, n: n_expected, expose } => {
                 if n != *n_expected {
                     return Err(CommitmentError::WrongWitnessLength(n, *n_expected));
                 }
+                let expose_rows = expose.rows.min(*kappa);
+                let expose_col_offset = expose.col_offset;
 
                 // SHA256 midstate optimization (same as `commit_many_with`).
                 let prefix_hasher = {
@@ -844,6 +1031,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                 {
                     let kappa = *kappa;
                     let mon_info = mon_info.clone();
+                    let exp_table = exp_table.clone();
                     let acc = cfg_into_iter!(0..n)
                         .fold(
                             || (
@@ -855,6 +1043,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 scratch.fill(0u16);
                                 fill_digit_at(j, &mut scratch);
 
+                                if expose_rows > 0
+                                    && j >= expose_col_offset
+                                    && j < expose_col_offset + expose_rows
+                                {
+                                    let which_row = j - expose_col_offset;
+                                    for which in 0..t {
+                                        local[which][which_row] += exp_table[scratch[which] as usize];
+                                    }
+                                }
+
                                 // Sample Ajtai column element(s) once.
                                 let col_seed = {
                                     let mut h = prefix.clone();
@@ -865,7 +1063,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                     s
                                 };
                                 let mut rng = ChaCha20Rng::from_seed(col_seed);
-                                for i in 0..kappa {
+                                for i in expose_rows..kappa {
                                     let aij = R::rand(&mut rng);
                                     for which in 0..t {
                                         let dig = scratch[which] as usize;
@@ -905,6 +1103,15 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                     for j in 0..n {
                         scratch.fill(0u16);
                         fill_digit_at(j, &mut scratch);
+                        if expose_rows > 0
+                            && j >= expose_col_offset
+                            && j < expose_col_offset + expose_rows
+                        {
+                            let which_row = j - expose_col_offset;
+                            for which in 0..t {
+                                acc[which][which_row] += exp_table[scratch[which] as usize];
+                            }
+                        }
                         let col_seed = {
                             let mut h = prefix.clone();
                             h.update((j as u64).to_le_bytes());
@@ -914,7 +1121,7 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                             s
                         };
                         let mut rng = ChaCha20Rng::from_seed(col_seed);
-                        for i in 0..*kappa {
+                        for i in expose_rows..*kappa {
                             let aij = R::rand(&mut rng);
                             for which in 0..t {
                                 let dig = scratch[which] as usize;

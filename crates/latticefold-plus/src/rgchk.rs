@@ -341,6 +341,12 @@ pub enum RangeCheckError<R: PolyRing> {
     PsiCheckAB(R::BaseRing, R),
     #[error("Psi check failed: v = {0}, u-comb = {1}")]
     PsiCheckVU(Vec<R::BaseRing>, Vec<R>),
+    #[error("Exposed prefix mismatch at i={i}: got={got:?} expected_const_coeff={expected:?}")]
+    ExposedPrefixMismatch {
+        i: usize,
+        got: R,
+        expected: R::BaseRing,
+    },
 }
 
 impl<R: CoeffRing> Rg<R>
@@ -433,10 +439,10 @@ where
                     ));
                     b.push(match &inst.m_tau {
                         MonomialVec::Dense(v) => sparse_mat_vec_eval_ring_streaming::<R>(
-                            m,
+                        m,
                             v.as_ref(),
-                            &out_rel.r,
-                            &one_minus_r,
+                        &out_rel.r,
+                        &one_minus_r,
                         ),
                         MonomialVec::Digits { digits, exp_table } => {
                             sparse_mat_vec_eval_ring_streaming_monomial_digits::<R>(
@@ -606,6 +612,52 @@ where
     R::BaseRing: Zq,
 {
     pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), RangeCheckError<R>> {
+        self.verify_with_exposed_prefix(transcript, &[])
+    }
+
+    /// Verify, additionally enforcing a small exposed-prefix binding on the Ajtai commitment surface.
+    ///
+    /// When `expected_prefix` is non-empty, we require (for the **first** instance only):
+    ///
+    /// - `fcoms[0].cm_f[i]` is a constant-coefficient ring element
+    /// - and equals `expected_prefix[i]` (embedded from `R::BaseRing`) for all `i`.
+    ///
+    /// This is intended for the SP1 streamed regime where the first few witness coordinates are
+    /// statement-defining public inputs (e.g. a digest), and the Ajtai scheme is configured with
+    /// prefix exposure (identity block) so these values are readable from `cm_f`.
+    pub fn verify_with_exposed_prefix(
+        &self,
+        transcript: &mut impl Transcript<R>,
+        expected_prefix: &[R::BaseRing],
+    ) -> Result<(), RangeCheckError<R>> {
+        if !expected_prefix.is_empty() {
+            let inst0 = self
+                .fcoms
+                .get(0)
+                .expect("Dcom::verify_with_exposed_prefix: expected at least one instance");
+            if inst0.cm_f.len() < expected_prefix.len() {
+                return Err(RangeCheckError::ExposedPrefixMismatch {
+                    i: expected_prefix.len() - 1,
+                    got: R::ZERO,
+                    expected: expected_prefix[expected_prefix.len() - 1],
+                });
+            }
+            for (i, &exp_i) in expected_prefix.iter().enumerate() {
+                let got = inst0.cm_f[i];
+                // Enforce constant-coeff ring element equality to exp_i.
+                let coeffs = got.coeffs();
+                if coeffs.get(0).copied().unwrap_or(R::BaseRing::ZERO) != exp_i
+                    || coeffs.iter().skip(1).any(|c| *c != R::BaseRing::ZERO)
+                {
+                    return Err(RangeCheckError::ExposedPrefixMismatch {
+                        i,
+                        got,
+                        expected: exp_i,
+                    });
+                }
+            }
+        }
+
         // (Fiat–Shamir): mirror prover-side ordering; absorb commitments before coins.
         absorb_fcoms_fcoms(&self.fcoms, transcript);
         self.out.verify(transcript)?;
@@ -701,23 +753,23 @@ where
         // We therefore build the digit alphabet as [-D, D] and decompose coefficients into that set.
         let digit_abs_max: i128 = (R::dimension() as i128) / 2 - 1;
         assert!(digit_abs_max >= 1, "ring dimension too small for monomial digits");
-        let b_i128: i128 = decomp.b as i128;
+            let b_i128: i128 = decomp.b as i128;
         assert!(b_i128 >= 2, "decomposition base must be >= 2");
         let digit_elems: Vec<R::BaseRing> = (-digit_abs_max..=digit_abs_max)
             .map(|x| br_from_i128::<R::BaseRing>(x))
-            .collect();
-        assert!(
-            digit_elems.len() <= (u16::MAX as usize),
-            "digit alphabet too large for u16 indices (len={})",
-            digit_elems.len()
-        );
-        let exp_table: Arc<Vec<R>> = Arc::new(
-            digit_elems
-                .iter()
-                .map(|&x| exp::<R>(x).unwrap())
-                .collect::<Vec<_>>(),
-        );
-        let digit_elems = Arc::new(digit_elems);
+                .collect();
+            assert!(
+                digit_elems.len() <= (u16::MAX as usize),
+                "digit alphabet too large for u16 indices (len={})",
+                digit_elems.len()
+            );
+            let exp_table: Arc<Vec<R>> = Arc::new(
+                digit_elems
+                    .iter()
+                    .map(|&x| exp::<R>(x).unwrap())
+                    .collect::<Vec<_>>(),
+            );
+            let digit_elems = Arc::new(digit_elems);
         let b_u128 = decomp.b;
         let ctx: &'static str = "RgInstance::from_f";
         let map_digit_to_idx: Box<dyn Fn(R::BaseRing) -> u16 + Send + Sync> =
@@ -776,7 +828,7 @@ where
                             );
                             table[row_idx] = (map_digit_to_idx)(tmp_local[k_i]);
                         } else {
-                            for (col_idx, &c) in coeffs.iter().enumerate() {
+                        for (col_idx, &c) in coeffs.iter().enumerate() {
                                 bounded_decompose_to_digits(
                                     c,
                                     b_i128,
@@ -787,7 +839,7 @@ where
                                     row_idx,
                                     ctx,
                                 );
-                                table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
+                            table[row_idx * d + col_idx] = (map_digit_to_idx)(tmp_local[k_i]);
                             }
                         }
                     }
@@ -814,8 +866,8 @@ where
                         digits_tables[k_i][row_idx] = (map_digit_to_idx)(tmp[k_i]);
                     }
                 } else {
-                    for (col_idx, &c) in coeffs.iter().enumerate() {
-                        // Writes into tmp[0..k] in-place.
+                for (col_idx, &c) in coeffs.iter().enumerate() {
+                    // Writes into tmp[0..k] in-place.
                         bounded_decompose_to_digits(
                             c,
                             b_i128,
@@ -826,8 +878,8 @@ where
                             row_idx,
                             ctx,
                         );
-                        for k_i in 0..k {
-                            digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
+                    for k_i in 0..k {
+                        digits_tables[k_i][row_idx * d + col_idx] = (map_digit_to_idx)(tmp[k_i]);
                         }
                     }
                 }

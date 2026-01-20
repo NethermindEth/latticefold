@@ -1684,6 +1684,14 @@ where
             for j in 0..kappa {
                 let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_f[j]);
                 absorb_flat.extend_from_slice(&rv.coeffs);
+                // Statement binding (prefix exposure):
+                // Enforce that the first 8 Ajtai commitment coordinates expose the statement digest
+                // public inputs, i.e. cm_f[j] == public_inputs[j] as a constant-coeff ring element.
+                const EXPOSE: usize = 8;
+                if l == 0 && j < EXPOSE && public_input_vars.len() >= EXPOSE && kappa >= EXPOSE {
+                    let pv_ring = scalar_var_to_ringvars::<R>(&mut b, public_input_vars[j]);
+                    ring_eq::<BF<R>>(&mut b, &rv, &pv_ring);
+                }
             }
             for j in 0..kappa {
                 let rv = ring_to_ringvars::<R>(&mut b, &cmc.C_Mf[j]);
