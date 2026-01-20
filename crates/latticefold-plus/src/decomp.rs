@@ -1475,16 +1475,48 @@ where
         maybe_print_rss("decomp_seeded(one_shot): after compute v0/v1");
 
         let t = Instant::now();
-        let C0 = scheme.commit(&F0).unwrap().as_ref().to_vec();
-        let C1 = {
+        let (C0, C1) = if assume_const0 {
+            if let PackedDigitVec::ConstCoeff0 { coeffs0, .. } = &F1_packed {
+                let mut out = scheme
+                    .commit_many_const_coeff_base_fast(n, 2, |j, vals| {
+                        vals[0] = F0[j].coeffs()[0];
+                        let v = coeffs0[j] as i64;
+                        vals[1] = if v >= 0 {
+                            R::BaseRing::from(v as u128)
+                        } else {
+                            -R::BaseRing::from((-v) as u128)
+                        };
+                    })
+                    .unwrap();
+                let c0 = out.remove(0).as_ref().to_vec();
+                let c1 = out.remove(0).as_ref().to_vec();
+                (c0, c1)
+            } else {
+                // F1 not const-coeff; fall back to ring path.
+                let mut out = scheme
+                    .commit_many_with(n, 2, |j, vals| {
+                        vals[0] = F0[j];
+                        let mut tmp = R::ZERO;
+                        F1_packed.fill_ring_at(j, &mut tmp);
+                        vals[1] = tmp;
+                    })
+                    .unwrap();
+                let c0 = out.remove(0).as_ref().to_vec();
+                let c1 = out.remove(0).as_ref().to_vec();
+                (c0, c1)
+            }
+        } else {
             let mut out = scheme
-                .commit_many_with(n, 1, |j, vals| {
+                .commit_many_with(n, 2, |j, vals| {
+                    vals[0] = F0[j];
                     let mut tmp = R::ZERO;
                     F1_packed.fill_ring_at(j, &mut tmp);
-                    vals[0] = tmp;
+                    vals[1] = tmp;
                 })
                 .unwrap();
-            out.remove(0).as_ref().to_vec()
+            let c0 = out.remove(0).as_ref().to_vec();
+            let c1 = out.remove(0).as_ref().to_vec();
+            (c0, c1)
         };
         if profile {
             println!(
