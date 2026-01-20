@@ -1071,6 +1071,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                         if scale == R::BaseRing::ZERO {
                                             continue;
                                         }
+                                        if shift == 0 {
+                                            if scale == R::BaseRing::ONE {
+                                                local[which][i] += aij;
+                                                continue;
+                                            }
+                                            if scale == -R::BaseRing::ONE {
+                                                local[which][i] -= aij;
+                                                continue;
+                                            }
+                                        }
                                         local[which][i] += mul_negacyclic_by_monomial::<R>(&aij, shift, scale);
                                     }
                                 }
@@ -1128,6 +1138,16 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 let (shift, scale) = mon_info[dig];
                                 if scale == R::BaseRing::ZERO {
                                     continue;
+                                }
+                                if shift == 0 {
+                                    if scale == R::BaseRing::ONE {
+                                        acc[which][i] += aij;
+                                        continue;
+                                    }
+                                    if scale == -R::BaseRing::ONE {
+                                        acc[which][i] -= aij;
+                                        continue;
+                                    }
                                 }
                                 acc[which][i] += mul_negacyclic_by_monomial::<R>(&aij, shift, scale);
                             }
