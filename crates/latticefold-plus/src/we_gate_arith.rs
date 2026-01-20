@@ -4255,9 +4255,19 @@ mod tests {
             if b_bound % 2 == 1 {
                 b_bound += 1;
             }
-            // Seeded Ajtai scheme (deterministic system parameter).
+            // Seeded Ajtai scheme (deterministic system parameter) with **prefix exposure**
+            // for statement binding in the sparse/SP1 path.
+            const EXPOSE_ROWS: usize = 8;
+            const EXPOSE_COL_OFFSET: usize = 1; // witness[0] is the shared ONE=1
             const AJTAI_SEED: [u8; 32] = [7u8; 32];
-            let scheme = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
+            let scheme = AjtaiCommitmentScheme::<RR>::seeded_with_exposed_prefix(
+                b"lf_plus_ajtai",
+                AJTAI_SEED,
+                kappa,
+                n,
+                EXPOSE_ROWS,
+                EXPOSE_COL_OFFSET,
+            );
 
             // Satisfiable const-coeff R1CS (base ring):
             // Use identity A=B=C so constraints are z_i^2 - z_i = 0, satisfied by boolean witness.
@@ -4267,11 +4277,17 @@ mod tests {
                 B: SparseMatrix::identity(n),
                 C: SparseMatrix::identity(n),
             };
+            let bind_prefix = sp1_digest_bits
+                .get(0..EXPOSE_ROWS)
+                .expect("need at least 8 public inputs for prefix binding");
             let f0: Arc<Vec<BR>> = Arc::new(
                 (0..n)
                     .map(|i| {
                         if i == 0 {
                             BR::ONE
+                        } else if (EXPOSE_COL_OFFSET..EXPOSE_COL_OFFSET + EXPOSE_ROWS).contains(&i) {
+                            // Make the exposed witness prefix equal the statement public inputs.
+                            bind_prefix[i - EXPOSE_COL_OFFSET]
                         } else {
                             BR::from((rng.next_u64() & 1) as u64)
                         }
@@ -4313,7 +4329,11 @@ mod tests {
             }
             proof
                 .cmproof
-                .verify_with_mlen(m0.len(), &mut rec)
+                .verify_with_mlen(
+                    m0.len(),
+                    &mut rec,
+                    bind_prefix,
+                )
                 .expect("cm verify");
             let trace = rec.trace().clone();
             eprintln!("[test_large_trace] plus.verify(record): {:?}", t1.elapsed());
@@ -4527,15 +4547,16 @@ mod tests {
         // Choose small-but-valid parameters for the internal range-check/CM machinery.
         //
         // IMPORTANT: `rgchk` digit decomposition will panic if `k` is too small for the chosen base,
-        // so we use the production-style choice `decomp_b = d/2` and pick ℓ = ceil(log_{d'} q).
-        let kappa = 1usize;
+        // so we use the production-style choice `decomp_b = d/2`.
+        //
+        // For statement binding coverage in this small test, we enable Ajtai prefix exposure:
+        // require kappa >= 8. To keep `n` small, we pick a small ℓ (still power-of-two).
+        let kappa = 8usize; // 8 exposed rows (identity block)
         let k = 1usize;
         let d = RR::dimension();
         let d_prime = d / 2;
-        let lnq = (BR::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
-        // Pow2-friendly: we round ℓ up so WE can use the fast factored `t(z)` path.
-        let ell_raw = (lnq / (d_prime as f64).ln()).ceil() as usize;
-        let ell = ell_raw.next_power_of_two();
+        // Small, power-of-two ℓ to keep the test fast (and >=4 to avoid decomposition panics).
+        let ell = 4usize;
 
         let tau_unpadded_len = kappa * (k * d) * ell * d;
         let n = tau_unpadded_len.next_power_of_two();
@@ -4549,9 +4570,16 @@ mod tests {
             digest32_to_bits_field::<BF0>(d)
         };
 
-        // Seeded Ajtai scheme (deterministic system parameter).
+        // Seeded Ajtai scheme (deterministic system parameter) with prefix exposure.
         const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
-        let ajtai = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
+        let ajtai = AjtaiCommitmentScheme::<RR>::seeded_with_exposed_prefix(
+            b"lf_plus_ajtai",
+            AJTAI_SEED,
+            kappa,
+            n,
+            8,
+            1, // expose witness cols 1..=8 (col0 is ONE)
+        );
 
         // Trivial satisfiable R1CS: A=B=C=0, so (Az)*(Bz) - Cz = 0 for any witness.
         let zero_rows: Vec<Vec<(BR, usize)>> = vec![Vec::new(); n];
@@ -4560,10 +4588,21 @@ mod tests {
         let c = SparseMatrix::<BR> { nrows: n, ncols: n, coeffs: zero_rows };
         let r1cs = R1CS::<BR> { l: 0, A: a, B: b, C: c };
 
-        // Constant-coeff witness prefix. Keep values tiny; the protocol is still well-defined.
+        // Constant-coeff witness prefix, with the exposed coordinates matching the statement prefix.
+        let bind_prefix: &[BF0] = public_inputs
+            .get(0..8)
+            .expect("need at least 8 public inputs for prefix binding");
         let f0: Arc<Vec<BR>> = Arc::new(
             (0..n)
-                .map(|i| if i == 0 { BR::ONE } else { BR::ZERO })
+                .map(|i| {
+                    if i == 0 {
+                        BR::ONE
+                    } else if (1..=8).contains(&i) {
+                        bind_prefix[i - 1]
+                    } else {
+                        BR::ZERO
+                    }
+                })
                 .collect(),
         );
 
@@ -4634,7 +4673,11 @@ mod tests {
         }
         proof
             .cmproof
-            .verify_with_mlen(m0.len(), &mut rec)
+            .verify_with_mlen(
+                m0.len(),
+                &mut rec,
+                bind_prefix,
+            )
             .expect("cm verify (record)");
         let trace = rec.trace().clone();
 

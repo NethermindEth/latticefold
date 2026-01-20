@@ -2373,18 +2373,6 @@ where
         &self,
         mlen: usize,
         transcript: &mut impl Transcript<R>,
-    ) -> Result<ComX<R>, SumCheckError<R>> {
-        self.verify_with_mlen_and_exposed_prefix(mlen, transcript, &[])
-    }
-
-    /// Verify, additionally enforcing exposed-prefix statement binding on `cm_f`.
-    ///
-    /// See `rgchk::Dcom::verify_with_exposed_prefix`.
-    #[inline]
-    pub fn verify_with_mlen_and_exposed_prefix(
-        &self,
-        mlen: usize,
-        transcript: &mut impl Transcript<R>,
         expected_prefix: &[R::BaseRing],
     ) -> Result<ComX<R>, SumCheckError<R>> {
         let k = self.dcom.dparams.k;
@@ -2399,7 +2387,7 @@ where
         // The specific `SumCheckError` variant is not semantically important here; callers
         // only require an error to reject the proof.
         self.dcom
-            .verify_with_exposed_prefix(transcript, expected_prefix)
+            .verify(transcript, expected_prefix)
             .map_err(|_e| SumCheckError::MaxDegreeExceeded)?;
 
         let s = (0..3)
@@ -2598,7 +2586,7 @@ where
         M: &[Arc<SparseMatrix<R>>],
         transcript: &mut impl Transcript<R>,
     ) -> Result<ComX<R>, SumCheckError<R>> {
-        self.verify_with_mlen(M.len(), transcript)
+        self.verify_with_mlen(M.len(), transcript, &[])
     }
 
     pub fn x(&self, s: &[R], ro: Vec<(R, R)>) -> ComX<R> {

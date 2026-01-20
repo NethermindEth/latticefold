@@ -59,7 +59,7 @@ type F = <R as PolyRing>::BaseRing;
 // - `EXPECTED_R1LF_DIGEST_HEX`: digest of the SP1 R1LF instance (shape id)
 // - `EXPECTED_VK_HASH_HEX`: SP1 verifier/program id (bytes32_raw)
 const EXPECTED_R1LF_DIGEST_HEX: &str =
-    "0x1d5fa6fcd7ec8246f73714190327d203592e08a86d9feb510eba0d3c3c02ecce";
+    "0x8140ed4551ea30286f5b81ac642a5c82b337e12864274d62d422a4ad631d096d";
 const EXPECTED_VK_HASH_HEX: &str =
     "0x004cda927463a9cda648d01028f3de6b4d4ff3135683772508de859c42fe6a08";
 
@@ -448,13 +448,14 @@ Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP
     for lp in &proof.lproof {
         lp.verify(&mut rec);
     }
+    let bind_prefix = public_inputs
+        .get(0..8)
+        .expect("expected at least 8 statement public inputs for Ajtai prefix exposure");
     proof.cmproof
-        .verify_with_mlen_and_exposed_prefix(
+        .verify_with_mlen(
             m0.len(),
             &mut rec,
-            // Bind the first 8 statement public inputs via Ajtai prefix exposure.
-            // (If fewer are present, skip the check.)
-            public_inputs.get(0..8).unwrap_or(&[]),
+            bind_prefix,
         )
         .expect("cm proof verify");
     println!("  PlusVerifier::verify(record trace): {:?}", t_verify_record.elapsed());

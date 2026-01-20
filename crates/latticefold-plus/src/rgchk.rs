@@ -611,10 +611,6 @@ impl<R: CoeffRing> Dcom<R>
 where
     R::BaseRing: Zq,
 {
-    pub fn verify(&self, transcript: &mut impl Transcript<R>) -> Result<(), RangeCheckError<R>> {
-        self.verify_with_exposed_prefix(transcript, &[])
-    }
-
     /// Verify, additionally enforcing a small exposed-prefix binding on the Ajtai commitment surface.
     ///
     /// When `expected_prefix` is non-empty, we require (for the **first** instance only):
@@ -625,7 +621,7 @@ where
     /// This is intended for the SP1 streamed regime where the first few witness coordinates are
     /// statement-defining public inputs (e.g. a digest), and the Ajtai scheme is configured with
     /// prefix exposure (identity block) so these values are readable from `cm_f`.
-    pub fn verify_with_exposed_prefix(
+    pub fn verify(
         &self,
         transcript: &mut impl Transcript<R>,
         expected_prefix: &[R::BaseRing],
@@ -2372,7 +2368,7 @@ mod tests {
         let dcom = rg.range_check(&Vec::<Arc<SparseMatrix<R>>>::new(), &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        dcom.verify(&mut ts).unwrap();
+        dcom.verify(&mut ts, &[]).unwrap();
     }
 
     #[test]
@@ -2416,6 +2412,6 @@ mod tests {
         let dcom = rg.range_check(&M, &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        dcom.verify(&mut ts).unwrap();
+        dcom.verify(&mut ts, &[]).unwrap();
     }
 }
