@@ -1657,6 +1657,14 @@ where
 
     let mut absorb_flat: Vec<usize> = Vec::new();
 
+    // Public inputs are absorbed *before* proof verification begins (optional when the overall
+    // verifier has already absorbed them earlier in the transcript and `ops_offset` starts later).
+    if include_public_inputs_in_absorb {
+        for &v in &public_input_vars {
+            absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v);
+        }
+    }
+
     // (Fiat–Shamir): commit-before-challenge.
     //
     // Dcom verification now absorbs the witness commitments before running `Out::verify`,
@@ -1701,13 +1709,6 @@ where
                 let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_mtau[j]);
                 absorb_flat.extend_from_slice(&rv.coeffs);
             }
-        }
-    }
-    // Public inputs absorbed before verification begins (optional when the overall verifier
-    // has already absorbed them earlier in the transcript).
-    if include_public_inputs_in_absorb {
-    for &v in &public_input_vars {
-        absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v);
         }
     }
     // Sumcheck parameter block absorbs.
