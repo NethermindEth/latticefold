@@ -3101,7 +3101,7 @@ where
                 &proof.cmproof.dcom,
                 trace,
                 params,
-                &[], // public inputs absorbed before the overall verifier begins
+                public_inputs, // statement public inputs (do NOT re-absorb in this segment)
                 cm_ops_offset,
                 cm_squeezed_field_offset,
                 false, // include_public_inputs_in_absorb
@@ -3468,9 +3468,14 @@ where
     //
     // In the full Plus verifier transcript, statement public inputs (e.g. SP1 digest) are absorbed
     // *before* any Π_lin / Cm verification begins. The embedded Dcom-prefix gadget therefore
-    // must **not** re-absorb them, and we build it with `public_inputs = []`.
-    if !dcom_wiring.public_input_vars.is_empty() {
-        return Err("plus: expected no extra public inputs in dcom prefix".to_string());
+    // must **not** re-absorb them (we pass `include_public_inputs_in_absorb=false`), but we
+    // still allocate them as local vars so we can enforce statement-binding constraints
+    // (e.g. exposed-prefix checks) and glue them to the circuit public inputs.
+    if pub_input_vars.len() != dcom_wiring.public_input_vars.len() {
+        return Err("plus: public input glue length mismatch (dcom prefix)".to_string());
+    }
+    for (pv, dv) in pub_input_vars.iter().zip(dcom_wiring.public_input_vars.iter()) {
+        glue.push((1, *pv, 4, *dv));
     }
 
     // Compute the absorb-op count in the Cm-prefix segment (from cm_ops_offset until first SqueezeBytes).
