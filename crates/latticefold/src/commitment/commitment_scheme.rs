@@ -965,24 +965,22 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
         };
 
         #[inline]
-        fn mul_negacyclic_by_monomial<Rr>(
+        fn add_mul_negacyclic_by_monomial_in_place<Rr>(
+            acc: &mut Rr,
             a: &Rr,
             shift: usize,
             scale: Rr::BaseRing,
-        ) -> Rr
-        where
-            Rr: PolyRing + From<Vec<Rr::BaseRing>>,
+        ) where
+            Rr: PolyRing,
             Rr::BaseRing: Ring + Copy,
         {
             if scale == Rr::BaseRing::ZERO {
-                return Rr::ZERO;
+                return;
             }
             let ac = a.coeffs();
+            let out = acc.coeffs_mut();
             let d = ac.len();
-            if shift == 0 && scale == Rr::BaseRing::ONE {
-                return *a;
-            }
-            let mut out = vec![Rr::BaseRing::ZERO; d];
+            debug_assert_eq!(out.len(), d);
             for i in 0..d {
                 let v = ac[i] * scale;
                 if v == Rr::BaseRing::ZERO {
@@ -996,7 +994,6 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                     out[j - d] -= v;
                 }
             }
-            out.into()
         }
 
         match &self.matrix {
@@ -1071,7 +1068,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                         if scale == R::BaseRing::ZERO {
                                             continue;
                                         }
-                                        local[which][i] += mul_negacyclic_by_monomial::<R>(&aij, shift, scale);
+                                        add_mul_negacyclic_by_monomial_in_place::<R>(
+                                            &mut local[which][i],
+                                            &aij,
+                                            shift,
+                                            scale,
+                                        );
                                     }
                                 }
                                 (local, scratch, prefix)
@@ -1129,7 +1131,12 @@ impl<R: Ring> AjtaiCommitmentScheme<R> {
                                 if scale == R::BaseRing::ZERO {
                                     continue;
                                 }
-                                acc[which][i] += mul_negacyclic_by_monomial::<R>(&aij, shift, scale);
+                                add_mul_negacyclic_by_monomial_in_place::<R>(
+                                    &mut acc[which][i],
+                                    &aij,
+                                    shift,
+                                    scale,
+                                );
                             }
                         }
                     }
