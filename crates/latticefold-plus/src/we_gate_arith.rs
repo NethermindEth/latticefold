@@ -3928,16 +3928,17 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
 
         let dparams = DecompParameters { b, k, l: ell };
-        let mut rng = ark_std::test_rng();
-        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
+        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        f[0] = RR::from(public_inputs[0]);
+        let mut A = Matrix::<RR>::zero(kappa, n);
+        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         // Build proof + trace, with a statement public input absorbed first.
-        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
         let (_com, proof) = cm.prove(&M, &public_inputs, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
@@ -3993,15 +3994,16 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
 
         let dparams = DecompParameters { b, k, l: ell };
-        let mut rng = ark_std::test_rng();
-        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
+        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        f[0] = RR::from(public_inputs[0]);
+        let mut A = Matrix::<RR>::zero(kappa, n);
+        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
-        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
         let (_com, proof) = cm.prove(&M, &public_inputs, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
@@ -4064,9 +4066,11 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
 
         let dparams = DecompParameters { b, k, l: ell };
-        let mut rng = ark_std::test_rng();
-        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        // Bind the first public input to the exposed commitment prefix.
+        f[0] = RR::from(sp1_digest_bits[0]);
+        let mut A = Matrix::<RR>::zero(kappa, n);
+        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
