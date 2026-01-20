@@ -1475,32 +1475,16 @@ where
         maybe_print_rss("decomp_seeded(one_shot): after compute v0/v1");
 
         let t = Instant::now();
-        // Fast path: if `F0` is constant-coefficient, avoid full ring multiplication.
-        let C0 = scheme.commit_const_coeff_fast(&F0).unwrap().as_ref().to_vec();
-        let C1 = match &F1_packed {
-            PackedDigitVec::ConstCoeff0 { coeffs0, .. } => {
-                let mut out = scheme
-                    .commit_many_const_coeff_base_fast(n, 1, |j, vals| {
-                        let v = coeffs0[j] as i64;
-                        vals[0] = if v >= 0 {
-                            R::BaseRing::from(v as u128)
-                        } else {
-                            -R::BaseRing::from((-v) as u128)
-                        };
-                    })
-                    .unwrap();
-                out.remove(0).as_ref().to_vec()
-            }
-            PackedDigitVec::Full { .. } => {
-                let mut out = scheme
-                    .commit_many_with(n, 1, |j, vals| {
-                        let mut tmp = R::ZERO;
-                        F1_packed.fill_ring_at(j, &mut tmp);
-                        vals[0] = tmp;
-                    })
-                    .unwrap();
-                out.remove(0).as_ref().to_vec()
-            }
+        let C0 = scheme.commit(&F0).unwrap().as_ref().to_vec();
+        let C1 = {
+            let mut out = scheme
+                .commit_many_with(n, 1, |j, vals| {
+                    let mut tmp = R::ZERO;
+                    F1_packed.fill_ring_at(j, &mut tmp);
+                    vals[0] = tmp;
+                })
+                .unwrap();
+            out.remove(0).as_ref().to_vec()
         };
         if profile {
             println!(
