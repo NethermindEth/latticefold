@@ -150,7 +150,11 @@ where
         }
     }
 
-    pub fn prove_sparse_base<L>(&mut self, comp: &[L]) -> PlusProof<R, L::Proof>
+    pub fn prove_sparse_base<L>(
+        &mut self,
+        comp: &[L],
+        public_inputs: &[R::BaseRing],
+    ) -> PlusProof<R, L::Proof>
     where
         L: Linearize<R>,
         R::BaseRing: PrimeField,
@@ -165,9 +169,9 @@ where
         });
 
         maybe_print_rss("PlusProverSparseBase::prove_sparse_base (after linearize)");
-        let (linb2, cmproof) =
-            self.acc
-                .mlin_seeded_base(&self.scheme, &self.M0, &mut self.transcript);
+        let (linb2, cmproof) = self
+            .acc
+            .mlin_seeded_base(&self.scheme, &self.M0, public_inputs, &mut self.transcript);
         maybe_print_rss("PlusProverSparseBase::prove_sparse_base (after mlin_seeded)");
 
         let decomp = crate::decomp::DecompBase {

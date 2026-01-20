@@ -96,6 +96,7 @@ where
     pub fn prove(
         &self,
         M: &[Arc<SparseMatrix<R>>],
+        public_inputs: &[R::BaseRing],
         transcript: &mut impl Transcript<R>,
     ) -> (Com<R>, CmProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
@@ -124,6 +125,10 @@ where
                 self.rg.nvars,
                 M.len(),
             );
+        }
+
+        for &v in public_inputs {
+            transcript.absorb_field_element(&v);
         }
 
         let t = Instant::now();
@@ -389,6 +394,7 @@ where
     pub fn prove_base(
         &self,
         M0: &[Arc<SparseMatrix<R::BaseRing>>],
+        public_inputs: &[R::BaseRing],
         transcript: &mut impl Transcript<R>,
     ) -> (Com<R>, CmProof<R>) {
         let profile = std::env::var("LF_PLUS_PROFILE").ok().as_deref() == Some("1");
@@ -417,6 +423,10 @@ where
                 self.rg.nvars,
                 M0.len(),
             );
+        }
+
+        for &v in public_inputs {
+            transcript.absorb_field_element(&v);
         }
 
         let t = Instant::now();
@@ -2714,7 +2724,7 @@ mod tests {
         let cm = Cm { rg };
 
         let mut ts = PoseidonTranscript::empty::<PC>();
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &[], &mut ts);
 
         let mut ts = PoseidonTranscript::empty::<PC>();
         proof.verify(&M, &mut ts).unwrap();

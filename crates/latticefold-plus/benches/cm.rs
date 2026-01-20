@@ -84,7 +84,7 @@ fn setup_proof(L: usize, witness_size: usize, k: usize, kappa: usize) -> (Cm<R>,
     let M = create_test_m_matrix(witness_size);
 
     let mut ts = create_transcript();
-    let (_com, proof) = cm.prove(&M, &mut ts);
+    let (_com, proof) = cm.prove(&M, &[], &mut ts);
 
     let mut verify_ts = create_transcript();
     proof

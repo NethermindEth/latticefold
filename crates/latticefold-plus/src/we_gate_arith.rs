@@ -3939,10 +3939,7 @@ mod tests {
         // Build proof + trace, with a statement public input absorbed first.
         let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        for b in &public_inputs {
-            ts.absorb_field_element(b);
-        }
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &public_inputs, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
         for b in &public_inputs {
             rec.absorb_field_element(b);
@@ -4006,10 +4003,7 @@ mod tests {
 
         let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        for b in &public_inputs {
-            ts.absorb_field_element(b);
-        }
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &public_inputs, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
         for b in &public_inputs {
             rec.absorb_field_element(b);
@@ -4079,7 +4073,7 @@ mod tests {
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &[], &mut ts);
 
         // Record.
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
@@ -4130,10 +4124,7 @@ mod tests {
 
         // Prove with digest absorbed before proving.
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        for b in &sp1_digest_bits {
-            ts.absorb_field_element(b);
-        }
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &sp1_digest_bits, &mut ts);
 
         // Record verifier trace with the same digest absorbed before verify.
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
@@ -4356,10 +4347,7 @@ mod tests {
                 pparams.clone(),
                 transcript,
             );
-            for b in sp1_digest_bits {
-                prover.transcript.absorb_field_element(b);
-            }
-            let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
+            let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs), &sp1_digest_bits);
             eprintln!("[test_large_trace] plus.prove: {:?}", t0.elapsed());
 
             let t1 = std::time::Instant::now();
@@ -4701,10 +4689,7 @@ mod tests {
             pparams.clone(),
             PoseidonTranscript::empty::<PCF>(),
         );
-        for b in &public_inputs {
-            prover.transcript.absorb_field_element(b);
-        }
-        let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
+        let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs), &public_inputs);
 
         // Record verifier trace (mirror the SP1 oneproof harness).
         let poseidon_cfg = PCF::get_poseidon_config();

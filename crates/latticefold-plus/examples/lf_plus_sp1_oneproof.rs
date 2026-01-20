@@ -429,14 +429,11 @@ Re-export the R1LF after enabling CircuitV2CommitPublicValues handling in the SP
         pparams.clone(),
         latticefold_plus::transcript::PoseidonTranscript::empty::<PC>(),
     );
-    for b in &public_inputs {
-        prover.transcript.absorb_field_element(b);
-    }
     println!("  setup full LF+: {:?}", t_setup.elapsed());
     maybe_print_rss("after setup full LF+");
 
     let t_prove = Instant::now();
-    let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
+    let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs), &public_inputs);
     println!("  PlusProverSparseBase::prove_sparse_base: {:?}", t_prove.elapsed());
     maybe_print_rss("after prove_sparse_base");
 
