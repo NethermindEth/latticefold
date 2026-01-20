@@ -3936,10 +3936,17 @@ mod tests {
         let cm = Cm { rg };
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
-        // Build proof + trace.
+        // Build proof + trace, with a statement public input absorbed first.
+        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
+        for b in &public_inputs {
+            ts.absorb_field_element(b);
+        }
         let (_com, proof) = cm.prove(&M, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        for b in &public_inputs {
+            rec.absorb_field_element(b);
+        }
         proof.verify(&M, &mut rec).expect("cm verify");
         let trace = rec.trace().clone();
 
@@ -3957,7 +3964,7 @@ mod tests {
         };
         let poseidon_cfg = PCF::get_poseidon_config();
 
-        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &public_inputs, &proof, M.len())
                 .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
@@ -3997,9 +4004,16 @@ mod tests {
         let cm = Cm { rg };
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
+        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
+        for b in &public_inputs {
+            ts.absorb_field_element(b);
+        }
         let (_com, proof) = cm.prove(&M, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        for b in &public_inputs {
+            rec.absorb_field_element(b);
+        }
         proof.verify(&M, &mut rec).expect("cm verify");
         let trace = rec.trace().clone();
 
@@ -4017,7 +4031,7 @@ mod tests {
         };
         let poseidon_cfg = PCF::get_poseidon_config();
 
-        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &public_inputs, &proof, M.len())
                 .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
