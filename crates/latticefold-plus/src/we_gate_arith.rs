@@ -18,6 +18,62 @@ use symphony::dpp_poseidon::{
 use symphony::dpp_sumcheck::Dr1csBuilder;
 use symphony::dpp_sumcheck::{sumcheck_verify_degree3, RingVars};
 
+// -----------------------------------------------------------------------------
+// Optional op-count instrumentation (for tiny-field port estimates).
+//
+// Enabled by setting `LFP_WE_GATE_OPMIX=1` (same switch as the coarse op-mix print).
+// -----------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Default)]
+struct CmMathOpCounts {
+    ring_add: u64,
+    ring_sub: u64,
+    ring_scale: u64,
+    ring_mul_negacyclic: u64,
+    ring_eq: u64,
+    lc_to_var: u64,
+    enforce_lc_eq_var: u64,
+    enforce_bool: u64,
+    scalar_add: u64,
+    scalar_sub: u64,
+    scalar_mul: u64,
+    scalar_mul_const: u64,
+    scalar_sub_const: u64,
+    scalar_pow_table: u64,
+    eq_eval_vars: u64,
+    short_challenge_from_bytes: u64,
+    ct_psi_mul_ring: u64,
+}
+
+thread_local! {
+    static CM_COUNTING: std::cell::Cell<bool> = std::cell::Cell::new(false);
+    static CM_COUNTS: std::cell::RefCell<CmMathOpCounts> = std::cell::RefCell::new(CmMathOpCounts::default());
+}
+
+#[inline]
+fn cm_counting_on() -> bool {
+    CM_COUNTING.with(|c| c.get())
+}
+
+#[inline]
+fn cm_bump(f: fn(&mut CmMathOpCounts)) {
+    if !cm_counting_on() {
+        return;
+    }
+    CM_COUNTS.with(|rc| {
+        let mut g = rc.borrow_mut();
+        f(&mut g);
+    });
+}
+
+fn cm_counts_reset() {
+    CM_COUNTS.with(|rc| *rc.borrow_mut() = CmMathOpCounts::default());
+}
+
+fn cm_counts_take() -> CmMathOpCounts {
+    CM_COUNTS.with(|rc| rc.borrow().clone())
+}
+
 /// Output of WE-gate arithmetization (single merged sparse dR1CS instance).
 #[derive(Clone, Debug)]
 pub struct WeDr1csOutput<F: PrimeField> {
@@ -154,6 +210,7 @@ where
 }
 
 fn ring_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    cm_bump(|c| c.ring_add += 1);
     assert_eq!(x.d(), y.d());
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
@@ -170,6 +227,7 @@ fn ring_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) 
 }
 
 fn ring_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    cm_bump(|c| c.ring_sub += 1);
     assert_eq!(x.d(), y.d());
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
@@ -186,6 +244,7 @@ fn ring_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) 
 }
 
 fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) -> RingVars {
+    cm_bump(|c| c.ring_scale += 1);
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
         let val = b.assignment[x.coeffs[i]] * b.assignment[s];
@@ -197,6 +256,7 @@ fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) ->
 }
 
 fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    cm_bump(|c| c.ring_mul_negacyclic += 1);
     // Negacyclic convolution mod (X^d + 1).
     let d = x.d();
     assert_eq!(d, y.d());
@@ -229,6 +289,7 @@ fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: 
 }
 
 fn ring_eq<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) {
+    cm_bump(|c| c.ring_eq += 1);
     assert_eq!(x.d(), y.d());
     for i in 0..x.d() {
         b.enforce_lc_times_one_eq_const(vec![(F::ONE, x.coeffs[i]), (-F::ONE, y.coeffs[i])]);
@@ -236,6 +297,7 @@ fn ring_eq<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) {
 }
 
 fn lc_to_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>) -> usize {
+    cm_bump(|c| c.lc_to_var += 1);
     let val = lc
         .iter()
         .fold(F::ZERO, |acc, (c, idx)| acc + (*c * b.assignment[*idx]));
@@ -246,10 +308,12 @@ fn lc_to_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>) -> usi
 }
 
 fn enforce_lc_eq_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>, v: usize) {
+    cm_bump(|c| c.enforce_lc_eq_var += 1);
     b.add_constraint(lc, vec![(F::ONE, b.one())], vec![(F::ONE, v)]);
 }
 
 fn enforce_bool<F: PrimeField>(b: &mut Dr1csBuilder<F>, bit: usize) {
+    cm_bump(|c| c.enforce_bool += 1);
     // bit*(bit-1)=0
     b.add_constraint(
         vec![(F::ONE, bit)],
@@ -342,6 +406,7 @@ fn short_challenge_from_bytes<F: PrimeField>(
     lambda: usize,
     ring_dim: usize,
 ) -> RingVars {
+    cm_bump(|c| c.short_challenge_from_bytes += 1);
     debug_assert_eq!(bytes.len(), ring_dim);
     // Matches `utils::short_challenge`: u = 2^(lambda / d).
     let exp = (lambda / ring_dim) as u32;
@@ -525,6 +590,7 @@ fn scalar_one_minus<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize) -> usize {
 }
 
 fn scalar_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usize {
+    cm_bump(|c| c.scalar_add += 1);
     let v = b.new_var(b.assignment[x] + b.assignment[y]);
     b.add_constraint(
         vec![(F::ONE, x), (F::ONE, y)],
@@ -535,12 +601,14 @@ fn scalar_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usi
 }
 
 fn scalar_mul_const<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, c: F) -> usize {
+    cm_bump(|cc| cc.scalar_mul_const += 1);
     let v = b.new_var(b.assignment[x] * c);
     b.add_constraint(vec![(c, x)], vec![(F::ONE, b.one())], vec![(F::ONE, v)]);
     v
 }
 
 fn scalar_pow_table<F: PrimeField>(b: &mut Dr1csBuilder<F>, base: usize, max_exp: usize) -> Vec<usize> {
+    cm_bump(|c| c.scalar_pow_table += 1);
     let mut pows = Vec::with_capacity(max_exp + 1);
     let one = b.one();
     let v0 = b.new_var(F::ONE);
@@ -1284,6 +1352,7 @@ where
 
 /// Evaluate eq(c, r) where both are vectors of scalar (BF) variables.
 fn eq_eval_vars<F: PrimeField>(b: &mut Dr1csBuilder<F>, c: &[usize], r: &[usize]) -> usize {
+    cm_bump(|cc| cc.eq_eval_vars += 1);
     assert_eq!(c.len(), r.len());
     let mut acc = b.new_var(F::ONE);
     b.enforce_var_eq_const(acc, F::ONE);
@@ -1411,6 +1480,7 @@ where
 }
 
 fn scalar_sub_const<F: PrimeField>(b: &mut Dr1csBuilder<F>, r: usize, c: F) -> usize {
+    cm_bump(|cc| cc.scalar_sub_const += 1);
     let val = b.assignment[r] - c;
     let v = b.new_var(val);
     // v = r - c
@@ -1423,6 +1493,7 @@ fn scalar_sub_const<F: PrimeField>(b: &mut Dr1csBuilder<F>, r: usize, c: F) -> u
 }
 
 fn scalar_mul<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usize {
+    cm_bump(|cc| cc.scalar_mul += 1);
     let val = b.assignment[x] * b.assignment[y];
     let v = b.new_var(val);
     b.enforce_mul(x, y, v);
@@ -1430,6 +1501,7 @@ fn scalar_mul<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usi
 }
 
 fn scalar_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usize {
+    cm_bump(|c| c.scalar_sub += 1);
     let val = b.assignment[x] - b.assignment[y];
     let v = b.new_var(val);
     // v = x - y
@@ -1514,6 +1586,7 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
+    cm_bump(|c| c.ct_psi_mul_ring += 1);
     // Compute ct(psi * x) as a BF-linear form in the coefficients of x.
     // This avoids implementing full ring multiplication in-circuit.
     let d = R::dimension();
@@ -3068,7 +3141,7 @@ where
         (dcom_inst, dcom_asg, dcom_wiring),
         (coin_inst, coin_asg, coin_wiring, op_wiring),
         (field_inst, field_asg, field_wiring_local),
-        (cm_inst, cm_asg, cm_wiring),
+        (cm_inst, cm_asg, cm_wiring, cm_counts),
         (decomp_inst, decomp_asg),
     ) = {
         let pose_build = || {
@@ -3209,7 +3282,12 @@ where
         };
 
         let cm_build = || {
-            cm_verifier_math_dr1cs::<R>(
+            let do_count = std::env::var("LFP_WE_GATE_OPMIX").is_ok();
+            if do_count {
+                cm_counts_reset();
+                CM_COUNTING.with(|c| c.set(true));
+            }
+            let out = cm_verifier_math_dr1cs::<R>(
                 trace,
                 &proof.cmproof,
                 k,
@@ -3217,7 +3295,12 @@ where
                 nvars,
                 mlen_mats,
                 cm_ops_offset,
-            )
+            );
+            if do_count {
+                CM_COUNTING.with(|c| c.set(false));
+            }
+            let counts = if do_count { cm_counts_take() } else { CmMathOpCounts::default() };
+            out.map(|(inst, asg, wiring)| (inst, asg, wiring, counts))
         };
 
         let decomp_build = || {
@@ -3655,6 +3738,26 @@ where
         eprintln!(
             "  dr1cs constraints by part: poseidon={} params={} lin={} stmt_absorb={} dcom={} cm_coins={} cm_fields={} cm_math={} decomp={}",
             c_pose, c_params, c_lin, c_stmt, c_dcom, c_coin, c_field, c_cm, c_decomp
+        );
+        eprintln!(
+            "  cm_math op counts: ring_add={} ring_sub={} ring_scale={} ring_mul={} ring_eq={} lc_to_var={} enforce_lc_eq_var={} enforce_bool={} scalar_add={} scalar_sub={} scalar_mul={} scalar_mul_const={} scalar_sub_const={} scalar_pow_table={} eq_eval_vars={} short_chal_from_bytes={} ct_psi_mul_ring={}",
+            cm_counts.ring_add,
+            cm_counts.ring_sub,
+            cm_counts.ring_scale,
+            cm_counts.ring_mul_negacyclic,
+            cm_counts.ring_eq,
+            cm_counts.lc_to_var,
+            cm_counts.enforce_lc_eq_var,
+            cm_counts.enforce_bool,
+            cm_counts.scalar_add,
+            cm_counts.scalar_sub,
+            cm_counts.scalar_mul,
+            cm_counts.scalar_mul_const,
+            cm_counts.scalar_sub_const,
+            cm_counts.scalar_pow_table,
+            cm_counts.eq_eval_vars,
+            cm_counts.short_challenge_from_bytes,
+            cm_counts.ct_psi_mul_ring
         );
         eprintln!(
             "  dr1cs constraints subtotal(parts)={}",
