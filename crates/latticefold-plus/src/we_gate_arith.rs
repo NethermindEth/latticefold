@@ -3062,7 +3062,7 @@ where
 
     // Build independent parts in parallel (they only get glued/merged later).
     let (
-        (pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb),
+        (pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb, pose_permutes),
         (params_inst, params_asg, params_vars, pub_input_vars),
         (lin_inst, lin_asg, lin_ch_vars, lin_absorb_flat),
         (dcom_inst, dcom_asg, dcom_wiring),
@@ -3072,10 +3072,11 @@ where
         (decomp_inst, decomp_asg),
     ) = {
         let pose_build = || {
-            let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
+            let (mut pose_inst, pose_asg, replay, _byte_wit, pose_wiring, byte_wiring) =
                 poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
                     .map_err(|e| format!("poseidon arith failed: {e}"))?;
             enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
+            let pose_permutes = replay.permutes.len();
 
             // Global reabsorb flags for absorb-op indexing.
             let mut is_reabsorb = vec![false; pose_wiring.absorb_ranges.len()];
@@ -3096,7 +3097,14 @@ where
                     }
                 }
             }
-            Ok::<_, String>((pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb))
+            Ok::<_, String>((
+                pose_inst,
+                pose_asg,
+                pose_wiring,
+                byte_wiring,
+                is_reabsorb,
+                pose_permutes,
+            ))
         };
 
         let params_build = || {
@@ -3579,6 +3587,76 @@ where
         glue.push((0, *pv, 7, *cv));
     }
 
+    // Optional: print an op-mix breakdown for tiny-field porting estimates.
+    //
+    // Enable with: `LFP_WE_GATE_OPMIX=1 ...`
+    if std::env::var("LFP_WE_GATE_OPMIX").is_ok() {
+        // Poseidon trace op mix (what the transcript did).
+        let mut n_absorb = 0usize;
+        let mut absorb_elems = 0usize;
+        let mut n_sq_field = 0usize;
+        let mut sq_field_elems = 0usize;
+        let mut n_sq_bytes = 0usize;
+        let mut sq_bytes = 0usize;
+        for op in &trace.ops {
+            match op {
+                LfPoseidonTraceOp::Absorb(v) => {
+                    n_absorb += 1;
+                    absorb_elems += v.len();
+                }
+                LfPoseidonTraceOp::SqueezeField(v) => {
+                    n_sq_field += 1;
+                    sq_field_elems += v.len();
+                }
+                LfPoseidonTraceOp::SqueezeBytes { n, .. } => {
+                    n_sq_bytes += 1;
+                    sq_bytes += *n;
+                }
+            }
+        }
+
+        // Constraint mix (what the WE gate arithmetization produced), by sub-part.
+        let c_pose = pose_inst.constraints.len();
+        let c_params = params_inst.constraints.len();
+        let c_lin = lin_inst.constraints.len();
+        let c_stmt = stmt_inst.constraints.len();
+        let c_dcom = dcom_inst.constraints.len();
+        let c_coin = coin_inst.constraints.len();
+        let c_field = field_inst.constraints.len();
+        let c_cm = cm_inst.constraints.len();
+        let c_decomp = decomp_inst.constraints.len();
+
+        eprintln!("==============================================================");
+        eprintln!("LF+ WE gate op-mix (native base field) — for tiny-field estimates");
+        eprintln!(
+            "  poseidon trace: permutes={} absorb_ops={} absorb_elems={} squeeze_field_ops={} squeeze_field_elems={} squeeze_bytes_ops={} squeeze_bytes_total={}",
+            pose_permutes,
+            n_absorb,
+            absorb_elems,
+            n_sq_field,
+            sq_field_elems,
+            n_sq_bytes,
+            sq_bytes
+        );
+        eprintln!(
+            "  dr1cs constraints by part: poseidon={} params={} lin={} stmt_absorb={} dcom={} cm_coins={} cm_fields={} cm_math={} decomp={}",
+            c_pose, c_params, c_lin, c_stmt, c_dcom, c_coin, c_field, c_cm, c_decomp
+        );
+        eprintln!(
+            "  dr1cs constraints subtotal(parts)={}",
+            c_pose
+                + c_params
+                + c_lin
+                + c_stmt
+                + c_dcom
+                + c_coin
+                + c_field
+                + c_cm
+                + c_decomp
+        );
+        eprintln!("==============================================================");
+    }
+
     // Merge: (poseidon, params/public_inputs, lin, stmt_absorb, dcom, coin, field, cm, decomp)
     let parts = vec![
         (pose_inst, pose_asg),     // 0
@@ -3593,6 +3671,14 @@ where
     ];
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
+    if std::env::var("LFP_WE_GATE_OPMIX").is_ok() {
+        eprintln!(
+            "LF+ WE gate merged: nvars={} constraints={} (glue constraints={})",
+            inst.nvars,
+            inst.constraints.len(),
+            glue.len()
+        );
+    }
     let public_len = 1 + 10 + public_inputs.len();
     Ok(WeDr1csOutput {
         inst,
