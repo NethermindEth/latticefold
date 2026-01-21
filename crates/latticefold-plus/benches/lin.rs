@@ -58,7 +58,7 @@ use utils::{
 /// ensure valid R1CS satisfaction with norm bound B.
 fn setup_input(n: usize, k: usize, kappa: usize, B: usize) -> LinB<R> {
     let mut rng = bench_rng();
-    let dparams = get_validated_decomp_params(k, kappa, n);
+    let _dparams = get_validated_decomp_params(k, kappa, n);
 
     let r1cs = R1CSBuilder::new(n, k, B as u128).build_decomposed_square();
     let A = create_ajtai_matrix(kappa, n, &mut rng);

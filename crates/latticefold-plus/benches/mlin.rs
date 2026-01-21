@@ -39,6 +39,7 @@ use latticefold_plus::{
 };
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 
 #[path = "utils/mod.rs"]
 mod utils;
@@ -137,7 +138,7 @@ fn setup_proof(
 struct MultilinearFoldProver;
 
 impl ProverBenchmark for MultilinearFoldProver {
-    type Input = (Mlin<R>, Matrix<R>, Vec<SparseMatrix<R>>);
+    type Input = (Mlin<R>, Matrix<R>, Vec<Arc<SparseMatrix<R>>>);
     type Output = (LinB2<R>, latticefold_plus::cm::CmProof<R>);
     type Params = (usize, usize, usize, usize, usize);
 
@@ -211,7 +212,7 @@ impl VerifierBenchmark for MultilinearFoldVerifier {
 struct MultilinearFoldKScaling;
 
 impl ProverBenchmark for MultilinearFoldKScaling {
-    type Input = (Mlin<R>, Matrix<R>, Vec<SparseMatrix<R>>);
+    type Input = (Mlin<R>, Matrix<R>, Vec<Arc<SparseMatrix<R>>>);
     type Output = (LinB2<R>, latticefold_plus::cm::CmProof<R>);
     type Params = (usize, usize, usize, usize, usize);
 
@@ -249,7 +250,7 @@ impl ProverBenchmark for MultilinearFoldKScaling {
 struct MultilinearFoldLargeWitness;
 
 impl ProverBenchmark for MultilinearFoldLargeWitness {
-    type Input = (Mlin<R>, Matrix<R>, Vec<SparseMatrix<R>>);
+    type Input = (Mlin<R>, Matrix<R>, Vec<Arc<SparseMatrix<R>>>);
     type Output = (LinB2<R>, latticefold_plus::cm::CmProof<R>);
     type Params = (usize, usize, usize, usize, usize);
 
@@ -287,7 +288,7 @@ impl ProverBenchmark for MultilinearFoldLargeWitness {
 struct MultilinearFoldKappaScaling;
 
 impl ProverBenchmark for MultilinearFoldKappaScaling {
-    type Input = (Mlin<R>, Matrix<R>, Vec<SparseMatrix<R>>);
+    type Input = (Mlin<R>, Matrix<R>, Vec<Arc<SparseMatrix<R>>>);
     type Output = (LinB2<R>, latticefold_plus::cm::CmProof<R>);
     type Params = (usize, usize, usize, usize, usize);
 
