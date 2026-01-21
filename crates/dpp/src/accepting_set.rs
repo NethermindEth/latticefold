@@ -35,8 +35,10 @@ fn estimate_domain_size(b: &[BigInt]) -> Option<u128> {
             return None;
         }
         let r = (bound * BigInt::from(2u64)) + BigInt::one();
-        let r_u = r.to_u128()?;
-        acc = acc.checked_mul(r_u)?;
+        // If we can't represent the range size in u128, the domain is certainly enormous.
+        let r_u = r.to_u128().unwrap_or(u128::MAX);
+        // If multiplication overflows, treat as enormous.
+        acc = acc.checked_mul(r_u).unwrap_or(u128::MAX);
     }
     Some(acc)
 }
