@@ -15,7 +15,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use cyclotomic_rings::rings::GetPoseidonParams;
 
-use ark_ff::{BigInteger, Fp384, MontBackend, MontConfig, PrimeField};
+use ark_ff::{BigInteger, Field, Fp384, MontBackend, MontConfig, PrimeField};
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 
 use latticefold_plus::lin::LinearizedVerify;
@@ -75,8 +75,28 @@ fn bench_we_dpp(c: &mut Criterion) {
     let dparams = DecompParameters { b, k, l: ell };
     let mut rng = ark_std::test_rng();
 
+    // Model SP1: one public input digest (statement-defined) absorbed into the transcript *before* proving.
+    // (In production this comes from SP1 public inputs.)
+    type FSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
+    // Use a "random-looking" in-field digest (so we don't accidentally rely on small constants).
+    let sp1_public_input_digest_bits: Vec<FSmall> = {
+        let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
+        digest32_to_bits_field::<FSmall>(d)
+    };
+
     // Ajtai matrix + monomial witness matrices (identity keeps `setchk` happy).
-    let A = Matrix::<R>::rand(&mut rng, kappa, n);
+    //
+    // IMPORTANT: `build_we_dr1cs_for_plus_proof` enforces a prefix binding constraint:
+    // `cm_f[j] == public_inputs[j]` for `j < min(kappa, 8)`.
+    //
+    // For this bench we keep `kappa=1`, so we must ensure `cm_f[0]` is a constant-coeff ring
+    // element equal to `public_inputs[0]` (a digest bit in {0,1}). We do that by making the
+    // first Ajtai row expose `f[0]` directly: `A[0,0]=1`, all other entries 0.
+    let A: Matrix<R> = {
+        let mut rows = vec![vec![<R as stark_rings::Ring>::ZERO; n]; kappa];
+        rows[0][0] = <R as stark_rings::Ring>::ONE;
+        rows.into()
+    };
     let M: Vec<Arc<SparseMatrix<R>>> = vec![Arc::new(SparseMatrix::identity(n))];
 
     // Minimal Π_lin component so the transcript prefix is exercised.
@@ -86,9 +106,17 @@ fn bench_we_dpp(c: &mut Criterion) {
     let sop = R::dimension() * 128;
     let B_bound = estimate_bound(sop, 1, R::dimension(), k) + 1;
     let m = n / k;
-    let z: Vec<R> = (0..m)
+    let mut z: Vec<R> = (0..m)
         .map(|_| R::from((rng.next_u64() & 1) as u128))
         .collect();
+    // Satisfy the enforced prefix binding for this toy bench: ensure `f[0] == public_inputs[0]`.
+    // With `k=1`, the gadget decomposition leaves `f[0] == z[0]`.
+    let bit0 = if sp1_public_input_digest_bits[0] == <FSmall as Field>::ZERO {
+        0u128
+    } else {
+        1u128
+    };
+    z[0] = R::from(bit0);
     let r1cs0 = r1cs_decomposed_square(
         latticefold::arith::r1cs::R1CS::<R> {
             l: 1,
@@ -107,14 +135,6 @@ fn bench_we_dpp(c: &mut Criterion) {
     // Prover-side full Plus proof.
     let transcript = latticefold_plus::transcript::PoseidonTranscript::empty::<PC>();
     let mut prover = PlusProver::init(A.clone(), M.clone(), 1, pparams.clone(), transcript);
-    // Model SP1: one public input digest (statement-defined) absorbed into the transcript *before* proving.
-    // (In production this comes from SP1 public inputs.)
-    type FSmall = <<R as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
-    // Use a "random-looking" in-field digest (so we don't accidentally rely on small constants).
-    let sp1_public_input_digest_bits: Vec<FSmall> = {
-        let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
-        digest32_to_bits_field::<FSmall>(d)
-    };
     for b in &sp1_public_input_digest_bits {
         prover.transcript.absorb_field_element(b);
     }
