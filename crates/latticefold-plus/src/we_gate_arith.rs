@@ -4924,6 +4924,224 @@ mod tests {
         run_one("sha256->bits", &sp1_digest_bits);
     }
 
+    // Goldilocks(d=64) version of the large-trace harness, for NTT-mul cost experiments.
+    //
+    // Run with (small scaling example):
+    //   LFP_TRACE_NPOW=12 LFP_WE_GATE_OPMIX=1 LFP_WE_GATE_NTT_MUL=1 \
+    //     cargo test --release -p latticefold-plus test_large_trace_goldilocks64 --features we_gate -- --nocapture --ignored
+    #[test]
+    #[ignore]
+    fn test_large_trace_goldilocks64() {
+        use cyclotomic_rings::rings::{GetPoseidonParams, GoldilocksPoseidonConfig as PCF, GoldilocksRing64 as RR};
+        use sha2::{Digest, Sha256};
+        use rand::RngCore;
+        use stark_rings::PolyRing;
+        use stark_rings_linalg::SparseMatrix;
+
+        use crate::we_statement::digest32_to_bits_field;
+
+        #[cfg(feature = "parallel")]
+        use rayon::current_num_threads;
+
+        // Keep this harness focused on the WE gate + op-mix.
+        // (We can layer DPP back in after we have clean cost deltas.)
+
+        // Default to the historical large-scale setting (n=2^20), but allow smaller for scaling studies.
+        let n_pow: usize = std::env::var("LFP_TRACE_NPOW")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(20);
+
+        let kappa = 2usize;
+        let ell = 32usize;
+        let d = RR::dimension();
+        let b = (d / 2) as u128;
+
+        // Match SP1 oneproof-style parameter choice:
+        // - digit base is d' = d/2
+        // - choose the *minimal* k to cover centered BabyBear values, then round up to pow2
+        let p_bb: u64 = std::env::var("LFP_TRACE_PBB")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(2013265921); // BabyBear prime
+        let d_prime_u64: u64 = (d / 2) as u64;
+        fn next_power_of_two_u64(n: u64) -> u64 {
+            if n <= 1 {
+                return 1;
+            }
+            1u64 << (64 - (n - 1).leading_zeros())
+        }
+        fn min_k_for_bound(base: u64, bound: u64) -> u64 {
+            debug_assert!(base >= 2 && base % 2 == 0);
+            if bound == 0 {
+                return 1;
+            }
+            let b = base as u128;
+            let half = (base / 2) as u128;
+            let target = bound as u128;
+            let mut k: u64 = 1;
+            let mut pow: u128 = b; // b^1
+            loop {
+                let max = half.saturating_mul(pow.saturating_sub(1) / (b - 1));
+                if max >= target {
+                    return k;
+                }
+                k += 1;
+                pow = pow.saturating_mul(b);
+            }
+        }
+        let k: usize = std::env::var("LFP_TRACE_K")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or_else(|| {
+                let k_raw = min_k_for_bound(d_prime_u64, p_bb / 2);
+                next_power_of_two_u64(k_raw) as usize
+            });
+        let dparams = DecompParameters { b, k, l: ell };
+
+        // Ensure `n` is large enough for the proof's internal unpadded lengths.
+        let n_min: usize = 1usize << n_pow;
+        let tau_unpadded_len: usize = kappa * (k * d) * ell * d;
+        let n: usize = n_min.max(tau_unpadded_len).next_power_of_two();
+        let nvars = ark_std::log2(n) as usize;
+
+        type BR = <RR as PolyRing>::BaseRing;
+        type FSmall = <BR as ark_ff::Field>::BasePrimeField;
+        let sp1_digest_bits: Vec<FSmall> = {
+            let d: [u8; 32] = Sha256::digest(b"LFP_SP1_PUBLIC_INPUT_DIGEST_V1").into();
+            digest32_to_bits_field::<FSmall>(d)
+        };
+
+        let run_one = |label: &str, sp1_digest_bits: &[FSmall]| {
+            eprintln!(
+                "\n[test_large_trace_goldilocks64] case={label} n=2^{n_pow} (sparse-base prover, GoldilocksRing64)"
+            );
+            #[cfg(feature = "parallel")]
+            eprintln!("[test_large_trace_goldilocks64] rayon_threads={}", current_num_threads());
+            #[cfg(not(feature = "parallel"))]
+            eprintln!("[test_large_trace_goldilocks64] rayon_threads=DISABLED(feature=parallel)");
+
+            let mut rng = ark_std::test_rng();
+            use crate::lin::LinParameters;
+            use crate::plus::{PlusParameters, PlusProverSparseBase};
+            use crate::r1cs::ComR1CSBase;
+            use crate::utils::estimate_bound;
+            use latticefold::arith::r1cs::R1CS;
+            use latticefold::commitment::AjtaiCommitmentScheme;
+            use std::sync::Arc;
+
+            // A minimal Π_lin component so the transcript prefix is exercised.
+            let sop = RR::dimension() * 128;
+            // IMPORTANT: balanced decomposition requires an even base.
+            let mut b_bound = estimate_bound(sop, 1, d, k) + 1;
+            if b_bound % 2 == 1 {
+                b_bound += 1;
+            }
+
+            // Seeded Ajtai scheme with prefix exposure (statement binding).
+            let expose_rows: usize = 8usize.min(kappa);
+            let expose_col_offset: usize = 1; // witness[0] is the shared ONE=1
+            const AJTAI_SEED: [u8; 32] = [7u8; 32];
+            let scheme = AjtaiCommitmentScheme::<RR>::seeded_with_exposed_prefix(
+                b"lf_plus_ajtai",
+                AJTAI_SEED,
+                kappa,
+                n,
+                expose_rows,
+                expose_col_offset,
+            );
+
+            // Satisfiable const-coeff R1CS (base ring): z_i^2 - z_i = 0.
+            let r1cs0 = R1CS::<BR> {
+                l: 0,
+                A: SparseMatrix::identity(n),
+                B: SparseMatrix::identity(n),
+                C: SparseMatrix::identity(n),
+            };
+
+            let bind_prefix = sp1_digest_bits
+                .get(0..expose_rows)
+                .expect("sp1_digest_bits shorter than expose_rows");
+            let f0: Arc<Vec<BR>> = Arc::new(
+                (0..n)
+                    .map(|i| {
+                        if i == 0 {
+                            BR::ONE
+                        } else if (expose_col_offset..expose_col_offset + expose_rows).contains(&i) {
+                            bind_prefix[i - expose_col_offset]
+                        } else {
+                            BR::from((rng.next_u64() & 1) as u64)
+                        }
+                    })
+                    .collect(),
+            );
+            let cr1cs = ComR1CSBase::<RR>::from_f0_seeded_base(r1cs0, f0, 0, &scheme);
+            let m0 = cr1cs.x.matrices_arc_base();
+
+            let lin_params = LinParameters { kappa, decomp: dparams.clone() };
+            let pparams = PlusParameters { lin: lin_params, B: b_bound };
+
+            let t0 = std::time::Instant::now();
+            let transcript = crate::transcript::PoseidonTranscript::empty::<PCF>();
+            let mut prover = PlusProverSparseBase::init_seeded_base(
+                scheme.clone(),
+                m0.clone(),
+                1,
+                pparams.clone(),
+                transcript,
+            );
+            let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs), sp1_digest_bits);
+            eprintln!("[test_large_trace_goldilocks64] plus.prove: {:?}", t0.elapsed());
+
+            let t1 = std::time::Instant::now();
+            let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+            for b in sp1_digest_bits {
+                rec.absorb_field_element(b);
+            }
+            for lp in &proof.lproof {
+                lp.verify(&mut rec);
+            }
+            proof.cmproof.verify_with_mlen(m0.len(), &mut rec, bind_prefix).expect("cm verify");
+            let trace = rec.trace().clone();
+            eprintln!("[test_large_trace_goldilocks64] plus.verify(record): {:?}", t1.elapsed());
+
+            let params = WeParams {
+                nvars_setchk: nvars as u64,
+                degree_setchk: 3,
+                nvars_cm: nvars as u64,
+                degree_cm: 2,
+                kappa: kappa as u64,
+                ring_dim_d: RR::dimension() as u64,
+                decomp_b: b as u64,
+                k: k as u64,
+                l: ell as u64,
+                mlen: m0.len() as u64,
+            };
+            let poseidon_cfg = PCF::get_poseidon_config();
+
+            let t2 = std::time::Instant::now();
+            let out = build_we_dr1cs_for_plus_proof::<RR>(
+                &poseidon_cfg,
+                &trace,
+                &params,
+                sp1_digest_bits,
+                &proof,
+                m0.len(),
+                b_bound,
+            )
+            .expect("build we dr1cs");
+            out.inst.check(&out.assignment).expect("dr1cs sat");
+            eprintln!(
+                "[test_large_trace_goldilocks64] build_we_dr1cs: {:?} (nvars={}, constraints={})",
+                t2.elapsed(),
+                out.inst.nvars,
+                out.inst.constraints
+            );
+        };
+
+        run_one("sha256->bits", &sp1_digest_bits);
+    }
+
     #[test]
     fn test_we_plus_prover_sparse_base_small_mock_sat() {
         // A small end-to-end test for the **production** SP1-style path:
