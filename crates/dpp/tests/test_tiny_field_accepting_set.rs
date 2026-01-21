@@ -1,11 +1,14 @@
 use ark_ff::{BigInteger, Field, Fp64, MontBackend, MontConfig, PrimeField, Zero};
+use num_bigint::BigInt;
+use num_traits::{One, ToPrimitive};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 use dpp::accepting_set::accepting_set_for_packed_query_sparse;
 use dpp::boolean_proof::BooleanProofFlpcpSparse;
 use dpp::dr1cs_flpcp::{Dr1csInstanceSparse, RsDr1csNpFlpcpSparse};
-use dpp::pipeline::build_rev2_dpp_sparse_boolean_auto;
+use dpp::pipeline::build_rev2_dpp_sparse_boolean;
+use dpp::PackedDppParams;
 use dpp::{EmbeddingParams, SparseVec};
 
 #[derive(MontConfig)]
@@ -23,6 +26,17 @@ type Goldilocks = Fp64<MontBackend<GoldilocksConfig, 1>>;
 
 fn lift_small_to_gold(x: F5) -> Goldilocks {
     Goldilocks::from_le_bytes_mod_order(&x.into_bigint().to_bytes_le())
+}
+
+fn estimate_domain_size_u128(b: &[BigInt]) -> u128 {
+    let mut acc: u128 = 1;
+    for bi in b {
+        let bound = bi - BigInt::one();
+        let bound_u: u128 = bound.to_u128().expect("bound fits u128 in tiny test");
+        let r = 2u128 * bound_u + 1u128;
+        acc = acc.checked_mul(r).expect("domain size fits u128 in tiny test");
+    }
+    acc
 }
 
 #[test]
@@ -68,19 +82,22 @@ fn test_tiny_field_accepting_set_membership_roundtrip() {
         .map(|b| if b.is_zero() { Goldilocks::ZERO } else { Goldilocks::ONE })
         .collect::<Vec<_>>();
 
-    let dppv = build_rev2_dpp_sparse_boolean_auto::<F5, Goldilocks, _>(
+    // Keep packing weights small (avoid the *_auto path which may pick huge ell and slow BigInt ops).
+    let dppv = build_rev2_dpp_sparse_boolean::<F5, Goldilocks, _>(
         flpcp.clone(),
         EmbeddingParams {
             gamma: 2,
             assume_boolean_proof: true,
             k_prime: 0,
         },
-    )
-    .expect("build_rev2_dpp_sparse_boolean_auto");
+        PackedDppParams { ell: 2 },
+    );
 
     // Sample a packed query and enumerate the induced accepting set A.
     let mut rng = ChaCha20Rng::seed_from_u64(12345);
     let query = dppv.sample_query(&mut rng, &x_gold).expect("sample_query");
+    let domain_est = estimate_domain_size_u128(&query.b);
+    assert!(domain_est <= 1_000_000, "tiny test should be enumerable");
     let a_set = accepting_set_for_packed_query_sparse::<Goldilocks>(&query, 1_000_000)
         .expect("accepting_set_for_packed_query_sparse");
     assert!(!a_set.is_empty());
@@ -106,10 +123,6 @@ fn test_tiny_field_accepting_set_membership_roundtrip() {
         .expect("verify_packed_answer");
     assert!(!ok_bad);
     // Membership failure is the stronger check; allow rare collision but still require verifier reject.
-    if in_a {
-        // If this happens, it means the accepting set is too coarse for this tiny instance;
-        // keep the soundness check above as the authoritative condition.
-        eprintln!("warning: flipped proof still landed in A (rare for tiny instances)");
-    }
+    let _ = in_a;
 }
 
