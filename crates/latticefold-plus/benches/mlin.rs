@@ -116,7 +116,7 @@ fn setup_proof(
 
     let A = create_ajtai_matrix(kappa, n, &mut rng);
     let mut ts = create_transcript();
-    let (linb2, proof) = mlin.mlin(&A, &M, &mut ts);
+    let (_linb2, proof) = mlin.mlin(&A, &M, &mut ts);
 
     let mut verify_ts = create_transcript();
     proof

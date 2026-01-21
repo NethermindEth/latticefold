@@ -78,7 +78,13 @@ fn setup_input(
 
     let cr1cs = ComR1CS::new(r1cs, z, 1, B, k, &A);
 
-    (A, cr1cs.f, dparams)
+    let f = cr1cs
+        .f
+        .as_ring_arc()
+        .expect("bench assumes ring-materialized witness")
+        .as_ref()
+        .clone();
+    (A, f, dparams)
 }
 
 // ============================================================================

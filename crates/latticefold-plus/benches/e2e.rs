@@ -89,7 +89,7 @@ fn setup_input(
 
     let cr1cs = ComR1CS::new(r1cs, z, 1, B, k, &A);
 
-    let M = cr1cs.x.matrices();
+    let M = cr1cs.x.matrices_arc();
 
     let pparams = PlusParameters { lin: params, B };
 
@@ -143,7 +143,7 @@ fn setup_proof(
     let r1cs = R1CSBuilder::new(n, k, B).build_decomposed_square();
     let z = WitnessPattern::BinaryChoice.generate(m, &mut rng);
     let cr1cs = ComR1CS::new(r1cs, z, 1, B, k, &A);
-    let M = cr1cs.x.matrices();
+    let M = cr1cs.x.matrices_arc();
 
     let ts = create_transcript();
     let verifier = PlusVerifier::init(A, M, pparams, ts);

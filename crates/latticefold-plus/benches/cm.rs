@@ -131,7 +131,7 @@ impl ProverBenchmark for CommitmentTransformProver {
 
     fn run_prover((input, M): Self::Input) -> Self::Output {
         let mut ts = create_transcript();
-        input.prove(&M, &mut ts)
+        input.prove(&M, &[], &mut ts)
     }
 }
 

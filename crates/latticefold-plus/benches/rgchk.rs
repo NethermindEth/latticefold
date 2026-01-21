@@ -76,7 +76,7 @@ fn setup_proof(witness_size: usize, k: usize, kappa: usize) -> (Rg<R>, Dcom<R>) 
     let dcom = rg.range_check(&[], &mut ts);
 
     let mut verify_ts = create_transcript();
-    dcom.verify(&mut verify_ts)
+    dcom.verify(&mut verify_ts, &[])
         .expect("Generated range check proof should be valid");
 
     (rg, dcom)
@@ -148,7 +148,7 @@ impl VerifierBenchmark for RangeCheckVerifier {
 
     fn run_verifier(_input: &Self::Input, proof: &Self::Proof) {
         let mut ts = create_transcript();
-        proof.verify(&mut ts).unwrap()
+        proof.verify(&mut ts, &[]).unwrap()
     }
 }
 
