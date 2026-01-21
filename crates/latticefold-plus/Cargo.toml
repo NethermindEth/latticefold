@@ -112,4 +112,5 @@ harness = false
 
 [[example]]
 name = "lf_plus_sp1_oneproof"
+path = "examples/lf_plus_sp1_oneproof_api.rs"
 required-features = ["we_gate"]

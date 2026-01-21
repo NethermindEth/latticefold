@@ -6,7 +6,7 @@
 //!
 //! Note: we intentionally target **small** committed messages (e.g. `cfs_*` transcript
 //! message commitments). Arithmetizing `cm_f` directly would require including the full
-//! witness `f` in the DPP witness, which is not the production Architecture‑T shape.
+//! witness `f` in the DPP witness, which is not the production Architecture shape.
 
 use ark_ff::Field;
 use latticefold::commitment::AjtaiCommitmentScheme;
