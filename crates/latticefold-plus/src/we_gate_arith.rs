@@ -3591,6 +3591,16 @@ where
     //
     // Enable with: `LFP_WE_GATE_OPMIX=1 ...`
     if std::env::var("LFP_WE_GATE_OPMIX").is_ok() {
+        // Optional deeper split: how many Poseidon permutes happen before CM starts?
+        // This removes ambiguity about “perm-heavy CM” vs “math-heavy CM”.
+        let pose_permutes_before_cm = {
+            use symphony::poseidon_trace::replay_ops;
+            replay_ops(poseidon_cfg, &ops[..cm_ops_offset])
+                .map(|r| r.permutes.len())
+                .unwrap_or(0usize)
+        };
+        let pose_permutes_after_cm = pose_permutes.saturating_sub(pose_permutes_before_cm);
+
         // Poseidon trace op mix (what the transcript did).
         let mut n_absorb = 0usize;
         let mut absorb_elems = 0usize;
@@ -3637,6 +3647,10 @@ where
             sq_field_elems,
             n_sq_bytes,
             sq_bytes
+        );
+        eprintln!(
+            "  poseidon permutes split: before_cm={} after_cm={}",
+            pose_permutes_before_cm, pose_permutes_after_cm
         );
         eprintln!(
             "  dr1cs constraints by part: poseidon={} params={} lin={} stmt_absorb={} dcom={} cm_coins={} cm_fields={} cm_math={} decomp={}",
