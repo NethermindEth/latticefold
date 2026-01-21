@@ -221,9 +221,42 @@ where
 
     /// Verify
     ///
+    /// IMPORTANT: This method does **not** absorb any statement public inputs into the Fiat–Shamir
+    /// transcript. It is only correct when the prover also did not absorb any extra statement data
+    /// before producing `proof` (i.e. `public_inputs` is empty / unused).
+    ///
+    /// For statement-bound regimes (e.g. SP1 streamed/WE) where the prover absorbs statement
+    /// `public_inputs` before any challenges are sampled, use `verify_with_public_inputs(...)`
+    /// instead (or ensure the caller pre-absorbs the same values into `self.transcript`).
+    ///
     /// If `expected_prefix` is non-empty, this enforces the exposed-prefix binding for the Cm proof
     /// (SP1 streamed/WE regime) and fails if binding cannot be applied.
     pub fn verify<P: LinearizedVerify<R>>(
+        &mut self,
+        proof: &PlusProof<R, P>,
+        expected_prefix: &[R::BaseRing],
+    ) -> bool {
+        self.verify_inner(proof, expected_prefix)
+    }
+
+    /// Verify, absorbing statement `public_inputs` into the transcript first.
+    ///
+    /// This is the safe entrypoint when the prover used statement-bound Fiat–Shamir by absorbing
+    /// `public_inputs` before proving (e.g. `PlusProverSparseBase::prove_sparse_base`).
+    pub fn verify_with_public_inputs<P: LinearizedVerify<R>>(
+        &mut self,
+        proof: &PlusProof<R, P>,
+        public_inputs: &[R::BaseRing],
+        expected_prefix: &[R::BaseRing],
+    ) -> bool {
+        for v in public_inputs {
+            self.transcript.absorb_field_element(v);
+        }
+        self.verify_inner(proof, expected_prefix)
+    }
+
+    #[inline]
+    fn verify_inner<P: LinearizedVerify<R>>(
         &mut self,
         proof: &PlusProof<R, P>,
         expected_prefix: &[R::BaseRing],
