@@ -214,6 +214,8 @@ fn ring_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) 
     assert_eq!(x.d(), y.d());
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
+        // One linear constraint per coefficient.
+        cm_bump(|c| c.scalar_add += 1);
         let val = b.assignment[x.coeffs[i]] + b.assignment[y.coeffs[i]];
         let v = b.new_var(val);
         b.add_constraint(
@@ -231,6 +233,8 @@ fn ring_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) 
     assert_eq!(x.d(), y.d());
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
+        // One linear constraint per coefficient.
+        cm_bump(|c| c.scalar_sub += 1);
         let val = b.assignment[x.coeffs[i]] - b.assignment[y.coeffs[i]];
         let v = b.new_var(val);
         b.add_constraint(
@@ -247,6 +251,8 @@ fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) ->
     cm_bump(|c| c.ring_scale += 1);
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
+        // One multiplication constraint per coefficient.
+        cm_bump(|c| c.scalar_mul += 1);
         let val = b.assignment[x.coeffs[i]] * b.assignment[s];
         let v = b.new_var(val);
         b.enforce_mul(x.coeffs[i], s, v);
@@ -271,10 +277,14 @@ fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: 
             // j = k - i mod d
             let j = if i <= k { k - i } else { d + k - i };
             let sign = if i <= k { F::ONE } else { -F::ONE };
+            // One multiplication constraint per product term.
+            cm_bump(|c| c.scalar_mul += 1);
             let prod_val = b.assignment[x.coeffs[i]] * b.assignment[y.coeffs[j]];
             let prod = b.new_var(prod_val);
             b.enforce_mul(x.coeffs[i], y.coeffs[j], prod);
             // acc = acc + sign * prod
+            // One linear constraint per accumulation step.
+            cm_bump(|c| c.scalar_add += 1);
             let new_acc = b.new_var(b.assignment[acc_var] + sign * b.assignment[prod]);
             b.add_constraint(
                 vec![(F::ONE, acc_var), (sign, prod)],
