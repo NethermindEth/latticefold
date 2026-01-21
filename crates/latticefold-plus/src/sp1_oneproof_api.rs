@@ -11,13 +11,14 @@ use cyclotomic_rings::rings::{FrogPoseidonConfig as PC, GetPoseidonParams};
 use cyclotomic_rings::rings::FrogRing64 as R;
 use ark_ff::{BigInteger, PrimeField};
 use latticefold::commitment::AjtaiCommitmentScheme;
+use latticefold::transcript::Transcript;
 use stark_rings::PolyRing;
 use stark_rings_linalg::SparseMatrix;
 
-use rand::{rngs::StdRng, RngCore, SeedableRng};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+use crate::lin::LinearizedVerify;
 use crate::we_statement::{we_statement_hash_lf_plus, LFP_WE_GATE_DIGEST_V1};
 
 /// Structured output for downstream wiring (no stdout parsing).
