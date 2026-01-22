@@ -22,6 +22,7 @@ pub mod embedding;
 pub mod boolean_proof;
 pub mod pipeline;
 pub mod accepting_set;
+pub mod theorem43;
 
 pub mod rs;
 pub mod dr1cs_flpcp;
