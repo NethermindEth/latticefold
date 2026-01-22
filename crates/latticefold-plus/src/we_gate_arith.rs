@@ -19,6 +19,48 @@ use symphony::dpp_sumcheck::Dr1csBuilder;
 use symphony::dpp_sumcheck::{sumcheck_verify_degree3, RingVars};
 
 // -----------------------------------------------------------------------------
+// Constant-variable tracking (fast paths for verifier-gate arithmetization).
+//
+// Dr1csBuilder doesn't expose "is this var provably constant?" metadata, but a large
+// portion of this module allocates constants via `const_var` (and related helpers).
+// We track those indices so we can safely:
+// - implement `ring_scale` by a linear constraint when the scalar is constant, and
+// - detect constant-coefficient ring elements (only coeff[0] potentially nonzero)
+//   to avoid d^2 negacyclic convolution in `ring_mul_negacyclic`.
+// -----------------------------------------------------------------------------
+
+thread_local! {
+    static TRACKED_CONST_VARS: std::cell::RefCell<std::collections::HashMap<usize, Vec<u8>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[inline]
+fn track_const_var<F: PrimeField>(idx: usize, v: F) {
+    use ark_ff::BigInteger;
+    TRACKED_CONST_VARS.with(|rc| {
+        rc.borrow_mut().insert(idx, v.into_bigint().to_bytes_le());
+    });
+}
+
+#[inline]
+fn tracked_const_var_value<F: PrimeField>(idx: usize) -> Option<F> {
+    TRACKED_CONST_VARS.with(|rc| {
+        rc.borrow()
+            .get(&idx)
+            .map(|bytes| F::from_le_bytes_mod_order(bytes))
+    })
+}
+
+#[inline]
+fn is_tracked_const_zero<F: PrimeField>(idx: usize) -> bool {
+    TRACKED_CONST_VARS.with(|rc| {
+        rc.borrow()
+            .get(&idx)
+            .is_some_and(|bytes| bytes.iter().all(|&b| b == 0))
+    })
+}
+
+// -----------------------------------------------------------------------------
 // Optional op-count instrumentation (for tiny-field port estimates).
 //
 // Enabled by setting `LFP_WE_GATE_OPMIX=1` (same switch as the coarse op-mix print).
@@ -180,11 +222,11 @@ where
 {
     let d = R::dimension();
     let mut coeffs = Vec::with_capacity(d);
-    let v0 = b.new_var(x);
+    // This is intended as a *constant-coeff* ring element; enforce constantness.
+    let v0 = const_var::<BF<R>>(b, x);
     coeffs.push(v0);
     for _ in 1..d {
-        let vz = b.new_var(BF::<R>::ZERO);
-        b.enforce_var_eq_const(vz, BF::<R>::ZERO);
+        let vz = const_var::<BF<R>>(b, BF::<R>::ZERO);
         coeffs.push(vz);
     }
     RingVars::new(coeffs)
@@ -202,8 +244,7 @@ where
     let mut coeffs = Vec::with_capacity(d);
     coeffs.push(x0);
     for _ in 1..d {
-        let vz = b.new_var(BF::<R>::ZERO);
-        b.enforce_var_eq_const(vz, BF::<R>::ZERO);
+        let vz = const_var::<BF<R>>(b, BF::<R>::ZERO);
         coeffs.push(vz);
     }
     RingVars::new(coeffs)
@@ -250,6 +291,13 @@ fn ring_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) 
 fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) -> RingVars {
     cm_bump(|c| c.ring_scale += 1);
     let mut out = Vec::with_capacity(x.d());
+    if let Some(c) = tracked_const_var_value::<F>(s) {
+        // Scaling by a constant is linear: avoid multiplication constraints.
+        for i in 0..x.d() {
+            out.push(scalar_mul_const::<F>(b, x.coeffs[i], c));
+        }
+        return RingVars::new(out);
+    }
     for i in 0..x.d() {
         // One multiplication constraint per coefficient.
         cm_bump(|c| c.scalar_mul += 1);
@@ -269,12 +317,37 @@ fn ring_mul_negacyclic<F: PrimeField + FftField>(b: &mut Dr1csBuilder<F>, x: &Ri
     // - Default implementation is the simple O(d^2) convolution (always correct, but expensive).
     // - If `LFP_WE_GATE_NTT_MUL=1` and the field supports sufficient 2-adicity, we switch to
     //   an NTT-based negacyclic multiply gadget that reduces variable-variable multiplications.
+    //
+    // Fast path (always safe): if either operand is a *constant-coefficient* ring element,
+    // i.e. only coeff[0] may be nonzero and coeff[1..] are provably zero constants, then
+    // multiplication is just per-coefficient scaling (O(d) multiplications).
+    let d = x.d();
+    assert_eq!(d, y.d());
+    let x_is_const_coeff = x.coeffs.iter().skip(1).all(|&v| is_tracked_const_zero::<F>(v));
+    let y_is_const_coeff = y.coeffs.iter().skip(1).all(|&v| is_tracked_const_zero::<F>(v));
+    if x_is_const_coeff && !y_is_const_coeff {
+        return ring_scale::<F>(b, y, x.coeffs[0]);
+    }
+    if y_is_const_coeff && !x_is_const_coeff {
+        return ring_scale::<F>(b, x, y.coeffs[0]);
+    }
+    if x_is_const_coeff && y_is_const_coeff {
+        // Both are constant-coeff: output is constant-coeff too.
+        let s = scalar_mul::<F>(b, x.coeffs[0], y.coeffs[0]);
+        // Build [s, 0, ..., 0] in-place (we only need this here).
+        let mut coeffs = Vec::with_capacity(d);
+        coeffs.push(s);
+        for _ in 1..d {
+            coeffs.push(const_var::<F>(b, F::ZERO));
+        }
+        return RingVars::new(coeffs);
+    }
+
     if std::env::var("LFP_WE_GATE_NTT_MUL").ok().as_deref() == Some("1") {
         // This branch is intentionally narrow: we only accelerate for power-of-two d where
         // an NTT exists (2d | (p-1)). For our WE gate runs, d=64.
         //
         // If the bound doesn't hold for this field, fall back to the naive multiply.
-        let d = x.d();
         if d.is_power_of_two()
             && d > 0
             && (2 * d).is_power_of_two()
@@ -478,6 +551,7 @@ fn enforce_bool<F: PrimeField>(b: &mut Dr1csBuilder<F>, bit: usize) {
 fn const_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, c: F) -> usize {
     let v = b.new_var(c);
     b.enforce_var_eq_const(v, c);
+    track_const_var::<F>(v, c);
     v
 }
 
