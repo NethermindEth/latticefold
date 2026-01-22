@@ -294,37 +294,39 @@ fn poly_mul_karatsuba<F: PrimeField>(b: &mut Dr1csBuilder<F>, a: &[usize], c: &[
     debug_assert_eq!(z2.len(), n - 1);
     let mut cross = Vec::with_capacity(n - 1);
     for i in 0..(n - 1) {
-        let t = scalar_sub::<F>(b, z1[i], z0[i]);
-        cross.push(scalar_sub::<F>(b, t, z2[i]));
+        // One linear constraint per coefficient:
+        // cross[i] = z1[i] - z0[i] - z2[i]
+        cross.push(lc_to_var::<F>(
+            b,
+            vec![(F::ONE, z1[i]), (-F::ONE, z0[i]), (-F::ONE, z2[i])],
+        ));
     }
 
     // Assemble length-(2n-1) product:
     // a*c = z0 + (cross << m) + (z2 << n)
     let mut res = Vec::with_capacity(2 * n - 1);
     for k in 0..(2 * n - 1) {
-        let mut acc: Option<usize> = None;
+        let mut terms: Vec<(F, usize)> = Vec::with_capacity(3);
         if k < z0.len() {
-            acc = Some(z0[k]);
+            terms.push((F::ONE, z0[k]));
         }
         if k >= m {
             let idx = k - m;
             if idx < cross.len() {
-                acc = Some(match acc {
-                    None => cross[idx],
-                    Some(v) => scalar_add::<F>(b, v, cross[idx]),
-                });
+                terms.push((F::ONE, cross[idx]));
             }
         }
         if k >= n {
             let idx = k - n;
             if idx < z2.len() {
-                acc = Some(match acc {
-                    None => z2[idx],
-                    Some(v) => scalar_add::<F>(b, v, z2[idx]),
-                });
+                terms.push((F::ONE, z2[idx]));
             }
         }
-        res.push(acc.expect("karatsuba assembly: missing term"));
+        match terms.len() {
+            0 => unreachable!("karatsuba assembly: missing term"),
+            1 => res.push(terms[0].1), // reuse the existing var; no constraint needed
+            _ => res.push(lc_to_var::<F>(b, terms)), // one linear constraint
+        }
     }
     res
 }
