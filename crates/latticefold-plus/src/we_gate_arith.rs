@@ -2007,7 +2007,11 @@ where
     let ring_zero = scalar_var_to_ringvars::<R>(&mut b, z0);
     let v = sumcheck_verify_degree3::<BF<R>>(&mut b, ring_zero.clone(), &msg_vars, &r_point)?;
 
-    // Absorb e/b evaluations, and keep their ring vars for rgchk checks.
+    // Keep e/b evaluations ring vars for rgchk checks.
+    //
+    // IMPORTANT (digest-absorb): the real verifier no longer absorbs the full coefficient vectors
+    // of `out.e` and `out.b` here. Instead, it absorbs the scalar digests `ev(r, beta)` and
+    // `ev(r, beta^2)` (via `absorb_field_element`) during the recombination check below.
     let mut out_e_vars: Vec<Vec<Vec<RingVars>>> = Vec::with_capacity(out.e.len());
     for ek in &out.e {
         let mut ek_vars: Vec<Vec<RingVars>> = Vec::with_capacity(ek.len());
@@ -2015,8 +2019,6 @@ where
             let mut ej_vars: Vec<RingVars> = Vec::with_capacity(ej.len());
             for r in ej {
                 let rv = ring_to_ringvars::<R>(&mut b, r);
-                absorb_flat.extend_from_slice(&rv.coeffs);
-                absorb_dcom_out_e(rv.coeffs.len());
                 ej_vars.push(rv);
             }
             ek_vars.push(ej_vars);
@@ -2026,8 +2028,6 @@ where
     let mut out_b_vars: Vec<RingVars> = Vec::with_capacity(out.b.len());
     for bb in &out.b {
         let rv = ring_to_ringvars::<R>(&mut b, bb);
-        absorb_flat.extend_from_slice(&rv.coeffs);
-        absorb_dcom_out_b(rv.coeffs.len());
         out_b_vars.push(rv);
     }
 
@@ -2052,6 +2052,10 @@ where
             let ejv = &out_e_vars[0][i][j];
             let ev1 = ring_eval_at_scalar::<R>(&mut b, ejv, beta);
             let ev2 = ring_eval_at_scalar::<R>(&mut b, ejv, beta2);
+            // Digest-absorb prover messages in the same order as `setchk::Out::verify`.
+            absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, ev1);
+            absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, ev2);
+            absorb_dcom_out_e(2);
             let ev1_sq = scalar_mul::<BF<R>>(&mut b, ev1, ev1);
             let diff = scalar_sub::<BF<R>>(&mut b, ev1_sq, ev2);
             let term = scalar_mul::<BF<R>>(&mut b, diff, alpha_pows[j]);
@@ -2075,6 +2079,10 @@ where
         let b_ring = &out_b_vars[i];
         let ev1 = ring_eval_at_scalar::<R>(&mut b, b_ring, beta);
         let ev2 = ring_eval_at_scalar::<R>(&mut b, b_ring, beta2);
+        // Digest-absorb prover messages in the same order as `setchk::Out::verify`.
+        absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, ev1);
+        absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, ev2);
+        absorb_dcom_out_b(2);
         let ev1_sq = scalar_mul::<BF<R>>(&mut b, ev1, ev1);
         let b_claim = scalar_sub::<BF<R>>(&mut b, ev1_sq, ev2);
 
@@ -3225,16 +3233,17 @@ where
             expect_get_challenge(&mut op_idx, &mut absorb_ops, &mut squeezed_field_elems)?;
             expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
         }
-        // absorb_evaluations(&out.e, &out.b)
-        for ek in &out.e {
-            for ej in ek {
-                for _ in 0..ej.len() {
-                    expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
-                }
+        // absorb_evaluations_digest(out.e[0], out.b):
+        // for each ring element r, absorb_field_element(ev(r,beta)) and absorb_field_element(ev(r,beta^2)).
+        for ej in &out.e[0] {
+            for _ in 0..ej.len() {
+                expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+                expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
             }
         }
         for _ in 0..out.b.len() {
-            expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
+            expect_absorb_len(1, &mut op_idx, &mut absorb_ops)?;
         }
 
         // rgchk::absorb_evaluations(&dcom.evals): absorb eval.a (as const-coeff rings), then eval.c

@@ -255,6 +255,9 @@ impl<R: OverField + PolyRing> In<R> {
         let mut mles: Vec<StreamingMleEnum<R>> =
             Vec::with_capacity((Ms_len + ms.len()) * (ncols * 2 + 1));
         let mut alphas = Vec::with_capacity(Ms_len);
+        // Track per-claim betas in the exact same order that `e0` and `b` are constructed.
+        // This is later used to shrink the transcript absorb surface for prover messages.
+        let mut betas: Vec<R::BaseRing> = Vec::with_capacity(Ms_len + ms.len());
         // Track which matrix sets are stored as `DigitsBacking::ConstCol0`.
         // For those, only column 0 varies by row; columns 1..d-1 are fixed to a constant monomial
         // and contribute identically zero to the set-check polynomial. We can omit them from the
@@ -268,6 +271,7 @@ impl<R: OverField + PolyRing> In<R> {
             let c0 = transcript.get_challenges(self.nvars);
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
             let beta = transcript.get_challenge();
+            betas.push(beta);
 
             // Step 2
             // Fast evaluation uses precomputed beta powers (degree = ring dimension).
@@ -313,6 +317,7 @@ impl<R: OverField + PolyRing> In<R> {
             let c0 = transcript.get_challenges(self.nvars);
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
             let beta = transcript.get_challenge();
+            betas.push(beta);
 
             // Step 2
             let beta_pows = beta_pows::<R>(beta);
@@ -372,6 +377,7 @@ impl<R: OverField + PolyRing> In<R> {
             let c0 = transcript.get_challenges(self.nvars);
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
             let beta = transcript.get_challenge();
+            betas.push(beta);
 
             let MT = (*M).transpose();
             let beta_pows = beta_pows::<R>(beta);
@@ -410,6 +416,7 @@ impl<R: OverField + PolyRing> In<R> {
             let c0 = transcript.get_challenges(self.nvars);
             let one_minus_c0 = c0.iter().copied().map(|x| R::BaseRing::ONE - x).collect();
             let beta = transcript.get_challenge();
+            betas.push(beta);
 
             let beta_pows = beta_pows::<R>(beta);
             let (v0, m_len) = match mset {
@@ -1214,8 +1221,15 @@ impl<R: OverField + PolyRing> In<R> {
         }
 
         let t_absorb = std::time::Instant::now();
-        // Prover to Verifier messages
-        absorb_evaluations(&e, &b, transcript);
+        // Prover to Verifier messages (digest-absorb).
+        //
+        // Instead of absorbing the full ring coefficient vectors for `e0` and `b` (which costs
+        // `R::dimension()` base-field absorbs per ring element), we absorb a compact digest:
+        // for each ring element `r`, absorb `ev(r, beta)` and `ev(r, beta^2)` as base-ring scalars.
+        //
+        // This preserves soundness binding under the monomiality check except with negligible
+        // probability over the sampled `beta`, while dramatically reducing Poseidon IO in the WE gate.
+        absorb_evaluations_digest(&e[0], &b, &betas, transcript);
         if profile {
             println!("[LF+ setchk] step3(absorb): {:?}", t_absorb.elapsed());
         }
@@ -1425,7 +1439,8 @@ impl<R: OverField> Out<R> {
         let v = subclaim.expected_evaluation;
 
         // Prover to Verifier messages
-        absorb_evaluations(&self.e, &self.b, transcript);
+        let betas: Vec<R::BaseRing> = cba.iter().map(|(_c, beta, _a)| *beta).collect();
+        absorb_evaluations_digest(&self.e[0], &self.b, &betas, transcript);
 
         use ark_std::One;
         let mut ver = R::zero();
@@ -1483,17 +1498,53 @@ impl<R: OverField> Out<R> {
     }
 }
 
-fn absorb_evaluations<R: OverField>(
-    e: &[Vec<Vec<R>>],
+/// Digest-absorb the prover messages for `Out::verify`.
+///
+/// Instead of absorbing every coefficient of every ring element in `e0`/`b`, absorb the scalar
+/// evaluations at the verifier's sampled points `beta` and `beta^2`.
+///
+/// The betas must be provided in the same order as the verifier's `cba` sampling:
+/// first all `e0` claims (one beta per `e0[i]`), then all `b` claims (one beta per `b[i]`).
+fn absorb_evaluations_digest<R: OverField + PolyRing>(
+    e0: &[Vec<R>],
     b: &[R],
+    betas: &[R::BaseRing],
     transcript: &mut impl Transcript<R>,
-) {
-    for ek in e {
-        for ej in ek {
-            transcript.absorb_slice(ej);
+) where
+    R::BaseRing: Ring,
+{
+    let nclaims = e0.len() + b.len();
+    assert_eq!(
+        betas.len(),
+        nclaims,
+        "absorb_evaluations_digest: betas length mismatch"
+    );
+
+    // e0 claims: absorb ev(e0[i][lane], beta) and ev(e0[i][lane], beta^2) for each lane.
+    for (i, block) in e0.iter().enumerate() {
+        let beta = betas[i];
+        let beta2 = beta * beta;
+        let beta_pows1 = beta_pows::<R>(beta);
+        let beta_pows2 = beta_pows::<R>(beta2);
+        for r in block {
+            let ev1 = ev_fast::<R>(r, &beta_pows1);
+            let ev2 = ev_fast::<R>(r, &beta_pows2);
+            transcript.absorb_field_element(&ev1);
+            transcript.absorb_field_element(&ev2);
         }
     }
-    transcript.absorb_slice(b);
+
+    // b claims: absorb ev(b[i], beta) and ev(b[i], beta^2).
+    for (i, bi) in b.iter().enumerate() {
+        let beta = betas[e0.len() + i];
+        let beta2 = beta * beta;
+        let beta_pows1 = beta_pows::<R>(beta);
+        let beta_pows2 = beta_pows::<R>(beta2);
+        let ev1 = ev_fast::<R>(bi, &beta_pows1);
+        let ev2 = ev_fast::<R>(bi, &beta_pows2);
+        transcript.absorb_field_element(&ev1);
+        transcript.absorb_field_element(&ev2);
+    }
 }
 
 #[cfg(test)]
