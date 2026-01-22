@@ -56,9 +56,42 @@ thread_local! {
 // is spending its absorb bandwidth (which drives permute count / Poseidon constraints).
 // -----------------------------------------------------------------------------
 
-#[derive(Clone, Debug, Default)]
+use std::sync::atomic::{AtomicU64, Ordering};
+
+// Global atomics (we build parts with Rayon, so thread-local counters won't aggregate).
+static ABSORB_DCOM_CM_F: AtomicU64 = AtomicU64::new(0);
+static ABSORB_DCOM_C_MF: AtomicU64 = AtomicU64::new(0);
+static ABSORB_DCOM_CM_MTAU: AtomicU64 = AtomicU64::new(0);
+static ABSORB_DCOM_SETCHK_PARAMS: AtomicU64 = AtomicU64::new(0);
+static ABSORB_DCOM_SETCHK_MSGS: AtomicU64 = AtomicU64::new(0);
+static ABSORB_DCOM_SETCHK_R: AtomicU64 = AtomicU64::new(0);
+static ABSORB_DCOM_OUT_E: AtomicU64 = AtomicU64::new(0);
+static ABSORB_DCOM_OUT_B: AtomicU64 = AtomicU64::new(0);
+static ABSORB_CM_COMH: AtomicU64 = AtomicU64::new(0);
+static ABSORB_CM_SC_PARAMS: AtomicU64 = AtomicU64::new(0);
+static ABSORB_CM_SC_MSGS: AtomicU64 = AtomicU64::new(0);
+static ABSORB_CM_SC_R: AtomicU64 = AtomicU64::new(0);
+static ABSORB_CM_ABSORB_EVALS: AtomicU64 = AtomicU64::new(0);
+
+#[inline]
+fn absorb_reset() {
+    ABSORB_DCOM_CM_F.store(0, Ordering::Relaxed);
+    ABSORB_DCOM_C_MF.store(0, Ordering::Relaxed);
+    ABSORB_DCOM_CM_MTAU.store(0, Ordering::Relaxed);
+    ABSORB_DCOM_SETCHK_PARAMS.store(0, Ordering::Relaxed);
+    ABSORB_DCOM_SETCHK_MSGS.store(0, Ordering::Relaxed);
+    ABSORB_DCOM_SETCHK_R.store(0, Ordering::Relaxed);
+    ABSORB_DCOM_OUT_E.store(0, Ordering::Relaxed);
+    ABSORB_DCOM_OUT_B.store(0, Ordering::Relaxed);
+    ABSORB_CM_COMH.store(0, Ordering::Relaxed);
+    ABSORB_CM_SC_PARAMS.store(0, Ordering::Relaxed);
+    ABSORB_CM_SC_MSGS.store(0, Ordering::Relaxed);
+    ABSORB_CM_SC_R.store(0, Ordering::Relaxed);
+    ABSORB_CM_ABSORB_EVALS.store(0, Ordering::Relaxed);
+}
+
+#[derive(Clone, Debug)]
 struct AbsorbBreakdown {
-    // Dcom-prefix (rgchk + setchk + eval absorbs)
     dcom_cm_f: u64,
     dcom_C_Mf: u64,
     dcom_cm_mtau: u64,
@@ -67,8 +100,6 @@ struct AbsorbBreakdown {
     dcom_setchk_r: u64,
     dcom_out_e: u64,
     dcom_out_b: u64,
-
-    // CmProof segment
     cm_comh: u64,
     cm_sumcheck_params: u64,
     cm_sumcheck_msgs: u64,
@@ -76,43 +107,39 @@ struct AbsorbBreakdown {
     cm_absorb_evals: u64,
 }
 
-thread_local! {
-    static ABSORB_COUNTING: std::cell::Cell<bool> = std::cell::Cell::new(false);
-    static ABSORB_COUNTS: std::cell::RefCell<AbsorbBreakdown> = std::cell::RefCell::new(AbsorbBreakdown::default());
-}
-
-#[inline]
-fn absorb_counting_on() -> bool {
-    ABSORB_COUNTING.with(|c| c.get())
-}
-
-#[inline]
-fn absorb_reset() {
-    ABSORB_COUNTS.with(|rc| *rc.borrow_mut() = AbsorbBreakdown::default());
-}
-
 #[inline]
 fn absorb_take() -> AbsorbBreakdown {
-    ABSORB_COUNTS.with(|rc| rc.borrow().clone())
+    AbsorbBreakdown {
+        dcom_cm_f: ABSORB_DCOM_CM_F.load(Ordering::Relaxed),
+        dcom_C_Mf: ABSORB_DCOM_C_MF.load(Ordering::Relaxed),
+        dcom_cm_mtau: ABSORB_DCOM_CM_MTAU.load(Ordering::Relaxed),
+        dcom_setchk_params: ABSORB_DCOM_SETCHK_PARAMS.load(Ordering::Relaxed),
+        dcom_setchk_msgs: ABSORB_DCOM_SETCHK_MSGS.load(Ordering::Relaxed),
+        dcom_setchk_r: ABSORB_DCOM_SETCHK_R.load(Ordering::Relaxed),
+        dcom_out_e: ABSORB_DCOM_OUT_E.load(Ordering::Relaxed),
+        dcom_out_b: ABSORB_DCOM_OUT_B.load(Ordering::Relaxed),
+        cm_comh: ABSORB_CM_COMH.load(Ordering::Relaxed),
+        cm_sumcheck_params: ABSORB_CM_SC_PARAMS.load(Ordering::Relaxed),
+        cm_sumcheck_msgs: ABSORB_CM_SC_MSGS.load(Ordering::Relaxed),
+        cm_sumcheck_r: ABSORB_CM_SC_R.load(Ordering::Relaxed),
+        cm_absorb_evals: ABSORB_CM_ABSORB_EVALS.load(Ordering::Relaxed),
+    }
 }
 
-// Specialized helpers (avoid closure gymnastics).
-// NOTE: These helpers always increment the counters. We only reset+print when enabled.
-// This avoids surprising "all zeros" output if the gating flag is set too late or differs
-// across threads in some harnesses.
-#[inline] fn absorb_dcom_cm_f(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_f += n as u64); }
-#[inline] fn absorb_dcom_C_Mf(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_C_Mf += n as u64); }
-#[inline] fn absorb_dcom_cm_mtau(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_mtau += n as u64); }
-#[inline] fn absorb_dcom_setchk_params(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_params += n as u64); }
-#[inline] fn absorb_dcom_setchk_msgs(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_msgs += n as u64); }
-#[inline] fn absorb_dcom_setchk_r(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_r += n as u64); }
-#[inline] fn absorb_dcom_out_e(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_e += n as u64); }
-#[inline] fn absorb_dcom_out_b(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_b += n as u64); }
-#[inline] fn absorb_cm_comh(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_comh += n as u64); }
-#[inline] fn absorb_cm_sumcheck_params(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_params += n as u64); }
-#[inline] fn absorb_cm_sumcheck_msgs(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_msgs += n as u64); }
-#[inline] fn absorb_cm_sumcheck_r(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_r += n as u64); }
-#[inline] fn absorb_cm_absorb_evals(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_absorb_evals += n as u64); }
+// Specialized helpers.
+#[inline] fn absorb_dcom_cm_f(n: usize) { ABSORB_DCOM_CM_F.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_dcom_C_Mf(n: usize) { ABSORB_DCOM_C_MF.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_dcom_cm_mtau(n: usize) { ABSORB_DCOM_CM_MTAU.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_dcom_setchk_params(n: usize) { ABSORB_DCOM_SETCHK_PARAMS.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_dcom_setchk_msgs(n: usize) { ABSORB_DCOM_SETCHK_MSGS.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_dcom_setchk_r(n: usize) { ABSORB_DCOM_SETCHK_R.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_dcom_out_e(n: usize) { ABSORB_DCOM_OUT_E.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_dcom_out_b(n: usize) { ABSORB_DCOM_OUT_B.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_cm_comh(n: usize) { ABSORB_CM_COMH.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_cm_sumcheck_params(n: usize) { ABSORB_CM_SC_PARAMS.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_cm_sumcheck_msgs(n: usize) { ABSORB_CM_SC_MSGS.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_cm_sumcheck_r(n: usize) { ABSORB_CM_SC_R.fetch_add(n as u64, Ordering::Relaxed); }
+#[inline] fn absorb_cm_absorb_evals(n: usize) { ABSORB_CM_ABSORB_EVALS.fetch_add(n as u64, Ordering::Relaxed); }
 
 #[inline]
 fn cm_counting_on() -> bool {
@@ -3029,9 +3056,7 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
-    let absorb_breakdown_on =
-        std::env::var("LFP_WE_GATE_OPMIX").ok().as_deref() == Some("1");
-    ABSORB_COUNTING.with(|c| c.set(absorb_breakdown_on));
+    let absorb_breakdown_on = std::env::var("LFP_WE_GATE_OPMIX").ok().as_deref() == Some("1");
     if absorb_breakdown_on {
         absorb_reset();
     }
