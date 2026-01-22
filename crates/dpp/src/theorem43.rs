@@ -23,6 +23,7 @@ use std::collections::BTreeMap;
 use crate::dr1cs_flpcp::RsDr1csNpFlpcpSparse;
 use crate::packing::BoundedFlpcpSparse;
 use crate::sparse::SparseVec;
+use crate::toy_poseidon2::{estimate_cost, ToyPoseidon2Cost, ToyPoseidon2Params, ToyPoseidon2Sponge};
 
 /// Coins defining the single lockable query.
 #[derive(Clone, Debug)]
