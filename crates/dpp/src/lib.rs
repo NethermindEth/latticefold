@@ -21,6 +21,9 @@ pub mod packing;
 pub mod embedding;
 pub mod boolean_proof;
 pub mod pipeline;
+pub mod accepting_set;
+pub mod theorem43;
+pub mod toy_poseidon2;
 
 pub mod rs;
 pub mod dr1cs_flpcp;
@@ -34,3 +37,4 @@ pub use embedding::{EmbeddedFlpcpSparse, EmbeddingParams};
 pub use boolean_proof::BooleanProofFlpcpSparse;
 pub use subset_sum::{decode_bounded_subset_sum, SubsetSumError};
 pub use sparse::SparseVec;
+pub use theorem43::{Theorem43ArmingStats, Theorem43Coins, Theorem43Dpp, Theorem43LockArtifact};
