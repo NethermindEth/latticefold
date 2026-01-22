@@ -48,6 +48,69 @@ thread_local! {
     static CM_COUNTS: std::cell::RefCell<CmMathOpCounts> = std::cell::RefCell::new(CmMathOpCounts::default());
 }
 
+// -----------------------------------------------------------------------------
+// Optional Poseidon absorb-surface breakdown (for IO reduction work).
+//
+// Enabled by setting `LFP_WE_GATE_OPMIX=1`.
+// This is *not* part of the constraint system; it only helps identify where the transcript
+// is spending its absorb bandwidth (which drives permute count / Poseidon constraints).
+// -----------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Default)]
+struct AbsorbBreakdown {
+    // Dcom-prefix (rgchk + setchk + eval absorbs)
+    dcom_cm_f: u64,
+    dcom_C_Mf: u64,
+    dcom_cm_mtau: u64,
+    dcom_setchk_params: u64,
+    dcom_setchk_msgs: u64,
+    dcom_setchk_r: u64,
+    dcom_out_e: u64,
+    dcom_out_b: u64,
+
+    // CmProof segment
+    cm_comh: u64,
+    cm_sumcheck_params: u64,
+    cm_sumcheck_msgs: u64,
+    cm_sumcheck_r: u64,
+    cm_absorb_evals: u64,
+}
+
+thread_local! {
+    static ABSORB_COUNTING: std::cell::Cell<bool> = std::cell::Cell::new(false);
+    static ABSORB_COUNTS: std::cell::RefCell<AbsorbBreakdown> = std::cell::RefCell::new(AbsorbBreakdown::default());
+}
+
+#[inline]
+fn absorb_counting_on() -> bool {
+    ABSORB_COUNTING.with(|c| c.get())
+}
+
+#[inline]
+fn absorb_reset() {
+    ABSORB_COUNTS.with(|rc| *rc.borrow_mut() = AbsorbBreakdown::default());
+}
+
+#[inline]
+fn absorb_take() -> AbsorbBreakdown {
+    ABSORB_COUNTS.with(|rc| rc.borrow().clone())
+}
+
+// Specialized helpers (avoid closure gymnastics).
+#[inline] fn absorb_dcom_cm_f(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_f += n as u64); } }
+#[inline] fn absorb_dcom_C_Mf(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_C_Mf += n as u64); } }
+#[inline] fn absorb_dcom_cm_mtau(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_mtau += n as u64); } }
+#[inline] fn absorb_dcom_setchk_params(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_params += n as u64); } }
+#[inline] fn absorb_dcom_setchk_msgs(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_msgs += n as u64); } }
+#[inline] fn absorb_dcom_setchk_r(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_r += n as u64); } }
+#[inline] fn absorb_dcom_out_e(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_e += n as u64); } }
+#[inline] fn absorb_dcom_out_b(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_b += n as u64); } }
+#[inline] fn absorb_cm_comh(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_comh += n as u64); } }
+#[inline] fn absorb_cm_sumcheck_params(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_params += n as u64); } }
+#[inline] fn absorb_cm_sumcheck_msgs(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_msgs += n as u64); } }
+#[inline] fn absorb_cm_sumcheck_r(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_r += n as u64); } }
+#[inline] fn absorb_cm_absorb_evals(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_absorb_evals += n as u64); } }
+
 #[inline]
 fn cm_counting_on() -> bool {
     CM_COUNTING.with(|c| c.get())
@@ -1007,6 +1070,7 @@ where
             let rv = ring_to_ringvars::<R>(&mut b, &proof.comh[l][j]);
             // `absorb_comh` absorbs each ring element in coefficient order.
             absorb_flat.extend_from_slice(&rv.coeffs);
+                absorb_cm_comh(rv.coeffs.len());
             row.push(rv);
         }
         comh_vars.push(row);
@@ -1164,6 +1228,7 @@ where
         let v_deg = const_var(b, BF::<R>::from(2u64));
         absorb_field_elem_as_ring::<R>(b, absorb_flat, v_nvars);
         absorb_field_elem_as_ring::<R>(b, absorb_flat, v_deg);
+        absorb_cm_sumcheck_params(2);
 
         // Per-round transcript absorbs:
         // - prover message evaluations (3 ring elems)
@@ -1173,6 +1238,8 @@ where
             absorb_flat.extend_from_slice(&m[1].coeffs);
             absorb_flat.extend_from_slice(&m[2].coeffs);
             absorb_field_elem_as_ring::<R>(b, absorb_flat, r_sc[round]);
+            absorb_cm_sumcheck_msgs(m[0].coeffs.len() + m[1].coeffs.len() + m[2].coeffs.len());
+            absorb_cm_sumcheck_r(1);
         }
 
         let rc_pows = scalar_pow_table::<BF<R>>(b, rc, max_pow);
@@ -1296,6 +1363,9 @@ where
                 absorb_flat.extend_from_slice(&row[1].coeffs);
                 absorb_flat.extend_from_slice(&row[2].coeffs);
                 absorb_flat.extend_from_slice(&row[3].coeffs);
+                absorb_cm_absorb_evals(
+                    row[0].coeffs.len() + row[1].coeffs.len() + row[2].coeffs.len() + row[3].coeffs.len(),
+                );
             }
         }
         Ok(())
@@ -1833,6 +1903,7 @@ where
             for j in 0..kappa {
                 let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_f[j]);
                 absorb_flat.extend_from_slice(&rv.coeffs);
+                absorb_dcom_cm_f(rv.coeffs.len());
                 // Statement binding (prefix exposure):
                 //
                 // The Ajtai scheme is configured with an identity block so that the first few
@@ -1867,10 +1938,12 @@ where
             for j in 0..kappa {
                 let rv = ring_to_ringvars::<R>(&mut b, &cmc.C_Mf[j]);
                 absorb_flat.extend_from_slice(&rv.coeffs);
+                absorb_dcom_C_Mf(rv.coeffs.len());
             }
             for j in 0..kappa {
                 let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_mtau[j]);
                 absorb_flat.extend_from_slice(&rv.coeffs);
+                absorb_dcom_cm_mtau(rv.coeffs.len());
             }
         }
     }
@@ -1878,6 +1951,7 @@ where
     // Use statement-bound params instead of hardcoded constants.
     absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, params_vars[0]); // nvars_setchk
     absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, params_vars[1]); // degree_setchk
+    absorb_dcom_setchk_params(2);
 
     let mut msg_vars: Vec<[RingVars; 4]> = Vec::with_capacity(nvars);
     for (round, m) in msgs.msgs().iter().enumerate() {
@@ -1893,6 +1967,8 @@ where
         absorb_flat.extend_from_slice(&e2.coeffs);
         absorb_flat.extend_from_slice(&e3.coeffs);
         absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, r_point[round]);
+        absorb_dcom_setchk_msgs(e0.coeffs.len() + e1.coeffs.len() + e2.coeffs.len() + e3.coeffs.len());
+        absorb_dcom_setchk_r(1);
         msg_vars.push([e0, e1, e2, e3]);
     }
 
@@ -1910,6 +1986,7 @@ where
             for r in ej {
                 let rv = ring_to_ringvars::<R>(&mut b, r);
                 absorb_flat.extend_from_slice(&rv.coeffs);
+                absorb_dcom_out_e(rv.coeffs.len());
                 ej_vars.push(rv);
             }
             ek_vars.push(ej_vars);
@@ -1920,6 +1997,7 @@ where
     for bb in &out.b {
         let rv = ring_to_ringvars::<R>(&mut b, bb);
         absorb_flat.extend_from_slice(&rv.coeffs);
+        absorb_dcom_out_b(rv.coeffs.len());
         out_b_vars.push(rv);
     }
 
@@ -2948,6 +3026,13 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
+    let absorb_breakdown_on =
+        std::env::var("LFP_WE_GATE_OPMIX").ok().as_deref() == Some("1");
+    ABSORB_COUNTING.with(|c| c.set(absorb_breakdown_on));
+    if absorb_breakdown_on {
+        absorb_reset();
+    }
+
     // Hygiene + soundness: bind the trace to the verifier *program*.
     //
     // We deterministically consume the transcript op sequence induced by:
@@ -3836,6 +3921,25 @@ where
                 + c_cm
                 + c_decomp
         );
+        if absorb_breakdown_on {
+            let a = absorb_take();
+            eprintln!(
+                "  absorb(non-reabsorb) breakdown: dcom(cm_f={} C_Mf={} cm_mtau={} setchk_params={} setchk_msgs={} setchk_r={} out_e={} out_b={}) cm(comh={} sc_params={} sc_msgs={} sc_r={} absorb_evals={})",
+                a.dcom_cm_f,
+                a.dcom_C_Mf,
+                a.dcom_cm_mtau,
+                a.dcom_setchk_params,
+                a.dcom_setchk_msgs,
+                a.dcom_setchk_r,
+                a.dcom_out_e,
+                a.dcom_out_b,
+                a.cm_comh,
+                a.cm_sumcheck_params,
+                a.cm_sumcheck_msgs,
+                a.cm_sumcheck_r,
+                a.cm_absorb_evals
+            );
+        }
         eprintln!("==============================================================");
     }
 
