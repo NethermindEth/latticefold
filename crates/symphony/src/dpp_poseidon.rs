@@ -680,17 +680,92 @@ fn poseidon_sponge_dr1cs_from_trace_impl<F: PrimeField>(
             let mut next_vars: Vec<usize> = Vec::with_capacity(t);
             if is_full {
                 // Full rounds: ARK -> SBOX on all lanes -> MDS.
-                let mut ark_vars: Vec<usize> = Vec::with_capacity(t);
-                for i in 0..t {
-                    let val = b.assignment[state_vars[i]] + cfg.ark[r][i];
-                    let v = b.new_var(val);
-                    b.enforce_lc_times_one_eq_var(vec![(F::ONE, state_vars[i]), (cfg.ark[r][i], one)], v);
-                    ark_vars.push(v);
+                //
+                // Optimization (safe): avoid materializing `ark_vars[i] = state[i] + ark[r][i]`
+                // as separate linear constraints/variables. Instead, feed the affine form
+                // `(state[i] + const)` directly into the S-box exponentiation constraints as
+                // a linear combination.
+                //
+                // This reduces ~t linear constraints per full round (and their vars), which is
+                // a meaningful fraction of Poseidon cost for large permute counts.
+
+                #[inline]
+                fn eval_lc<F: PrimeField>(b: &Dr1csBuilder<F>, lc: &[(F, usize)]) -> F {
+                    lc.iter()
+                        .fold(F::ZERO, |acc, (c, idx)| acc + (*c * b.assignment[*idx]))
                 }
+
+                #[inline]
+                fn enforce_mul_lc_lc<F: PrimeField>(
+                    b: &mut Dr1csBuilder<F>,
+                    a: Vec<(F, usize)>,
+                    bb: Vec<(F, usize)>,
+                ) -> usize {
+                    let out_val = eval_lc::<F>(b, &a) * eval_lc::<F>(b, &bb);
+                    let out = b.new_var(out_val);
+                    b.add_constraint(a, bb, vec![(F::ONE, out)]);
+                    out
+                }
+
+                #[inline]
+                fn enforce_mul_var_lc<F: PrimeField>(
+                    b: &mut Dr1csBuilder<F>,
+                    x: usize,
+                    lc: Vec<(F, usize)>,
+                ) -> usize {
+                    let out_val = b.assignment[x] * eval_lc::<F>(b, &lc);
+                    let out = b.new_var(out_val);
+                    b.add_constraint(vec![(F::ONE, x)], lc, vec![(F::ONE, out)]);
+                    out
+                }
+
+                // S-box outputs per lane.
                 let mut sbox_vars: Vec<usize> = Vec::with_capacity(t);
                 for i in 0..t {
-                    sbox_vars.push(b.enforce_pow_u64(ark_vars[i], cfg.alpha));
+                    let ark = cfg.ark[r][i];
+                    // lc_in = state[i] + ark
+                    let lc_in = if ark.is_zero() {
+                        vec![(F::ONE, state_vars[i])]
+                    } else {
+                        vec![(F::ONE, state_vars[i]), (ark, one)]
+                    };
+
+                    let out = match cfg.alpha {
+                        3 => {
+                            // x^3 = (x^2)*x
+                            let x2 = enforce_mul_lc_lc::<F>(b, lc_in.clone(), lc_in.clone());
+                            enforce_mul_var_lc::<F>(b, x2, lc_in)
+                        }
+                        5 => {
+                            // x^5 = (x^2)^2 * x
+                            let x2 = enforce_mul_lc_lc::<F>(b, lc_in.clone(), lc_in.clone());
+                            let x4_val = b.assignment[x2] * b.assignment[x2];
+                            let x4 = b.new_var(x4_val);
+                            b.enforce_mul(x2, x2, x4);
+                            enforce_mul_var_lc::<F>(b, x4, lc_in)
+                        }
+                        7 => {
+                            // x^7 = (x^2)^2 * x^2 * x
+                            let x2 = enforce_mul_lc_lc::<F>(b, lc_in.clone(), lc_in.clone());
+                            let x4_val = b.assignment[x2] * b.assignment[x2];
+                            let x4 = b.new_var(x4_val);
+                            b.enforce_mul(x2, x2, x4);
+                            let x6_val = x4_val * b.assignment[x2];
+                            let x6 = b.new_var(x6_val);
+                            b.enforce_mul(x4, x2, x6);
+                            enforce_mul_var_lc::<F>(b, x6, lc_in)
+                        }
+                        _ => {
+                            // Fallback: materialize ARK as a var and use the generic exponentiation gadget.
+                            let val = b.assignment[state_vars[i]] + ark;
+                            let v = b.new_var(val);
+                            b.enforce_lc_times_one_eq_var(vec![(F::ONE, state_vars[i]), (ark, one)], v);
+                            b.enforce_pow_u64(v, cfg.alpha)
+                        }
+                    };
+                    sbox_vars.push(out);
                 }
+
                 for i in 0..t {
                     let mut lc: Vec<(F, usize)> = Vec::with_capacity(t);
                     let mut val = F::ZERO;
