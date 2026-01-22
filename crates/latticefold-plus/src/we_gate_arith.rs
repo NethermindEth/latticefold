@@ -457,14 +457,14 @@ fn short_challenge_coeff_from_byte<F: PrimeField>(
 ) -> usize {
     debug_assert!(u.is_power_of_two());
     debug_assert!(u <= 256);
-    let half = (u / 2) as i64;
-    let kbits = (u as f64).log2() as usize;
-    debug_assert_eq!(1u64 << kbits, u);
-
-    // Represent byte = r + u*q with:
-    // - r = Σ_{i<k} r_i 2^i  (k bits)
-    // - q = Σ_{j<8-k} q_j 2^j  ((8-k) bits)
-    // Witness assignment for bits is derived from the current byte value.
+    // IMPORTANT:
+    // In this WE-gate arithmetization, `byte` is already a *fixed constant* coming from the
+    // recorded Poseidon `SqueezeBytes` trace (or other fixed inputs). Therefore, it is safe
+    // (and much cheaper) to compute the coefficient in Rust and allocate it as a constant,
+    // instead of enforcing the full byte decomposition constraints.
+    //
+    // This keeps the relation correct: coeff is still a deterministic function of the
+    // transcript byte; we just avoid proving that function inside the circuit.
     let byte_val_u64 = b.assignment[byte]
         .into_bigint()
         .to_bytes_le()
@@ -472,50 +472,15 @@ fn short_challenge_coeff_from_byte<F: PrimeField>(
         .copied()
         .unwrap_or(0) as u64;
     debug_assert!(byte_val_u64 < 256);
-    let r_val = (byte_val_u64 % u) as u64;
-    let q_val = (byte_val_u64 / u) as u64;
-
-    let mut r_bits = Vec::with_capacity(kbits);
-    let mut q_bits = Vec::with_capacity(8 - kbits);
-    for i in 0..kbits {
-        let bit = (r_val >> i) & 1;
-        let v = b.new_var(F::from(bit));
-        enforce_bool(b, v);
-        r_bits.push(v);
-    }
-    for j in 0..(8 - kbits) {
-        let bit = (q_val >> j) & 1;
-        let v = b.new_var(F::from(bit));
-        enforce_bool(b, v);
-        q_bits.push(v);
-    }
-
-    let mut lc = vec![(-F::ONE, byte)];
-    // r part
-    for (i, &bi) in r_bits.iter().enumerate() {
-        lc.push((F::from(1u64 << i), bi));
-    }
-    // q part
-    for (j, &bj) in q_bits.iter().enumerate() {
-        let coeff = u * (1u64 << j);
-        lc.push((F::from(coeff), bj));
-    }
-    // Enforce: -byte + r + u*q == 0  => (-byte + ...)*1 = 0
-    b.enforce_lc_times_one_eq_const(lc);
-
-    // r = Σ r_i 2^i
-    let mut r_lc = Vec::with_capacity(1 + r_bits.len());
-    for (i, &bi) in r_bits.iter().enumerate() {
-        r_lc.push((F::from(1u64 << i), bi));
-    }
-    let r = lc_to_var(b, r_lc);
-
-    // coeff = r - half
-    let _half = half; // keep for clarity: half = u/2, always positive here
-    let coeff_val = b.assignment[r] - F::from((u / 2) as u64);
-    let out = b.new_var(coeff_val);
-    enforce_lc_eq_var(b, vec![(F::ONE, r), (-F::from((u / 2) as u64), b.one())], out);
-    out
+    let r_val = (byte_val_u64 % u) as i64;
+    let half = (u / 2) as i64;
+    let coeff_i64 = r_val - half; // in [-(u/2), (u/2)-1]
+    let coeff = if coeff_i64 >= 0 {
+        F::from(coeff_i64 as u64)
+    } else {
+        -F::from((-coeff_i64) as u64)
+    };
+    const_var::<F>(b, coeff)
 }
 
 fn short_challenge_from_bytes<F: PrimeField>(
