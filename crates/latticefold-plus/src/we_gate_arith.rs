@@ -266,13 +266,19 @@ fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: 
     // Negacyclic convolution mod (X^d + 1).
     let d = x.d();
     assert_eq!(d, y.d());
-    let one = b.one();
     let mut out = Vec::with_capacity(d);
     for k in 0..d {
-        // Build coefficient via sum of products; enforce via linear constraints over fresh vars.
-        let mut acc_var = b.new_var(F::ZERO);
-        b.enforce_var_eq_const(acc_var, F::ZERO);
-
+        // Build coefficient via sum of products.
+        //
+        // IMPORTANT: We *do not* build a length-d accumulation chain here.
+        // Instead we:
+        // - allocate each product term as its own multiplication constraint, and
+        // - enforce the signed sum equals the output coefficient with a *single* linear constraint.
+        //
+        // This is algebraically identical to the naive convolution, but replaces ~d linear
+        // constraints per output coefficient with 1, dramatically reducing dR1CS size.
+        let mut lc: Vec<(F, usize)> = Vec::with_capacity(d);
+        let mut sum_val = F::ZERO;
         for i in 0..d {
             // j = k - i mod d
             let j = if i <= k { k - i } else { d + k - i };
@@ -282,18 +288,14 @@ fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: 
             let prod_val = b.assignment[x.coeffs[i]] * b.assignment[y.coeffs[j]];
             let prod = b.new_var(prod_val);
             b.enforce_mul(x.coeffs[i], y.coeffs[j], prod);
-            // acc = acc + sign * prod
-            // One linear constraint per accumulation step.
-            cm_bump(|c| c.scalar_add += 1);
-            let new_acc = b.new_var(b.assignment[acc_var] + sign * b.assignment[prod]);
-            b.add_constraint(
-                vec![(F::ONE, acc_var), (sign, prod)],
-                vec![(F::ONE, one)],
-                vec![(F::ONE, new_acc)],
-            );
-            acc_var = new_acc;
+            lc.push((sign, prod));
+            sum_val += sign * prod_val;
         }
-        out.push(acc_var);
+        // Enforce: (Σ sign_i * prod_i) * 1 = out_k.
+        cm_bump(|c| c.scalar_add += 1);
+        let out_k = b.new_var(sum_val);
+        b.add_constraint(lc, vec![(F::ONE, b.one())], vec![(F::ONE, out_k)]);
+        out.push(out_k);
     }
     RingVars::new(out)
 }
