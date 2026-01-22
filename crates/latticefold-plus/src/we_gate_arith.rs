@@ -261,9 +261,101 @@ fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) ->
     RingVars::new(out)
 }
 
-fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
-    cm_bump(|c| c.ring_mul_negacyclic += 1);
-    // Negacyclic convolution mod (X^d + 1).
+fn poly_mul_karatsuba<F: PrimeField>(b: &mut Dr1csBuilder<F>, a: &[usize], c: &[usize]) -> Vec<usize> {
+    assert_eq!(a.len(), c.len());
+    let n = a.len();
+    assert!(n.is_power_of_two(), "karatsuba requires power-of-two length");
+    assert!(n > 0);
+    if n == 1 {
+        return vec![scalar_mul::<F>(b, a[0], c[0])]; // length 2n-1 = 1
+    }
+    let m = n / 2;
+    let (a0, a1) = a.split_at(m);
+    let (c0, c1) = c.split_at(m);
+
+    // z0 = a0*c0, z2 = a1*c1
+    let z0 = poly_mul_karatsuba::<F>(b, a0, c0); // len n-1
+    let z2 = poly_mul_karatsuba::<F>(b, a1, c1); // len n-1
+
+    // (a0+a1), (c0+c1)
+    let mut a01 = Vec::with_capacity(m);
+    let mut c01 = Vec::with_capacity(m);
+    for i in 0..m {
+        a01.push(scalar_add::<F>(b, a0[i], a1[i]));
+        c01.push(scalar_add::<F>(b, c0[i], c1[i]));
+    }
+
+    // z1 = (a0+a1)*(c0+c1)
+    let z1 = poly_mul_karatsuba::<F>(b, &a01, &c01); // len n-1
+
+    // cross = z1 - z0 - z2
+    debug_assert_eq!(z0.len(), n - 1);
+    debug_assert_eq!(z1.len(), n - 1);
+    debug_assert_eq!(z2.len(), n - 1);
+    let mut cross = Vec::with_capacity(n - 1);
+    for i in 0..(n - 1) {
+        let t = scalar_sub::<F>(b, z1[i], z0[i]);
+        cross.push(scalar_sub::<F>(b, t, z2[i]));
+    }
+
+    // Assemble length-(2n-1) product:
+    // a*c = z0 + (cross << m) + (z2 << n)
+    let mut res = Vec::with_capacity(2 * n - 1);
+    for k in 0..(2 * n - 1) {
+        let mut acc: Option<usize> = None;
+        if k < z0.len() {
+            acc = Some(z0[k]);
+        }
+        if k >= m {
+            let idx = k - m;
+            if idx < cross.len() {
+                acc = Some(match acc {
+                    None => cross[idx],
+                    Some(v) => scalar_add::<F>(b, v, cross[idx]),
+                });
+            }
+        }
+        if k >= n {
+            let idx = k - n;
+            if idx < z2.len() {
+                acc = Some(match acc {
+                    None => z2[idx],
+                    Some(v) => scalar_add::<F>(b, v, z2[idx]),
+                });
+            }
+        }
+        res.push(acc.expect("karatsuba assembly: missing term"));
+    }
+    res
+}
+
+fn ring_mul_negacyclic_karatsuba<F: PrimeField>(
+    b: &mut Dr1csBuilder<F>,
+    x: &RingVars,
+    y: &RingVars,
+) -> RingVars {
+    // Compute ordinary product (len 2d-1) then fold mod (X^d + 1): c[k] = p[k] - p[k+d].
+    let d = x.d();
+    assert_eq!(d, y.d());
+    assert!(d.is_power_of_two());
+    let prod = poly_mul_karatsuba::<F>(b, &x.coeffs, &y.coeffs); // len 2d-1
+    debug_assert_eq!(prod.len(), 2 * d - 1);
+    let mut out = Vec::with_capacity(d);
+    for k in 0..d {
+        let low = prod[k];
+        let hi = k + d;
+        if hi < prod.len() {
+            out.push(scalar_sub::<F>(b, low, prod[hi]));
+        } else {
+            // Highest coefficient p[2d-1] is zero, so subtraction is unnecessary.
+            out.push(low);
+        }
+    }
+    RingVars::new(out)
+}
+
+fn ring_mul_negacyclic_naive<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    // Negacyclic convolution mod (X^d + 1) via signed schoolbook.
     let d = x.d();
     assert_eq!(d, y.d());
     let mut out = Vec::with_capacity(d);
@@ -298,6 +390,18 @@ fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: 
         out.push(out_k);
     }
     RingVars::new(out)
+}
+
+fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    cm_bump(|c| c.ring_mul_negacyclic += 1);
+    let d = x.d();
+    assert_eq!(d, y.d());
+    // Karatsuba cuts mul count (64^2 -> 3^6 = 729) for d=64 and is algebraically identical.
+    // Fall back to the signed schoolbook for non-pow2 dimensions.
+    if d.is_power_of_two() && d > 1 {
+        return ring_mul_negacyclic_karatsuba::<F>(b, x, y);
+    }
+    ring_mul_negacyclic_naive::<F>(b, x, y)
 }
 
 fn ring_eq<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) {
@@ -1001,10 +1105,10 @@ where
         let mut acc0 = scalar_to_ringvars::<R>(&mut b, BF::<R>::ZERO);
         let mut acc1 = scalar_to_ringvars::<R>(&mut b, BF::<R>::ZERO);
         for j in 0..kappa {
-            let t0 = scalar_var_to_ringvars::<R>(&mut b, tensor_c0[j]);
-            let t1 = scalar_var_to_ringvars::<R>(&mut b, tensor_c1[j]);
-            let s0 = ring_mul_negacyclic::<BF<R>>(&mut b, &t0, &comh_vars[l][j]);
-            let s1 = ring_mul_negacyclic::<BF<R>>(&mut b, &t1, &comh_vars[l][j]);
+            // tensor_c{0,1}[j] are BF scalars. Multiplying a ring element by a constant-coeff ring
+            // is exactly per-coefficient scaling (avoid a full negacyclic multiply gadget).
+            let s0 = ring_scale::<BF<R>>(&mut b, &comh_vars[l][j], tensor_c0[j]);
+            let s1 = ring_scale::<BF<R>>(&mut b, &comh_vars[l][j], tensor_c1[j]);
             acc0 = ring_add::<BF<R>>(&mut b, &acc0, &s0);
             acc1 = ring_add::<BF<R>>(&mut b, &acc1, &s1);
         }
@@ -1215,8 +1319,7 @@ where
                 inner = ring_add::<BF<R>>(b, &inner, &t_m3);
             }
             // eq * inner
-            let eq_ring = scalar_var_to_ringvars::<R>(b, eq);
-            let eq_inner = ring_mul_negacyclic::<BF<R>>(b, &eq_ring, &inner);
+            let eq_inner = ring_scale::<BF<R>>(b, &inner, eq);
             eval_acc = ring_add::<BF<R>>(b, &eval_acc, &eq_inner);
 
             // Add t(z) terms (uses el[0][0])
@@ -1477,14 +1580,13 @@ where
     let vb = ring_to_ringvars::<R>(&mut b, &proof.vb);
     let vc = ring_to_ringvars::<R>(&mut b, &proof.vc);
 
-    // e = eq_eval(r_pre, r_sc) (scalar), lifted to a constant-coeff ring element.
+    // e = eq_eval(r_pre, r_sc) (scalar).
     let e = eq_eval_vars::<BF<R>>(&mut b, &r_pre, &r_sc);
-    let e_ring = scalar_var_to_ringvars::<R>(&mut b, e);
 
     // Enforce: e * (va*vb - vc) == subclaim_eval
     let vab = ring_mul_negacyclic::<BF<R>>(&mut b, &va, &vb);
     let diff = ring_sub::<BF<R>>(&mut b, &vab, &vc);
-    let lhs = ring_mul_negacyclic::<BF<R>>(&mut b, &e_ring, &diff);
+    let lhs = ring_scale::<BF<R>>(&mut b, &diff, e);
     ring_eq::<BF<R>>(&mut b, &lhs, &subclaim_eval);
 
     let (inst, asg) = b.into_instance();
@@ -2864,14 +2966,13 @@ where
         absorb_flat.extend_from_slice(&vb.coeffs);
         absorb_flat.extend_from_slice(&vc.coeffs);
 
-        // e = eq_eval(r_pre, r_sc) (scalar), lifted to a constant-coeff ring element.
+        // e = eq_eval(r_pre, r_sc) (scalar).
         let e = eq_eval_vars::<BF<R>>(&mut b, &r_pre, &r_sc);
-        let e_ring = scalar_var_to_ringvars::<R>(&mut b, e);
 
         // Enforce: e * (va*vb - vc) == subclaim_eval
         let vab = ring_mul_negacyclic::<BF<R>>(&mut b, &va, &vb);
         let diff = ring_sub::<BF<R>>(&mut b, &vab, &vc);
-        let lhs = ring_mul_negacyclic::<BF<R>>(&mut b, &e_ring, &diff);
+        let lhs = ring_scale::<BF<R>>(&mut b, &diff, e);
         ring_eq::<BF<R>>(&mut b, &lhs, &subclaim_eval);
     }
 

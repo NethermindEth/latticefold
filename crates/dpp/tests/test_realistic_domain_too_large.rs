@@ -1,4 +1,4 @@
-use ark_ff::{Field, Fp64, MontBackend, MontConfig, PrimeField};
+use ark_ff::{Field, Fp64, MontBackend, MontConfig};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
