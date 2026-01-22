@@ -97,19 +97,22 @@ fn absorb_take() -> AbsorbBreakdown {
 }
 
 // Specialized helpers (avoid closure gymnastics).
-#[inline] fn absorb_dcom_cm_f(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_f += n as u64); } }
-#[inline] fn absorb_dcom_C_Mf(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_C_Mf += n as u64); } }
-#[inline] fn absorb_dcom_cm_mtau(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_mtau += n as u64); } }
-#[inline] fn absorb_dcom_setchk_params(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_params += n as u64); } }
-#[inline] fn absorb_dcom_setchk_msgs(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_msgs += n as u64); } }
-#[inline] fn absorb_dcom_setchk_r(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_r += n as u64); } }
-#[inline] fn absorb_dcom_out_e(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_e += n as u64); } }
-#[inline] fn absorb_dcom_out_b(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_b += n as u64); } }
-#[inline] fn absorb_cm_comh(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_comh += n as u64); } }
-#[inline] fn absorb_cm_sumcheck_params(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_params += n as u64); } }
-#[inline] fn absorb_cm_sumcheck_msgs(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_msgs += n as u64); } }
-#[inline] fn absorb_cm_sumcheck_r(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_r += n as u64); } }
-#[inline] fn absorb_cm_absorb_evals(n: usize) { if absorb_counting_on() { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_absorb_evals += n as u64); } }
+// NOTE: These helpers always increment the counters. We only reset+print when enabled.
+// This avoids surprising "all zeros" output if the gating flag is set too late or differs
+// across threads in some harnesses.
+#[inline] fn absorb_dcom_cm_f(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_f += n as u64); }
+#[inline] fn absorb_dcom_C_Mf(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_C_Mf += n as u64); }
+#[inline] fn absorb_dcom_cm_mtau(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_cm_mtau += n as u64); }
+#[inline] fn absorb_dcom_setchk_params(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_params += n as u64); }
+#[inline] fn absorb_dcom_setchk_msgs(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_msgs += n as u64); }
+#[inline] fn absorb_dcom_setchk_r(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_setchk_r += n as u64); }
+#[inline] fn absorb_dcom_out_e(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_e += n as u64); }
+#[inline] fn absorb_dcom_out_b(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().dcom_out_b += n as u64); }
+#[inline] fn absorb_cm_comh(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_comh += n as u64); }
+#[inline] fn absorb_cm_sumcheck_params(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_params += n as u64); }
+#[inline] fn absorb_cm_sumcheck_msgs(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_msgs += n as u64); }
+#[inline] fn absorb_cm_sumcheck_r(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_sumcheck_r += n as u64); }
+#[inline] fn absorb_cm_absorb_evals(n: usize) { ABSORB_COUNTS.with(|rc| rc.borrow_mut().cm_absorb_evals += n as u64); }
 
 #[inline]
 fn cm_counting_on() -> bool {
