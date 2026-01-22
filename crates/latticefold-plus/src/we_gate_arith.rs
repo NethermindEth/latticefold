@@ -5135,7 +5135,7 @@ mod tests {
                 "[test_large_trace_goldilocks64] build_we_dr1cs: {:?} (nvars={}, constraints={})",
                 t2.elapsed(),
                 out.inst.nvars,
-                out.inst.constraints
+                out.inst.constraints.len()
             );
         };
 
