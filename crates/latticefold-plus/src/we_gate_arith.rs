@@ -4260,7 +4260,7 @@ mod tests {
         if (F::TWO_ADICITY as usize) < 7 {
             // Frog's base field may not be 2-adic enough for the NTT path; that's OK because
             // the accelerated gadget is guarded by `LFP_WE_GATE_NTT_MUL=1` *and* a 2-adicity check.
-            return;
+            //return;
         }
 
         let mut b = Dr1csBuilder::<F>::new();
