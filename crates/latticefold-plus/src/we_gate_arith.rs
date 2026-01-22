@@ -32,8 +32,6 @@ struct CmMathOpCounts {
     ring_mul_negacyclic: u64,
     ring_eq: u64,
     lc_to_var: u64,
-    enforce_lc_eq_var: u64,
-    enforce_bool: u64,
     scalar_add: u64,
     scalar_sub: u64,
     scalar_mul: u64,
@@ -180,12 +178,15 @@ where
 {
     let d = R::dimension();
     let mut coeffs = Vec::with_capacity(d);
-    let v0 = b.new_var(x);
+    // This helper is used for *constant* scalars known at arithmetization time (e.g. 0 initializers).
+    // Enforce constantness to avoid introducing free offsets into verifier math.
+    let v0 = const_var::<BF<R>>(b, x);
     coeffs.push(v0);
+    let z = const_var::<BF<R>>(b, BF::<R>::ZERO);
     for _ in 1..d {
-        let vz = b.new_var(BF::<R>::ZERO);
-        b.enforce_var_eq_const(vz, BF::<R>::ZERO);
-        coeffs.push(vz);
+        // Reuse a single constrained-zero var for all remaining coefficients.
+        // This is algebraically identical but avoids allocating O(d) fresh zero vars per call.
+        coeffs.push(z);
     }
     RingVars::new(coeffs)
 }
@@ -201,10 +202,9 @@ where
     let d = R::dimension();
     let mut coeffs = Vec::with_capacity(d);
     coeffs.push(x0);
+    let z = const_var::<BF<R>>(b, BF::<R>::ZERO);
     for _ in 1..d {
-        let vz = b.new_var(BF::<R>::ZERO);
-        b.enforce_var_eq_const(vz, BF::<R>::ZERO);
-        coeffs.push(vz);
+        coeffs.push(z);
     }
     RingVars::new(coeffs)
 }
@@ -425,20 +425,7 @@ fn lc_to_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>) -> usi
     v
 }
 
-fn enforce_lc_eq_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>, v: usize) {
-    cm_bump(|c| c.enforce_lc_eq_var += 1);
-    b.add_constraint(lc, vec![(F::ONE, b.one())], vec![(F::ONE, v)]);
-}
 
-fn enforce_bool<F: PrimeField>(b: &mut Dr1csBuilder<F>, bit: usize) {
-    cm_bump(|c| c.enforce_bool += 1);
-    // bit*(bit-1)=0
-    b.add_constraint(
-        vec![(F::ONE, bit)],
-        vec![(F::ONE, bit), (-F::ONE, b.one())],
-        vec![(F::ZERO, b.one())],
-    );
-}
 
 fn const_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, c: F) -> usize {
     let v = b.new_var(c);
@@ -3820,15 +3807,13 @@ where
             c_pose, c_params, c_lin, c_stmt, c_dcom, c_coin, c_field, c_cm, c_decomp
         );
         eprintln!(
-            "  cm_math op counts: ring_add={} ring_sub={} ring_scale={} ring_mul={} ring_eq={} lc_to_var={} enforce_lc_eq_var={} enforce_bool={} scalar_add={} scalar_sub={} scalar_mul={} scalar_mul_const={} scalar_sub_const={} scalar_pow_table={} eq_eval_vars={} short_chal_from_bytes={} ct_psi_mul_ring={}",
+            "  cm_math op counts: ring_add={} ring_sub={} ring_scale={} ring_mul={} ring_eq={} lc_to_var={} scalar_add={} scalar_sub={} scalar_mul={} scalar_mul_const={} scalar_sub_const={} scalar_pow_table={} eq_eval_vars={} short_chal_from_bytes={} ct_psi_mul_ring={}",
             cm_counts.ring_add,
             cm_counts.ring_sub,
             cm_counts.ring_scale,
             cm_counts.ring_mul_negacyclic,
             cm_counts.ring_eq,
             cm_counts.lc_to_var,
-            cm_counts.enforce_lc_eq_var,
-            cm_counts.enforce_bool,
             cm_counts.scalar_add,
             cm_counts.scalar_sub,
             cm_counts.scalar_mul,
