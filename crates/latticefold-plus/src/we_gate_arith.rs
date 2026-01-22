@@ -4,7 +4,7 @@
 //! keeping the relation log-scale in `n` and linear in the verifier-visible message sizes.
 
 use ark_crypto_primitives::sponge::poseidon::PoseidonConfig;
-use ark_ff::{BigInteger, Field, FftField, PrimeField};
+use ark_ff::{BigInteger, Field, PrimeField};
 use stark_rings::{psi, unit_monomial, CoeffRing, OverField, PolyRing, Zq};
 
 use crate::recording_transcript::{PoseidonTraceOp as LfPoseidonTraceOp, PoseidonTranscriptTrace};
@@ -261,32 +261,9 @@ fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) ->
     RingVars::new(out)
 }
 
-fn ring_mul_negacyclic<F: PrimeField + FftField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
     cm_bump(|c| c.ring_mul_negacyclic += 1);
     // Negacyclic convolution mod (X^d + 1).
-    //
-    // IMPORTANT:
-    // - Default implementation is the simple O(d^2) convolution (always correct, but expensive).
-    // - If `LFP_WE_GATE_NTT_MUL=1` and the field supports sufficient 2-adicity, we switch to
-    //   an NTT-based negacyclic multiply gadget that reduces variable-variable multiplications.
-    if std::env::var("LFP_WE_GATE_NTT_MUL").ok().as_deref() == Some("1") {
-        // This branch is intentionally narrow: we only accelerate for power-of-two d where
-        // an NTT exists (2d | (p-1)). For our WE gate runs, d=64.
-        //
-        // If the bound doesn't hold for this field, fall back to the naive multiply.
-        let d = x.d();
-        if d.is_power_of_two()
-            && d > 0
-            && (2 * d).is_power_of_two()
-            && (F::TWO_ADICITY as usize) >= (2 * d).trailing_zeros() as usize
-        {
-            return ring_mul_negacyclic_ntt::<F>(b, x, y);
-        }
-    }
-    ring_mul_negacyclic_naive::<F>(b, x, y)
-}
-
-fn ring_mul_negacyclic_naive<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
     let d = x.d();
     assert_eq!(d, y.d());
     let one = b.one();
@@ -319,110 +296,6 @@ fn ring_mul_negacyclic_naive<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVar
         out.push(acc_var);
     }
     RingVars::new(out)
-}
-
-fn two_adic_root_of_unity<F: FftField>(order: usize) -> F {
-    debug_assert!(order.is_power_of_two());
-    let log_order = order.trailing_zeros() as usize;
-    let t = F::TWO_ADICITY as usize;
-    assert!(t >= log_order, "field does not support required 2-adic order");
-    // TWO_ADIC_ROOT_OF_UNITY has order 2^t. Raise it to 2^(t-log_order) to get order 2^log_order.
-    let exp = 1u64 << (t - log_order);
-    F::TWO_ADIC_ROOT_OF_UNITY.pow([exp])
-}
-
-fn ring_mul_negacyclic_ntt<F: FftField + PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
-    // NTT-based negacyclic multiplication for power-of-two d.
-    //
-    // For d = 2^m:
-    // - Let ψ be a primitive 2d-th root of unity (order = 2d).
-    // - Define ζ = ψ^2 (primitive d-th root).
-    // - Twist: a'_i = a_i * ψ^i, b'_i = b_i * ψ^i.
-    // - Compute cyclic conv length d via NTT with root ζ:
-    //     c' = NTT^{-1}(NTT(a') ∘ NTT(b'))
-    // - Untwist: c_i = c'_i * ψ^{-i}.
-    let d = x.d();
-    assert_eq!(d, y.d());
-    assert!(d.is_power_of_two());
-    assert!(2 * d <= (1usize << (F::TWO_ADICITY as usize)));
-
-    let psi = two_adic_root_of_unity::<F>(2 * d); // order 2d
-    let zeta = psi * psi; // order d
-    let zeta_inv = zeta.inverse().expect("zeta invertible");
-    let psi_inv = psi.inverse().expect("psi invertible");
-    let n_inv = F::from(d as u64).inverse().expect("n invertible");
-
-    // Precompute powers ψ^i and ψ^{-i} for i=0..d-1.
-    let mut psi_pows = vec![F::ONE; d];
-    let mut psi_inv_pows = vec![F::ONE; d];
-    for i in 1..d {
-        psi_pows[i] = psi_pows[i - 1] * psi;
-        psi_inv_pows[i] = psi_inv_pows[i - 1] * psi_inv;
-    }
-
-    // Twist (constant muls).
-    let mut a = Vec::with_capacity(d);
-    let mut btw = Vec::with_capacity(d);
-    for i in 0..d {
-        a.push(scalar_mul_const::<F>(b, x.coeffs[i], psi_pows[i]));
-        btw.push(scalar_mul_const::<F>(b, y.coeffs[i], psi_pows[i]));
-    }
-
-    // Forward NTT on both.
-    ntt_in_place::<F>(b, &mut a, zeta);
-    ntt_in_place::<F>(b, &mut btw, zeta);
-
-    // Pointwise multiply (variable-variable).
-    let mut c_freq = Vec::with_capacity(d);
-    for i in 0..d {
-        c_freq.push(scalar_mul::<F>(b, a[i], btw[i]));
-    }
-
-    // Inverse NTT.
-    ntt_in_place::<F>(b, &mut c_freq, zeta_inv);
-    // Scale by n^{-1}.
-    for i in 0..d {
-        c_freq[i] = scalar_mul_const::<F>(b, c_freq[i], n_inv);
-    }
-
-    // Untwist.
-    let mut out = Vec::with_capacity(d);
-    for i in 0..d {
-        out.push(scalar_mul_const::<F>(b, c_freq[i], psi_inv_pows[i]));
-    }
-    RingVars::new(out)
-}
-
-fn ntt_in_place<F: PrimeField>(
-    b: &mut Dr1csBuilder<F>,
-    a: &mut [usize],
-    root: F, // primitive n-th root of unity
-) {
-    let n = a.len();
-    debug_assert!(n.is_power_of_two());
-    let mut len = 1usize;
-    while len < n {
-        // wlen = root^(n/(2*len))
-        let step = n / (2 * len);
-        let wlen = root.pow([step as u64]);
-        // Precompute w powers for this stage.
-        let mut ws = vec![F::ONE; len];
-        for j in 1..len {
-            ws[j] = ws[j - 1] * wlen;
-        }
-
-        for i in (0..n).step_by(2 * len) {
-            for j in 0..len {
-                let u = a[i + j];
-                let v = scalar_mul_const::<F>(b, a[i + j + len], ws[j]);
-                let t0 = scalar_add::<F>(b, u, v);
-                let t1 = scalar_sub::<F>(b, u, v);
-                a[i + j] = t0;
-                a[i + j + len] = t1;
-            }
-        }
-        len <<= 1;
-    }
 }
 
 fn ring_eq<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) {
@@ -1126,10 +999,10 @@ where
         let mut acc0 = scalar_to_ringvars::<R>(&mut b, BF::<R>::ZERO);
         let mut acc1 = scalar_to_ringvars::<R>(&mut b, BF::<R>::ZERO);
         for j in 0..kappa {
-            // tensor_c{0,1}[j] are scalars; multiplying a ring element by a constant-coeff ring
-            // is just per-coefficient scaling (avoids the O(d^2) convolution).
-            let s0 = ring_scale::<BF<R>>(&mut b, &comh_vars[l][j], tensor_c0[j]);
-            let s1 = ring_scale::<BF<R>>(&mut b, &comh_vars[l][j], tensor_c1[j]);
+            let t0 = scalar_var_to_ringvars::<R>(&mut b, tensor_c0[j]);
+            let t1 = scalar_var_to_ringvars::<R>(&mut b, tensor_c1[j]);
+            let s0 = ring_mul_negacyclic::<BF<R>>(&mut b, &t0, &comh_vars[l][j]);
+            let s1 = ring_mul_negacyclic::<BF<R>>(&mut b, &t1, &comh_vars[l][j]);
             acc0 = ring_add::<BF<R>>(&mut b, &acc0, &s0);
             acc1 = ring_add::<BF<R>>(&mut b, &acc1, &s1);
         }
@@ -1340,7 +1213,8 @@ where
                 inner = ring_add::<BF<R>>(b, &inner, &t_m3);
             }
             // eq * inner
-            let eq_inner = ring_scale::<BF<R>>(b, &inner, eq);
+            let eq_ring = scalar_var_to_ringvars::<R>(b, eq);
+            let eq_inner = ring_mul_negacyclic::<BF<R>>(b, &eq_ring, &inner);
             eval_acc = ring_add::<BF<R>>(b, &eval_acc, &eq_inner);
 
             // Add t(z) terms (uses el[0][0])
@@ -1603,11 +1477,12 @@ where
 
     // e = eq_eval(r_pre, r_sc) (scalar), lifted to a constant-coeff ring element.
     let e = eq_eval_vars::<BF<R>>(&mut b, &r_pre, &r_sc);
+    let e_ring = scalar_var_to_ringvars::<R>(&mut b, e);
 
     // Enforce: e * (va*vb - vc) == subclaim_eval
     let vab = ring_mul_negacyclic::<BF<R>>(&mut b, &va, &vb);
     let diff = ring_sub::<BF<R>>(&mut b, &vab, &vc);
-    let lhs = ring_scale::<BF<R>>(&mut b, &diff, e);
+    let lhs = ring_mul_negacyclic::<BF<R>>(&mut b, &e_ring, &diff);
     ring_eq::<BF<R>>(&mut b, &lhs, &subclaim_eval);
 
     let (inst, asg) = b.into_instance();
@@ -2989,11 +2864,12 @@ where
 
         // e = eq_eval(r_pre, r_sc) (scalar), lifted to a constant-coeff ring element.
         let e = eq_eval_vars::<BF<R>>(&mut b, &r_pre, &r_sc);
+        let e_ring = scalar_var_to_ringvars::<R>(&mut b, e);
 
         // Enforce: e * (va*vb - vc) == subclaim_eval
         let vab = ring_mul_negacyclic::<BF<R>>(&mut b, &va, &vb);
         let diff = ring_sub::<BF<R>>(&mut b, &vab, &vc);
-        let lhs = ring_scale::<BF<R>>(&mut b, &diff, e);
+        let lhs = ring_mul_negacyclic::<BF<R>>(&mut b, &e_ring, &diff);
         ring_eq::<BF<R>>(&mut b, &lhs, &subclaim_eval);
     }
 
@@ -4244,44 +4120,6 @@ mod tests {
 
         let (inst, asg) = b.into_instance();
         inst.check(&asg).unwrap();
-    }
-
-    #[test]
-    fn test_ring_mul_negacyclic_ntt_matches_naive_on_d64() {
-        // Sanity: the accelerated NTT-based negacyclic multiply must match the naive O(d^2) gadget.
-        //
-        // This is a *gadget-level* equivalence check: we build both computations in one dR1CS
-        // and enforce equality of all coefficients.
-        type RR = cyclotomic_rings::rings::FrogRing64;
-        type F = BF<RR>;
-
-        let d = RR::dimension();
-        assert_eq!(d, 64, "this test assumes d=64");
-        if (F::TWO_ADICITY as usize) < 7 {
-            // Frog's base field may not be 2-adic enough for the NTT path; that's OK because
-            // the accelerated gadget is guarded by `LFP_WE_GATE_NTT_MUL=1` *and* a 2-adicity check.
-            return;
-        }
-
-        let mut b = Dr1csBuilder::<F>::new();
-        b.enforce_var_eq_const(b.one(), F::ONE);
-
-        // Deterministic “random” inputs.
-        let mut x_coeffs = Vec::with_capacity(d);
-        let mut y_coeffs = Vec::with_capacity(d);
-        for i in 0..d {
-            x_coeffs.push(const_var(&mut b, F::from((1000 + i) as u64)));
-            y_coeffs.push(const_var(&mut b, F::from((2000 + 3 * i) as u64)));
-        }
-        let x = RingVars::new(x_coeffs);
-        let y = RingVars::new(y_coeffs);
-
-        let z_naive = ring_mul_negacyclic_naive::<F>(&mut b, &x, &y);
-        let z_ntt = ring_mul_negacyclic_ntt::<F>(&mut b, &x, &y);
-        ring_eq::<F>(&mut b, &z_naive, &z_ntt);
-
-        let (inst, asg) = b.into_instance();
-        inst.check(&asg).expect("ntt gadget must match naive");
     }
 
     #[test]
