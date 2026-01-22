@@ -25,7 +25,7 @@
 #![allow(non_snake_case)]
 
 use criterion::Criterion;
-use latticefold_plus::setchk::{In, MonomialSet, Out};
+use latticefold_plus::setchk::{ExternalMats, In, MonomialSet, Out};
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings_linalg::SparseMatrix;
 
@@ -70,7 +70,7 @@ fn setup_proof(set_size: usize, num_batches: usize) -> (In<R>, Out<R>) {
     let input = setup_input(set_size, num_batches);
     let mut ts = create_transcript();
 
-    let output = input.set_check(&[], &mut ts);
+    let output = input.set_check(ExternalMats::Ring(&[]), &mut ts);
 
     let mut verify_ts = create_transcript();
     output
@@ -113,7 +113,7 @@ impl ProverBenchmark for SetCheckProver {
 
     fn run_prover(input: Self::Input) -> Self::Output {
         let mut ts = create_transcript();
-        input.set_check(&[], &mut ts)
+        input.set_check(ExternalMats::Ring(&[]), &mut ts)
     }
 }
 
@@ -182,7 +182,7 @@ impl ProverBenchmark for SetCheckBatching {
 
     fn run_prover(input: Self::Input) -> Self::Output {
         let mut ts = create_transcript();
-        input.set_check(&[], &mut ts)
+        input.set_check(ExternalMats::Ring(&[]), &mut ts)
     }
 }
 

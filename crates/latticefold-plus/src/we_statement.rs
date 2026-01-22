@@ -129,8 +129,16 @@ pub fn digest32_to_bits_field<BF: PrimeField>(digest: [u8; 32]) -> Vec<BF> {
 /// In the SP1/WE arming model this should be a **precomputed constant** identifying the exact
 /// WE gate version (code + constraint system generation), not something derived per-proof.
 ///
-/// TODO: fill with the production gate digest for the SP1 WE gate.
-pub const LFP_WE_GATE_DIGEST_V1: [u8; 32] = [0u8; 32];
+/// Temporary nonzero domain separator for this gate version.
+///
+/// Value is `SHA256("LFP_WE_GATE_DIGEST_V1")`.
+///
+/// NOTE: This is *not* a hash of the code/constraint system; it is just a stable, nonzero label.
+pub const LFP_WE_GATE_DIGEST_V1: [u8; 32] = [
+    0xc2, 0x50, 0x46, 0x54, 0x4b, 0x5b, 0xb8, 0xcc, 0x6f, 0xef, 0x2b, 0x55, 0x27, 0xb0,
+    0x17, 0x77, 0xfb, 0x54, 0x0d, 0x5f, 0x1b, 0xc6, 0xda, 0x2b, 0x0d, 0x00, 0xc7, 0x4e,
+    0xda, 0x7e, 0x02, 0x25,
+];
 
 /// Deterministic statement encoding for WE/DPP.
 ///

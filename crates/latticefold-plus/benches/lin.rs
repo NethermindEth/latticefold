@@ -34,7 +34,9 @@ use latticefold_plus::{
     r1cs::ComR1CS,
 };
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
-use stark_rings_linalg::{Matrix, SparseMatrix};
+use stark_rings_linalg::Matrix;
+use std::sync::Arc;
+use stark_rings_linalg::SparseMatrix;
 
 #[path = "utils/mod.rs"]
 mod utils;
@@ -58,7 +60,7 @@ use utils::{
 /// ensure valid R1CS satisfaction with norm bound B.
 fn setup_input(n: usize, k: usize, kappa: usize, B: usize) -> LinB<R> {
     let mut rng = bench_rng();
-    let dparams = get_validated_decomp_params(k, kappa, n);
+    let _dparams = get_validated_decomp_params(k, kappa, n);
 
     let r1cs = R1CSBuilder::new(n, k, B as u128).build_decomposed_square();
     let A = create_ajtai_matrix(kappa, n, &mut rng);
@@ -96,7 +98,7 @@ fn setup_proof(
     let A = create_ajtai_matrix(kappa, n, &mut rng);
 
     let mut ts = create_transcript();
-    let (linb2, proof) = linb.lin(&A, &M, &params, &mut ts);
+    let (_linb2, proof) = linb.lin(&A, &M, &params, &mut ts);
 
     let mut verify_ts = create_transcript();
     proof
@@ -118,7 +120,7 @@ fn setup_proof(
 struct SingleInstanceFoldProver;
 
 impl ProverBenchmark for SingleInstanceFoldProver {
-    type Input = (LinB<R>, Matrix<R>, Vec<SparseMatrix<R>>, LinParameters);
+    type Input = (LinB<R>, Matrix<R>, Vec<Arc<SparseMatrix<R>>>, LinParameters);
     type Output = (LinB2<R>, latticefold_plus::cm::CmProof<R>);
     type Params = (usize, usize, usize, usize);
 

@@ -33,3 +33,7 @@ pub mod we_gate_arith;
 pub mod sp1_r1lf;
 #[cfg(feature = "we_gate")]
 pub mod sp1_witness_io;
+
+// API wrapper for the SP1 oneproof WE-gate harness (so downstream crates can call it in-process).
+#[cfg(feature = "we_gate")]
+pub mod sp1_oneproof_api;

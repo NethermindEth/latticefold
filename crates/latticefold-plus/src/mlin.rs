@@ -90,7 +90,7 @@ where
         let cm = Cm { rg };
 
         let t = Instant::now();
-        let (com, proof) = cm.prove(M, transcript);
+        let (com, proof) = cm.prove(M, &[], transcript);
         if profile {
             println!("[LF+ Mlin::mlin] Cm::prove: {:?}", t.elapsed());
         }
@@ -217,7 +217,7 @@ where
         let cm = Cm { rg };
 
         let t = Instant::now();
-        let (com, proof) = cm.prove(M, transcript);
+        let (com, proof) = cm.prove(M, &[], transcript);
         if profile {
             println!("[LF+ Mlin::mlin_seeded] Cm::prove: {:?}", t.elapsed());
         }

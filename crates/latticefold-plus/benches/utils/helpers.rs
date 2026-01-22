@@ -6,6 +6,7 @@
 //! - Builders for common cryptographic structures
 
 use std::time::Duration;
+use std::sync::Arc;
 
 use ark_ff::{PrimeField, Zero};
 use criterion::{BatchSize, BenchmarkGroup, BenchmarkId, Criterion, Throughput};
@@ -378,10 +379,10 @@ pub fn bench_rng() -> impl Rng + CryptoRng {
 /// instead of 1, creating non-trivial constraints for R1CS benchmarks.
 ///
 /// Returns a single-element vector containing the modified sparse matrix.
-pub fn create_test_m_matrix(n: usize) -> Vec<SparseMatrix<R>> {
+pub fn create_test_m_matrix(n: usize) -> Vec<Arc<SparseMatrix<R>>> {
     let mut m = SparseMatrix::identity(n);
     m.coeffs[0][0].0 = 2u128.into();
-    vec![m]
+    vec![Arc::new(m)]
 }
 
 /// Creates a random Ajtai commitment matrix.

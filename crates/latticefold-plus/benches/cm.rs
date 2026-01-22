@@ -31,6 +31,7 @@ use latticefold_plus::{
 };
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
 use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 
 #[path = "utils/mod.rs"]
 mod utils;
@@ -84,7 +85,7 @@ fn setup_proof(L: usize, witness_size: usize, k: usize, kappa: usize) -> (Cm<R>,
     let M = create_test_m_matrix(witness_size);
 
     let mut ts = create_transcript();
-    let (_com, proof) = cm.prove(&M, &mut ts);
+    let (_com, proof) = cm.prove(&M, &[], &mut ts);
 
     let mut verify_ts = create_transcript();
     proof
@@ -106,7 +107,7 @@ fn setup_proof(L: usize, witness_size: usize, k: usize, kappa: usize) -> (Cm<R>,
 struct CommitmentTransformProver;
 
 impl ProverBenchmark for CommitmentTransformProver {
-    type Input = (Cm<R>, Vec<SparseMatrix<R>>);
+    type Input = (Cm<R>, Vec<Arc<SparseMatrix<R>>>);
     type Output = (latticefold_plus::cm::Com<R>, CmProof<R>);
     type Params = (usize, usize, usize, usize);
 
@@ -130,7 +131,7 @@ impl ProverBenchmark for CommitmentTransformProver {
 
     fn run_prover((input, M): Self::Input) -> Self::Output {
         let mut ts = create_transcript();
-        input.prove(&M, &mut ts)
+        input.prove(&M, &[], &mut ts)
     }
 }
 
