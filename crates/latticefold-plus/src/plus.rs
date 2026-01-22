@@ -150,13 +150,20 @@ where
         }
     }
 
-    pub fn prove_sparse_base<L>(&mut self, comp: &[L]) -> PlusProof<R, L::Proof>
+    pub fn prove_sparse_base<L>(
+        &mut self,
+        comp: &[L],
+        public_inputs: &[R::BaseRing],
+    ) -> PlusProof<R, L::Proof>
     where
         L: Linearize<R>,
         R::BaseRing: PrimeField,
         <R::BaseRing as PrimeField>::BigInt: BigInteger,
     {
         maybe_print_rss("PlusProverSparseBase::prove_sparse_base (start)");
+        for &v in public_inputs {
+            self.transcript.absorb_field_element(&v);
+        }
         let mut lproof = Vec::with_capacity(comp.len());
         comp.iter().for_each(|compi| {
             let (linb, lp) = compi.linearize(&mut self.transcript);
@@ -194,7 +201,7 @@ where
 impl<R, TS> PlusVerifier<R, TS>
 where
     R::BaseRing: Zq,
-    R: CoeffRing,
+    R: CoeffRing + PolyRing,
     TS: Transcript<R>,
 {
     /// Initialize
@@ -213,11 +220,54 @@ where
     }
 
     /// Verify
-    pub fn verify<P: LinearizedVerify<R>>(&mut self, proof: &PlusProof<R, P>) -> bool {
+    ///
+    /// IMPORTANT: This method does **not** absorb any statement public inputs into the Fiat–Shamir
+    /// transcript. It is only correct when the prover also did not absorb any extra statement data
+    /// before producing `proof` (i.e. `public_inputs` is empty / unused).
+    ///
+    /// For statement-bound regimes (e.g. SP1 streamed/WE) where the prover absorbs statement
+    /// `public_inputs` before any challenges are sampled, use `verify_with_public_inputs(...)`
+    /// instead (or ensure the caller pre-absorbs the same values into `self.transcript`).
+    ///
+    /// If `expected_prefix` is non-empty, this enforces the exposed-prefix binding for the Cm proof
+    /// (SP1 streamed/WE regime) and fails if binding cannot be applied.
+    pub fn verify<P: LinearizedVerify<R>>(
+        &mut self,
+        proof: &PlusProof<R, P>,
+        expected_prefix: &[R::BaseRing],
+    ) -> bool {
+        self.verify_inner(proof, expected_prefix)
+    }
+
+    /// Verify, absorbing statement `public_inputs` into the transcript first.
+    ///
+    /// This is the safe entrypoint when the prover used statement-bound Fiat–Shamir by absorbing
+    /// `public_inputs` before proving (e.g. `PlusProverSparseBase::prove_sparse_base`).
+    pub fn verify_with_public_inputs<P: LinearizedVerify<R>>(
+        &mut self,
+        proof: &PlusProof<R, P>,
+        public_inputs: &[R::BaseRing],
+        expected_prefix: &[R::BaseRing],
+    ) -> bool {
+        for v in public_inputs {
+            self.transcript.absorb_field_element(v);
+        }
+        self.verify_inner(proof, expected_prefix)
+    }
+
+    #[inline]
+    fn verify_inner<P: LinearizedVerify<R>>(
+        &mut self,
+        proof: &PlusProof<R, P>,
+        expected_prefix: &[R::BaseRing],
+    ) -> bool {
         for lp in &proof.lproof {
             lp.verify(&mut self.transcript);
         }
-        proof.cmproof.verify(&self.M, &mut self.transcript).unwrap();
+        proof
+            .cmproof
+            .verify_with_mlen(self.M.len(), &mut self.transcript, expected_prefix)
+            .unwrap();
         proof
             .dproof
             .verify(&proof.linb2x.cm_g, &proof.linb2x.vo, self.params.B);
@@ -307,7 +357,7 @@ mod tests {
         
         // Time verification
         let start = std::time::Instant::now();
-        verifier.verify(&proof);
+        verifier.verify(&proof, &[]);
         let verify_time = start.elapsed();
         
         // Print transcript metrics for DPP cost estimation
@@ -386,7 +436,7 @@ mod tests {
 
         let transcript = PoseidonTranscript::empty::<PC>();
         let mut verifier = PlusVerifier::init(A, M, pparams, transcript);
-        verifier.verify(&proof);
+        verifier.verify(&proof, &[]);
     }
 
     /// Large-scale test to measure tensor optimization impact
@@ -490,7 +540,7 @@ mod tests {
         let ts = PoseidonTranscript::empty::<PC>();
         let mut verifier = PlusVerifier::init(A, M, pparams, ts);
         let start = std::time::Instant::now();
-        verifier.verify(&proof);
+        verifier.verify(&proof, &[]);
         let verify_time = start.elapsed();
         
         println!("\n=== VERIFICATION BENCHMARK (n={}) ===", n);

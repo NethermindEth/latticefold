@@ -32,7 +32,8 @@ use latticefold_plus::{
     r1cs::{r1cs_decomposed_square, ComR1CS},
 };
 use stark_rings::cyclotomic_ring::models::frog_ring::RqPoly as R;
-use stark_rings_linalg::Matrix;
+use stark_rings_linalg::{Matrix, SparseMatrix};
+use std::sync::Arc;
 
 #[path = "utils/mod.rs"]
 mod utils;
@@ -59,7 +60,7 @@ fn setup_input(
     k: usize,
     kappa: usize,
     B: usize,
-) -> (Decomp<R>, Vec<R>, Vec<(R, R)>, usize) {
+) -> (Vec<R>, Vec<(R, R)>, Vec<Arc<SparseMatrix<R>>>, Matrix<R>, usize) {
     let mut rng = bench_rng();
     let r1cs = R1CSBuilder::new(n, k, B as u128).build_basic();
     let r1cs = r1cs_decomposed_square(r1cs, n, B as u128, k);
@@ -74,13 +75,20 @@ fn setup_input(
     let mut ts = create_transcript();
     lproof.verify(&mut ts);
 
-    let decomp = Decomp {
-        f: cr1cs.f,
-        r: lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>(),
-        M: cr1cs.x.matrices(),
-    };
+    let f = cr1cs
+        .f
+        .as_ring_arc()
+        .expect("bench assumes ring-materialized witness")
+        .as_ref()
+        .clone();
+    let r = lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>();
+    let M = cr1cs.x.matrices_arc();
 
-    (decomp, cr1cs.x.cm_f, linb.x.v, B)
+    // `linb` is currently unused in the decomposition-prover benchmark setup, but keeping
+    // the linearize call ensures we exercise the full realistic path.
+    let _ = linb;
+
+    (f, r, M, A, B)
 }
 
 /// Generates a valid decomposition proof for verifier benchmarks.
@@ -108,11 +116,15 @@ fn setup_proof(
     let mut ts = create_transcript();
     lproof.verify(&mut ts);
 
-    let decomp = Decomp {
-        f: cr1cs.f,
-        r: lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>(),
-        M: cr1cs.x.matrices(),
-    };
+    let f = cr1cs
+        .f
+        .as_ring_arc()
+        .expect("bench assumes ring-materialized witness")
+        .as_ref()
+        .clone();
+    let r = lproof.r.iter().map(|&r| (r, r)).collect::<Vec<_>>();
+    let M = cr1cs.x.matrices_arc();
+    let decomp = Decomp { f, r, M: &M };
 
     // Use the SAME matrix A for decomposition as was used for the original commitment
     let (_outputs, proof) = decomp.decompose(&A, B as u128);
@@ -134,7 +146,7 @@ fn setup_proof(
 struct DecompositionProver;
 
 impl ProverBenchmark for DecompositionProver {
-    type Input = (Decomp<R>, Matrix<R>, usize);
+    type Input = (Vec<R>, Vec<(R, R)>, Vec<Arc<SparseMatrix<R>>>, Matrix<R>, usize);
     type Output = ((LinB<R>, LinB<R>), DecompProof<R>);
     type Params = (usize, usize, usize, usize);
 
@@ -143,10 +155,8 @@ impl ProverBenchmark for DecompositionProver {
     }
 
     fn setup_input((n, k, kappa, B): Self::Params) -> Self::Input {
-        let mut rng = bench_rng();
-        let (decomp, _cm_f, _v, B) = setup_input(n, k, kappa, B);
-        let A = create_ajtai_matrix(kappa, n, &mut rng);
-        (decomp, A, B)
+        let (f, r, M, A, B) = setup_input(n, k, kappa, B);
+        (f, r, M, A, B)
     }
 
     fn param_label((n, k, kappa, B): Self::Params) -> String {
@@ -157,7 +167,8 @@ impl ProverBenchmark for DecompositionProver {
         n as u64
     }
 
-    fn run_prover((decomp, A, B): Self::Input) -> Self::Output {
+    fn run_prover((f, r, M, A, B): Self::Input) -> Self::Output {
+        let decomp = Decomp { f, r, M: &M };
         decomp.decompose(&A, B as u128)
     }
 }
@@ -227,12 +238,10 @@ fn bench_decomp_roundtrip(c: &mut Criterion) {
         |bencher| {
             bencher.iter_batched(
                 || {
-                    let mut rng = bench_rng();
-                    let (decomp, _cm_f, _v, B) = setup_input(n, k, kappa, B);
-                    let A = create_ajtai_matrix(kappa, n, &mut rng);
-                    (decomp, A, B)
+                    setup_input(n, k, kappa, B)
                 },
-                |(decomp, A, B)| {
+                |(f, r, M, A, B)| {
+                    let decomp = Decomp { f, r, M: &M };
                     let ((linb0, linb1), _proof) = decomp.decompose(&A, B as u128);
                     (linb0, linb1)
                 },

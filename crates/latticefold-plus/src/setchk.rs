@@ -157,9 +157,14 @@ pub struct Out<R: PolyRing> {
 }
 
 #[derive(Debug, Error)]
-pub enum SetCheckError<R: Ring> {
+pub enum SetCheckError<R: Ring + PolyRing> {
     #[error("Sumcheck failed: {0}")]
     Sumcheck(#[from] SumCheckError<R>),
+    #[error("Sumcheck point mismatch: proof_r={proof_r:?}, transcript_r={transcript_r:?}")]
+    PointMismatch {
+        proof_r: Vec<R::BaseRing>,
+        transcript_r: Vec<R::BaseRing>,
+    },
     #[error("Recomputed claim `v` mismatch: expected = {0}, received = {1}")]
     ExpectedEvaluation(R, R),
 }
@@ -1400,6 +1405,20 @@ impl<R: OverField> Out<R> {
             R::zero(),
             &self.sumcheck_proof,
         )?;
+
+        // Bind the prover-provided `r` to the transcript-derived sumcheck point.
+        //
+        // This is a critical soundness guardrail: downstream protocols (e.g. `Rg`/`Dcom`)
+        // may use `self.r` as the evaluation point for auxiliary checks. If we don't enforce
+        // `self.r == r_br`, a malformed proof could desynchronize the transcript point from
+        // the claimed evaluation point.
+        let r_br: Vec<R::BaseRing> = subclaim.point.clone();
+        if self.r != r_br {
+            return Err(SetCheckError::PointMismatch {
+                proof_r: self.r.clone(),
+                transcript_r: r_br,
+            });
+        }
 
         let r: Vec<R> = subclaim.point.into_iter().map(|x| x.into()).collect();
 

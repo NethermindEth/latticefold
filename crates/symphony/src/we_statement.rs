@@ -1,6 +1,6 @@
 //! Helpers to bind WE locks to a Symphony statement.
 //!
-//! In Architecture‑T (statement-only arming), the armer derives per-lock queries from a
+//! In Architecture (statement-only arming), the armer derives per-lock queries from a
 //! **statement hash** that binds:
 //! - the SP1 verifier key / program id (vk hash),
 //! - the SP1 R1CS digest,

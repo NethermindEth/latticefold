@@ -18,6 +18,62 @@ use symphony::dpp_poseidon::{
 use symphony::dpp_sumcheck::Dr1csBuilder;
 use symphony::dpp_sumcheck::{sumcheck_verify_degree3, RingVars};
 
+// -----------------------------------------------------------------------------
+// Optional op-count instrumentation (for tiny-field port estimates).
+//
+// Enabled by setting `LFP_WE_GATE_OPMIX=1` (same switch as the coarse op-mix print).
+// -----------------------------------------------------------------------------
+
+#[derive(Clone, Debug, Default)]
+struct CmMathOpCounts {
+    ring_add: u64,
+    ring_sub: u64,
+    ring_scale: u64,
+    ring_mul_negacyclic: u64,
+    ring_eq: u64,
+    lc_to_var: u64,
+    enforce_lc_eq_var: u64,
+    enforce_bool: u64,
+    scalar_add: u64,
+    scalar_sub: u64,
+    scalar_mul: u64,
+    scalar_mul_const: u64,
+    scalar_sub_const: u64,
+    scalar_pow_table: u64,
+    eq_eval_vars: u64,
+    short_challenge_from_bytes: u64,
+    ct_psi_mul_ring: u64,
+}
+
+thread_local! {
+    static CM_COUNTING: std::cell::Cell<bool> = std::cell::Cell::new(false);
+    static CM_COUNTS: std::cell::RefCell<CmMathOpCounts> = std::cell::RefCell::new(CmMathOpCounts::default());
+}
+
+#[inline]
+fn cm_counting_on() -> bool {
+    CM_COUNTING.with(|c| c.get())
+}
+
+#[inline]
+fn cm_bump(f: fn(&mut CmMathOpCounts)) {
+    if !cm_counting_on() {
+        return;
+    }
+    CM_COUNTS.with(|rc| {
+        let mut g = rc.borrow_mut();
+        f(&mut g);
+    });
+}
+
+fn cm_counts_reset() {
+    CM_COUNTS.with(|rc| *rc.borrow_mut() = CmMathOpCounts::default());
+}
+
+fn cm_counts_take() -> CmMathOpCounts {
+    CM_COUNTS.with(|rc| rc.borrow().clone())
+}
+
 /// Output of WE-gate arithmetization (single merged sparse dR1CS instance).
 #[derive(Clone, Debug)]
 pub struct WeDr1csOutput<F: PrimeField> {
@@ -154,9 +210,12 @@ where
 }
 
 fn ring_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    cm_bump(|c| c.ring_add += 1);
     assert_eq!(x.d(), y.d());
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
+        // One linear constraint per coefficient.
+        cm_bump(|c| c.scalar_add += 1);
         let val = b.assignment[x.coeffs[i]] + b.assignment[y.coeffs[i]];
         let v = b.new_var(val);
         b.add_constraint(
@@ -170,9 +229,12 @@ fn ring_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) 
 }
 
 fn ring_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    cm_bump(|c| c.ring_sub += 1);
     assert_eq!(x.d(), y.d());
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
+        // One linear constraint per coefficient.
+        cm_bump(|c| c.scalar_sub += 1);
         let val = b.assignment[x.coeffs[i]] - b.assignment[y.coeffs[i]];
         let v = b.new_var(val);
         b.add_constraint(
@@ -186,8 +248,11 @@ fn ring_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) 
 }
 
 fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) -> RingVars {
+    cm_bump(|c| c.ring_scale += 1);
     let mut out = Vec::with_capacity(x.d());
     for i in 0..x.d() {
+        // One multiplication constraint per coefficient.
+        cm_bump(|c| c.scalar_mul += 1);
         let val = b.assignment[x.coeffs[i]] * b.assignment[s];
         let v = b.new_var(val);
         b.enforce_mul(x.coeffs[i], s, v);
@@ -197,6 +262,7 @@ fn ring_scale<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, s: usize) ->
 }
 
 fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) -> RingVars {
+    cm_bump(|c| c.ring_mul_negacyclic += 1);
     // Negacyclic convolution mod (X^d + 1).
     let d = x.d();
     assert_eq!(d, y.d());
@@ -211,10 +277,14 @@ fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: 
             // j = k - i mod d
             let j = if i <= k { k - i } else { d + k - i };
             let sign = if i <= k { F::ONE } else { -F::ONE };
+            // One multiplication constraint per product term.
+            cm_bump(|c| c.scalar_mul += 1);
             let prod_val = b.assignment[x.coeffs[i]] * b.assignment[y.coeffs[j]];
             let prod = b.new_var(prod_val);
             b.enforce_mul(x.coeffs[i], y.coeffs[j], prod);
             // acc = acc + sign * prod
+            // One linear constraint per accumulation step.
+            cm_bump(|c| c.scalar_add += 1);
             let new_acc = b.new_var(b.assignment[acc_var] + sign * b.assignment[prod]);
             b.add_constraint(
                 vec![(F::ONE, acc_var), (sign, prod)],
@@ -229,6 +299,7 @@ fn ring_mul_negacyclic<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: 
 }
 
 fn ring_eq<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) {
+    cm_bump(|c| c.ring_eq += 1);
     assert_eq!(x.d(), y.d());
     for i in 0..x.d() {
         b.enforce_lc_times_one_eq_const(vec![(F::ONE, x.coeffs[i]), (-F::ONE, y.coeffs[i])]);
@@ -236,6 +307,7 @@ fn ring_eq<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: &RingVars, y: &RingVars) {
 }
 
 fn lc_to_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>) -> usize {
+    cm_bump(|c| c.lc_to_var += 1);
     let val = lc
         .iter()
         .fold(F::ZERO, |acc, (c, idx)| acc + (*c * b.assignment[*idx]));
@@ -246,10 +318,12 @@ fn lc_to_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>) -> usi
 }
 
 fn enforce_lc_eq_var<F: PrimeField>(b: &mut Dr1csBuilder<F>, lc: Vec<(F, usize)>, v: usize) {
+    cm_bump(|c| c.enforce_lc_eq_var += 1);
     b.add_constraint(lc, vec![(F::ONE, b.one())], vec![(F::ONE, v)]);
 }
 
 fn enforce_bool<F: PrimeField>(b: &mut Dr1csBuilder<F>, bit: usize) {
+    cm_bump(|c| c.enforce_bool += 1);
     // bit*(bit-1)=0
     b.add_constraint(
         vec![(F::ONE, bit)],
@@ -342,6 +416,7 @@ fn short_challenge_from_bytes<F: PrimeField>(
     lambda: usize,
     ring_dim: usize,
 ) -> RingVars {
+    cm_bump(|c| c.short_challenge_from_bytes += 1);
     debug_assert_eq!(bytes.len(), ring_dim);
     // Matches `utils::short_challenge`: u = 2^(lambda / d).
     let exp = (lambda / ring_dim) as u32;
@@ -525,6 +600,7 @@ fn scalar_one_minus<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize) -> usize {
 }
 
 fn scalar_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usize {
+    cm_bump(|c| c.scalar_add += 1);
     let v = b.new_var(b.assignment[x] + b.assignment[y]);
     b.add_constraint(
         vec![(F::ONE, x), (F::ONE, y)],
@@ -535,12 +611,14 @@ fn scalar_add<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usi
 }
 
 fn scalar_mul_const<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, c: F) -> usize {
+    cm_bump(|cc| cc.scalar_mul_const += 1);
     let v = b.new_var(b.assignment[x] * c);
     b.add_constraint(vec![(c, x)], vec![(F::ONE, b.one())], vec![(F::ONE, v)]);
     v
 }
 
 fn scalar_pow_table<F: PrimeField>(b: &mut Dr1csBuilder<F>, base: usize, max_exp: usize) -> Vec<usize> {
+    cm_bump(|c| c.scalar_pow_table += 1);
     let mut pows = Vec::with_capacity(max_exp + 1);
     let one = b.one();
     let v0 = b.new_var(F::ONE);
@@ -688,6 +766,10 @@ where
 struct CmMathWiring {
     short: CmShortChallengeWiring,
     field: CmFieldChallengeWiring,
+    /// Base-field variables for `dcom.out.r` used by CM's `eq(r, ro)` factor.
+    ///
+    /// This must be glued to the transcript-derived setchk point coming from the Dcom prefix.
+    r_pre_vars: Vec<usize>,
     /// Flattened BF variables that must equal Poseidon absorb inputs (non-reabsorb absorbs),
     /// for the CmProof segment starting at `absorb_comh`.
     absorb_flat: Vec<usize>,
@@ -992,6 +1074,16 @@ where
     let z_idx = l_instances * (4 + 4 * mlen_chunks_usize);
     let max_pow = z_idx + 1;
 
+    // Base-field r used by CM's `eq(r, ro)` factor.
+    let r_pre_vars: Vec<usize> = proof
+        .dcom
+        .out
+        .r
+        .iter()
+        .copied()
+        .map(|x| b.new_var(bf_from_base_ring::<R>(x)))
+        .collect();
+
     // For each of the two sumchecks, compute:
     // - claimed_sum
     // - subclaim_eval via sumcheck_verify_degree2
@@ -1088,15 +1180,7 @@ where
         );
 
         // eq(r, ro) where r is dcom.out.r (base ring)
-        let r_pre = proof
-            .dcom
-            .out
-            .r
-            .iter()
-            .copied()
-            .map(|x| b.new_var(bf_from_base_ring::<R>(x)))
-            .collect::<Vec<_>>();
-        let eq = eq_eval_vars::<BF<R>>(b, &r_pre, r_sc);
+        let eq = eq_eval_vars::<BF<R>>(b, &r_pre_vars, r_sc);
         let mut eval_acc = scalar_to_ringvars::<R>(b, BF::<R>::ZERO);
 
         for l in 0..l_instances {
@@ -1188,6 +1272,7 @@ where
         CmMathWiring {
             short: short_wiring,
             field: field_wiring,
+            r_pre_vars,
             absorb_flat,
         },
     ))
@@ -1277,6 +1362,7 @@ where
 
 /// Evaluate eq(c, r) where both are vectors of scalar (BF) variables.
 fn eq_eval_vars<F: PrimeField>(b: &mut Dr1csBuilder<F>, c: &[usize], r: &[usize]) -> usize {
+    cm_bump(|cc| cc.eq_eval_vars += 1);
     assert_eq!(c.len(), r.len());
     let mut acc = b.new_var(F::ONE);
     b.enforce_var_eq_const(acc, F::ONE);
@@ -1404,6 +1490,7 @@ where
 }
 
 fn scalar_sub_const<F: PrimeField>(b: &mut Dr1csBuilder<F>, r: usize, c: F) -> usize {
+    cm_bump(|cc| cc.scalar_sub_const += 1);
     let val = b.assignment[r] - c;
     let v = b.new_var(val);
     // v = r - c
@@ -1416,6 +1503,7 @@ fn scalar_sub_const<F: PrimeField>(b: &mut Dr1csBuilder<F>, r: usize, c: F) -> u
 }
 
 fn scalar_mul<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usize {
+    cm_bump(|cc| cc.scalar_mul += 1);
     let val = b.assignment[x] * b.assignment[y];
     let v = b.new_var(val);
     b.enforce_mul(x, y, v);
@@ -1423,6 +1511,7 @@ fn scalar_mul<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usi
 }
 
 fn scalar_sub<F: PrimeField>(b: &mut Dr1csBuilder<F>, x: usize, y: usize) -> usize {
+    cm_bump(|c| c.scalar_sub += 1);
     let val = b.assignment[x] - b.assignment[y];
     let v = b.new_var(val);
     // v = x - y
@@ -1489,6 +1578,8 @@ fn absorb_field_elem_as_ring<R>(
 struct DcomPrefixMathWiring {
     /// Local vars for all Poseidon `SqueezeField` outputs used in the Dcom prefix, in order.
     squeeze_field_vars: Vec<usize>,
+    /// Transcript-derived setchk sumcheck point `r` (base field), length = nvars.
+    r_point_vars: Vec<usize>,
     /// Local vars for the 9 statement-bound params (same order as `WeParams::to_field_vec`).
     params_vars: Vec<usize>,
     /// Local vars for the extra statement-defined public inputs (e.g. SP1 public input digest).
@@ -1505,6 +1596,7 @@ where
     R: OverField + CoeffRing + PolyRing,
     R::BaseRing: Zq + Field,
 {
+    cm_bump(|c| c.ct_psi_mul_ring += 1);
     // Compute ct(psi * x) as a BF-linear form in the coefficients of x.
     // This avoids implementing full ring multiplication in-circuit.
     let d = R::dimension();
@@ -1647,11 +1739,81 @@ where
     }
 
     let mut absorb_flat: Vec<usize> = Vec::new();
-    // Public inputs absorbed before verification begins (optional when the overall verifier
-    // has already absorbed them earlier in the transcript).
+
+    // Public inputs are absorbed *before* proof verification begins (optional when the overall
+    // verifier has already absorbed them earlier in the transcript and `ops_offset` starts later).
     if include_public_inputs_in_absorb {
-    for &v in &public_input_vars {
-        absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v);
+        for &v in &public_input_vars {
+            absorb_field_elem_as_ring::<R>(&mut b, &mut absorb_flat, v);
+        }
+    }
+
+    // (Fiat–Shamir): commit-before-challenge.
+    //
+    // Dcom verification now absorbs the witness commitments before running `Out::verify`,
+    // so that all subsequent verifier coins are bound to the committed witness.
+    //
+    // Must match `rgchk::absorb_fcoms_{instances,fcoms}` ordering:
+    // for each instance l: cm_f, C_Mf, cm_mtau.
+    {
+        let kappa: usize = {
+            let k = params.kappa;
+            if k > (usize::MAX as u64) {
+                return Err("dcom/rgchk: kappa too large for usize".to_string());
+            }
+            k as usize
+        };
+        if dcom.fcoms.len() != dcom.evals.len() {
+            return Err("dcom/rgchk: fcoms length mismatch".to_string());
+        }
+        for (l, cmc) in dcom.fcoms.iter().enumerate() {
+            if cmc.cm_f.len() != kappa || cmc.C_Mf.len() != kappa || cmc.cm_mtau.len() != kappa {
+                return Err(format!(
+                    "dcom/rgchk: fcoms[{l}] commitment len mismatch (expected kappa={kappa})"
+                ));
+            }
+            for j in 0..kappa {
+                let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_f[j]);
+                absorb_flat.extend_from_slice(&rv.coeffs);
+                // Statement binding (prefix exposure):
+                //
+                // The Ajtai scheme is configured with an identity block so that the first few
+                // commitment coordinates are *literal* witness coordinates (readable from `cm_f`).
+                //
+                // Fail closed: if the verifier expects prefix binding (expose_rows > 0), require
+                // the corresponding number of statement public inputs to be provided.
+                const EXPOSE_MAX: usize = 8;
+                let expose_rows = EXPOSE_MAX.min(kappa);
+                if expose_rows > 0 {
+                    if public_input_vars.len() < expose_rows {
+                        return Err(format!(
+                            "dcom/rgchk: expected at least {} public inputs for prefix binding (got {})",
+                            expose_rows,
+                            public_input_vars.len()
+                        ));
+                    }
+                    // Current SP1 streamed/WE usage is L=1. If this ever changes, either bind all
+                    // instances or explicitly statement-bind a per-instance digest.
+                    if dcom.fcoms.len() != 1 {
+                        return Err(format!(
+                            "dcom/rgchk: prefix binding requires L=1 (got L={})",
+                            dcom.fcoms.len()
+                        ));
+                    }
+                    if l == 0 && j < expose_rows {
+                        let pv_ring = scalar_var_to_ringvars::<R>(&mut b, public_input_vars[j]);
+                        ring_eq::<BF<R>>(&mut b, &rv, &pv_ring);
+                    }
+                }
+            }
+            for j in 0..kappa {
+                let rv = ring_to_ringvars::<R>(&mut b, &cmc.C_Mf[j]);
+                absorb_flat.extend_from_slice(&rv.coeffs);
+            }
+            for j in 0..kappa {
+                let rv = ring_to_ringvars::<R>(&mut b, &cmc.cm_mtau[j]);
+                absorb_flat.extend_from_slice(&rv.coeffs);
+            }
         }
     }
     // Sumcheck parameter block absorbs.
@@ -1860,6 +2022,7 @@ where
         asg,
         DcomPrefixMathWiring {
             squeeze_field_vars,
+            r_point_vars: r_point.clone(),
             params_vars,
             public_input_vars,
             absorb_flat,
@@ -2846,6 +3009,26 @@ where
         let dcom = &proof.cmproof.dcom;
         let out = &dcom.out;
 
+        // Dcom::verify (prefix): absorb witness commitments (Fiat–Shamir commit-before-challenge).
+        //
+        // We absorb, for each folded instance:
+        // - cm_f (kappa ring elems)
+        // - C_Mf (kappa ring elems)
+        // - cm_mtau (kappa ring elems)
+        //
+        // Each ring element is absorbed as `len=d` base-field elements by the transcript.
+        for f in &dcom.fcoms {
+            for _ in 0..f.cm_f.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+            for _ in 0..f.C_Mf.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+            for _ in 0..f.cm_mtau.len() {
+                expect_absorb_len(d, &mut op_idx, &mut absorb_ops)?;
+            }
+        }
+
         // Out::verify (SetChk) transcript coins.
         let nclaims = out.e[0].len() + out.b.len();
         for _ in 0..nclaims {
@@ -2962,20 +3145,21 @@ where
 
     // Build independent parts in parallel (they only get glued/merged later).
     let (
-        (pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb),
+        (pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb, pose_permutes),
         (params_inst, params_asg, params_vars, pub_input_vars),
         (lin_inst, lin_asg, lin_ch_vars, lin_absorb_flat),
         (dcom_inst, dcom_asg, dcom_wiring),
         (coin_inst, coin_asg, coin_wiring, op_wiring),
         (field_inst, field_asg, field_wiring_local),
-        (cm_inst, cm_asg, cm_wiring),
+        (cm_inst, cm_asg, cm_wiring, cm_counts),
         (decomp_inst, decomp_asg),
     ) = {
         let pose_build = || {
-            let (mut pose_inst, pose_asg, _replay, _byte_wit, pose_wiring, byte_wiring) =
+            let (mut pose_inst, pose_asg, replay, _byte_wit, pose_wiring, byte_wiring) =
                 poseidon_sponge_dr1cs_from_trace_with_wiring_and_bytes::<BF<R>>(poseidon_cfg, &ops)
                     .map_err(|e| format!("poseidon arith failed: {e}"))?;
             enforce_reabsorb_equals_squeeze::<BF<R>>(&mut pose_inst, &pose_wiring, &ops)?;
+            let pose_permutes = replay.permutes.len();
 
             // Global reabsorb flags for absorb-op indexing.
             let mut is_reabsorb = vec![false; pose_wiring.absorb_ranges.len()];
@@ -2996,7 +3180,14 @@ where
                     }
                 }
             }
-            Ok::<_, String>((pose_inst, pose_asg, pose_wiring, byte_wiring, is_reabsorb))
+            Ok::<_, String>((
+                pose_inst,
+                pose_asg,
+                pose_wiring,
+                byte_wiring,
+                is_reabsorb,
+                pose_permutes,
+            ))
         };
 
         let params_build = || {
@@ -3023,7 +3214,7 @@ where
                 &proof.cmproof.dcom,
                 trace,
                 params,
-                &[], // public inputs absorbed before the overall verifier begins
+                public_inputs, // statement public inputs (do NOT re-absorb in this segment)
                 cm_ops_offset,
                 cm_squeezed_field_offset,
                 false, // include_public_inputs_in_absorb
@@ -3101,7 +3292,12 @@ where
         };
 
         let cm_build = || {
-            cm_verifier_math_dr1cs::<R>(
+            let do_count = std::env::var("LFP_WE_GATE_OPMIX").is_ok();
+            if do_count {
+                cm_counts_reset();
+                CM_COUNTING.with(|c| c.set(true));
+            }
+            let out = cm_verifier_math_dr1cs::<R>(
                 trace,
                 &proof.cmproof,
                 k,
@@ -3109,7 +3305,12 @@ where
                 nvars,
                 mlen_mats,
                 cm_ops_offset,
-            )
+            );
+            if do_count {
+                CM_COUNTING.with(|c| c.set(false));
+            }
+            let counts = if do_count { cm_counts_take() } else { CmMathOpCounts::default() };
+            out.map(|(inst, asg, wiring)| (inst, asg, wiring, counts))
         };
 
         let decomp_build = || {
@@ -3390,9 +3591,14 @@ where
     //
     // In the full Plus verifier transcript, statement public inputs (e.g. SP1 digest) are absorbed
     // *before* any Π_lin / Cm verification begins. The embedded Dcom-prefix gadget therefore
-    // must **not** re-absorb them, and we build it with `public_inputs = []`.
-    if !dcom_wiring.public_input_vars.is_empty() {
-        return Err("plus: expected no extra public inputs in dcom prefix".to_string());
+    // must **not** re-absorb them (we pass `include_public_inputs_in_absorb=false`), but we
+    // still allocate them as local vars so we can enforce statement-binding constraints
+    // (e.g. exposed-prefix checks) and glue them to the circuit public inputs.
+    if pub_input_vars.len() != dcom_wiring.public_input_vars.len() {
+        return Err("plus: public input glue length mismatch (dcom prefix)".to_string());
+    }
+    for (pv, dv) in pub_input_vars.iter().zip(dcom_wiring.public_input_vars.iter()) {
+        glue.push((1, *pv, 4, *dv));
     }
 
     // Compute the absorb-op count in the Cm-prefix segment (from cm_ops_offset until first SqueezeBytes).
@@ -3438,6 +3644,20 @@ where
         glue.push((0, *pv, 4, *lv));
     }
 
+    // Glue SetChk sumcheck point `r` into CM math.
+    // In the standalone CmProof WE relation we still have the Dcom prefix, so we must tie
+    // the `dcom.out.r` used by CM verification to the transcript-derived `r`.
+    if dcom_wiring.r_point_vars.len() != cm_wiring.r_pre_vars.len() {
+        return Err("plus: dcom/cm r length mismatch".to_string());
+    }
+    for (rv, cv) in dcom_wiring
+        .r_point_vars
+        .iter()
+        .zip(cm_wiring.r_pre_vars.iter())
+    {
+        glue.push((4, *rv, 7, *cv));
+    }
+
     // Glue Cm absorb surface (non-reabsorb absorbs starting at Cm segment) to Poseidon absorb vars.
     let cm_abs_start = cm_absorb_op_offset + absorb_ops_before_cm;
     if cm_abs_start > pose_wiring.absorb_ranges.len() {
@@ -3460,6 +3680,110 @@ where
         glue.push((0, *pv, 7, *cv));
     }
 
+    // Optional: print an op-mix breakdown for tiny-field porting estimates.
+    //
+    // Enable with: `LFP_WE_GATE_OPMIX=1 ...`
+    if std::env::var("LFP_WE_GATE_OPMIX").is_ok() {
+        // Optional deeper split: how many Poseidon permutes happen before CM starts?
+        // This removes ambiguity about “perm-heavy CM” vs “math-heavy CM”.
+        let pose_permutes_before_cm = {
+            use symphony::poseidon_trace::replay_ops;
+            replay_ops(poseidon_cfg, &ops[..cm_ops_offset])
+                .map(|r| r.permutes.len())
+                .unwrap_or(0usize)
+        };
+        let pose_permutes_after_cm = pose_permutes.saturating_sub(pose_permutes_before_cm);
+
+        // Poseidon trace op mix (what the transcript did).
+        let mut n_absorb = 0usize;
+        let mut absorb_elems = 0usize;
+        let mut n_sq_field = 0usize;
+        let mut sq_field_elems = 0usize;
+        let mut n_sq_bytes = 0usize;
+        let mut sq_bytes = 0usize;
+        for op in &trace.ops {
+            match op {
+                LfPoseidonTraceOp::Absorb(v) => {
+                    n_absorb += 1;
+                    absorb_elems += v.len();
+                }
+                LfPoseidonTraceOp::SqueezeField(v) => {
+                    n_sq_field += 1;
+                    sq_field_elems += v.len();
+                }
+                LfPoseidonTraceOp::SqueezeBytes { n, .. } => {
+                    n_sq_bytes += 1;
+                    sq_bytes += *n;
+                }
+            }
+        }
+
+        // Constraint mix (what the WE gate arithmetization produced), by sub-part.
+        let c_pose = pose_inst.constraints.len();
+        let c_params = params_inst.constraints.len();
+        let c_lin = lin_inst.constraints.len();
+        let c_stmt = stmt_inst.constraints.len();
+        let c_dcom = dcom_inst.constraints.len();
+        let c_coin = coin_inst.constraints.len();
+        let c_field = field_inst.constraints.len();
+        let c_cm = cm_inst.constraints.len();
+        let c_decomp = decomp_inst.constraints.len();
+
+        eprintln!("==============================================================");
+        eprintln!("LF+ WE gate op-mix (native base field) — for tiny-field estimates");
+        eprintln!(
+            "  poseidon trace: permutes={} absorb_ops={} absorb_elems={} squeeze_field_ops={} squeeze_field_elems={} squeeze_bytes_ops={} squeeze_bytes_total={}",
+            pose_permutes,
+            n_absorb,
+            absorb_elems,
+            n_sq_field,
+            sq_field_elems,
+            n_sq_bytes,
+            sq_bytes
+        );
+        eprintln!(
+            "  poseidon permutes split: before_cm={} after_cm={}",
+            pose_permutes_before_cm, pose_permutes_after_cm
+        );
+        eprintln!(
+            "  dr1cs constraints by part: poseidon={} params={} lin={} stmt_absorb={} dcom={} cm_coins={} cm_fields={} cm_math={} decomp={}",
+            c_pose, c_params, c_lin, c_stmt, c_dcom, c_coin, c_field, c_cm, c_decomp
+        );
+        eprintln!(
+            "  cm_math op counts: ring_add={} ring_sub={} ring_scale={} ring_mul={} ring_eq={} lc_to_var={} enforce_lc_eq_var={} enforce_bool={} scalar_add={} scalar_sub={} scalar_mul={} scalar_mul_const={} scalar_sub_const={} scalar_pow_table={} eq_eval_vars={} short_chal_from_bytes={} ct_psi_mul_ring={}",
+            cm_counts.ring_add,
+            cm_counts.ring_sub,
+            cm_counts.ring_scale,
+            cm_counts.ring_mul_negacyclic,
+            cm_counts.ring_eq,
+            cm_counts.lc_to_var,
+            cm_counts.enforce_lc_eq_var,
+            cm_counts.enforce_bool,
+            cm_counts.scalar_add,
+            cm_counts.scalar_sub,
+            cm_counts.scalar_mul,
+            cm_counts.scalar_mul_const,
+            cm_counts.scalar_sub_const,
+            cm_counts.scalar_pow_table,
+            cm_counts.eq_eval_vars,
+            cm_counts.short_challenge_from_bytes,
+            cm_counts.ct_psi_mul_ring
+        );
+        eprintln!(
+            "  dr1cs constraints subtotal(parts)={}",
+            c_pose
+                + c_params
+                + c_lin
+                + c_stmt
+                + c_dcom
+                + c_coin
+                + c_field
+                + c_cm
+                + c_decomp
+        );
+        eprintln!("==============================================================");
+    }
+
     // Merge: (poseidon, params/public_inputs, lin, stmt_absorb, dcom, coin, field, cm, decomp)
     let parts = vec![
         (pose_inst, pose_asg),     // 0
@@ -3474,6 +3798,14 @@ where
     ];
     let (inst, assignment) =
         merge_sparse_dr1cs_share_one_with_glue(&parts, &glue).map_err(|e| e.to_string())?;
+    if std::env::var("LFP_WE_GATE_OPMIX").is_ok() {
+        eprintln!(
+            "LF+ WE gate merged: nvars={} constraints={} (glue constraints={})",
+            inst.nvars,
+            inst.constraints.len(),
+            glue.len()
+        );
+    }
     let public_len = 1 + 10 + public_inputs.len();
     Ok(WeDr1csOutput {
         inst,
@@ -3809,18 +4141,23 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
 
         let dparams = DecompParameters { b, k, l: ell };
-        let mut rng = ark_std::test_rng();
-        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
+        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        f[0] = RR::from(public_inputs[0]);
+        let mut A = Matrix::<RR>::zero(kappa, n);
+        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
-        // Build proof + trace.
+        // Build proof + trace, with a statement public input absorbed first.
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &public_inputs, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        for b in &public_inputs {
+            rec.absorb_field_element(b);
+        }
         proof.verify(&M, &mut rec).expect("cm verify");
         let trace = rec.trace().clone();
 
@@ -3838,7 +4175,7 @@ mod tests {
         };
         let poseidon_cfg = PCF::get_poseidon_config();
 
-        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &public_inputs, &proof, M.len())
                 .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
@@ -3870,17 +4207,22 @@ mod tests {
         let nvars = ark_std::log2(n) as usize;
 
         let dparams = DecompParameters { b, k, l: ell };
-        let mut rng = ark_std::test_rng();
-        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
+        let public_inputs = vec![<BF<RR> as ark_ff::Field>::ONE];
+        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        f[0] = RR::from(public_inputs[0]);
+        let mut A = Matrix::<RR>::zero(kappa, n);
+        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
         let inst = RgInstance::from_f(f, &A, &dparams);
         let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
         let cm = Cm { rg };
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &public_inputs, &mut ts);
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
+        for b in &public_inputs {
+            rec.absorb_field_element(b);
+        }
         proof.verify(&M, &mut rec).expect("cm verify");
         let trace = rec.trace().clone();
 
@@ -3898,7 +4240,7 @@ mod tests {
         };
         let poseidon_cfg = PCF::get_poseidon_config();
 
-        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &[], &proof, M.len())
+        let out = build_we_dr1cs_for_cm_proof::<RR>(&poseidon_cfg, &trace, &params, &public_inputs, &proof, M.len())
                 .expect("build we dr1cs");
         out.inst.check(&out.assignment).expect("should satisfy");
 
@@ -3946,7 +4288,7 @@ mod tests {
         let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
 
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &[], &mut ts);
 
         // Record.
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
@@ -3979,15 +4321,6 @@ mod tests {
         let n = tau_unpadded_len.next_power_of_two();
         let nvars = ark_std::log2(n) as usize;
 
-        let dparams = DecompParameters { b, k, l: ell };
-        let mut rng = ark_std::test_rng();
-        let f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
-        let A = Matrix::<RR>::rand(&mut rng, kappa, n);
-        let inst = RgInstance::from_f(f, &A, &dparams);
-        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
-        let cm = Cm { rg };
-        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
-
         // Statement-defined SP1 public input digest as 256 boolean bits (collision-robust and DPP-friendly).
         type BF0 = <<RR as PolyRing>::BaseRing as ark_ff::Field>::BasePrimeField;
         let sp1_digest_bits: Vec<BF0> = {
@@ -3995,12 +4328,20 @@ mod tests {
             crate::we_statement::digest32_to_bits_field::<BF0>(d)
         };
 
+        let dparams = DecompParameters { b, k, l: ell };
+        let mut f = vec![RR::from(<RR as PolyRing>::BaseRing::zero()); n];
+        // Bind the first digest bit to the exposed commitment prefix.
+        f[0] = RR::from(sp1_digest_bits[0]);
+        let mut A = Matrix::<RR>::zero(kappa, n);
+        A.vals[0][0] = RR::from(<RR as PolyRing>::BaseRing::ONE);
+        let inst = RgInstance::from_f(f, &A, &dparams);
+        let rg = Rg { nvars, instances: vec![inst], dparams: dparams.clone() };
+        let cm = Cm { rg };
+        let M: Vec<std::sync::Arc<SparseMatrix<RR>>> = vec![std::sync::Arc::new(SparseMatrix::identity(n))];
+
         // Prove with digest absorbed before proving.
         let mut ts = crate::transcript::PoseidonTranscript::empty::<PCF>();
-        for b in &sp1_digest_bits {
-            ts.absorb_field_element(b);
-        }
-        let (_com, proof) = cm.prove(&M, &mut ts);
+        let (_com, proof) = cm.prove(&M, &sp1_digest_bits, &mut ts);
 
         // Record verifier trace with the same digest absorbed before verify.
         let mut rec = TracePoseidonTranscript::<RR>::empty::<PCF>();
@@ -4163,9 +4504,22 @@ mod tests {
             if b_bound % 2 == 1 {
                 b_bound += 1;
             }
-            // Seeded Ajtai scheme (deterministic system parameter).
+            // Seeded Ajtai scheme (deterministic system parameter) with **prefix exposure**
+            // for statement binding in the sparse/SP1 path.
+            //
+            // NOTE: This large-trace benchmark defaults to `kappa=2` for cost reasons; in that
+            // configuration we can only expose/bind `min(kappa, 8)` coordinates.
+            let expose_rows: usize = 8usize.min(kappa);
+            let expose_col_offset: usize = 1; // witness[0] is the shared ONE=1
             const AJTAI_SEED: [u8; 32] = [7u8; 32];
-            let scheme = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
+            let scheme = AjtaiCommitmentScheme::<RR>::seeded_with_exposed_prefix(
+                b"lf_plus_ajtai",
+                AJTAI_SEED,
+                kappa,
+                n,
+                expose_rows,
+                expose_col_offset,
+            );
 
             // Satisfiable const-coeff R1CS (base ring):
             // Use identity A=B=C so constraints are z_i^2 - z_i = 0, satisfied by boolean witness.
@@ -4175,11 +4529,17 @@ mod tests {
                 B: SparseMatrix::identity(n),
                 C: SparseMatrix::identity(n),
             };
+            let bind_prefix = sp1_digest_bits
+                .get(0..expose_rows)
+                .expect("sp1_digest_bits shorter than expose_rows");
             let f0: Arc<Vec<BR>> = Arc::new(
                 (0..n)
                     .map(|i| {
                         if i == 0 {
                             BR::ONE
+                        } else if (expose_col_offset..expose_col_offset + expose_rows).contains(&i) {
+                            // Make the exposed witness prefix equal the statement public inputs.
+                            bind_prefix[i - expose_col_offset]
                         } else {
                             BR::from((rng.next_u64() & 1) as u64)
                         }
@@ -4204,10 +4564,7 @@ mod tests {
                 pparams.clone(),
                 transcript,
             );
-            for b in sp1_digest_bits {
-                prover.transcript.absorb_field_element(b);
-            }
-            let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
+            let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs), &sp1_digest_bits);
             eprintln!("[test_large_trace] plus.prove: {:?}", t0.elapsed());
 
             let t1 = std::time::Instant::now();
@@ -4221,7 +4578,11 @@ mod tests {
             }
             proof
                 .cmproof
-                .verify_with_mlen(m0.len(), &mut rec)
+                .verify_with_mlen(
+                    m0.len(),
+                    &mut rec,
+                    bind_prefix,
+                )
                 .expect("cm verify");
             let trace = rec.trace().clone();
             eprintln!("[test_large_trace] plus.verify(record): {:?}", t1.elapsed());
@@ -4435,15 +4796,16 @@ mod tests {
         // Choose small-but-valid parameters for the internal range-check/CM machinery.
         //
         // IMPORTANT: `rgchk` digit decomposition will panic if `k` is too small for the chosen base,
-        // so we use the production-style choice `decomp_b = d/2` and pick ℓ = ceil(log_{d'} q).
-        let kappa = 1usize;
+        // so we use the production-style choice `decomp_b = d/2`.
+        //
+        // For statement binding coverage in this small test, we enable Ajtai prefix exposure:
+        // require kappa >= 8. To keep `n` small, we pick a small ℓ (still power-of-two).
+        let kappa = 8usize; // 8 exposed rows (identity block)
         let k = 1usize;
         let d = RR::dimension();
         let d_prime = d / 2;
-        let lnq = (BR::MODULUS_BIT_SIZE as f64) * std::f64::consts::LN_2;
-        // Pow2-friendly: we round ℓ up so WE can use the fast factored `t(z)` path.
-        let ell_raw = (lnq / (d_prime as f64).ln()).ceil() as usize;
-        let ell = ell_raw.next_power_of_two();
+        // Small, power-of-two ℓ to keep the test fast (and >=4 to avoid decomposition panics).
+        let ell = 4usize;
 
         let tau_unpadded_len = kappa * (k * d) * ell * d;
         let n = tau_unpadded_len.next_power_of_two();
@@ -4457,9 +4819,16 @@ mod tests {
             digest32_to_bits_field::<BF0>(d)
         };
 
-        // Seeded Ajtai scheme (deterministic system parameter).
+        // Seeded Ajtai scheme (deterministic system parameter) with prefix exposure.
         const AJTAI_SEED: [u8; 32] = *b"LFP_SP1_AJTAI_SEED_V1_0000000000";
-        let ajtai = AjtaiCommitmentScheme::<RR>::seeded(b"lf_plus_ajtai", AJTAI_SEED, kappa, n);
+        let ajtai = AjtaiCommitmentScheme::<RR>::seeded_with_exposed_prefix(
+            b"lf_plus_ajtai",
+            AJTAI_SEED,
+            kappa,
+            n,
+            8,
+            1, // expose witness cols 1..=8 (col0 is ONE)
+        );
 
         // Trivial satisfiable R1CS: A=B=C=0, so (Az)*(Bz) - Cz = 0 for any witness.
         let zero_rows: Vec<Vec<(BR, usize)>> = vec![Vec::new(); n];
@@ -4468,10 +4837,21 @@ mod tests {
         let c = SparseMatrix::<BR> { nrows: n, ncols: n, coeffs: zero_rows };
         let r1cs = R1CS::<BR> { l: 0, A: a, B: b, C: c };
 
-        // Constant-coeff witness prefix. Keep values tiny; the protocol is still well-defined.
+        // Constant-coeff witness prefix, with the exposed coordinates matching the statement prefix.
+        let bind_prefix: &[BF0] = public_inputs
+            .get(0..8)
+            .expect("need at least 8 public inputs for prefix binding");
         let f0: Arc<Vec<BR>> = Arc::new(
             (0..n)
-                .map(|i| if i == 0 { BR::ONE } else { BR::ZERO })
+                .map(|i| {
+                    if i == 0 {
+                        BR::ONE
+                    } else if (1..=8).contains(&i) {
+                        bind_prefix[i - 1]
+                    } else {
+                        BR::ZERO
+                    }
+                })
                 .collect(),
         );
 
@@ -4526,10 +4906,7 @@ mod tests {
             pparams.clone(),
             PoseidonTranscript::empty::<PCF>(),
         );
-        for b in &public_inputs {
-            prover.transcript.absorb_field_element(b);
-        }
-        let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs));
+        let proof = prover.prove_sparse_base(std::slice::from_ref(&cr1cs), &public_inputs);
 
         // Record verifier trace (mirror the SP1 oneproof harness).
         let poseidon_cfg = PCF::get_poseidon_config();
@@ -4542,7 +4919,11 @@ mod tests {
         }
         proof
             .cmproof
-            .verify_with_mlen(m0.len(), &mut rec)
+            .verify_with_mlen(
+                m0.len(),
+                &mut rec,
+                bind_prefix,
+            )
             .expect("cm verify (record)");
         let trace = rec.trace().clone();
 
