@@ -314,13 +314,60 @@ impl<F: PrimeField> Dr1csBuilder<F> {
     }
 
     fn enforce_pow_u64(&mut self, base: usize, alpha: u64) -> usize {
-        // Build constraints for base^alpha using square-and-multiply over variables.
-        // We materialize each multiply into a fresh variable.
+        // Build constraints for base^alpha over variables.
+        //
+        // IMPORTANT:
+        // This gadget is used heavily by Poseidon (S-box exponentiation). For common small exponents,
+        // we use short addition chains to minimize multiplication constraints.
         if alpha == 0 {
             return self.new_var(F::ONE);
         }
         if alpha == 1 {
             return base;
+        }
+        // Common Poseidon alphas.
+        // - alpha=3: x^3 = (x^2)*x (2 muls)
+        // - alpha=5: x^5 = (x^2)^2 * x (3 muls)
+        // - alpha=7: x^7 = (x^2)^2 * x^2 * x (4 muls)
+        if alpha == 3 {
+            let x2_val = self.assignment[base] * self.assignment[base];
+            let x2 = self.new_var(x2_val);
+            self.enforce_mul(base, base, x2);
+            let x3_val = x2_val * self.assignment[base];
+            let x3 = self.new_var(x3_val);
+            self.enforce_mul(x2, base, x3);
+            return x3;
+        }
+        if alpha == 5 {
+            let x = base;
+            let x_val = self.assignment[x];
+            let x2_val = x_val * x_val;
+            let x2 = self.new_var(x2_val);
+            self.enforce_mul(x, x, x2);
+            let x4_val = x2_val * x2_val;
+            let x4 = self.new_var(x4_val);
+            self.enforce_mul(x2, x2, x4);
+            let x5_val = x4_val * x_val;
+            let x5 = self.new_var(x5_val);
+            self.enforce_mul(x4, x, x5);
+            return x5;
+        }
+        if alpha == 7 {
+            let x = base;
+            let x_val = self.assignment[x];
+            let x2_val = x_val * x_val;
+            let x2 = self.new_var(x2_val);
+            self.enforce_mul(x, x, x2);
+            let x4_val = x2_val * x2_val;
+            let x4 = self.new_var(x4_val);
+            self.enforce_mul(x2, x2, x4);
+            let x6_val = x4_val * x2_val;
+            let x6 = self.new_var(x6_val);
+            self.enforce_mul(x4, x2, x6);
+            let x7_val = x6_val * x_val;
+            let x7 = self.new_var(x7_val);
+            self.enforce_mul(x6, x, x7);
+            return x7;
         }
 
         // current = base
@@ -630,44 +677,68 @@ fn poseidon_sponge_dr1cs_from_trace_impl<F: PrimeField>(
         for r in 0..total_rounds {
             let is_full = r < full_rounds_over_2 || r >= (full_rounds_over_2 + cfg.partial_rounds);
 
-            // ARK
-            let mut ark_vars: Vec<usize> = Vec::with_capacity(t);
-            for i in 0..t {
-                let val = b.assignment[state_vars[i]] + cfg.ark[r][i];
-                let v = b.new_var(val);
-                b.enforce_lc_times_one_eq_var(
-                    vec![(F::ONE, state_vars[i]), (cfg.ark[r][i], one)],
-                    v,
-                );
-                ark_vars.push(v);
-            }
-
-            // SBOX
-            let mut sbox_vars: Vec<usize> = Vec::with_capacity(t);
-            for i in 0..t {
-                if is_full || i == 0 {
-                    let out_var = b.enforce_pow_u64(ark_vars[i], cfg.alpha);
-                    sbox_vars.push(out_var);
-                } else {
-                    let v = b.new_var(b.assignment[ark_vars[i]]);
-                    b.enforce_var_eq_var(ark_vars[i], v);
-                    sbox_vars.push(v);
-                }
-            }
-
-            // MDS
             let mut next_vars: Vec<usize> = Vec::with_capacity(t);
-            for i in 0..t {
-                let mut lc: Vec<(F, usize)> = Vec::with_capacity(t);
-                let mut val = F::ZERO;
-                for j in 0..t {
-                    let coeff = cfg.mds[i][j];
-                    lc.push((coeff, sbox_vars[j]));
-                    val += coeff * b.assignment[sbox_vars[j]];
+            if is_full {
+                // Full rounds: ARK -> SBOX on all lanes -> MDS.
+                let mut ark_vars: Vec<usize> = Vec::with_capacity(t);
+                for i in 0..t {
+                    let val = b.assignment[state_vars[i]] + cfg.ark[r][i];
+                    let v = b.new_var(val);
+                    b.enforce_lc_times_one_eq_var(vec![(F::ONE, state_vars[i]), (cfg.ark[r][i], one)], v);
+                    ark_vars.push(v);
                 }
-                let v = b.new_var(val);
-                b.enforce_lc_times_one_eq_var(lc, v);
-                next_vars.push(v);
+                let mut sbox_vars: Vec<usize> = Vec::with_capacity(t);
+                for i in 0..t {
+                    sbox_vars.push(b.enforce_pow_u64(ark_vars[i], cfg.alpha));
+                }
+                for i in 0..t {
+                    let mut lc: Vec<(F, usize)> = Vec::with_capacity(t);
+                    let mut val = F::ZERO;
+                    for j in 0..t {
+                        let coeff = cfg.mds[i][j];
+                        lc.push((coeff, sbox_vars[j]));
+                        val += coeff * b.assignment[sbox_vars[j]];
+                    }
+                    let v = b.new_var(val);
+                    b.enforce_lc_times_one_eq_var(lc, v);
+                    next_vars.push(v);
+                }
+            } else {
+                // Partial rounds: only lane 0 is S-boxed.
+                //
+                // Optimization: avoid materializing ARK vars (and equality vars) for the identity lanes.
+                // We fold their ARK constants directly into the MDS linear constraints:
+                //   input[j] = state[j] + ark[r][j] for j>0, and input[0] = SBOX(state[0] + ark[r][0]).
+                let ark0_val = b.assignment[state_vars[0]] + cfg.ark[r][0];
+                let ark0 = b.new_var(ark0_val);
+                b.enforce_lc_times_one_eq_var(vec![(F::ONE, state_vars[0]), (cfg.ark[r][0], one)], ark0);
+                let sbox0 = b.enforce_pow_u64(ark0, cfg.alpha);
+
+                for i in 0..t {
+                    // y_i = Σ_j mds[i][j] * input[j]
+                    let mut lc: Vec<(F, usize)> = Vec::with_capacity(t + 1);
+                    let mut val = F::ZERO;
+                    // j=0 nonlinear lane
+                    let c0 = cfg.mds[i][0];
+                    lc.push((c0, sbox0));
+                    val += c0 * b.assignment[sbox0];
+
+                    // j>0 linear lanes: use state var directly, and fold constants into the LC.
+                    let mut const_term = F::ZERO;
+                    for j in 1..t {
+                        let coeff = cfg.mds[i][j];
+                        lc.push((coeff, state_vars[j]));
+                        val += coeff * b.assignment[state_vars[j]];
+                        const_term += coeff * cfg.ark[r][j];
+                    }
+                    if !const_term.is_zero() {
+                        lc.push((const_term, one));
+                        val += const_term;
+                    }
+                    let v = b.new_var(val);
+                    b.enforce_lc_times_one_eq_var(lc, v);
+                    next_vars.push(v);
+                }
             }
 
             // Sanity against traced round state.
@@ -864,6 +935,10 @@ fn poseidon_sponge_dr1cs_from_trace_impl<F: PrimeField>(
 
                     for e in 0..num_elements {
                         // Allocate byte vars for this element.
+                        //
+                        // IMPORTANT: these bytes are already fixed by the recorded trace
+                        // (`enforce_var_eq_const`), so additional bit-decomposition constraints
+                        // are unnecessary for soundness of this arithmetization and are very costly.
                         let mut byte_vars: Vec<usize> = Vec::with_capacity(usable_bytes);
                         for i in 0..usable_bytes {
                             let bval = F::from(full_bytes[e * usable_bytes + i] as u64);
@@ -871,29 +946,6 @@ fn poseidon_sponge_dr1cs_from_trace_impl<F: PrimeField>(
                             b.enforce_var_eq_const(bv, bval);
                             byte_vars.push(bv);
                             op_byte_vars.push(bv);
-
-                            // Decompose into 8 bits to enforce 0..255 and bind bits to bv.
-                            let mut bits: Vec<usize> = Vec::with_capacity(8);
-                            for bi in 0..8 {
-                                let bit = ((full_bytes[e * usable_bytes + i] >> bi) & 1) as u64;
-                                let vbit = b.new_var(if bit == 1 { F::ONE } else { F::ZERO });
-                                // boolean: vbit*(1-vbit)=0
-                                let one_minus = b.new_var(F::ONE - b.assignment[vbit]);
-                                b.enforce_lc_times_one_eq_var(
-                                    vec![(F::ONE, one), (-F::ONE, vbit)],
-                                    one_minus,
-                                );
-                                b.add_constraint(vec![(F::ONE, vbit)], vec![(F::ONE, one_minus)], vec![(F::ZERO, one)]);
-                                bits.push(vbit);
-                            }
-                            // bv == Σ 2^j * bits[j]
-                            let mut lc: Vec<(F, usize)> = Vec::with_capacity(8);
-                            let mut p2 = F::ONE;
-                            for &vbit in &bits {
-                                lc.push((p2, vbit));
-                                p2 = p2.double();
-                            }
-                            b.enforce_lc_times_one_eq_var(lc, bv);
                         }
 
                         // Link src element: src = Σ 256^i * byte_i + 256^k * high
