@@ -463,42 +463,25 @@ impl<F: PrimeField + FftField> RsDr1csNpFlpcpSparse<F> {
             (false, idx - self.l)
         }
     }
-}
 
-impl<F: PrimeField + FftField> BoundedFlpcpSparse<F> for RsDr1csNpFlpcpSparse<F> {
-    fn n(&self) -> usize {
-        self.l
-    }
-
-    fn m(&self) -> usize {
-        // proof = z_w (n-l) || w (2k)
-        (self.inst.n - self.l) + 2 * self.inst.k()
-    }
-
-    fn k(&self) -> usize {
-        3
-    }
-
-    fn bounds_b(&self) -> Vec<BigInt> {
-        // Unbounded FLPCP: same trivial bound.
-        let len = self.n() + self.m();
-        let p = BigInt::from_bytes_le(num_bigint::Sign::Plus, &F::MODULUS.to_bytes_le());
-        let half = (&p - BigInt::one()) / BigInt::from(2u64);
-        let b = BigInt::from(len as u64) * &half * &half;
-        vec![b.clone(), b.clone(), b]
-    }
-
-    fn sample_queries_and_predicate_sparse(
+    /// Deterministically build the 3 sparse query vectors for fixed verifier coins `(idx, lambda)`.
+    ///
+    /// This is useful for higher-level “lockable” compositions that need to index the verifier’s
+    /// randomness space, rather than sampling inside this method.
+    pub fn queries_for_coins_sparse(
         &self,
-        rng: &mut dyn RngCore,
+        idx: usize,
+        lambda: F,
         x: &[F],
     ) -> Result<(Vec<SparseVec<F>>, FlpcpPredicate<F>), String> {
         if x.len() != self.l || self.inst.k() == 0 {
             return Err("bad input".to_string());
         }
+        if idx >= self.ell {
+            return Err("bad coin idx".to_string());
+        }
+
         let k = self.inst.k();
-        let idx = (rng.next_u64() as usize) % self.ell;
-        let lambda = F::from(rng.next_u64());
         let alpha = self.points[idx];
 
         let lam_k = lagrange_coeffs_at(&self.points[..k], &self.ws_k, alpha);
@@ -556,6 +539,40 @@ impl<F: PrimeField + FftField> BoundedFlpcpSparse<F> for RsDr1csNpFlpcpSparse<F>
             ],
             FlpcpPredicate::MulEq,
         ))
+    }
+}
+
+impl<F: PrimeField + FftField> BoundedFlpcpSparse<F> for RsDr1csNpFlpcpSparse<F> {
+    fn n(&self) -> usize {
+        self.l
+    }
+
+    fn m(&self) -> usize {
+        // proof = z_w (n-l) || w (2k)
+        (self.inst.n - self.l) + 2 * self.inst.k()
+    }
+
+    fn k(&self) -> usize {
+        3
+    }
+
+    fn bounds_b(&self) -> Vec<BigInt> {
+        // Unbounded FLPCP: same trivial bound.
+        let len = self.n() + self.m();
+        let p = BigInt::from_bytes_le(num_bigint::Sign::Plus, &F::MODULUS.to_bytes_le());
+        let half = (&p - BigInt::one()) / BigInt::from(2u64);
+        let b = BigInt::from(len as u64) * &half * &half;
+        vec![b.clone(), b.clone(), b]
+    }
+
+    fn sample_queries_and_predicate_sparse(
+        &self,
+        rng: &mut dyn RngCore,
+        x: &[F],
+    ) -> Result<(Vec<SparseVec<F>>, FlpcpPredicate<F>), String> {
+        let idx = (rng.next_u64() as usize) % self.ell;
+        let lambda = F::from(rng.next_u64());
+        self.queries_for_coins_sparse(idx, lambda, x)
     }
 }
 
