@@ -212,6 +212,25 @@ where
     RingVars::new(coeffs)
 }
 
+fn ring_const_to_ringvars<R>(
+    b: &mut Dr1csBuilder<BF<R>>,
+    x: &R,
+) -> RingVars
+where
+    R: PolyRing,
+    R::BaseRing: Field,
+{
+    // Same as `ring_to_ringvars`, but each coefficient is enforced as a constant.
+    // This enables safe fast-path detection of monomials and constant-coefficient ring elements.
+    let mut coeffs = Vec::with_capacity(R::dimension());
+    for c in x.coeffs() {
+        let fp = c.to_base_prime_field_elements().into_iter().next().unwrap();
+        let v = const_var::<BF<R>>(b, fp);
+        coeffs.push(v);
+    }
+    RingVars::new(coeffs)
+}
+
 fn scalar_to_ringvars<R>(
     b: &mut Dr1csBuilder<BF<R>>,
     x: BF<R>,
@@ -341,6 +360,58 @@ fn ring_mul_negacyclic<F: PrimeField + FftField>(b: &mut Dr1csBuilder<F>, x: &Ri
             coeffs.push(const_var::<F>(b, F::ZERO));
         }
         return RingVars::new(coeffs);
+    }
+
+    // Fast path (always safe): if either operand is a *single monomial with constant coefficient*,
+    // multiply by signed rotation + constant scaling in O(d) constraints.
+    fn try_monomial_const<F: PrimeField>(rv: &RingVars) -> Option<(usize, F)> {
+        let mut found: Option<(usize, F)> = None;
+        for (i, &v) in rv.coeffs.iter().enumerate() {
+            // Only accept *tracked constants* here.
+            let c = tracked_const_var_value::<F>(v)?;
+            if c.is_zero() {
+                continue;
+            }
+            if found.is_some() {
+                return None;
+            }
+            found = Some((i, c));
+        }
+        let (idx, c) = found?;
+        for (i, &v) in rv.coeffs.iter().enumerate() {
+            if i == idx {
+                continue;
+            }
+            if !is_tracked_const_zero::<F>(v) {
+                return None;
+            }
+        }
+        Some((idx, c))
+    }
+
+    if let Some((shift, scale)) = try_monomial_const::<F>(x) {
+        let mut out = Vec::with_capacity(d);
+        for k in 0..d {
+            let (src, sign) = if k >= shift {
+                (k - shift, F::ONE)
+            } else {
+                (d + k - shift, -F::ONE)
+            };
+            out.push(scalar_mul_const::<F>(b, y.coeffs[src], sign * scale));
+        }
+        return RingVars::new(out);
+    }
+    if let Some((shift, scale)) = try_monomial_const::<F>(y) {
+        let mut out = Vec::with_capacity(d);
+        for k in 0..d {
+            let (src, sign) = if k >= shift {
+                (k - shift, F::ONE)
+            } else {
+                (d + k - shift, -F::ONE)
+            };
+            out.push(scalar_mul_const::<F>(b, x.coeffs[src], sign * scale));
+        }
+        return RingVars::new(out);
     }
 
     if std::env::var("LFP_WE_GATE_NTT_MUL").ok().as_deref() == Some("1") {
@@ -1241,7 +1312,7 @@ where
     let mut xp = Vec::with_capacity(d);
     for i in 0..d {
         let mi = stark_rings::unit_monomial::<R>(i);
-        xp.push(ring_to_ringvars::<R>(&mut b, &mi));
+        xp.push(ring_const_to_ringvars::<R>(&mut b, &mi));
     }
 
     // --- Verify the two degree-2 sumchecks + recombination equality ---
