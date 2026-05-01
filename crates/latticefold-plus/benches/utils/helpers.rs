@@ -94,7 +94,7 @@ impl WitnessPattern {
                 let choices = [R::ZERO, R::ONE];
                 (0..size).map(|_| *choices.choose(rng).unwrap()).collect()
             }
-            WitnessPattern::Custom(f) => (0..size).map(|i| f(i)).collect(),
+            WitnessPattern::Custom(f) => (0..size).map(f).collect(),
         }
     }
 }
@@ -311,7 +311,7 @@ pub fn bench_prover_protocol<P: ProverBenchmark>(c: &mut Criterion, param_sets: 
         group.throughput(Throughput::Elements(P::throughput(params)));
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(&P::param_label(params)),
+            BenchmarkId::from_parameter(P::param_label(params)),
             &params,
             |bencher, &params| {
                 bencher.iter_batched(
@@ -345,7 +345,7 @@ pub fn bench_verifier_protocol<V: VerifierBenchmark>(c: &mut Criterion, param_se
         group.throughput(Throughput::Elements(V::throughput(params)));
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(&V::param_label(params)),
+            BenchmarkId::from_parameter(V::param_label(params)),
             &params,
             |bencher, &params| {
                 let (input, proof) = V::setup_proof(params);
@@ -470,8 +470,6 @@ pub fn get_validated_decomp_params(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_bench_rng_deterministic() {
         let mut rng1 = bench_rng();
