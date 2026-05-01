@@ -27,7 +27,6 @@
 #![allow(non_snake_case)]
 
 use criterion::Criterion;
-use cyclotomic_rings::rings::FrogPoseidonConfig as PC;
 use latticefold_plus::{
     lin::LinParameters,
     plus::{PlusParameters, PlusProof, PlusProver, PlusVerifier},

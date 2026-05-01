@@ -26,7 +26,9 @@
 
 use criterion::Criterion;
 use latticefold_plus::{
-    r1cs::ComR1CS, rgchk::{DecompParameters, RgInstance}, utils::estimate_bound,
+    r1cs::ComR1CS,
+    rgchk::{DecompParameters, RgInstance},
+    utils::estimate_bound,
 };
 use stark_rings::{cyclotomic_ring::models::frog_ring::RqPoly as R, PolyRing};
 use stark_rings_linalg::Matrix;

@@ -10,6 +10,9 @@
 //! - `KAPPA_SCALING`: Varies security parameter κ (kappa)
 //! - `FOLDING_ARITY`: Varies number of instances L for batched protocols
 
+// suppress warnings given that types here are used in all benches
+#![allow(dead_code)]
+
 pub mod helpers;
 
 /// Range check protocol (Constructions 4.3-4.4) parameter sets.
@@ -237,11 +240,8 @@ pub mod double_commitment {
     /// - L: Folding arity (affects bound calculation)
     /// - k: Decomposition width (gadget decomposition parameter)
     /// - kappa: Security parameter (commitment matrix rows)
-    pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] = &[
-        (32768, 3, 2, 2),
-        (65536, 3, 4, 2),
-        (131072, 3, 4, 2),
-    ];
+    pub const WITNESS_SCALING: &[(usize, usize, usize, usize)] =
+        &[(32768, 3, 2, 2), (65536, 3, 4, 2), (131072, 3, 4, 2)];
 
     /// Decomposition width scaling benchmark.
     ///
@@ -252,10 +252,7 @@ pub mod double_commitment {
     /// Fixed parameters: L=3, κ=2.
     ///
     /// Format: `(n, L, k, kappa)`
-    pub const K_SCALING: &[(usize, usize, usize, usize)] = &[
-        (65536, 3, 2, 2),
-        (65536, 3, 4, 2),
-    ];
+    pub const K_SCALING: &[(usize, usize, usize, usize)] = &[(65536, 3, 2, 2), (65536, 3, 4, 2)];
 }
 
 /// End-to-end LatticeFold+ protocol parameter sets.
@@ -279,11 +276,8 @@ pub mod e2e {
     /// - L: Folding arity (number of R1CS instances to batch)
     /// - k: Decomposition width
     /// - kappa: Security parameter
-    pub const PROTOCOL_SCALING: &[(usize, usize, usize, usize)] = &[
-        (65536, 2, 4, 2),
-        (65536, 3, 4, 2),
-        (131072, 3, 4, 2),
-    ];
+    pub const PROTOCOL_SCALING: &[(usize, usize, usize, usize)] =
+        &[(65536, 2, 4, 2), (65536, 3, 4, 2), (131072, 3, 4, 2)];
 
     /// Folding arity scaling benchmark.
     ///

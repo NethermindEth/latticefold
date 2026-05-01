@@ -49,17 +49,18 @@ use utils::{
 // Setup Functions
 // ============================================================================
 
+/// Decomposition input for prover benchmarks
+struct SetupInput {
+    decomp: Decomp<R>,
+    B: usize,
+}
+
 /// Creates decomposition input for prover benchmarks.
 ///
 /// Generates a LinB2 instance by first creating a committed R1CS, linearizing
 /// it, and then preparing the decomposition input structure. Uses witness with
 /// all ones to ensure valid R1CS satisfaction and norm bounds.
-fn setup_input(
-    n: usize,
-    k: usize,
-    kappa: usize,
-    B: usize,
-) -> (Decomp<R>, Vec<R>, Vec<(R, R)>, usize) {
+fn setup_input(n: usize, k: usize, kappa: usize, B: usize) -> SetupInput {
     let mut rng = bench_rng();
     let r1cs = R1CSBuilder::new(n, k, B as u128).build_basic();
     let r1cs = r1cs_decomposed_square(r1cs, n, B as u128, k);
@@ -69,7 +70,7 @@ fn setup_input(
     let cr1cs = ComR1CS::new(r1cs, z, 1, B as u128, k, &A);
 
     let mut ts = create_transcript();
-    let (linb, lproof) = cr1cs.linearize(&mut ts);
+    let (_linb, lproof) = cr1cs.linearize(&mut ts);
 
     let mut ts = create_transcript();
     lproof.verify(&mut ts);
@@ -80,7 +81,15 @@ fn setup_input(
         M: cr1cs.x.matrices(),
     };
 
-    (decomp, cr1cs.x.cm_f, linb.x.v, B)
+    SetupInput { decomp, B }
+}
+
+/// Decomposition proof for verifier benchmarks
+struct SetupProof {
+    cm_f: Vec<R>,
+    v: Vec<(R, R)>,
+    B: usize,
+    proof: DecompProof<R>,
 }
 
 /// Generates a valid decomposition proof for verifier benchmarks.
@@ -88,12 +97,7 @@ fn setup_input(
 /// Creates a LinB2 instance, executes the decomposition protocol to generate
 /// a `DecompProof`, and validates it before returning. This ensures the
 /// verifier benchmarks measure only verification time, not error handling.
-fn setup_proof(
-    n: usize,
-    k: usize,
-    kappa: usize,
-    B: usize,
-) -> ((Vec<R>, Vec<(R, R)>, usize), DecompProof<R>) {
+fn setup_proof(n: usize, k: usize, kappa: usize, B: usize) -> SetupProof {
     let mut rng = bench_rng();
     let r1cs = R1CSBuilder::new(n, k, B as u128).build_basic();
     let r1cs = r1cs_decomposed_square(r1cs, n, B as u128, k);
@@ -119,7 +123,12 @@ fn setup_proof(
 
     proof.verify(&cr1cs.x.cm_f, &linb.x.v, B as u128);
 
-    ((cr1cs.x.cm_f, linb.x.v, B), proof)
+    SetupProof {
+        cm_f: cr1cs.x.cm_f,
+        v: linb.x.v,
+        B,
+        proof,
+    }
 }
 
 // ============================================================================
@@ -144,7 +153,7 @@ impl ProverBenchmark for DecompositionProver {
 
     fn setup_input((n, k, kappa, B): Self::Params) -> Self::Input {
         let mut rng = bench_rng();
-        let (decomp, _cm_f, _v, B) = setup_input(n, k, kappa, B);
+        let SetupInput { decomp, B, .. } = setup_input(n, k, kappa, B);
         let A = create_ajtai_matrix(kappa, n, &mut rng);
         (decomp, A, B)
     }
@@ -179,7 +188,8 @@ impl VerifierBenchmark for DecompositionVerifier {
     }
 
     fn setup_proof((n, k, kappa, B): Self::Params) -> (Self::Input, Self::Proof) {
-        setup_proof(n, k, kappa, B)
+        let sp = setup_proof(n, k, kappa, B);
+        ((sp.cm_f, sp.v, sp.B), sp.proof)
     }
 
     fn param_label((n, k, kappa, B): Self::Params) -> String {
@@ -228,7 +238,7 @@ fn bench_decomp_roundtrip(c: &mut Criterion) {
             bencher.iter_batched(
                 || {
                     let mut rng = bench_rng();
-                    let (decomp, _cm_f, _v, B) = setup_input(n, k, kappa, B);
+                    let SetupInput { decomp, B, .. } = setup_input(n, k, kappa, B);
                     let A = create_ajtai_matrix(kappa, n, &mut rng);
                     (decomp, A, B)
                 },
