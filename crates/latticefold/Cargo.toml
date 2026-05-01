@@ -43,7 +43,7 @@ toml = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-dhat = "0.3.2"
+dhat = "0.3.3"
 humansize = "2.1.3"
 lazy_static = "1.5.0"
 
