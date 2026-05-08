@@ -44,9 +44,9 @@ pub trait LinearizationProver<NTT: SuitableRing, T: Transcript<NTT>> {
     /// Returns an error if asked to evaluate MLEs with incorrect number of variables
     ///
     fn prove(
+        &mut self,
         cm_i: &CCCS<NTT>,
         wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<NTT>, LinearizationProof<NTT>), LinearizationError<NTT>>;
 }
@@ -68,18 +68,18 @@ pub trait LinearizationVerifier<NTT: OverField, T: Transcript<NTT>> {
     /// * `Err(LinearizationError<NTT>)` - If verification fails, returns a `LinearizationError<NTT>`.
     ///
     fn verify(
+        &mut self,
         cm_i: &CCCS<NTT>,
         proof: &LinearizationProof<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, LinearizationError<NTT>>;
 }
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
+impl<'t, NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<'t, NTT, T> {
     /// Step 2 of Fig 5: Construct polynomial $g$ and generate $\beta$ challenges.
     fn construct_polynomial_g(
+        &mut self,
         z_ccs: &[NTT],
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<
         (
@@ -90,7 +90,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
         LinearizationError<NTT>,
     > {
         // Generate beta challenges from Step 1
-        let beta_s = transcript.squeeze_beta_challenges(ccs.s);
+        let beta_s = self.transcript.squeeze_beta_challenges(ccs.s);
 
         // Prepare MLEs
         let Mz_mles = calculate_Mz_mles::<NTT, LinearizationError<NTT>>(ccs, z_ccs)?;
@@ -104,14 +104,14 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
 
     /// Step 2: Run linearization sum-check protocol.
     fn generate_sumcheck_proof(
-        transcript: &mut impl Transcript<NTT>,
+        &mut self,
         mles: Vec<DenseMultilinearExtension<NTT>>,
         nvars: usize,
         degree: usize,
         comb_fn: impl Fn(&[NTT]) -> NTT + Sync + Send,
     ) -> Result<(Proof<NTT>, Vec<NTT>), LinearizationError<NTT>> {
         let (sum_check_proof, prover_state) =
-            MLSumcheck::prove_as_subprotocol(transcript, mles, nvars, degree, comb_fn);
+            MLSumcheck::prove_as_subprotocol(self.transcript, mles, nvars, degree, comb_fn);
         let point_r = prover_state
             .randomness
             .into_iter()
@@ -139,13 +139,13 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationProver<NTT, T> {
     }
 }
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
-    for LFLinearizationProver<NTT, T>
+impl<'t, NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
+    for LFLinearizationProver<'t, NTT, T>
 {
     fn prove(
+        &mut self,
         cm_i: &CCCS<NTT>,
         wit: &Witness<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(LCCCS<NTT>, LinearizationProof<NTT>), LinearizationError<NTT>> {
         // Step 1: Generate beta challenges (done in construct_polynomial_g because they are not needed
@@ -154,20 +154,20 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
         // Step 2: Sum check protocol.
         // z_ccs vector, i.e. concatenation x || 1 || w.
         let z_ccs = cm_i.get_z_vector(&wit.w_ccs);
-        let (g_mles, g_degree, Mz_mles) = Self::construct_polynomial_g(&z_ccs, transcript, ccs)?;
+        let (g_mles, g_degree, Mz_mles) = self.construct_polynomial_g(&z_ccs, ccs)?;
 
         let comb_fn = |vals: &[NTT]| -> NTT { sumcheck_polynomial_comb_fn(vals, ccs) };
 
         // Run sumcheck protocol.
         let (sumcheck_proof, point_r) =
-            Self::generate_sumcheck_proof(transcript, g_mles, ccs.s, g_degree, comb_fn)?;
+            self.generate_sumcheck_proof(g_mles, ccs.s, g_degree, comb_fn)?;
 
         // Step 3: Compute v, u_vector.
         let (point_r, v, u) = Self::compute_evaluation_vectors(wit, &point_r, &Mz_mles)?;
 
         // Absorbing the prover's messages to the verifier.
-        transcript.absorb_slice(&v);
-        transcript.absorb_slice(&u);
+        self.transcript.absorb_slice(&v);
+        self.transcript.absorb_slice(&u);
 
         // Step 5: Output linearization_proof and lcccs
         let linearization_proof = LinearizationProof {
@@ -189,10 +189,10 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationProver<NTT, T>
     }
 }
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
+impl<'t, NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<'t, NTT, T> {
     fn verify_sumcheck_proof(
+        &mut self,
         proof: &LinearizationProof<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<(Vec<NTT>, NTT), LinearizationError<NTT>> {
         // The polynomial has degree <= ccs.d + 1 and log_m (ccs.s) vars.
@@ -200,7 +200,7 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
         let degree = ccs.d + 1;
 
         let subclaim = MLSumcheck::verify_as_subprotocol(
-            transcript,
+            self.transcript,
             nvars,
             degree,
             NTT::zero(),
@@ -212,7 +212,9 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
             subclaim.expected_evaluation,
         ))
     }
+}
 
+impl<'t, NTT: SuitableRing, T> LFLinearizationVerifier<'t, NTT, T> {
     /// Step 4: Verify
     /// $$
     /// \mathbf{e} \cdot \left( \sum\_{i=1}^{n\_s} c_i \cdot \prod\_{j \in S\_i} \mathbf{u}\_j \right) \stackrel{?}{=} s.
@@ -258,26 +260,26 @@ impl<NTT: SuitableRing, T: Transcript<NTT>> LFLinearizationVerifier<NTT, T> {
     }
 }
 
-impl<NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
-    for LFLinearizationVerifier<NTT, T>
+impl<'t, NTT: SuitableRing, T: Transcript<NTT>> LinearizationVerifier<NTT, T>
+    for LFLinearizationVerifier<'t, NTT, T>
 {
     fn verify(
+        &mut self,
         cm_i: &CCCS<NTT>,
         proof: &LinearizationProof<NTT>,
-        transcript: &mut impl Transcript<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, LinearizationError<NTT>> {
         // Step 1: Generate the beta challenges.
-        let beta_s = transcript.squeeze_beta_challenges(ccs.s);
+        let beta_s = self.transcript.squeeze_beta_challenges(ccs.s);
 
         //Step 2: The sumcheck.
-        let (point_r, s) = Self::verify_sumcheck_proof(proof, transcript, ccs)?;
+        let (point_r, s) = self.verify_sumcheck_proof(proof, ccs)?;
 
         Self::verify_evaluation_claim(&beta_s, &point_r, s, proof, ccs)?;
 
         // Absorbing the prover's mmessages to the verifier.
-        transcript.absorb_slice(&proof.v);
-        transcript.absorb_slice(&proof.u);
+        self.transcript.absorb_slice(&proof.v);
+        self.transcript.absorb_slice(&proof.u);
 
         // Step 5: Output z_o
         Ok(Self::prepare_verifier_output(cm_i, point_r, proof))

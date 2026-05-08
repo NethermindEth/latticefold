@@ -55,54 +55,42 @@ fn generate_code_for_examples() {
         #[allow(dead_code)]
         use latticefold::decomposition_parameters::DecompositionParams;
 
-        #[derive(Clone)]
-        pub struct GoldilocksExampleDP {{}}
+        const GOLIDLOCKS_EXAMPLE_DP: DecompositionParams = DecompositionParams {{ 
+            B: {b}, // Default: 1 << 15
+            l: {l}, // Default: 5
+            b: {b_small}, // Default = 2
+            k: {k}, // Default = 15
+        }};
 
-        impl DecompositionParams for GoldilocksExampleDP {{
-            const B: u128 = {b}; // Default: 1 << 15
-            const L: usize = {l}; // Default: 5
-            const B_SMALL: usize = {b_small}; // Default = 2
-            const K: usize = {k}; // Default = 15
-        }}
+        const STARKPRIME_EXAMPLE_DP: DecompositionParams = DecompositionParams {{ 
+            B: {b}, // Default: 1073741824u128
+            l: {l}, // Default: 9
+            b: {b_small}, // Default = 2
+            k: {k}, // Default = 30
+        }};
 
-        #[derive(Clone)]
-        pub struct StarkPrimeExampleDP {{}}
+        const BABYBEAR_EXAMPLE_DP: DecompositionParams = DecompositionParams {{ 
+            B: {b}, // Default: 1 << 15
+            l: {l}, // Default: 5
+            b: {b_small}, // Default = 2
+            k: {k}, // Default = 15
+        }};
 
-        impl DecompositionParams for StarkPrimeExampleDP {{
-            const B: u128 = {b}; // Default: 1073741824u128
-            const L: usize = {l}; // Default: 9
-            const B_SMALL: usize = {b_small}; // Default = 2
-            const K: usize = {k}; // Default = 30
-        }}
-
-        #[derive(Clone)]
-        pub struct BabyBearExampleDP {{}}
-
-        impl DecompositionParams for BabyBearExampleDP {{
-            const B: u128 = {b}; // Default: 1 << 15
-            const L: usize = {l}; // Default: 5
-            const B_SMALL: usize = {b_small}; // Default = 2
-            const K: usize = {k}; // Default = 15
-        }}
-
-        #[derive(Clone)]
-        pub struct FrogExampleDP {{}}
-
-        impl DecompositionParams for FrogExampleDP {{
-            const B: u128 = {b}; // Default: 1 << 15
-            const L: usize = {l}; // Default: 5
-            const B_SMALL: usize = {b_small}; // Default = 2
-            const K: usize = {k}; // Default = 15
-        }}
+        const FROG_EXAMPLE_DP: DecompositionParams = DecompositionParams {{ 
+            B: {b}, // Default: 1 << 15
+            l: {l}, // Default: 5
+            b: {b_small}, // Default = 2
+            k: {k}, // Default = 15
+        }};
 
         const X_LEN: usize = {x_len}; // Default = 1
         const KAPPA: usize = {kappa}; // Default = 4
         const WIT_LEN: usize = {wit_len}; // Default = 4
 
-        const N_GOLDILOCKS: usize = WIT_LEN * GoldilocksExampleDP::L;
-        const N_BABYBEAR: usize = WIT_LEN * BabyBearExampleDP::L;
-        const N_FROG: usize = WIT_LEN * FrogExampleDP::L;
-        const N_STARK: usize = WIT_LEN * StarkPrimeExampleDP::L;
+        const N_GOLDILOCKS: usize = WIT_LEN * GOLIDLOCKS_EXAMPLE_DP.l;
+        const N_BABYBEAR: usize = WIT_LEN * BABYBEAR_EXAMPLE_DP.l;
+        const N_FROG: usize = WIT_LEN * FROG_EXAMPLE_DP.l;
+        const N_STARK: usize = WIT_LEN * STARKPRIME_EXAMPLE_DP.l;
         "#,
     );
 
@@ -110,7 +98,7 @@ fn generate_code_for_examples() {
         "Goldilocks" => generated_code.push_str(
             r#"
             const N: usize = N_GOLDILOCKS;
-            type DP = GoldilocksExampleDP;
+            const DP: DecompositionParams = GOLIDLOCKS_EXAMPLE_DP;
             type RqNTT = cyclotomic_rings::rings::GoldilocksRingNTT;
             type CS = cyclotomic_rings::rings::GoldilocksChallengeSet;
             "#,
@@ -118,7 +106,7 @@ fn generate_code_for_examples() {
         "BabyBear" => generated_code.push_str(
             r#"
             const N: usize = N_BABYBEAR;
-            type DP = BabyBearExampleDP;
+            const DP: DecompositionParams = BABYBEAR_EXAMPLE_DP;
             type RqNTT = cyclotomic_rings::rings::BabyBearRingNTT;
             type CS = cyclotomic_rings::rings::BabyBearChallengeSet;
             "#,
@@ -126,7 +114,7 @@ fn generate_code_for_examples() {
         "Frog" => generated_code.push_str(
             r#"
             const N: usize = N_FROG;
-            type DP = FrogExampleDP;
+            const DP: DecompositionParams = FROG_EXAMPLE_DP;
             type RqNTT = cyclotomic_rings::rings::FrogRingNTT;
             type CS = cyclotomic_rings::rings::FrogChallengeSet;
             "#,
@@ -134,7 +122,7 @@ fn generate_code_for_examples() {
         "StarkPrime" => generated_code.push_str(
             r#"
             const N: usize = N_STARK;
-            type DP = StarkPrimeExampleDP;
+            const DP: DecompositionParams = STARKPRIME_EXAMPLE_DP;
             type RqNTT = cyclotomic_rings::rings::StarkRingNTT;
             type CS = cyclotomic_rings::rings::StarkChallengeSet;
             "#,
@@ -243,6 +231,11 @@ fn parse_benches() {
         File::create(&linearization_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut linearization_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(
+        &mut linearization_file,
+        "use latticefold::decomposition_parameters::DecompositionParams;"
+    )
+    .unwrap();
     writeln!(&mut linearization_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
 
     let decomposition_file_path = Path::new(&out_dir).join("generated_decomposition_benchmarks.rs");
@@ -250,6 +243,11 @@ fn parse_benches() {
         File::create(&decomposition_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut decomposition_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(
+        &mut decomposition_file,
+        "use latticefold::decomposition_parameters::DecompositionParams;"
+    )
+    .unwrap();
     writeln!(&mut decomposition_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
 
     let folding_file_path = Path::new(&out_dir).join("generated_folding_benchmarks.rs");
@@ -257,6 +255,11 @@ fn parse_benches() {
         File::create(&folding_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut folding_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(
+        &mut folding_file,
+        "use latticefold::decomposition_parameters::DecompositionParams;"
+    )
+    .unwrap();
     writeln!(&mut folding_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
 
     let e2e_file_path = Path::new(&out_dir).join("generated_e2e_benchmarks.rs");
@@ -264,6 +267,11 @@ fn parse_benches() {
         File::create(&e2e_file_path).expect("Failed to create benchmark generated file");
 
     writeln!(&mut e2e_file, "use utils::{{Bencher, R1CS}};").unwrap();
+    writeln!(
+        &mut e2e_file,
+        "use latticefold::decomposition_parameters::DecompositionParams;"
+    )
+    .unwrap();
     writeln!(&mut e2e_file, "use cyclotomic_rings::rings::{{BabyBearChallengeSet, BabyBearRingNTT, FrogChallengeSet, FrogRingNTT, GoldilocksChallengeSet, GoldilocksRingNTT, StarkChallengeSet, StarkRingNTT}};").unwrap();
 
     let mut files = (
@@ -594,35 +602,33 @@ fn write_function(
                     const WIT_LEN: usize = #n;
                     const N: usize = #n * #l;
 
-                    #[derive(Clone)]
-                    struct DP {}
-                    impl DecompositionParams for DP {
-                        const B: u128 = #b;
-                        const L: usize = #l;
-                        const B_SMALL: usize = #b_small;
-                        const K: usize = #k;
-                    }
+                    const DP: DecompositionParams = DecompositionParams {
+                        B: #b,
+                        l: #l,
+                        b: #b_small,
+                        k: #k,
+                    };
 
                     type CS = #cs;
                     type R = #ring;
 
-                    type BlockBencher = Bencher<DP, R, CS>;
+                    type BlockBencher = Bencher<R, CS>;
 
                     if X_LEN == ENV.x_len.unwrap_or(X_LEN) &&
                         KAPPA == ENV.kappa.unwrap_or(KAPPA) &&
                         N == ENV.n.unwrap_or(N) &&
                         WIT_LEN == ENV.wit_len.unwrap_or(WIT_LEN) &&
-                        DP::B == ENV.b.unwrap_or(DP::B) &&
-                        DP::L == ENV.l.unwrap_or(DP::L) &&
-                        DP::B_SMALL == ENV.b_small.unwrap_or(DP::B_SMALL) &&
-                        DP::K == ENV.k.unwrap_or(DP::K)
+                        DP.B == ENV.b.unwrap_or(DP.B) &&
+                        DP.l == ENV.l.unwrap_or(DP.l) &&
+                        DP.b == ENV.b_small.unwrap_or(DP.b) &&
+                        DP.k == ENV.k.unwrap_or(DP.k)
                     {
                         if ENV.prover {
-                            BlockBencher::#prover_function(&mut group, X_LEN, N, WIT_LEN, KAPPA, #scalar);
+                            BlockBencher::#prover_function(&mut group, &DP, X_LEN, N, WIT_LEN, KAPPA, #scalar);
                         };
 
                         if ENV.verifier {
-                            BlockBencher::#verifier_function(&mut group, X_LEN, N, WIT_LEN, KAPPA, #scalar);
+                            BlockBencher::#verifier_function(&mut group, &DP, X_LEN, N, WIT_LEN, KAPPA, #scalar);
                         };
                     }
                 };

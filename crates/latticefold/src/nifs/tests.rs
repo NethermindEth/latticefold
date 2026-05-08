@@ -10,14 +10,11 @@ use crate::{
         linearization::{LFLinearizationProver, LinearizationProver},
         NIFSProver, NIFSVerifier,
     },
-    transcript::{poseidon::PoseidonTranscript, TranscriptWithShortChallenges},
+    transcript::poseidon::PoseidonTranscript,
 };
 
-fn setup_test_environment<
-    RqNTT: SuitableRing,
-    DP: DecompositionParams,
-    CS: LatticefoldChallengeSet<RqNTT>,
->(
+fn setup_test_environment<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT>>(
+    dparams: &DecompositionParams,
     kappa: usize,
     n: usize,
     wit_len: usize,
@@ -29,89 +26,62 @@ fn setup_test_environment<
     CCS<RqNTT>,
     AjtaiCommitmentScheme<RqNTT>,
 ) {
-    let ccs = get_test_ccs::<RqNTT>(n, DP::L);
+    let ccs = get_test_ccs::<RqNTT>(n, dparams.l);
     let mut rng = test_rng();
     let (_, x_ccs, w_ccs) = get_test_z_split::<RqNTT>(rng.gen_range(0..64));
     let scheme = AjtaiCommitmentScheme::rand(kappa, n, &mut rng);
 
-    let wit_i = Witness::from_w_ccs::<DP>(w_ccs);
+    let wit_i = Witness::from_w_ccs(w_ccs, dparams.B, dparams.l);
     let cm_i = CCCS {
-        cm: wit_i.commit::<DP>(&scheme).unwrap(),
+        cm: wit_i.commit(&scheme).unwrap(),
         x_ccs: x_ccs.clone(),
     };
 
     let rand_w_ccs: Vec<RqNTT> = (0..wit_len).map(|i| RqNTT::from(i as u64)).collect();
-    let wit_acc = Witness::from_w_ccs::<DP>(rand_w_ccs);
+    let wit_acc = Witness::from_w_ccs(rand_w_ccs, dparams.B, dparams.l);
 
     let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let (acc, _) = LFLinearizationProver::<_, PoseidonTranscript<RqNTT, CS>>::prove(
-        &cm_i,
-        &wit_acc,
-        &mut transcript,
-        &ccs,
-    )
-    .unwrap();
+    let (acc, _) = LFLinearizationProver::new(&mut transcript)
+        .prove(&cm_i, &wit_acc, &ccs)
+        .unwrap();
     (acc, wit_acc, cm_i, wit_i, ccs, scheme)
 }
 
-fn test_nifs_prove<
-    RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-    DP: DecompositionParams,
-    T: TranscriptWithShortChallenges<RqNTT>,
->(
+fn test_nifs_prove<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT> + Sync>(
+    dparams: DecompositionParams,
     kappa: usize,
     n: usize,
     wit_len: usize,
 ) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
-        setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
+        setup_test_environment::<RqNTT, CS>(&dparams, kappa, n, wit_len);
 
-    let mut transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let result = NIFSProver::<RqNTT, DP, T>::prove(
-        &acc,
-        &w_acc,
-        &cm_i,
-        &w_i,
-        &mut transcript,
-        &ccs,
-        &scheme,
-    );
+    let result =
+        NIFSProver::new(dparams, transcript).prove(&acc, &w_acc, &cm_i, &w_i, &ccs, &scheme);
 
     assert!(result.is_ok());
 }
 
-fn test_nifs_verify<
-    RqNTT: SuitableRing,
-    CS: LatticefoldChallengeSet<RqNTT>,
-    DP: DecompositionParams,
-    T: TranscriptWithShortChallenges<RqNTT>,
->(
+fn test_nifs_verify<RqNTT: SuitableRing, CS: LatticefoldChallengeSet<RqNTT> + Sync>(
+    dparams: DecompositionParams,
     kappa: usize,
     n: usize,
     wit_len: usize,
 ) {
     let (acc, w_acc, cm_i, w_i, ccs, scheme) =
-        setup_test_environment::<RqNTT, DP, CS>(kappa, n, wit_len);
+        setup_test_environment::<RqNTT, CS>(&dparams, kappa, n, wit_len);
 
-    let mut prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
-    let mut verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let prover_transcript = PoseidonTranscript::<RqNTT, CS>::default();
+    let verifier_transcript = PoseidonTranscript::<RqNTT, CS>::default();
 
-    let (_, _, proof) = NIFSProver::<RqNTT, DP, T>::prove(
-        &acc,
-        &w_acc,
-        &cm_i,
-        &w_i,
-        &mut prover_transcript,
-        &ccs,
-        &scheme,
-    )
-    .unwrap();
+    let (_, _, proof) = NIFSProver::new(dparams.clone(), prover_transcript)
+        .prove(&acc, &w_acc, &cm_i, &w_i, &ccs, &scheme)
+        .unwrap();
 
-    let result =
-        NIFSVerifier::<RqNTT, DP, T>::verify(&acc, &cm_i, &proof, &mut verifier_transcript, &ccs);
+    let result = NIFSVerifier::new(dparams, verifier_transcript).verify(&acc, &cm_i, &proof, &ccs);
 
     assert!(result.is_ok());
 }
@@ -122,30 +92,30 @@ mod e2e_tests {
         use cyclotomic_rings::rings::{StarkChallengeSet, StarkRingNTT};
 
         use crate::{
-            decomposition_parameters::{test_params::StarkDP, DecompositionParams},
+            decomposition_parameters::test_params::dp_stark,
             nifs::tests::{test_nifs_prove, test_nifs_verify},
-            transcript::poseidon::PoseidonTranscript,
         };
 
         type RqNTT = StarkRingNTT;
         type CS = StarkChallengeSet;
-        type DP = StarkDP;
-        type T = PoseidonTranscript<RqNTT, CS>;
 
         const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
-        const N: usize = WIT_LEN * DP::L;
 
         #[ignore]
         #[test]
         fn test_prove() {
-            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            let dparams = dp_stark();
+            let n = WIT_LEN * dparams.l;
+            test_nifs_prove::<RqNTT, CS>(dparams, KAPPA, n, WIT_LEN);
         }
 
         #[ignore]
         #[test]
         fn test_verify() {
-            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            let dparams = dp_stark();
+            let n = WIT_LEN * dparams.l;
+            test_nifs_verify::<RqNTT, CS>(dparams, KAPPA, n, WIT_LEN);
         }
     }
 
@@ -153,25 +123,26 @@ mod e2e_tests {
         use cyclotomic_rings::rings::{GoldilocksChallengeSet, GoldilocksRingNTT};
 
         use super::*;
-        use crate::decomposition_parameters::test_params::GoldilocksDP;
+        use crate::decomposition_parameters::test_params::dp_goldilocks;
 
         type RqNTT = GoldilocksRingNTT;
         type CS = GoldilocksChallengeSet;
-        type DP = GoldilocksDP;
-        type T = PoseidonTranscript<RqNTT, CS>;
 
         const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
-        const N: usize = WIT_LEN * DP::L;
 
         #[test]
         fn test_prove() {
-            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            let dparams = dp_goldilocks();
+            let n = WIT_LEN * dparams.l;
+            test_nifs_prove::<RqNTT, CS>(dparams, KAPPA, n, WIT_LEN);
         }
 
         #[test]
         fn test_verify() {
-            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            let dparams = dp_goldilocks();
+            let n = WIT_LEN * dparams.l;
+            test_nifs_verify::<RqNTT, CS>(dparams, KAPPA, n, WIT_LEN);
         }
     }
 
@@ -179,25 +150,26 @@ mod e2e_tests {
         use cyclotomic_rings::rings::{BabyBearChallengeSet, BabyBearRingNTT};
 
         use super::*;
-        use crate::decomposition_parameters::test_params::BabyBearDP;
+        use crate::decomposition_parameters::test_params::dp_babybear;
 
         type RqNTT = BabyBearRingNTT;
         type CS = BabyBearChallengeSet;
-        type DP = BabyBearDP;
-        type T = PoseidonTranscript<RqNTT, CS>;
 
         const KAPPA: usize = 4;
         const WIT_LEN: usize = 4;
-        const N: usize = WIT_LEN * DP::L;
 
         #[test]
         fn test_prove() {
-            test_nifs_prove::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            let dparams = dp_babybear();
+            let n = WIT_LEN * dparams.l;
+            test_nifs_prove::<RqNTT, CS>(dparams, KAPPA, n, WIT_LEN);
         }
 
         #[test]
         fn test_verify() {
-            test_nifs_verify::<RqNTT, CS, DP, T>(KAPPA, N, WIT_LEN);
+            let dparams = dp_babybear();
+            let n = WIT_LEN * dparams.l;
+            test_nifs_verify::<RqNTT, CS>(dparams, KAPPA, n, WIT_LEN);
         }
     }
 }

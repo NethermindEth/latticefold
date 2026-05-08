@@ -60,10 +60,10 @@ pub trait FoldingProver<NTT: SuitableRing, T: TranscriptWithShortChallenges<NTT>
     ///
     /// Returns an error if asked to evaluate MLEs with incorrect number of variables
     ///
-    fn prove<P: DecompositionParams>(
+    fn prove(
+        &mut self,
         cm_i_s: &[LCCCS<NTT>],
         w_s: Vec<Witness<NTT>>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
         mz_mles: &[Vec<DenseMultilinearExtension<NTT>>],
     ) -> Result<(LCCCS<NTT>, Witness<NTT>, FoldingProof<NTT>), FoldingError<NTT>>;
@@ -85,10 +85,10 @@ pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NT
     /// * `Ok(LCCCS<NTT>)` - On success, returns the folded linearized version of the CCS witness commitment.
     /// * `Err(FoldingError<NTT>)` - If verification fails, returns a `FoldingError<NTT>`.
     ///
-    fn verify<P: DecompositionParams>(
+    fn verify(
+        &mut self,
         cm_i_s: &[LCCCS<NTT>],
         proof: &FoldingProof<NTT>,
-        transcript: &mut impl TranscriptWithShortChallenges<NTT>,
         ccs: &CCS<NTT>,
     ) -> Result<LCCCS<NTT>, FoldingError<NTT>>;
 }
@@ -96,15 +96,37 @@ pub trait FoldingVerifier<NTT: SuitableRing, T: TranscriptWithShortChallenges<NT
 /// The LatticeFold folding prover
 ///
 /// Implements the [`FoldingProver`] trait.
-pub struct LFFoldingProver<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
+pub struct LFFoldingProver<'t, R, T> {
+    _ntt: PhantomData<R>,
+    pub dparams: DecompositionParams,
+    pub transcript: &'t mut T,
+}
+
+impl<'t, R, T> LFFoldingProver<'t, R, T> {
+    pub fn new(dparams: DecompositionParams, transcript: &'t mut T) -> Self {
+        Self {
+            _ntt: Default::default(),
+            dparams,
+            transcript,
+        }
+    }
 }
 
 /// The LatticeFold folding verifier
 ///
 /// Implements the [`FoldingVerifier`] trait.
-pub struct LFFoldingVerifier<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
+pub struct LFFoldingVerifier<'t, R, T> {
+    _ntt: PhantomData<R>,
+    pub dparams: DecompositionParams,
+    pub transcript: &'t mut T,
+}
+
+impl<'t, R, T> LFFoldingVerifier<'t, R, T> {
+    pub fn new(dparams: DecompositionParams, transcript: &'t mut T) -> Self {
+        Self {
+            _ntt: Default::default(),
+            dparams,
+            transcript,
+        }
+    }
 }

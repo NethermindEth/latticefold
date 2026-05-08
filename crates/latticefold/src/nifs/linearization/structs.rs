@@ -39,15 +39,33 @@ pub struct LinearizationProof<NTT: OverField> {
 /// The LatticeFold prover
 ///
 /// The implementation of the `LinearizationProver` trait is defined in the main linearization file.
-pub struct LFLinearizationProver<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
+pub struct LFLinearizationProver<'t, R, T> {
+    _r: PhantomData<R>,
+    pub transcript: &'t mut T,
+}
+
+impl<'t, R, T> LFLinearizationProver<'t, R, T> {
+    pub fn new(transcript: &'t mut T) -> Self {
+        Self {
+            _r: Default::default(),
+            transcript,
+        }
+    }
 }
 
 /// The LatticeFold verifier
 ///
 /// The implementation of the `LinearizationVerifier` trait is defined in the main linearization file.
-pub struct LFLinearizationVerifier<NTT, T> {
-    _ntt: PhantomData<NTT>,
-    _t: PhantomData<T>,
+pub struct LFLinearizationVerifier<'t, R, T> {
+    _r: PhantomData<R>,
+    pub transcript: &'t mut T,
+}
+
+impl<'t, R, T> LFLinearizationVerifier<'t, R, T> {
+    pub fn new(transcript: &'t mut T) -> Self {
+        Self {
+            _r: Default::default(),
+            transcript,
+        }
+    }
 }
