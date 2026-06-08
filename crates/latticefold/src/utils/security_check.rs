@@ -2,7 +2,13 @@ use ark_std::f64;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 
-fn calculate_bound_l2(degree: usize, kappa: usize, ring_modulus_log2: f64) -> BigUint {
+/// Maximum binding ell-2 norm `B_{L_2}` for an Ajtai commitment with the given
+/// ring degree, `kappa`, and `log2` modulus.
+///
+/// The ell-2 norm-check path (ePrint 2026/721) consumes this directly as the
+/// target bound `beta`, rather than going through the `bound_inf` derived in
+/// [`check_ring_modulus_128_bits_security`].
+pub fn calculate_bound_l2(degree: usize, kappa: usize, ring_modulus_log2: f64) -> BigUint {
     // The current security parameter use log2(delta)
     let delta = 1.0045_f64;
     // Calculate B_{L_2} as 2^{2 \sqrt{\text{log2}(\delta) \times \text{degree} \times \kappa \times \frac{\text{modulus}}{2}}}

@@ -3,9 +3,11 @@
 #![allow(non_snake_case)]
 
 pub mod cm;
+pub mod conjugation;
 pub mod decomp;
 pub mod lin;
 pub mod mlin;
+pub mod normcheck;
 pub mod plus;
 pub mod r1cs;
 pub mod rgchk;

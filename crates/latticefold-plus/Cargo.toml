@@ -6,7 +6,7 @@ license.workspace = true
 
 [features]
 default = ["std"]
-std = ["ark-std/std", "cyclotomic-rings/std", "rand/std"]
+std = ["ark-std/std", "cyclotomic-rings/std", "latticefold/std", "rand/std"]
 parallel = [
     "dep:rayon",
     "std",
@@ -16,6 +16,10 @@ parallel = [
     "stark-rings-poly/parallel",
 ]
 getrandom = ["ark-std/getrandom"]
+
+# Use the ell-2 norm-check (ePrint 2026/721) in place of the ell-infinity
+# monomial range check. Off by default: the ell-infinity path is unchanged.
+l2-normcheck = []
 
 # dev-only
 dhat-heap = []
@@ -102,6 +106,10 @@ harness = false
 
 [[bench]]
 name = "decomp"
+harness = false
+
+[[bench]]
+name = "normcheck"
 harness = false
 
 [[bench]]
